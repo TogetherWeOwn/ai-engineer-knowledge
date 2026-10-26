@@ -219,6 +219,11 @@ def parses_as_non_string(value: str) -> bool:
         float(value)
         return True
     except ValueError:
+        pass
+    try:
+        int(value, 0)
+        return True
+    except ValueError:
         return False
 
 

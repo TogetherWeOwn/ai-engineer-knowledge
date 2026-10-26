@@ -314,3 +314,14 @@ def test_orphan_without_area_does_not_crash_generation(tmp_path: Path) -> None:
     result = run_generator(tmp_path)
     assert result.returncode == 0, result.stderr
     assert (orphan_dir / "broken.md").exists(), "even a broken orphan is never deleted"
+
+
+def test_hex_title_round_trips_as_a_string(tmp_path: Path) -> None:
+    payload = analysis("VIDEO0001", "2026-01-15", "Way.")
+    payload["techniques"][0]["title"] = "0x10"
+    write_analysis(tmp_path, "one.json", payload)
+
+    assert run_generator(tmp_path).returncode == 0
+    claim, _ = read_claim(tmp_path / "claims" / "observability" / "trace-first-debugging.md")
+    assert claim["title"] == "0x10"
+    assert isinstance(claim["title"], str)
