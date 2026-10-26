@@ -252,3 +252,65 @@ def test_check_mode_detects_stale_output(tmp_path: Path) -> None:
     assert run_generator(tmp_path).returncode == 0
     fresh = run_generator(tmp_path, "--check")
     assert fresh.returncode == 0, fresh.stderr + fresh.stdout
+
+
+def test_malformed_analysis_files_are_skipped_not_fatal(tmp_path: Path) -> None:
+    write_analysis(tmp_path, "good.json", analysis("GOOD00001", "2026-01-15", "Way."))
+    (tmp_path / "analysis" / "list.json").write_text("[]", encoding="utf-8")
+    (tmp_path / "analysis" / "badtech.json").write_text(
+        json.dumps({"video_id": "BADTECH01", "techniques": 5}), encoding="utf-8"
+    )
+
+    result = run_generator(tmp_path)
+    assert result.returncode == 0, result.stderr
+    assert (tmp_path / "claims" / "observability" / "trace-first-debugging.md").exists()
+
+
+def test_unsafe_video_id_is_not_used_as_a_path(tmp_path: Path) -> None:
+    evil = analysis("../../evil", "2025-01-15", "Old way.")
+    evil.pop("video_url")
+    write_analysis(tmp_path, "evil.json", evil)
+    write_analysis(tmp_path, "good.json", analysis("GOOD00001", "2026-01-15", "New way."))
+
+    result = run_generator(tmp_path)
+    assert result.returncode == 0, result.stderr
+    assert not (tmp_path / "evil.md").exists()
+    written = {str(p.relative_to(tmp_path)) for p in tmp_path.rglob("*.md")}
+    assert all("evil" not in name for name in written), written
+
+
+def test_invalid_video_id_falls_back_to_the_url(tmp_path: Path) -> None:
+    payload = analysis("not a valid id!", "2025-01-15", "Old way.")
+    payload["video_url"] = "https://www.youtube.com/watch?v=REALID001"
+    write_analysis(tmp_path, "x.json", payload)
+    write_analysis(tmp_path, "good.json", analysis("GOOD00001", "2026-01-15", "New way."))
+
+    result = run_generator(tmp_path)
+    assert result.returncode == 0, result.stderr
+    superseded = tmp_path / "claims" / "observability" / "trace-first-debugging--REALID001.md"
+    assert superseded.exists(), "superseded file must use the URL-derived video id"
+
+
+def test_numeric_title_round_trips_as_a_string(tmp_path: Path) -> None:
+    payload = analysis("VIDEO0001", "2026-01-15", "Way.")
+    payload["techniques"][0]["title"] = "2024"
+    write_analysis(tmp_path, "one.json", payload)
+
+    assert run_generator(tmp_path).returncode == 0
+    claim, _ = read_claim(tmp_path / "claims" / "observability" / "trace-first-debugging.md")
+    assert claim["title"] == "2024"
+    assert isinstance(claim["title"], str)
+
+
+def test_orphan_without_area_does_not_crash_generation(tmp_path: Path) -> None:
+    orphan_dir = tmp_path / "claims" / "misc"
+    orphan_dir.mkdir(parents=True)
+    (orphan_dir / "broken.md").write_text(
+        "---\ntype: technique\nid: broken-orphan\nstatus: active\n---\n\n# Broken\n",
+        encoding="utf-8",
+    )
+    write_analysis(tmp_path, "one.json", analysis("VIDEO0001", "2026-01-15", "Way."))
+
+    result = run_generator(tmp_path)
+    assert result.returncode == 0, result.stderr
+    assert (orphan_dir / "broken.md").exists(), "even a broken orphan is never deleted"

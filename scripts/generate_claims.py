@@ -71,9 +71,13 @@ def parse_date(value: object) -> str | None:
         return None
 
 
+SAFE_VIDEO_ID = re.compile(r"[A-Za-z0-9_-]{1,64}")
+
+
 def video_id_of(payload: dict) -> str | None:
-    if isinstance(payload.get("video_id"), str) and payload["video_id"]:
-        return payload["video_id"]
+    raw = payload.get("video_id")
+    if isinstance(raw, str) and SAFE_VIDEO_ID.fullmatch(raw):
+        return raw
     url = payload.get("video_url")
     if isinstance(url, str):
         match = re.search(r"[?&]v=([A-Za-z0-9_-]{6,})", url)
@@ -99,6 +103,9 @@ def load_instances(root: Path) -> list[dict]:
         except (OSError, json.JSONDecodeError) as exc:
             print(f"warning: skipping {path.name}: {exc}", file=sys.stderr)
             continue
+        if not isinstance(payload, dict):
+            print(f"warning: skipping {path.name}: top level is not an object", file=sys.stderr)
+            continue
         video_id = video_id_of(payload)
         if not video_id:
             print(f"warning: skipping {path.name}: no video id or URL", file=sys.stderr)
@@ -108,7 +115,11 @@ def load_instances(root: Path) -> list[dict]:
             or payload.get("published_at")
             or payload.get("publish_date")
         )
-        for technique in payload.get("techniques") or []:
+        techniques = payload.get("techniques") or []
+        if not isinstance(techniques, list):
+            print(f"warning: skipping {path.name}: techniques is not a list", file=sys.stderr)
+            continue
+        for technique in techniques:
             if not isinstance(technique, dict):
                 continue
             title = technique.get("title") or technique.get("name") or ""
@@ -196,12 +207,31 @@ def build_claims(instances: list[dict]) -> dict[str, dict]:
     return claims
 
 
+NON_STRING_WORDS = {"true", "false", "null", "~", "yes", "no", "on", "off"}
+
+
+def parses_as_non_string(value: str) -> bool:
+    if value.lower() in NON_STRING_WORDS:
+        return True
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}([Tt ].*)?", value):
+        return True
+    try:
+        float(value)
+        return True
+    except ValueError:
+        return False
+
+
 def yaml_scalar(value: object) -> str:
     if value is None:
         return "null"
     if isinstance(value, float):
         return repr(value)
-    if isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9_./-]+", value):
+    if (
+        isinstance(value, str)
+        and re.fullmatch(r"[A-Za-z0-9_./-]+", value)
+        and not parses_as_non_string(value)
+    ):
         return value
     return json.dumps(value)
 
@@ -263,7 +293,9 @@ def parse_claim_file(text: str) -> dict | None:
         frontmatter[key.strip()] = parse_scalar(raw)
     if sources:
         frontmatter["sources"] = sources
-    if "id" not in frontmatter:
+    if not isinstance(frontmatter.get("id"), str) or not isinstance(
+        frontmatter.get("area"), str
+    ):
         return None
     ordered = {key: frontmatter.get(key) for key in FRONTMATTER_KEYS}
     return {"frontmatter": ordered, "body": body.lstrip("\n")}
@@ -275,9 +307,16 @@ def scan_existing_claims(root: Path) -> dict[str, dict]:
     if not claims_dir.exists():
         return found
     for path in sorted(claims_dir.rglob("*.md")):
-        parsed = parse_claim_file(path.read_text(encoding="utf-8"))
+        text = path.read_text(encoding="utf-8")
+        parsed = parse_claim_file(text)
         if parsed:
             found[str(path.relative_to(root))] = parsed
+        elif text.startswith("---"):
+            print(
+                f"warning: {path.relative_to(root)} has unusable frontmatter; "
+                "kept on disk, excluded from generated indexes",
+                file=sys.stderr,
+            )
     return found
 
 
