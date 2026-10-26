@@ -1,0 +1,48 @@
+name: refresh
+
+# Weekly: note which channel videos still lack a transcript, regenerate the
+# claims tree from committed analyses, and commit any change.
+#
+# Hard rule: this workflow must NEVER fetch video captions. Caption hosts
+# reject datacenter egress, so transcripts are fetched from a residential
+# connection and committed to transcripts/ by that step. Automation here
+# only reads the public RSS feed and files already in the repo.
+
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: List videos missing transcripts (RSS only, never captions)
+        run: python3 scripts/check_rss.py
+        continue-on-error: true
+      - name: Regenerate claims from committed analyses
+        run: python3 scripts/generate_claims.py
+      - name: Install test dependencies
+        run: pip install pytest pyyaml
+      - name: Verify before committing
+        run: |
+          pytest -q
+          python3 scripts/generate_claims.py --check
+      - name: Commit regenerated tree
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add claims areas catalog.json llms.txt llms-full.md state
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "chore: refresh knowledge base"
+            git push
+          fi
