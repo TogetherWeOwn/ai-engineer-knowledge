@@ -15,8 +15,9 @@ the corrected generator and independent acceptance checks are ready.
 `scripts/backfill_publish_dates.py` reads real `analysis/*.json` records using
 `vid`, preserving `takeaways`, string `confidence`, and other fields. It uses
 YouTube Data API v3 `videos.list` with `part=snippet` in batches of at most 50
-IDs. Only `snippet.publishedAt` can fill `published_at`; existing valid aware
-timestamps are unchanged. Dates are never inferred from captions or fetch time.
+IDs. Only `snippet.publishedAt` can fill `published_at`, stored verbatim;
+existing valid aware timestamps are unchanged. Dates are never inferred
+from captions or fetch time.
 
 ```sh
 # Offline and read-only; no key needed. Empty corpus or <95% coverage exits 1.

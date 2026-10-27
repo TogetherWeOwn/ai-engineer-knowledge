@@ -18,8 +18,8 @@ cover the corrected behavior.
 - `confidence`: preserve its actual string value. Do not coerce it into a
   fabricated numeric score.
 - `published_at`: full ISO 8601 datetime with a UTC offset, backfilled from
-  YouTube Data API v3 `videos.list` -> `snippet.publishedAt`. Missing dates
-  remain missing until resolved. Date-only or timezone-naive values are not
+  YouTube Data API v3 `videos.list` -> `snippet.publishedAt`, stored verbatim.
+  Missing dates remain missing until resolved. Date-only or timezone-naive values are not
   adequate for coverage or supersession.
 - Transcript SHA256 and `retrieved_at` are public provenance; retrieval time
   does not substitute for publication time. Keep the source video URL, title

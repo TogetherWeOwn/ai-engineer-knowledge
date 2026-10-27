@@ -73,7 +73,9 @@ def report(records: list[tuple[Path, dict, bytes]], dates: dict[str, str] | None
     dates = dates or {}
     for _, payload, _ in records:
         vid = payload["vid"]
-        published = timestamp(payload.get("published_at")) or dates.get(vid)
+        # Fetched dates are raw API strings; normalize for comparison so that
+        # equivalent instants with different UTC offsets do not conflict.
+        published = timestamp(payload.get("published_at")) or timestamp(dates.get(vid))
         by_video[vid] = by_video.get(vid, True) and published is not None
         if published is not None:
             values.setdefault(vid, set()).add(published)
@@ -95,7 +97,10 @@ def report(records: list[tuple[Path, dict, bytes]], dates: dict[str, str] | None
 
 
 def fetch_dates(ids: list[str], key: str) -> dict[str, str]:
-    """Validate all batches before returning any data eligible for persistence."""
+    """Validate all batches before returning any data eligible for persistence.
+
+    Returned values are the exact API publishedAt strings; callers normalize
+    only for coverage/conflict comparison, never for storage."""
     dates = {}
     for start in range(0, len(ids), BATCH_SIZE):
         batch = ids[start : start + BATCH_SIZE]
@@ -126,10 +131,11 @@ def fetch_dates(ids: list[str], key: str) -> dict[str, str]:
                 raise BackfillError("invalid_api_response", "Unexpected or duplicate response video ID; no files were changed.")
             seen.add(vid)
             snippet = item.get("snippet")
-            published = timestamp(snippet.get("publishedAt")) if isinstance(snippet, dict) else None
-            if published is None:
+            raw = snippet.get("publishedAt") if isinstance(snippet, dict) else None
+            if timestamp(raw) is None:
                 raise BackfillError("invalid_api_response", "Expected an aware snippet.publishedAt timestamp; no files were changed.")
-            dates[vid] = published
+            assert isinstance(raw, str)
+            dates[vid] = raw
         # Omitted IDs may be private/deleted. Leave them unresolved, never guess.
     return dates
 
