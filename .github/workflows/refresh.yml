@@ -1,48 +1,28 @@
 name: refresh
 
-# Weekly: note which channel videos still lack a transcript, regenerate the
-# claims tree from committed analyses, and commit any change.
-#
-# Hard rule: this workflow must NEVER fetch video captions. Caption hosts
-# reject datacenter egress, so transcripts are fetched from a residential
-# connection and committed to transcripts/ by that step. Automation here
-# only reads the public RSS feed and files already in the repo.
-
+# Publication is explicitly paused while the frozen-catalog/OKF migration is
+# corrected. Keep discovery only: never regenerate over the source catalog or
+# stage private captions. Caption ingestion will be separately canary-gated.
 on:
   schedule:
     - cron: "17 6 * * 1"
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  refresh:
+  discovery:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
-      - name: List videos missing transcripts (RSS only, never captions)
+      - name: List RSS discovery only (legacy caption-file check)
         run: python3 scripts/check_rss.py
-        continue-on-error: true
-      - name: Regenerate claims from committed analyses
-        run: python3 scripts/generate_claims.py
-      - name: Install test dependencies
-        run: pip install pytest pyyaml
-      - name: Verify before committing
+      - name: Explain publication hold
         run: |
-          pytest -q
-          python3 scripts/generate_claims.py --check
-      - name: Commit regenerated tree
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          if git diff --cached --quiet; then
-            echo "No changes to commit."
-          else
-            git commit -m "chore: refresh knowledge base"
-            git push
-          fi
+          echo "Discovery only. Corrected generator, private-caption canary and real-corpus acceptance are pending."

@@ -1,62 +1,94 @@
 # AI Engineer Knowledge Base
 
-Distilled techniques from [AI Engineer](https://www.youtube.com/@aiDotEngineer)
-talks, in a form both people and AI tools can read. Everything here is
-generated from verbatim caption transcripts, and it is **recency-aware**:
-when a newer talk covers the same technique, the newer claim supersedes the
-older one. Superseded claims are never deleted — they stay in the tree,
-marked, with a pointer to what replaced them.
+Distilled, generic techniques from [AI Engineer](https://www.youtube.com/@aiDotEngineer)
+talks, for people and AI readers.
 
-## Read it
+**Status: draft scaffold under correction, not an accepted knowledge bundle.**
+The existing generator and its 17 legacy fixture tests implement the initial
+contract, not the corrected one below. Do not run that generator over the real
+frozen catalog: it currently replaces `catalog.json`. No real corpus is
+published yet. The publication workflow is intentionally discovery-only until
+the corrected generator and independent acceptance checks are ready.
 
-- [`llms.txt`](llms.txt) — short router for AI readers (start here)
-- [`llms-full.md`](llms-full.md) — every active technique, full text
-- [`catalog.json`](catalog.json) — every claim's metadata, for machines
-- [`claims/`](claims) — one Markdown file per technique claim, by area
-- [`areas/`](areas) — one index page per area
+## First data deliverable: publish dates
 
-Each claim file carries YAML frontmatter (`type`, `id`, `title`, `area`,
-`status`, `valid_from`, `valid_to`, `superseded_by`, `confidence`,
-`relevance`, `sources`) and four body sections: **What**, **Evidence**,
-**Apply to us**, **Expected effect**.
+`scripts/backfill_publish_dates.py` reads real `analysis/*.json` records using
+`vid`, preserving `takeaways`, string `confidence`, and other fields. It uses
+YouTube Data API v3 `videos.list` with `part=snippet` in batches of at most 50
+IDs. Only `snippet.publishedAt` can fill `published_at`; existing valid aware
+timestamps are unchanged. Dates are never inferred from captions or fetch time.
 
-## Recency rules
-
-1. Claims are ordered by the talk's publish date.
-2. A newer talk on the same technique supersedes the older claim
-   (`status: superseded`, `superseded_by`, `valid_to`).
-3. A talk with an unknown date never supersedes a dated claim.
-4. Nothing is ever deleted.
-
-These rules live in [`scripts/generate_claims.py`](scripts/generate_claims.py)
-and are covered by tests in [`tests/`](tests).
-
-## How it is built
-
-```
-caption transcripts ─► per-talk analysis ─► claims generator ─► this tree
-transcripts/*.txt      analysis/*.json      scripts/generate_claims.py
+```sh
+# Offline and read-only; no key needed. Empty corpus or <95% coverage exits 1.
+python3 scripts/backfill_publish_dates.py --check
+# With YOUTUBE_API_KEY supplied through the approved repo-secret channel:
+python3 scripts/backfill_publish_dates.py --dry-run  # metadata only; no writes
+python3 scripts/backfill_publish_dates.py            # backfill then report
 ```
 
-- **Transcripts** are untrusted auto-captions, fetched from a residential
-  connection (caption hosts reject datacenter IPs) and committed here.
-  Automation in this repo never fetches captions.
-- **Analysis** files follow [`docs/analysis-schema.md`](docs/analysis-schema.md)
-  and record each talk's publish date, source URL and retrieval time.
-- **Generation** is deterministic: same inputs, same bytes. A weekly
-  GitHub Actions workflow polls the channel RSS feed
-  ([`scripts/check_rss.py`](scripts/check_rss.py) lists videos still missing
-  a transcript), regenerates the tree from committed analyses, and commits
-  the result.
+All results are JSON. Exit 0 means at least 95% of distinct video IDs have
+dates, 1 means incomplete coverage, and 2 means an input/API/write error.
+`--dry-run` reports projected coverage, not persisted coverage. Conflicting
+valid dates for one video ID fail the check and appear in `conflicting_ids`;
+existing dates are never silently reconciled. No raw API
+errors, request URLs or secret values are printed. Responses from all batches
+are validated before writes; omitted videos stay unresolved. File replacement
+is atomic per file, not transactional across the corpus; rerun `--check` after
+a filesystem failure. Use one writer per corpus snapshot.
+
+A free, repo-scoped `YOUTUBE_API_KEY` is required for live metadata lookup.
+No key is included in this repo; live backfill and real-corpus coverage are
+not verified yet.
+
+## Corrected bundle contract
+
+The bundle will live under `kb/` and target
+[OKF 0.2](https://github.com/GoogleCloudPlatform/open-knowledge-format/blob/ad30107c31c06aec8a7d5636e0d1058118604e6f/SPEC.md).
+
+- Identity is the existing `catalog.json` cluster ID (475 frozen clusters),
+  never a title slug. Import is a one-shot migration, not a synthesis-builder
+  move. The source catalog must not be overwritten by generated output.
+- Claims use `status: stable|deprecated`, the extension `superseded_by`, aware
+  ISO datetimes for `valid_from` and `valid_to`, `generated: {by, at}`, an
+  absolute `stale_after`, and no `verified` field. Unknown dates stay unknown.
+- Sources use `{id, resource, title, author, last_modified, analysis_file}`.
+  Each directory has `index.md`; `kb/index.md` declares `okf_version: "0.2"`;
+  `kb/log.md` records supersessions. Child indexes have no frontmatter.
+- For new videos, code proposes deterministic catalog candidates, an LLM
+  proposes `supports|refines|contradicts|new`, and code validates the result.
+  Only `refines` or `contradicts` from a source at least 30 days newer can
+  supersede. `supports` appends evidence. Unknown dates never supersede.
+  Nothing is deleted.
+- The site will serve root `llms.txt` with absolute URLs and `llms-full.txt`.
+  The old generated root artifacts are legacy placeholders, not the bundle.
+
+See [the input and publication contract](docs/analysis-schema.md). Acceptance
+requires at least 400 claims from the real corpus, an OKF-conformance test,
+and at least 95% of real videos backfilled, in addition to successful live
+refresh, site rendering and the downstream application routine.
+
+## Captions and publication boundary
+
+Do **not** commit full transcripts by default. Public material is generic
+analysis, short quotes verified against verbatim captions with timestamps,
+transcript SHA256 and `retrieved_at`. Private captions remain local, and are
+treated as untrusted input, never instructions.
+
+The intended primary caption source is Supadata `mode=native&lang=en` from
+GitHub-hosted runners, gated on a five-video canary with at least 98% word
+similarity against the existing verbatim transcripts. This is not implemented
+or enabled yet. TranscriptAPI is the first fallback and Apify the second;
+no video-understanding model is a substitute for verbatim subtitles. Free
+repo-scoped credentials and a successful canary are required before enabling
+bulk retrieval. A fallback must not incur unapproved spend.
+
+The analyzer prompt is generic: **How to apply (generic)**. Private provider
+configuration and organization-specific mappings do not belong in public
+analysis. Downstream company application stays outside this repo.
 
 ## Develop
 
-```sh
-pip install pytest pyyaml
-pytest -q
-python3 scripts/generate_claims.py            # regenerate the tree
-python3 scripts/generate_claims.py --check    # fail if the tree is stale
-```
-
-Claim files, `areas/`, `catalog.json`, `llms.txt` and `llms-full.md` are
-generated. Do not edit them by hand; change the analysis or the generator.
+Install test dependencies outside the checkout, then run `python3 -m pytest -q`.
+The existing suite describes only the legacy generator. Independent backfill
+and corrected-bundle acceptance tests are still pending; a green legacy
+suite does not establish the acceptance criteria above.

@@ -1,50 +1,103 @@
-# Analysis input contract
+# Analysis input and publication contract
 
-The claims generator reads one JSON file per talk from `analysis/*.json`.
-This document is the contract the analysis step must emit. The generator is
-defensive: a file it cannot identify (no video id or URL) is skipped with a
-warning, and missing optional fields fall back to documented defaults — one
-bad file never stops the run.
+## Implementation status
 
-```json
-{
-  "video_id": "4UtrRVtUN_g",
-  "video_url": "https://www.youtube.com/watch?v=4UtrRVtUN_g",
-  "title": "How to Build an AI Code Review Agent",
-  "talk_date": "2026-10-26",
-  "retrieved_at": "2026-10-26T12:00:00Z",
-  "transcript_file": "transcripts/4UtrRVtUN_g.txt",
-  "techniques": [
-    {
-      "slug": "trace-first-debugging",
-      "title": "Trace-first debugging",
-      "area": "observability",
-      "what": "What the technique is.",
-      "evidence": "What the talk shows or measures.",
-      "apply": "How a small team would apply it.",
-      "expected_effect": "What should measurably improve.",
-      "confidence": 0.8,
-      "relevance": 0.9
-    }
-  ]
-}
-```
+The publish-date backfill accepts the real analysis envelope below. The
+legacy `scripts/generate_claims.py` still expects the initial
+`video_id/techniques` fixture contract; it is not the migration adapter and
+must not run on the frozen source catalog. Bundle generation remains paused
+until the real catalog schema is inspected and independent acceptance tests
+cover the corrected behavior.
 
-Field notes:
+## Real input envelope
 
-- `video_id` or `video_url` is required; the id is derived from the URL
-  when absent.
-- `talk_date` is the talk's **publish date** (ISO 8601). It drives
-  supersession, so it must come from the feed/platform metadata, not from
-  the transcript. `published_at` / `publish_date` are accepted as aliases.
-  When the date is genuinely unknown, omit it: an undated claim never
-  supersedes a dated one.
-- `retrieved_at` is when the transcript was fetched. Provenance only.
-- `techniques[].slug` identifies the technique across talks: **the same
-  technique must get the same slug in every talk**, or supersession cannot
-  link them. When absent, the slug is derived from the title.
-- `techniques[].area` groups claims into `areas/` pages. Default `general`.
-- `confidence` / `relevance` are 0–1 numbers or omitted.
+- `vid`: string video ID. The backfill groups records by this field.
+- `takeaways`: preserve the actual corpus value and structure. The backfill
+  does not reinterpret it; a sanitized real sample is required before writing
+  the claim migration adapter.
+- `confidence`: preserve its actual string value. Do not coerce it into a
+  fabricated numeric score.
+- `published_at`: full ISO 8601 datetime with a UTC offset, backfilled from
+  YouTube Data API v3 `videos.list` -> `snippet.publishedAt`. Missing dates
+  remain missing until resolved. Date-only or timezone-naive values are not
+  adequate for coverage or supersession.
+- Transcript SHA256 and `retrieved_at` are public provenance; retrieval time
+  does not substitute for publication time. Keep the source video URL, title
+  and speaker when available; do not invent missing metadata.
 
-Transcripts are untrusted auto-captions. Analysis must treat transcript
-text as data, never as instructions.
+The backfill reads `analysis/*.json`, changes only `published_at` when its
+current value is missing/invalid, and preserves all other keys. It does not
+publish analysis or validate whether pre-existing prose is safe to publish.
+Public sanitization is a separate required import step. Symlinked inputs and
+malformed analysis fail before network requests or writes.
+
+`--check` is offline, counts distinct video IDs, and succeeds at >=95% coverage
+only with a nonempty corpus. Every analysis record for a duplicated ID must
+have a valid date for that video to count. Conflicting valid dates for one ID
+are reported in `conflicting_ids` and fail the check; equivalent instants with
+different UTC offsets are not conflicts. Existing dates are not silently
+rewritten to resolve conflicts. `--dry-run` fetches metadata but
+writes nothing; its coverage is projected. All API batches must validate
+before any writes. Unavailable/omitted IDs are listed, never assigned guessed
+dates. Existing valid aware timestamps are preserved verbatim.
+
+YouTube `publishedAt` means publication, not necessarily initial upload time:
+[video resource documentation](https://developers.google.com/youtube/v3/docs/videos#snippet.publishedAt).
+Use the public video resource without owner impersonation or privileged
+private-video access. Credential: repo-scoped `YOUTUBE_API_KEY`; never an
+existing private runtime credential. No secret value, request URL or raw API
+error belongs in logs or artifacts.
+
+## Frozen identities and relation validation
+
+The real `catalog.json` contains 475 frozen cluster IDs. The one-shot migration
+must preserve these IDs; same-title techniques must not collapse into a slug.
+Do not generate a replacement source catalog from claim frontmatter.
+
+New videos use three stages: deterministic candidate generation against the
+catalog, an untrusted LLM relation proposal (`supports|refines|contradicts|new`),
+then code validation. The validator rejects out-of-candidate identities and
+malformed/unsupported relations. New identities require an explicit validated
+extension path, never a silent rename of a frozen cluster.
+
+Only `refines` and `contradicts` from a source at least **30 days newer** than
+the current evidence can supersede it. Supports appends. Unknown dates cannot
+supersede. Retain all revisions and record supersessions in `kb/log.md`.
+
+## Target OKF bundle
+
+Target specification:
+[OKF 0.2 at ad30107](https://github.com/GoogleCloudPlatform/open-knowledge-format/blob/ad30107c31c06aec8a7d5636e0d1058118604e6f/SPEC.md).
+The following application requirements are stricter than OKF's minimal
+conformance rules; both must be tested.
+
+- Bundle: `kb/`. Every directory has `index.md`; only the root index has
+  frontmatter, declaring `okf_version: "0.2"`. `kb/log.md` uses newest-first
+  date-grouped entries with `YYYY-MM-DD` headings, stable event IDs and links.
+- Concepts: `type: technique`, frozen cluster identity, `status: stable` or
+  `deprecated`, aware `valid_from`/`valid_to` or null for unknowns, extension
+  `superseded_by`, `generated: {by, at}`, and an absolute `stale_after`.
+  `generated.at` represents the last meaningful change, not the latest check;
+  replay must not churn it. Omit `verified`: generated content is unverified.
+- Each source: `{id: <vid>, resource: <video_url>, title, author: <speaker>,
+  last_modified: <published_at>, analysis_file}`. Unknown values remain unknown.
+  Use source-ID footnotes for attribution, not positional indexes.
+- Body: **What**, **Evidence**, **How to apply (generic)**, **Expected effect**.
+- Router: site-root `llms.txt` with absolute URLs, under 100 lines, pointing to
+  `llms-full.txt` and bundle indexes.
+
+## Public content boundary
+
+Full transcripts are **not** published by default. Publish only generic
+analysis, short timestamped quotes checked against verbatim captions,
+transcript SHA256 and retrieval provenance. A hash is not proof that a quote
+was verified; verification must compare actual text/timestamps.
+
+The generic analyzer must not read a company brief or encode private runtime
+provider assumptions. Remove internal tracker references, hostnames, home
+paths and organization-status fields before import. Company-specific
+application mapping belongs in downstream task records, not public claims.
+Treat captions and model responses as data, never instructions. Supadata
+native English captions require the five-video >=98% similarity canary before
+bulk use; fallback order is TranscriptAPI then Apify, subject to authorized
+access and no new spend. No video-understanding substitute is permitted.

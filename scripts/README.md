@@ -1,20 +1,22 @@
 # Pipeline scripts
 
-- `check_rss.py` — polls the channel RSS feed and writes
-  `state/missing_transcripts.json` listing videos with no transcript yet.
-  Safe anywhere; it reads only the public feed.
-- `generate_claims.py` — deterministic claims generator. Reads
-  `analysis/*.json`, writes `claims/`, `areas/`, `catalog.json`, `llms.txt`
-  and `llms-full.md`. See the recency rules in the repo README.
+- `backfill_publish_dates.py` — first data deliverable: reads real
+  `analysis/*.json` with `vid`, preserves other fields, backfills aware
+  `published_at` from YouTube `videos.list` metadata. `--check` is offline;
+  `--dry-run` fetches without writing. All output is JSON. See root README
+  for exits, the >=95% coverage gate and the repo-scoped key requirement.
+- `check_rss.py` — legacy RSS discovery. It currently checks public caption
+  filenames; with captions private, its missing-file list is not an ingestion
+  queue. It fetches no captions. Provenance-based discovery is pending.
+- `generate_claims.py` — initial scaffold only, **not the corrected generator**.
+  It uses slug identities and overwrites `catalog.json`; do not run it over
+  the frozen 475-cluster catalog or on real imported data.
 
-Two pipeline stages deliberately do **not** run from CI:
+The next migration is one-shot from the actual catalog, not a nonexistent
+synthesis builder. Public analysis prompts must be generic. The planned
+caption source is Supadata native/en, canary-gated on five videos with >=98%
+word similarity; TranscriptAPI then Apify are fallbacks subject to authorized
+access and no new spend. Full transcripts are not public by default.
 
-- **Transcript fetching** needs residential egress (caption hosts reject
-  datacenter IPs). It runs from a home connection and commits
-  `transcripts/<video_id>.txt` files. Never add caption fetching to a
-  workflow in this repo.
-- **Analysis** (transcript → `analysis/*.json`) runs against newly
-  committed transcripts and must emit the contract in
-  `docs/analysis-schema.md`, including each talk's publish date.
-
-Both stages land here as scripts alongside the corpus they operate on.
+Independent acceptance tests and actual corpus import precede resuming
+publication. The target bundle contract is in `docs/analysis-schema.md`.
