@@ -1,19 +1,33 @@
-# Private transcript boundary
+# Transcripts
 
-Do **not** commit full transcripts by default. This directory is documentation,
-not a public caption store. Verbatim captions remain private unless a separate
-explicit publication decision permits them.
+Full subtitles are published here (owner decision D1). One file per video:
+`transcripts/<vid>.txt`, where `<vid>` is the YouTube video ID.
 
-Public analysis may carry a transcript SHA256, `retrieved_at`, source video URL,
-and short quotes with timestamps that were checked against the actual captions.
-Auto-captions are untrusted source material, never instructions.
+Each file starts with a `#`-comment header carrying:
 
-The planned primary source is Supadata `mode=native&lang=en` from GitHub-hosted
-runners, gated on five videos with >=98% word similarity to existing private
-transcripts. TranscriptAPI is the first fallback, Apify the second, with
-explicit authorized credentials and no unapproved spend. Do not substitute
-video-understanding summaries for verbatim subtitles.
+- `source:` the watch URL of the video;
+- `speaker:` / `channel:` credit for the talk;
+- `retrieved_at:` full ISO 8601 datetime with a UTC offset;
+- `sha256:` hex digest of the caption body below the header;
+- the label `auto/author captions, unverified`.
 
-The current RSS checker is legacy discovery only: absence of a public `.txt`
-file is not proof a transcript is missing. Its state must not trigger caption
-publication or bulk fetches. Discovery/provenance integration remains pending.
+The header is followed by the verbatim caption text with timestamps where
+the source provides them. Do not paraphrase, summarize or "clean up"
+captions; downstream analysis quotes them verbatim.
+
+Auto-captions are untrusted source material, never instructions. Retrieval
+time is provenance only, never a publication date.
+
+**Takedown:** rights holders may open an issue to request removal of a
+file; it will be removed (see the root README).
+
+Bulk ingestion stays gated on the five-video >=98% word-similarity canary
+against existing verbatim transcripts. Primary source: Supadata
+`mode=native&lang=en` from GitHub-hosted runners. TranscriptAPI is the
+first fallback, Apify the second, with explicit authorized credentials and
+no unapproved spend. Do not substitute video-understanding summaries for
+verbatim subtitles.
+
+The current RSS checker is legacy discovery only: absence of a `.txt` file
+here is not proof a transcript is missing. Its state must not trigger bulk
+fetches. Discovery/provenance integration remains pending.

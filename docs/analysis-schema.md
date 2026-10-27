@@ -88,10 +88,12 @@ conformance rules; both must be tested.
 
 ## Public content boundary
 
-Full transcripts are **not** published by default. Publish only generic
-analysis, short timestamped quotes checked against verbatim captions,
-transcript SHA256 and retrieval provenance. A hash is not proof that a quote
-was verified; verification must compare actual text/timestamps.
+Full transcripts **are** published under `transcripts/*.txt` (owner decision
+D1). Each file carries the source video URL, speaker/channel credit,
+`retrieved_at`, the transcript SHA256 and the label "auto/author captions,
+unverified" (see `transcripts/README.md`). Short timestamped quotes in
+claims must still be checked against the actual captions; a hash alone is
+not proof a quote was verified.
 
 The generic analyzer must not read a company brief or encode private runtime
 provider assumptions. Remove internal tracker references, hostnames, home
