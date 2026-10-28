@@ -182,6 +182,10 @@ def parse_captions(raw: bytes, vid: str):
     index = 0
     while index < len(lines) and lines[index].startswith(b"#"):
         line = lines[index].decode("utf-8").strip()
+        # Reject all machine markers, including documented inline-unverified
+        # variants and malformed markers that would otherwise look like fields.
+        if line[1:].strip().casefold().startswith("machine transcript"):
+            reject("not_caption_evidence")
         if ": " in line:
             key, value = line[2:].split(": ", 1)
             if key in header:
@@ -193,9 +197,7 @@ def parse_captions(raw: bytes, vid: str):
     body = b"".join(lines[index:])
     source = f"https://www.youtube.com/watch?v={vid}"
     if (header.get("source") != source or header.get("sha256") != hashlib.sha256(body).hexdigest()
-            or [label for label in labels if label in ("# auto/author captions, unverified",
-                                                       "# machine transcript (Whisper; no YouTube captions)")]
-            != ["# auto/author captions, unverified"]):
+            or sum(label[1:].strip() == "auto/author captions, unverified" for label in labels) != 1):
         reject("invalid_provenance")
     aware_timestamp(header.get("retrieved_at"))
     text(header.get("speaker") or header.get("channel"), maximum=1000)

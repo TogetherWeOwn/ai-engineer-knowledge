@@ -908,3 +908,74 @@ def test_publication_revalidates_relations_of_an_untrusted_artifact(corpus, monk
     (artifact / f'{VID}.json').write_text(json.dumps(forged))
     with pytest.raises(module.AnalysisError, match='out_of_candidate_id'):
         module.validate_publication(corpus.root, VID, artifact)
+
+
+@pytest.mark.parametrize("machine_marker", [
+    "# machine transcript (Whisper; no YouTube captions)",
+    "# machine transcript (Whisper; no YouTube captions), unverified",
+    "# machine transcript (Whisper; no YouTube captions)\n# unverified",
+    "#machine transcript (Whisper; no YouTube captions), unverified",
+    "# MACHINE TRANSCRIPT (unrecognized variant)",
+    "# machine transcript: Whisper; no YouTube captions, unverified",
+])
+@pytest.mark.parametrize("keep_native", [True, False])
+def test_all_machine_marker_variants_are_ineligible_for_caption_analysis(corpus, monkeypatch, machine_marker, keep_native):
+    original = corpus.caption.read_text()
+    native = "# auto/author captions, unverified"
+    replacement = native + "\n" + machine_marker if keep_native else machine_marker
+    corpus.caption.write_text(original.replace(native, replacement))
+    before = snapshot(corpus.base)
+    assert_rejected(invoke(corpus, monkeypatch, check=True), corpus, before, [])
+
+
+@pytest.mark.parametrize("word_count, accepted", [(39, True), (40, True), (41, False)])
+def test_quote_word_limit_is_inclusive_independently_of_character_limit(corpus, monkeypatch, word_count, accepted):
+    quote = " ".join(["ax"] * word_count)
+    assert len(quote) < 200  # Safely below the independent character bound.
+    corpus.captions(body=f"[00:05] {quote}\n")
+    proposed = {"talk_summary": "Synthetic boundary example.", "takeaways": [takeaway(quote=quote)], "truncated": False}
+    related = {"relations": [{"takeaway_index": 0, "relation": "new", "catalog_id": None}], "truncated": False}
+    before = snapshot(corpus.base)
+    result = invoke(corpus, monkeypatch, extract=proposed, relate=related)
+    if not accepted:
+        assert_rejected(result, corpus, before, ["extract"])
+    else:
+        assert result.status == 0
+        assert_sanitized(result)
+        assert [stage for stage, _ in result.requests] == ["extract", "relate"]
+        assert json.loads(corpus.target.read_text())["takeaways"][0]["evidence_quote"] == quote
+        after = snapshot(corpus.base)
+        target = corpus.target.relative_to(corpus.base).as_posix()
+        assert {k: v for k, v in after.items() if k != target} == {k: v for k, v in before.items() if k != target}
+
+
+@pytest.mark.parametrize("char_count, accepted", [(279, True), (280, True), (281, False)])
+def test_quote_character_limit_is_inclusive_independently_of_word_limit(corpus, monkeypatch, char_count, accepted):
+    quote = "a" * (char_count - 6) + " bb cc"
+    assert len(quote) == char_count and len(quote.split()) == 3
+    corpus.captions(body=f"[00:05] {quote}\n")
+    proposed = {"talk_summary": "Synthetic boundary example.", "takeaways": [takeaway(quote=quote)], "truncated": False}
+    related = {"relations": [{"takeaway_index": 0, "relation": "new", "catalog_id": None}], "truncated": False}
+    before = snapshot(corpus.base)
+    result = invoke(corpus, monkeypatch, extract=proposed, relate=related)
+    if not accepted:
+        assert_rejected(result, corpus, before, ["extract"])
+    else:
+        assert result.status == 0
+        assert_sanitized(result)
+        assert [stage for stage, _ in result.requests] == ["extract", "relate"]
+        assert json.loads(corpus.target.read_text())["takeaways"][0]["evidence_quote"] == quote
+        after = snapshot(corpus.base)
+        target = corpus.target.relative_to(corpus.base).as_posix()
+        assert {k: v for k, v in after.items() if k != target} == {k: v for k, v in before.items() if k != target}
+
+
+
+@pytest.mark.parametrize("native_marker", ["# auto/author captions, unverified", "#auto/author captions, unverified", "#\t auto/author captions, unverified"])
+def test_documented_native_label_whitespace_conforms_in_offline_check(corpus, monkeypatch, native_marker):
+    corpus.caption.write_text(corpus.caption.read_text().replace("# auto/author captions, unverified", native_marker))
+    before = snapshot(corpus.base)
+    result = invoke(corpus, monkeypatch, check=True)
+    assert result.status == 0
+    assert result.requests == []
+    assert snapshot(corpus.base) == before
