@@ -1,0 +1,69 @@
+name: backfill
+
+# Live C6 publish-date backfill: YouTube videos.list -> analysis/*.json
+# published_at, using the repo-scoped YOUTUBE_API_KEY. Manual dispatch only.
+# Single writer (concurrency group); stages analysis/*.json and the regenerated
+# frozen bundle explicitly. Exit 1 (incomplete coverage) still commits consistent
+# partial progress so the next dispatch continues. Exit 2 or an unexpected exit never commits:
+# a filesystem error can leave per-file progress that needs inspection.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: backfill-publish-dates
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - name: Install test dependencies
+        run: pip install pytest pyyaml
+      - name: Run publish-date backfill
+        id: backfill
+        env:
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+        run: |
+          set +e
+          python3 scripts/backfill_publish_dates.py | tee /tmp/backfill-report.json
+          echo "exit_code=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+      # Publication dates feed claim source metadata and valid_from. Regenerate
+      # before checking freshness, then commit the consistent tree together.
+      # GITHUB_TOKEN pushes do not trigger CI, so verify here before committing;
+      # a generation, test or freshness failure prevents the push.
+      - name: Validate backfilled checkout
+        if: steps.backfill.outputs.exit_code == '0' || steps.backfill.outputs.exit_code == '1'
+        run: |
+          python3 scripts/generate_claims.py
+          pytest -q
+          python3 scripts/generate_claims.py --check
+      - name: Commit analysis dates
+        if: steps.backfill.outputs.exit_code == '0' || steps.backfill.outputs.exit_code == '1'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -- analysis/*.json
+          if [ -d kb ]; then
+            git add -- kb/ llms.txt llms-full.txt
+          fi
+          if git diff --cached --quiet; then
+            echo "No date changes to commit."
+          else
+            git commit -m "data: backfill video publish dates (videos.list)"
+            git push
+          fi
+      - name: Report gate result
+        run: |
+          cat /tmp/backfill-report.json
+          code='${{ steps.backfill.outputs.exit_code }}'
+          case "$code" in
+            0|1|2) exit "$code" ;;
+            *) echo "unexpected backfill exit code: $code"; exit 2 ;;
+          esac

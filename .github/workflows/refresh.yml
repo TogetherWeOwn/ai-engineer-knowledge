@@ -1,0 +1,35 @@
+name: refresh
+
+# Publication is explicitly paused while the frozen-catalog/OKF migration is
+# corrected. Keep discovery only: never regenerate over the source catalog.
+# Caption ingestion into transcripts/*.txt stays canary-gated (owner decision
+# D1 permits publication with the required provenance header).
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  discovery:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - name: List RSS discovery only (legacy caption-file check)
+        run: python3 scripts/check_rss.py
+      - name: Upload RSS discovery inventory
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: rss-discovery-inventory
+          path: state/missing_transcripts.json
+          if-no-files-found: error
+      - name: Explain publication hold
+        run: |
+          echo "Discovery only. Corrected generator, caption canary and real-corpus acceptance are pending."

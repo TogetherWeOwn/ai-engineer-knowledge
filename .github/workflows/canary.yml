@@ -1,0 +1,43 @@
+name: canary
+
+# Supadata canary gate: 5 videos, mode=native&lang=en, from a GitHub-hosted
+# runner. Pass (>=0.98 word similarity each, HTTP 200, no 206) authorizes
+# bulk caption retrieval; anything else keeps it disabled. Manual dispatch
+# only; the 5 video IDs must already have conforming transcripts/*.txt
+# references (see docs/canary.md). Read-only: commits nothing.
+on:
+  workflow_dispatch:
+    inputs:
+      vids:
+        description: "Exactly 5 comma-separated video IDs with reference transcripts"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - name: Run Supadata canary
+        env:
+          SUPADATA_API_KEY: ${{ secrets.SUPADATA_API_KEY }}
+          VIDS: ${{ inputs.vids }}
+        run: |
+          python3 scripts/supadata_canary.py \
+            --vids "$VIDS" \
+            --out canary-report.json
+      - name: Upload canary report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: canary-report
+          path: canary-report.json
+          if-no-files-found: error
