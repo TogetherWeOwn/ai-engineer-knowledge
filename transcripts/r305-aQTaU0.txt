@@ -1,0 +1,434 @@
+# title: Text Diffusion — Brendan O’Donoghue, Google DeepMind
+# source: https://www.youtube.com/watch?v=r305-aQTaU0
+# speaker: Brendan O’Donoghue, Google DeepMind
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T08:37:53Z
+# sha256: 3ab0f47f1e6b720647cb677b5847aaed69bfa91b017f1a7459f6d224bd7ae206
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:07] [music]
+[00:14] >> Some people are still filtering into the room.
+[00:17] But it's mostly intro stuff for the first couple of slides so they won't
+[00:20] miss anything. Okay, welcome everybody. My name is Brendan. I'm I'm a research
+[00:24] scientist at DeepMind. I'm talking today about text diffusion, which is kind of a
+[00:28] more forward-looking research area at DeepMind. So you're probably familiar
+[00:33] with image and video diffusion, which is kind of state of the art for these
+[00:37] modalities right now where you you know, you take ground truth, say image, you
+[00:41] add noise to it in training, and then you train a neural network to remove
+[00:46] that noise gradually, and then at inference time you just initialize
+[00:50] the the picture with pure noise, and then you iteratively refine out the
+[00:54] noise to recover back to, you know, whatever image or video or audio or
+[00:59] whatever you're looking for. And the principle is essentially the same for
+[01:02] text for text diffusion, where you start with a clean
+[01:07] sequence of tokens, like so a clean sentence or something like that. And
+[01:10] then you gradually add noise, you corrupt it somehow. There's lots of
+[01:14] different ways to do that. You can do it in continuous or discrete way, but let's
+[01:17] just say discrete for now, which would in this case just mean adding random
+[01:20] tokens or replacing tokens with other random tokens. And you do that for a
+[01:24] bunch of different noise levels, and you train the neural network to try to fill
+[01:28] in to try to correct the mistakes basically in the text. And then at
+[01:32] inference time you initialize the sequence of tokens to just pure noise,
+[01:36] like pure random discrete tokens from the vocabulary, and then you iteratively
+[01:41] refine through that to fill in the information in the order that the neural
+[01:44] network wants to do to recover back to, say, a clean sentence.
+[01:49] And then in practice, so we, you know, I showed we I showed you some GIFs here of
+[01:53] what it looks like for images. You get very similar looking at for text, where
+[01:57] it kind of uh you know, starts off all noisy and then
+[02:00] gradually like fills in the text and then you get clean relatively clean
+[02:04] outputs at the end. Okay, so the the team I'm on we had a a
+[02:09] research demo release 1 year ago now called Gemini diffusion which was a
+[02:14] variant of a Gemini model which did text diffusion instead of auto aggressive
+[02:18] next token generation and that was like a research preview that was open to
+[02:21] about 100k people. Uh
+[02:24] Uh >> [clears throat]
+[02:24] >> And you know, we're still you know, keep keep posted for new new developments in
+[02:28] that direction upcoming soon.
+[02:31] Um And we did have some good numbers at the time, but again it's a year ago
+[02:36] which is like you know, prehistoric times in this field. Our kind of main
+[02:40] competitor model was Gemini 2.0 flashlight at the time cuz that was the
+[02:43] architecture we were branching from the text fusion model and we basically had
+[02:47] very similar quality across the board there. Um mostly you know, a little bit
+[02:52] of advantage in code, a little bit of disadvantage in some other areas, but
+[02:55] kind of relatively similar performance at much better latencies.
+[02:59] Um but again yeah, this is a year ago so I wouldn't fixate too much on these
+[03:03] numbers. Okay, so what's the difference between
+[03:05] auto aggressive generation and diffusion? So in in the standard vanilla
+[03:08] Gemini Gemma you know, GPT whatever um generation of text you do this you
+[03:15] know, you have some context that comes in and you want to generate some
+[03:17] response to that and the model does it one token at a time. So it generates the
+[03:21] first token and then condition on that generates the next token and so on.
+[03:24] Whereas in diffusion you have the you know, a context will come in whatever
+[03:27] that is and it'll initialize like I like I mentioned like a long sequence of
+[03:31] tokens could be hundreds could be thousands could be shorter depends on
+[03:34] the model uh to be random noise and then it iteratively refines that canvas to
+[03:40] remove the noise over the course of a few denoising steps. So rather than one
+[03:44] token at a time it does the entire block together but over a couple of
+[03:48] iterations. So it's not just one pass, it does multiple passes, but it gets to
+[03:53] attend to the future tokens and so on. So, it's a kind of a different way of
+[03:56] generating text. Uh um So, that obviously has some pros and
+[04:01] cons. So, the main pro that people really like and probably is the biggest
+[04:05] advantage that text-to-image models have is that it's it's just faster inference.
+[04:09] It just generates faster tokens per second cuz it makes much better use of
+[04:13] the hardware, the TPU and the GPU. And I have some slides on that to explain why.
+[04:17] Um but some other advantages are it can do bidirectional attention within the
+[04:20] within this canvas of tokens. So, you know,
+[04:23] autoregressive models can only attend to the past. They have causal attention
+[04:28] within their, you know, their transformer. Whereas the a text-to-image
+[04:31] model is not restricted at all. It can attend to the future. And that has some
+[04:34] interesting properties like it can do self-correcting generation based on
+[04:38] future tokens. So, it could like, you know, do some reasoning, see that it got
+[04:41] the answer incorrect, and then go back and fix the reasoning and do it again. I
+[04:45] have I have a demo of that. Um because this this process is is
+[04:49] iterative, it does a number of steps to to to respond, and that means the model
+[04:54] can actually do adaptive computation. It it it turns out that you can train the
+[04:57] model to spend more time on harder problems and less time on easier
+[05:01] problems. And like like the fusion models in general, you can do things
+[05:04] like in-place editing where you say like fix the last tokens and give me the
+[05:08] prefix that corresponds to those tokens and stuff.
+[05:11] Um but the main disadvantage it has and the reason why it's not kind of used
+[05:14] everywhere right now is lower throughput for large batches. So,
+[05:19] autoregressive models, they're slow, but you can have a big batch of queries
+[05:24] together, and then if you push that through the neural network through on
+[05:28] the GPU, each individual user is slow, but that you make good use of the TPU by
+[05:32] doing that. And so, you can serve a lot of queries. And so, you keep your costs
+[05:36] down. You can serve a lot. Whereas since text-to-image does multiple forward
+[05:41] passes on the same data, it, you know, it hits a compute threshold basically
+[05:44] earlier, and it's it's even though it's lower latency for any one user, it tends
+[05:49] to be, you know, lower throughput overall. So, higher cost to serve. And
+[05:53] right now, you know, if you have if you've played with Claude recently, uh
+[05:57] you'll know that they have some throughput concerns. So, uh
+[06:02] people really care about throughput right now. And so, no one's landing text
+[06:06] diffusion into any of these big models primarily because of that disadvantage.
+[06:09] It's just too expensive to serve, even if it is much lower latency.
+[06:13] Okay, so just leading into why does it have lower latency in case you're not
+[06:16] familiar with kind of the architecture of how GPUs and TPUs run today. So, in a
+[06:21] in a GPU, there's like a a tensor core, which does these like big matrix
+[06:24] multiplies. It's very efficient, has a lot of flops or hops or, you know,
+[06:28] whatever. Uh and then the memory that sits on the
+[06:31] TPU GPU, this this HBM, that's where the weights and the activations and
+[06:35] everything are stored, and that has to transfer over
+[06:39] from the memory, all the weights and the activations and the KV cache, into the
+[06:43] tensor core in order to do the computation. And so, it has to flow
+[06:46] through this bandwidth channel. And that bandwidth channel is very tight.
+[06:50] It turns out that the the both GPUs and TPUs have a lot of flops and not that
+[06:55] much bandwidth. It's quite hard to It's expensive to put bandwidth onto these
+[06:58] chips, and it's easy to put flops. So, because of that ratio, you can uh you
+[07:03] you know, you can If you do the more flops you do for each streaming amount
+[07:08] of data you put through, the better. All right, so
+[07:12] So, when we're serving uh an auto regressive
+[07:15] model, these these chips are memory bound. They're basically
+[07:18] bottlenecked by this bandwidth. Um so, when you do auto regressive next
+[07:22] token generation, for each token, you're doing one token at a time. Let's say
+[07:26] batch size one. You have to stream over the entire
+[07:29] neural network and all the KV cache and everything to get one token,
+[07:33] and then you do it again for the next token and so on.
+[07:35] Whereas for text diffusion, you're generating, say, 256 tokens, you still
+[07:40] will over everything, but if you can do that less times
+[07:44] than the number of tokens, this iterative refinement process, then
+[07:47] you'll get a speed up. So, if you can do, say, 24 passes to generate 256
+[07:52] tokens, you'll be doing 10 times fewer memory transfers than an
+[07:57] autoregressive model. And if you are truly memory bound, then you'll be 10
+[08:01] times faster, something like that. So, that's that's the real reason, that's
+[08:03] the hardware reason why uh text-to-image models are much lower latency than
+[08:07] autoregressive models. Okay. So, you know, we had this Gemini
+[08:11] diffusion demo. Maybe some of you got access to it uh
+[08:14] last year. And, you know, that was able to hit, you know, something like 2,000
+[08:18] tokens a second um pretty consistently, depending on the
+[08:21] length of the query. Obviously, it depends. The longer sequence it's
+[08:24] generating, the less it's prefill dominated. And so, you can really lean
+[08:28] into these very long sequences of very fast tokens. But, if you're only
+[08:31] generating one token, for instance, you'll be just dominated by the cost of
+[08:34] the prefill. And the tokens per second number that was reported on this webpage
+[08:37] was incorporated prefill and everything like that.
+[08:40] So, this was 2,000 tokens a second. Those were genuine raw tokens that you
+[08:43] would receive in your web browser. Okay, so that was the
+[08:47] kind of a whirlwind tour of text-to-image and its main advantage,
+[08:51] which is latency. But, I want to dig in a little bit into some of the other
+[08:54] advantages that text-to-image has, which are kind of a little bit less talked
+[08:57] about in the literature. Um but, I think are pretty cool, and
+[09:00] this is why I'm excited about it. So, at at the at IO last year, Google IO last
+[09:04] year, they showed this demo for the text-to-image model, which is
+[09:07] you know, this is really easy prompt. But, uh you know, lots of models
+[09:11] actually make mistakes on it. So, the prompt is, do you go to next slide?
+[09:15] What is the square root of 81 * 2/3 squared plus, you know, blah blah blah.
+[09:20] And I think the answer is 39 to this problem.
+[09:23] And so, you know, you pass that into the model, and you ask the you ask the
+[09:27] Gemini diffusion to respond to that. After one forward pass, these are the
+[09:31] tokens it's generated. So, one forward pass through the model, it's starting to
+[09:35] respond. Now, since it's an iterative refine the process, a one forward pass
+[09:39] is is not all it's going to do, but after one forward pass it has this. So,
+[09:43] it has answer equals and then it said 60.
+[09:46] It's not correct, but that's what it's guessing for now. And then it starts to
+[09:49] do the reasoning. So, a solution calculate square root of 81 and so on.
+[09:53] After two forward passes, it's changed 60 to 49.
+[09:58] And it's gotten a little bit further into the reasoning. So, it's gotten
+[10:01] like, you know, five steps into the reasoning. 2 squared equals 4 and some
+[10:04] of the blue tokens are kind of still going to change.
+[10:07] And then after three forward passes, it's actually gotten all the way through
+[10:10] the reasoning. So, it gets it gets and it gets the
+[10:13] answer correct at the end. 36 + 3 is equal to 39. And it's gone back and
+[10:17] fixed the original response to say 39. So, it's it had a mistake twice, 60 and
+[10:23] then 49, but once it finished the reasoning, it was able to return back
+[10:27] and fix the mistake that it made at the start. Now, it's going to do a couple
+[10:31] more forward passes in order to fix, you know, some of these tokens that aren't
+[10:33] quite right in the text, but overall that's basically the structure of the
+[10:36] output that it'll return. And this is, you know, this is a a
+[10:39] property that text division models have. This ability to do bidirectional
+[10:43] reasoning. So, to to not only see the past, but also see the future that it's
+[10:47] going to utter. It's going to respond. And also to use that information to do
+[10:51] self-correction. So, it made a mistake, but it was able to, you know, had
+[10:54] another forward pass, it was able to go through and fix that mistake.
+[10:58] At the time, you know, much, much bigger models than the one we were serving made
+[11:02] a mistake for this problem. So, both Chat GPT 4o, which was new at the time,
+[11:07] and Gemini 2.5 Flash, which was brand new at the time, both made an error on
+[11:10] this on this exact problem. So, you give them the exact same prompt and then they
+[11:14] would say, you know, remember the answer is 39.
+[11:17] GPT 4o said 40. That's the best guess it can do at that
+[11:20] one token. It went through the reasoning and then it said 30 It did manage to
+[11:23] figure out it was 39 and said I made a mistake. It's 39, not 40.
+[11:27] Uh Gemini 2.5 Flash also made a mistake, said 42 and then it it actually just
+[11:31] stuck to its guns and never changed it and said 36 + 3 is 42. So it like
+[11:35] incorporated the error into its reasoning later. Uh and these are way
+[11:39] bigger models than the Gemini diffusion models. So it's it's really is a
+[11:41] property a flaw of auto aggressive models that the text diffusion models
+[11:46] don't have. Um and you know, you can fix this with modern reasoning thinking
+[11:50] models. Uh but you know, then you're just kind of punting the the problem
+[11:54] into something else, but Anyway, okay. So that's that's that's
+[11:57] one advantage, which is bidirectional reasoning self-correction. Another one
+[12:01] is what I I hinted at before, which is dynamic computation. So you can you can
+[12:04] give the model more time at inference, more forward passes, you get a bigger
+[12:08] budget, and it can just do better. It's not exactly monotonic, but it is roughly
+[12:12] monotonic that the quality across every eval basically just continues to go up
+[12:16] because it can it gets even if the even if the solution is almost entirely clean
+[12:20] and correct, it gets to look at it and see that it made a mistake and then
+[12:24] fix it. So you get this you get this nice kind of curve where you always see
+[12:28] as the number of denoising steps such as the forward passes go increases, you get
+[12:32] you can overall the the quality gets higher. And these are just six coding
+[12:36] evals that we monitor internally. On top of that, a slightly different
+[12:40] concept is it is the model can do adaptive computation, which is that you
+[12:44] can allow the model, you train it in a way to determine itself when it is
+[12:49] finished. And then for easy responses, it can use
+[12:53] a little bit of compute and for harder responses, it can take longer.
+[12:56] So here's just three examples from from the Gemini diffusion model.
+[12:59] Which is what are the first 100 digits of pi? This is actually 100 tokens. It
+[13:02] looks like a short response. This is actually 100 tokens. And it only takes
+[13:05] four steps to do that. Because the model it's an easy prompt. It's an easy
+[13:10] response because you've just memorized the 100 digits of pi. You can just
+[13:12] output it. Whereas you know, for an auto aggressive model in the same time would
+[13:17] have only done four tokens. Um so that's a very easy one. Slightly
+[13:21] more challenging is to write a little bit of code, so that takes you know, 18
+[13:24] forward passes uh to generate FizzBuzz. And then some
+[13:28] something more complicated is explained quantum mechanics in a single paragraph,
+[13:31] and that took 31 denoising steps. So, it just took its time just for whatever
+[13:34] reason decided to spend longer on those ones. And so, the model naturally gets
+[13:38] to decide I guess to determine when it's going to finish and return the response.
+[13:43] And And typically, we see that harder evals take more time. So, this is This
+[13:48] is a year ago now, so the evals are kind of old school, but um
+[13:52] the you know, on the higher on the harder end is GPQA Diamond, which for
+[13:57] this the model size we were targeting was quite a hard eval, and that took a
+[13:59] long time for it to respond to those ones.
+[14:03] Whereas on the other end are like MBPP, which is mostly basic Python programs,
+[14:07] it was very it was very easy to you know, took a very little time for it to
+[14:10] respond to these ones. And this is entirely determined by the model itself.
+[14:14] Just easier problems, easier prompts, it could respond to quickly, and harder
+[14:17] ones it decided itself to spend more time reasoning.
+[14:20] Okay, so that's that's another property, which is the a dynamic and adaptive
+[14:25] computation. Lastly is the kind of fast in-place
+[14:28] editing. So, diffusion models in general have this very nice property where you
+[14:33] can so, take an image like in this example,
+[14:37] you know, cut something out of it or whatever or give it a little prompt, and
+[14:41] it'll fill it in, and you can use the context uh that that
+[14:45] you haven't cut out to fill in the the piece you've cut out correctly. And so,
+[14:50] you you can use that for like clever image editing, things like that.
+[14:54] Um And then because the reason it can do that is because uh you know, it's not
+[14:57] autoregressive. There are autoregressive image generators, right, which go left
+[15:00] to right, top to bottom like raster order, generating pixels, you know, but
+[15:05] diffusion doesn't work like that. It'll just see the entire image and then start
+[15:09] to denoise it. And because of that, because it gets to see every pix- every
+[15:12] pixel gets to see every pixel, it can fill in the missing information and and
+[15:16] do it in a way that's kind of consistent with whatever prompt you're giving.
+[15:19] Uh Uh we can do something similar. So, I have a couple of demos here.
+[15:23] Uh Can you see that? Yeah, so this is just
+[15:26] some code and you say, "There is a bug in this code. Can you fix it?" And it
+[15:29] just It'll just make the edit in the correct place. Like, it won't you You
+[15:32] can barely see that, but it's just doing a little fix here of the indices.
+[15:35] Uh and you can say things like, "Can you add documentation?" And it'll go in.
+[15:39] It's not It's not just one by one generating all the tokens. It's doing a
+[15:42] clever editing procedure to to actually fill in the uh the correct edits here.
+[15:47] You can do that with, you know, more general text. Like, you can take a story
+[15:52] and then say, "Add a middle paragraph." And because it can see that the first
+[15:55] and the and this third paragraph, it can fill in the paragraph in a way that's
+[15:58] consistent with the the rest of the story, for instance. And this is just
+[16:02] in-place editing, basically. Um okay. So, that's uh Those are some of
+[16:07] the advantages. Uh don't have a lot of time.
+[16:10] Uh the biggest advantage, like I mentioned,
+[16:12] is this low latency. And you know, we we really lean into that. And uh I just
+[16:18] want to show you a couple of demos of some of the things that people
+[16:20] internally have built to kind of show what the advantage of low latency can
+[16:25] give you. So, it's not just the same thing faster. It can really unlock some
+[16:28] new some really new applications. So, in your own work, you're all AI engineers.
+[16:33] Uh it'd be interesting to see when when the next diffusion model comes out from
+[16:37] our team what the low latency could unlock. Uh
+[16:41] and kind of what new applications can be built. So, here are just some demos. So,
+[16:44] this is Wikipedia. Let me just pause it, actually. This is Wikipedia where
+[16:48] everything is generated on the fly, even the HTML. So, this This is actually
+[16:52] being Oops. This is actually being generated by the by the model on the
+[16:56] fly. So, that It's a web page with the HTML and the text and everything being
+[17:00] generated on the fly. So, it looks like regular Wikipedia. And when you click on
+[17:03] it, it's it's the the latency is low enough that it can just fill in the page
+[17:07] as if it was a real Wikipedia page. Um so, that's kind of uh Wikipedia
+[17:11] generated on the fly by a this is a very low latency model. We have a similar
+[17:15] thing where we did it for Reddit. So, now all the responses to your posts
+[17:20] will be by bots. They weren't already. Um
+[17:25] and it's generating fake comments. Not the So,
+[17:28] uh the Gemini diffusion model was not an image generating model. So, this demo
+[17:32] links in the which was our startup state-of-the-art image generator model
+[17:36] at the time, which I think was Juno. Was it was before Nano Banana. So, it is the
+[17:41] two of these models working together to fill in the web page. So, it's the image
+[17:44] generation model is a little slower. Um but you can see that it's like, you
+[17:48] know, you can you can
+[17:50] invent any Reddit you want, sharks in this case, and it'll generate the page
+[17:54] with the text. The images follow a minute a minute later, and then you can
+[17:58] interact with this website as if it was a real website with, you know, real
+[18:01] users and so on. Just being entire All the comments, all the images, all the
+[18:05] HTML, everything is being generated entirely on the fly here. This is being
+[18:08] generated by the model. Um I love this one. This is my favorite
+[18:11] one. This is an operating system also being
+[18:16] entirely generated on the fly. So, every click here is generating the next page
+[18:20] of the operating system. So, it looks like a real operating system, but it's
+[18:23] all being generated by the model on the fly responding to every click. So, every
+[18:27] time you enter like the readme, it generates the text, but it also
+[18:30] generates, you know, the the web pages you can do, you know, go back to the
+[18:33] desktop and and so on. I think this
+[18:37] Yeah, okay. Um and then this is a this is a demo from someone on Twitter who
+[18:43] used the who used the Gemini diffusion API
+[18:48] uh or sorry, not the API, the web page to do some
+[18:52] live coding with his voice. So, I I really like this one.
+[18:55] >> Create a to-do app.
+[19:00] Add 10 random to-dos.
+[19:05] Allow to-dos to have a completed state.
+[19:10] Mark four random to-dos as completed. Allow me to sort to-do's by name and by
+[19:17] state.
+[19:22] All right, let's see if this works. Sort by name, sort by state. Testing, enter,
+[19:27] was added to the bottom. We'll try deleting a few. Add one. Everything's
+[19:30] working. Please convert this to dark mode.
+[19:37] And this was literally 15 seconds of work.
+[19:40] >> Okay, so that was uh yeah, that was someone outside of our team so he he
+[19:43] could say that. Uh yeah, but five coding by voice but
+[19:46] but just in general I think that, you know, low latency models can really
+[19:50] unlock some new experiences uh for users and new products. And so we're excited
+[19:54] to see what people will do when the next generation comes out. Okay, and on that
+[19:57] note, thank you very much. >> [applause]
+[20:05] >> Questions? Yeah?
+[20:22] >> Yeah, yeah. So yeah, we use all the same data. Yeah. I mean, the algorithms have
+[20:25] to change a bit but we use all the same data. Yeah.
+[20:33] You can distill them, yeah. Yeah, they're I'm not sure if there are any
+[20:36] published ones. >> [laughter]
+[20:38] >> I don't think so. Maybe they're selling externally but
+[20:45] There's a Yeah, so we're going to release
+[20:47] something soon. Yeah.
+[20:52] Yeah. Yeah.
+[21:04] Uh yeah, so there's a the bigger models
+[21:07] tend to require less steps for the same output. So, they kind of
+[21:13] you know, even if the model is getting bigger and the flops per forward pass
+[21:16] are getting bigger, they tend to reduce the
+[21:20] the forward passes they need. So, it's kind of a
+[21:24] you kind of have some sort of a diminishing cost of serving even the
+[21:28] biggest models. Yeah. >> So, the next question, do you
+[21:31] how do you price the
+[21:33] price of the structure doesn't matter for the diffusion
+[21:38] >> Uh I don't know. We haven't got to that yet. I'm a research scientist.
+[21:41] Uh Yeah.
+[21:44] >> How do you define the size of the answer because for
+[21:48] >> Yeah. >> you expect that I have this image and I
+[21:52] have the output >> Yeah.
+[21:53] >> frame. How do you do that in >> Mhm.
+[21:56] >> coding or text? >> So, there's a there's a there's a few
+[21:58] different ways. The easiest way is to just fix some some window length and
+[22:03] then just iterate on that. So, it's like auto aggressive, block-wise auto
+[22:06] aggressive. It's kind of the standard way to do it. But, you can have like a a
+[22:10] head that will predict the length of the response and stuff like that if you
+[22:12] wanted. Yeah. >> Yeah, but you have to fix the outcome in
+[22:16] order to let the diffusion model
+[22:19] >> No, it still can generate unlimited texts texts, but it's just if you fix a
+[22:23] window length then it just does that window length
+[22:26] auto aggressively if it needs to generate like many many windows of text.
+[22:31] Yeah. >> I might have already mentioned this, but
+[22:33] when you gave that example of the denoising steps being different ranges
+[22:36] with different, you know, uh >> Yeah.
+[22:40] >> Could you ahead of time set like a a limit on the denoising steps that you
+[22:45] that you require for a problem so you can have
+[22:46] >> Yeah. >> almost just understand what your latency
+[22:49] is going to be ahead of time? >> Mhm.
+[22:51] Yeah, yeah, these are all with a limit, but they just finish as with earlier
+[22:53] than the limit. Yeah. >> If you if you had multiple windows like
+[22:58] you just said going through, can can they then go back and attempt to
+[23:02] previous windows? Is that kind of as the window goes is it
+[23:05] >> It's Yeah, it's it's I mean that that you could potentially, but for for us we
+[23:09] just set it in stone and continue. Yeah. Yeah.
+[23:13] Other questions here?
+[23:24] Yeah, yeah, that's how it works. Yeah.
+[23:35] Oh no, so it's prefill is the same. It's just so you've got some context and you
+[23:39] pre you prefill. Uh and then after that the generation
+[23:42] step is typically in blocks of some fixed size, like 512 or 1,000 or 32 or
+[23:48] whatever you want. And then that's auto aggressive.
+[23:53] Yeah.
+[24:06] So you can do that. Um the easiest way to do it is to just have like a logits
+[24:11] at the top. Just vanilla prediction head at the top.
+[24:16] Well, it So this is like this is all like discrete diffusion, right? So it's
+[24:20] always tokens in tokens out. Like if I show you the
+[24:24] For every step, yeah. So if I go back here, it's always like a
+[24:27] discrete corruption process. And then you fill in a discrete token
+[24:31] back in. So it's always So you're always in a discrete space.
+[24:35] But you can do it in latent spaces, but and people have done that, but most of
+[24:39] the most of the text diffusion models in literature is discrete diffusion today.
+[24:45] Yeah.
+[24:48] There might be one day. Yeah.
+[25:02] >> I think for now they have different use cases. So, you know, if you think about
+[25:05] what a low latency model provides, that's like that's worse
+[25:10] throughput. So, what's that trade-off is on-device applications. So, we are in
+[25:15] a couple of on-device applications already.
+[25:17] Um and within like the Alphabet ecosystem. So, robotics, things like
+[25:21] that, where you want to run a a model on the device itself. So, your phone or a
+[25:25] robot or whatever. And then you but you want it to be low latency and you're not
+[25:29] batching with thousands of other queries like Gemini being served in the service
+[25:32] side. So, you want the lowest latency model.
+[25:36] Quality isn't really any They're the same quality basically.
+[25:39] So, then you may as well pick the low latency one cuz you don't have the
+[25:42] throughput concerns. >> What do you mean like
+[25:44] in the in the future like can we get quality up to the bar with with the
+[25:49] current black box models? >> I Quality isn't the concern, it's the
+[25:52] throughput uh for serving in a big batch setting. Yeah, yeah.
+[25:57] Yeah. >> So, currently you are getting more or
+[25:59] less the same quality of frontier models in your research?
+[26:02] >> Yeah, yeah.
+[26:05] >> So, what about reasoning tasks? Because we
+[26:07] we can really verify what we want. >> Sorry?
+[26:10] >> What what about reasoning tasks? Because we we can really verify what we want.
+[26:13] Something like this. >> Yeah, yeah. Yeah, you can do RL. Yeah.
+[26:16] You just need to change the algorithm, you know, but you can still do it.
+[26:20] Yeah.
+[26:22] Yeah. >> Is there much scope for combining
+[26:24] diffusion with autoregressive text models?
+[26:28] >> Yeah, you can do that. Yeah.
+[26:32] >> [laughter]
+[26:34] >> Yeah.
+[26:37] Yeah. >> Can you like initialize with a smaller
+[26:40] model so you don't have to start from noise so you can have to do less steps?
+[26:43] >> Um the problem with that is if you train it
+[26:47] with noise, it expects noise. You'd have to train it with the small model.
+[26:52] As you like the output and that just adds complexity. So, we don't usually do
+[26:55] that.
+[26:58] Yeah.
+[27:05] Um Well, not from not from our team, but
+[27:08] there are there's a bunch of literature out there, yeah.
+[27:10] Yeah.
+[27:13] Yeah. You get the idea, I think. Yeah.
+[27:20] Any other questions? There's a lot of questions.
+[27:22] Gone through them all. That's good. Oh, one more. Okay.
+[27:29] Um I don't know.
+[27:33] I don't think we've tried to do that. >> [laughter]
+[27:37] >> Probably would work. It would probably do something. Yeah.
+[27:43] Cool. Okay. Thanks, everybody. >> [applause]
+[27:55] [music]

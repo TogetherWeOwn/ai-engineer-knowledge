@@ -1,0 +1,311 @@
+# title: MCP Tasks (async): Why Aren't Any Agents Supporting Them? — Cornelia Davis, Temporal
+# source: https://www.youtube.com/watch?v=s4r6nk5WsZw
+# speaker: Cornelia Davis, Temporal
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T06:33:01Z
+# sha256: 73a694cfa7a145feb8459fe0a74323aa228451275a76bb8469920f2922877664
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:01] [music]
+[00:12] >> I know it's 1 minute ahead, but these 20-minute sessions are really short, so
+[00:16] I'm going to get started. So, title of my talk you all have seen
+[00:20] cuz you're all here, which is why the heck aren't any agents supporting MCP
+[00:24] tasks. If you don't know what tasks are, don't worry, you will know in just a
+[00:28] moment. But, the first answer to that question
+[00:31] is, well, cuz they're smart. The people who are building those clients are
+[00:36] smart. What I mean by that is that the MCP tasks specification that came out in
+[00:42] November was marked as experimental. And so, well, you might shrug and say,
+[00:46] well, gosh, those clients and servers, they're all supporting a whole bunch of
+[00:51] experimental things. Why not MCP tasks? Well, again, you'll see the answer to
+[00:56] that as we move forward. Um the next answer to that question is,
+[01:01] well, they're pretty involved. Um there's a lot of complexity in here, and
+[01:06] that's what I want to do over the next 20 minutes is teach you some of that
+[01:10] complexity. Quick intro, my name is Cornelia Davis.
+[01:14] I'm a technologist at uh Temporal. Uh we're distributed systems stuff. I have
+[01:19] a long history in distributed systems, did a whole bunch of stuff in the
+[01:22] microservices era, um including Cloud Foundry, Kubernetes, GitOps, Weave
+[01:27] Works, all of that stuff, and I even wrote a book about that. That's who I
+[01:31] am. Today's agenda in the next 19 minutes is
+[01:35] that rather than just talking about things in the abstract, I'm going to
+[01:39] ground us in a very concrete example. So, I'm going to give you the lay of the
+[01:43] land of that concrete example. Then, I'm going to give you an overview of MCP
+[01:47] tasks. Quick question, who here is wants to do things with tasks?
+[01:53] Async MCP tools. Okay. So, I'm going to give you a little bit of an overview.
+[01:58] Um then we're going to talk about it MCP tasks V1. That's the spec that came out
+[02:03] in November and spoiler alert, there's a new one coming out in July. So, that
+[02:07] comment that I made about them being smart about not implementing it yet.
+[02:11] Well, there's some pretty radical changes. So, I'm going to show you um
+[02:16] what's happening with V2 and I actually have some live demos to show all this
+[02:20] working and then we'll have some takeaways at the end.
+[02:23] So, the use case that we're going to talk about here is a simple purchase
+[02:27] order use case. So, the use case is you're going to get in a purchase order
+[02:32] and then it's going to go through a number of steps. It's going to record
+[02:36] the fact that the goods were received and then it's going to do in parallel,
+[02:40] it's going to do some back office stuff updating inventory, sending out
+[02:44] notifications and then in parallel to that it's going to pay some invoices.
+[02:51] Now, the invoicing is going to happen via an MCP tool.
+[02:55] Now, that MCP tool is has itself a number of steps. So, it's going to
+[03:01] validate against an ERP, then it's going to have a little human in the loop to
+[03:06] request approval, maybe. Um then it's going to reconcile against
+[03:10] the ERP again, do a little bit more human in the loop and so on. So, you can
+[03:14] see that on the right hand side that MCP server that's going to be it's a tool
+[03:20] that's going to be doing the invoice processing for us. It is long running.
+[03:25] It's not going to work in a request response style and that's what MCP tasks
+[03:30] are all about. And what we're going to do and I'm
+[03:34] today's talk is not about temporal, but really what I did here was just showed
+[03:39] you a couple of snippets of the code and yes, I will be sharing all the code for
+[03:42] what I'm showing today. Couple of snippets here and the real
+[03:46] point that I want you to look at is that reject or approve. That is showing you
+[03:51] that there is a mechanism for signaling into a long-running process. And that's
+[03:56] really the point. And that's what we need is that this is all about
+[04:01] asynchronous. So, you understand what MCP tasks are now? MCP tasks are
+[04:06] allowing you to have an MCP tool that you can invoke and then it is
+[04:11] long-running in the background, and then eventually you can get back some
+[04:15] response. So, let's talk about that MCP tasks
+[04:20] overview. This is a very simple sequence diagram. It's exactly what you all would
+[04:26] expect when I tell you that MCP tasks are long-running tasks.
+[04:30] You're going to invoke a tool, and instead of getting back a response,
+[04:35] you're going to get a handle. And you can interact with that handle, right?
+[04:39] Obvious, right? This is This isn't rocket science. Looks easy enough,
+[04:43] right? Well, it turns out that if you actually want this to work over long
+[04:49] horizons, it gets a little bit more complicated than that.
+[04:53] So, what are some of those complications? Well, you can have all
+[04:57] sorts of the longer something runs, the more likely there's going to be some
+[05:01] kind of infrastructure blip that's going to cause a problem in that long-running
+[05:06] task. So, you could have network blips, you could have network challenges, you
+[05:12] could have humans that you're waiting for their in-a-loop part,
+[05:17] and they go away on vacation like I'm about to, yay, um day after tomorrow.
+[05:22] Um or processes can crash. So, your agent can go down. The agent that's
+[05:27] processing the purchase order can go down, or your MCP server can go down as
+[05:32] well. So, all of those problems you need to deal with, and those are the things
+[05:36] that makes it a little bit more difficult.
+[05:39] Now, in addition to what I've told you about
+[05:43] MCP tasks so far that you're going to get back a handle that you can interact
+[05:47] with by the specification those MCP tasks can't disappear.
+[05:55] This is verbage from the spec itself that says once you've locked launched a
+[06:00] task it has to be durable. What that means is all of these things that I just
+[06:05] showed you on the previous screen clients humans going away on vacation
+[06:11] servers going down clients going down connections disconnecting
+[06:16] the task needs to survive that and you need to be able to interact with that
+[06:21] task when the infrastructure comes back. And I'm going to show you how all of
+[06:26] that is done. Now
+[06:29] on there's elements there's server side elements that talk about how you make
+[06:34] the server side durable and I did a talk at the MCP Dev Summit in March and this
+[06:40] is the QR code that it will take you to that YouTube video and that's where I go
+[06:44] into a lot of detail about the server side and what you need to do with the
+[06:48] server side. Today as you saw is an extension of that work where I'm talking
+[06:54] about the client side. So without further ado let me go into a
+[06:59] demo. I for those of you who know me I'm always doing demos.
+[07:03] So what we have here is we have a dashboard. Um I am not doing this
+[07:07] through a chat interface because it frankly it's more efficient for me to
+[07:11] click a couple of buttons here to show you this rather than trying to type
+[07:15] things in. So I have a user interface here that's showing you the number of
+[07:19] purchase orders that have been submitted. I'm going to submit a simple
+[07:22] purchase order so that's just a button that is kicking things off and in a
+[07:26] moment if the dam demo gods are with me it says submitted we should see the
+[07:31] purchase order pop up here and it should show some Ah
+[07:36] here's why it's not working because I haven't started my servers. So remember
+[07:40] I said it has to work even when the servers aren't running. I forgot to show
+[07:45] you here that what I'm doing in this these two windows is in the upper
+[07:49] window, I'm starting the back end. This is the MCP server.
+[07:54] And in the um lower window, I am starting the MCP
+[07:58] client. And you'll see what that client is in a moment. You can see in the
+[08:02] splash screen there that I am using fast MCP on the client side.
+[08:06] So, let's go back here and notice that even though I submitted that, even
+[08:11] though my servers weren't running, that submission did go through. So, it's
+[08:16] captured that. So, what you can see here, and you didn't see it cycle
+[08:20] through, but on the far right-hand side, the invoice task is it initially showed
+[08:26] you that it was work submitted, then it showed you that it was working, and now
+[08:30] it's asking for input required. I can come over here. Let me show you
+[08:34] what's going on at the back end and at the front end. What I have here are some
+[08:39] dashboards that are showing those running processes. On the right-hand
+[08:44] side, you have the back end. That's where the invoice processing is, and you
+[08:48] can see the name here. Let me increase the font size there a little bit. So,
+[08:53] you can see that this is running the invoice, and on the left-hand side, you
+[08:56] can see that it's running the PO. I'll explain that task tracker thing in just
+[09:01] a moment. So, if we go into the invoice, we can
+[09:05] see that it has the process that we talked about earlier. It validated
+[09:09] against the ERP, and now it's waiting for human input. It's waiting for that
+[09:13] approval. Over on the PO side, we can also see the
+[09:17] process that I showed you earlier, which is to say,
+[09:21] let's go back here. It is So, ah, yes. So, it did that record recorded that the
+[09:27] goods were received. Then, in parallel, it's invoking the invoice processor MCP
+[09:34] task. And notice that there's this line item here that says task tracker
+[09:38] workflow. Yes, indeed. That is my MCP client implementation. Remember I said
+[09:45] nobody's implemented this on the client side? Well, I created my own
+[09:48] implementation here. But in parallel with doing the invoice processing, we
+[09:52] also had this back office stuff that was happening.
+[09:56] So if I come back over here and I click on input required, I can approve this.
+[10:02] And I'll hit submit. And we come over here and you'll see in just a moment
+[10:07] that the signal is going to come into the back end. Uh need to refresh. Oh,
+[10:12] there it goes. So the approval came into the back end and now the back end is
+[10:16] going ahead with its additional process paying the invoice. And you'll see a
+[10:20] number of line items there. There's some um some uh re- uh retries that are have
+[10:26] been programmed in here, but you can see here that it took a few tries before the
+[10:30] the ERP went through. We paid the line item and now you can see that the task
+[10:35] completed. So everything's completed. If I go back
+[10:39] to the dashboard that you saw at the top,
+[10:45] you can see that all of those processes completed. Okay? So that's the basic
+[10:50] stuff. And I can run that again, but in the in I already gave you inadvertently
+[10:56] gave you the example of the infrastructure was down. I could have
+[11:00] killed that server halfway through and it would have continued exactly exactly
+[11:05] as you saw here. Okay? So you saw it at the very beginning.
+[11:09] All right, let's go back to slides. So that's the first demo. So let's talk
+[11:14] about um tasks version one.
+[11:18] So in tasks version one, there were a number of tool semantics. And again, I
+[11:23] go over these tool semantics in a lot more detail in that MCP Dev Summit talk.
+[11:28] But there's one really interesting thing that I want to draw your attention to,
+[11:32] which is that tasks come with it One of the things that the specification
+[11:37] defines is a life cycle for tasks. And that's what you see here on the screen.
+[11:43] It has working. It can go into an input required. From
+[11:46] input required, it can go back to working, and then eventually it'll
+[11:50] complete or be canceled or fail. So, that's one of the things that's super
+[11:56] interesting about the task specification is that it's about the life cycle of the
+[12:02] task. There's a whole bunch of other semantics there as well around obtaining
+[12:07] inputs and delivering results. And I'm going to go through this fairly quickly
+[12:11] because I already mentioned some of this is going away.
+[12:15] So, this is what the tool semantics were before the task semantics. Notice that
+[12:20] tools/call is exactly the same.
+[12:24] There's some metadata that you pass in when you want it to be async.
+[12:28] And then there's task get cancel list, as well as task result.
+[12:35] And so, the top four are request-response in style. The bottom
+[12:39] one keeps a connection open. It keeps a connection alive. And the sequence
+[12:44] diagram that you can see here is kind of the basic stuff. Now, there's two
+[12:48] hiccups with this um uh two major challenges with this
+[12:54] particular version of the protocol. The first one is right here.
+[12:58] Task list. This is a stateful protocol. So, what that means is that the Remember
+[13:05] I said that the server was responsible for durability?
+[13:09] Well, this particular endpoint allows me to go to the server and say, "Hey, what
+[13:15] tasks do you have?" So, if I have had if the client has gone
+[13:19] away, if the user took too long to respond, if my network dropped out and I
+[13:25] had to reconnect, I can use this task list to go back to the server and say,
+[13:30] "What have you got?" And then you can continue on with that.
+[13:35] That works fine if you have one task or two tasks, or maybe it it even works
+[13:44] if you have 10 tasks, but what happens if you've got a whole slew of agents out
+[13:49] there and you've got a million tasks at the back end.
+[13:52] Spoiler alert, there is no filter on that endpoint. So, you would have to go
+[13:57] through a million tasks to find the one that you're looking for that you want to
+[14:00] interact with. This is going away. You'll see in just a moment, but that's
+[14:05] one of the challenges. Just because you can doesn't mean you should. The other
+[14:09] one is the task result because that is where we were tunneling the input
+[14:14] required. So, in the case of task result, this sequence diagram is really
+[14:19] simple. It doesn't have the the interactivity. What we have as soon as
+[14:24] you do task as soon as you have input required is
+[14:28] the top and bottom are just fine, but this middle section has this weird
+[14:32] protocol where you open a long-running connection and then the server elicits a
+[14:38] response from the client. That gets super tricky. And I'm running short on
+[14:44] time, so I'm not actually going to show you this demo.
+[14:47] Happy to show it to you. I'll be around all day tomorrow, too. So, I can happy
+[14:51] to show it to you, but I want to show you instead Here's basically the
+[14:56] architecture of what you need to build on the server side. This is Notice that
+[15:00] this is using fast MCP. So, fast MCP already has support for server side and
+[15:06] some client side stuff as well. But, the interesting thing is notice
+[15:10] that little box in the on the left-hand side that on the on the lower part where
+[15:14] it says MCP client protocol handler? That protocol handler with the ugliness
+[15:20] that I just showed you or results actually looks like this.
+[15:25] And I can show this to you running and it has all sorts of complexity in it. I
+[15:30] got to have the long-running connection. Well, what happens if my connection dies
+[15:34] in the middle of that? How do I pick up where I left off when I come back?
+[15:38] You'll see that a big part of what the task specification does is it talks
+[15:42] about durability. So, back to the question of why the heck
+[15:47] aren't there any clients that are supporting this protocol?
+[15:51] Yeah. That's why. Super involved. It's still
+[15:56] involved with V2, but it gets better. So, let me tell you about that. So, in
+[16:01] May, Angie Jones, who's responsible for developer experience at the Agoric AI
+[16:06] Foundation, which is where MCP now lives,
+[16:10] posted this blog. And
+[16:14] one of the things that made me jump up and
+[16:16] celebrate a little bit is that the protocol is going stateless.
+[16:21] So, as somebody who's been working in the microservices world for a long time,
+[16:25] stateful protocols are the absolute worst thing in large-scale distributed
+[16:31] systems. So, the protocol is going stateless. It's also doing a number of
+[16:35] other things. So, the first bullet is a stateless core. The second bullet is
+[16:39] interesting cuz it's they also have structured MCP so that there's a core
+[16:44] and there's extensions. If some of you were in the room for the previous two
+[16:48] talks, they talked about MCPUI two talks ago, they mentioned extension.
+[16:54] Well, that's what's happening here in the V2
+[16:57] MCP protocol is that they have extensions and tasks have become an
+[17:03] extension. So, let me tell you a little bit about
+[17:06] how tasks changed from V1 to V2 and I do want to give you one more demo. So, on
+[17:13] the left-hand side, you can see what the protocol was before. These are the RPC
+[17:17] requests that you were doing over the wire. On the right-hand side, you can
+[17:21] see a couple of things. Task list has gone away.
+[17:27] Good. Wasn't particularly useful anyway,
+[17:30] especially at large scale. And instead of having this input
+[17:36] required going over a long-running session, you now have an endpoint that
+[17:41] allows you from the client side to say, "Here's an update."
+[17:45] So, if you remember a while ago, I showed you that screenshot that said
+[17:49] Temporal has this notion of a signal. That's effectively what this is. It's a
+[17:54] way of signaling into this long-running task. The task result stays, but it
+[17:59] changes because it no longer has this long session-based protocol.
+[18:04] But, I put the picture on the right-hand side here to emphasize the fact that the
+[18:10] life cycle management of these tasks is unchanged. That's actually sound. Now, I
+[18:18] go into this a lot into more detail in the talk that I keep referring to. Um on
+[18:23] the server side, in invoice processing, I have my own state machine that the
+[18:28] invoice is going through. And so, part of what you're doing when you implement
+[18:32] these server-side these tasks is you're mapping from the life cycle states of
+[18:37] the task over to the domain state machine that's running the the
+[18:43] application that the the MCP server in the back end or the tool.
+[18:48] So, list again goes away. Now, remember I said that the MCP tasks specification
+[18:55] has durability all over it? With this change, given that lists are gone,
+[19:01] you now are required on the client side, well,
+[19:05] kind of required. There's a little an a little uh parenthetical remark here. The
+[19:11] The spec right now says that clients should persist task IDs, but it also
+[19:16] points out that if you don't persist task IDs, there is no way to get it
+[19:21] back. So, I'm not quite sure why this doesn't have a an all caps must.
+[19:28] The other thing that I want to point out is that I already mentioned it is that
+[19:32] you're going to have potentially a lot of agents that are processing POs or a
+[19:37] lot of agents that are doing a lot of things. And so, having multiple things
+[19:42] running, I think is really um crucial as well.
+[19:46] So, with that um I'm going to go to the the second
+[19:52] demo. And I'm going to go back to my purchase
+[19:56] order here. So, what I'm going to do now is I'm going to submit a number of
+[20:01] things. And I'm actually still demoing here
+[20:05] because I have 13 seconds left. I'm not going to switch over to my V2. You'll
+[20:10] see that from the high level, it actually looks exactly the same. I am
+[20:15] going to show you what the client proto- client server protocol looks like in the
+[20:19] V1 case. It's really quite ugly. But, you'll notice here
+[20:23] that we have um I've submitted a bunch of different ones. I can tell you with
+[20:28] the V1 protocol, the reference implementation, if you had input
+[20:32] required on multiple even though you can see that there's
+[20:36] many of them in flight, on the client side they were FIFO.
+[20:40] So, you could only respond to the first one. And part of the protocol that I
+[20:44] implemented was to get around that gap. So, let's come over here. We can refresh
+[20:50] both of these and you can see that there's going to be a bunch of POs in
+[20:53] flight. And now I want to show you the task
+[20:58] tracker. So, if we go into the task tracker, that's the MCP client. And now
+[21:03] let me just expand this so we can see it in a little bit more detail.
+[21:07] What you can see here is that remember that that protocol, I
+[21:11] showed you that big long sequence diagram?
+[21:14] There's a lot of steps involved in that. And what I've done here is I've
+[21:18] implemented it as a workflow. And you can see here that there's some
+[21:22] elicitation handling that's going from the server side back to the client.
+[21:27] So, I won't go into any more details cuz I'm literally out of time now, but I
+[21:31] want to share two more things. And that is
+[21:35] Um so, going from V1, remember this ugly picture, to V2 in the client server
+[21:42] protocol, much much cleaner. Much easier to implement.
+[21:47] So, speaking of implementing, here's a summary of all the things that you need
+[21:51] to do if you want to implement tasks. Still relatively involved. Here's a
+[21:55] picture. I'm going to make these slides available in the Git repo that I'm about
+[21:59] to show you. And here's the Git repo that I'm going
+[22:03] about to show you. And while you're getting that screenshot, I'm going to
+[22:07] tell you about two pieces of work that I'm continuing with. Number one,
+[22:12] even though this is better, it still doesn't scale to the millions.
+[22:18] Why? Because if I've got a million tasks running, I've got a million clients that
+[22:23] are doing gets against each and every one of those tasks. That does not scale.
+[22:29] There is a part of the MCPC task specification that is a notifications
+[22:34] protocol, which I haven't gotten far enough yet, but it's showing promise,
+[22:40] which is going to allow you to, instead of having a million clients
+[22:45] uh uh to uh
+[22:47] pulling their tasks, it's going to have a single endpoint where they can say,
+[22:51] "Has something changed?" And if it has, tell me which one, and now I'll go pull
+[22:56] that task. So, it's definitely from a scale perspective. The other thing that
+[23:02] we're doing is in the very near future in the next month or so or two, we're
+[23:08] going to have a an implementation of all of this where it's going to be much
+[23:12] simpler for you. My goal is to actually implement it in in fast MCP so [snorts]
+[23:17] that you can use the same protocol the same framework that you're using
+[23:21] probably for your MCP servers today. So without further ado, that is it.
+[23:26] Thank you to the next speaker for letting me go a few minutes long and
+[23:30] I'll be around. I'll step out if you have any questions find me in the
+[23:32] hallway. >> [applause]

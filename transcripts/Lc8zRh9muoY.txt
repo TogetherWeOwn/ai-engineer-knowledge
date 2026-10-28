@@ -1,0 +1,198 @@
+# title: Your Agent Failed in Prod. Good Luck Reproducing It. - Tisha Chawla & Susheem Koul, Microsoft
+# source: https://www.youtube.com/watch?v=Lc8zRh9muoY
+# speaker: Tisha Chawla & Susheem Koul, Microsoft
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T08:09:43Z
+# sha256: 638d5e3ade490eb20fe2b68ec5cadf5a07e4e34bbc3337b38ee6ee7c024a3876
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:00] Imagine something your agent didn't prod was wrong.
+[00:04] Called the wrong tool, it wrote the wrong thing, and now suddenly your team
+[00:08] is on on correlation to figure out what actually went wrong.
+[00:14] Pretty common, right? Now, as for the standard engineering
+[00:18] response, your gut will tell you to pull the raw prompt from the telemetry logs,
+[00:23] pass it to the same model using the same prompt, and run it locally to isolate
+[00:29] the bug. Which we'll all do. And surprisingly, it will work as well. Run
+[00:34] it again, it will work again. You'll run it 10 more times, it will be just
+[00:38] perfect every time. But now let's talk about that one run which cost you, and
+[00:45] that will be gone. You can't reproduce it. And if you can't reproduce it, you
+[00:49] can't debug it. And if you can't debug it, you can't promise it won't happen to
+[00:54] your next customer or user, right? Now, I am Tisha. I have Sachin with me
+[00:59] as my co-presenter. We both run agents against real production backends. You
+[01:05] know, the kind of place where a bad write isn't, "Oh well, done it again."
+[01:09] It's you on a call with a customer explaining where the data actually went.
+[01:15] This whole talk is going to be about that one thing you lose the second an
+[01:20] agent goes haywire in production, which is being able to reproduce it.
+[01:24] That will be our not start for the next 10 minutes to follow.
+[01:29] Now let's look at how this actually blows up. You've got an agent hooked to
+[01:34] a broker API, which is the scenario I'm taking. The user says, "Hey, sell $1,000
+[01:40] of stock." Now comes the interesting part. Instead
+[01:44] of doing the math, the agent sells the raw number 1,000 and dumps it straight
+[01:51] into the quantity field. Guess what? It sells 1,000 shares instead.
+[01:56] Now, at of 190 bucks a share, a $1,000 Intel will become how much? A $190,000
+[02:04] disaster, right? And the terrifying part is that the API
+[02:09] or my inferring returned a clean 200 okay in 30 milliseconds. We got zero
+[02:14] exceptions, zero alerts. If you see the trade
+[02:18] is completely wrong. But, your dashboards are sitting there perfectly
+[02:23] green, perfectly flawless. Then, such a scenario as we last
+[02:28] discussed comes up. What's the first thing which you would do to try and fix
+[02:34] this? The reflex here is to, you know, just turn the model temperature down to
+[02:39] absolute zero, assuming greedy decoding will make everything deterministic,
+[02:44] right? But, that's a complete misconception. Setting the temperature
+[02:49] to zero doesn't fix a broken reasoning path. It just means the model is going
+[02:55] to make the exact same logical error, the exact same way, at the exact same
+[03:01] time, and honestly, even worse than that.
+[03:05] To back up the scenario we just discussed, look at the engineering
+[03:09] threads on Reddit and Hacker News. The hard data shows that temperature zero
+[03:14] isn't even truly deterministic on a hardware level. Running the same prompt
+[03:19] a thousand times can still return dozens of completely different responses just
+[03:25] due to the underlying GPU non-determinism and the MOE
+[03:29] architectures which are there. So, to understand why this actually
+[03:34] happens, we'll have to look at it from first principles.
+[03:38] It comes down to four simple things. One,
+[03:42] sampling determinism isn't system determinism.
+[03:46] Temperature zero just means always take the argmax, but it doesn't guarantee
+[03:51] that the underlying scores stay identical run to run.
+[03:55] Two, floating point math isn't associative. The order you add your
+[04:01] decimal matters, right? But a tiny shift in matrix operation alters the final
+[04:07] logits and which in turn will flip the winning token.
+[04:12] Three, it's not a concurrency issue. Run the
+[04:16] same matrix multiplication alone on a GPU a thousand times and I'll guarantee
+[04:20] you'll get this exact same bits. So the real culprit is batch invariance here
+[04:25] because a request gets grouped with whatever else hits the server that
+[04:30] millisecond. Four, mixture of experts routing has the
+[04:34] exact same bottleneck. Experts have strict capacity limits. If a batch
+[04:39] overflows a specific subnetwork, tokens get rerouted.
+[04:44] Whether the token makes the cut depends entirely on the traffic you got batched
+[04:49] with. So the ultimate takeaway here is that
+[04:53] chasing text outputs is a losing battle, completely. We don't need the model to
+[04:59] return the exact same token back every time. We just need our system to execute
+[05:05] the exact same state transition. Which means we've been asking the wrong
+[05:11] question all along, right? The wrong question is how do I make the model
+[05:16] deterministic? And I've seen teams burning weeks on that and walk away
+[05:20] deciding the system is just unknowable. The right question is how do I debug and
+[05:26] retest a run I can't reproduce because determinism was never
+[05:30] the North Star. Debugging was. Two words we keep mixing up, which I'll
+[05:36] talk about now, is bitwise determinism and replayability. Bitwise determinism
+[05:41] is same input, same output. That's controllability. You're not getting it
+[05:46] from a hosted API, and you don't actually want it because the randomness
+[05:51] is what makes the model good. Like once the model explores more, you'll get more
+[05:55] creative answers. The other one is replayability, which is re-validates a
+[05:59] run that already happened well enough to debug it. That's observability. You
+[06:05] don't need the model deterministic. You need the run recorded, and you don't
+[06:09] freeze the model. You capture what it did.
+[06:14] Now, the question which we are all thinking about is where do you record?
+[06:20] For sure, not at the network layer because half your agent will never touch
+[06:25] the network, the local retrieval, the in-process tools, the memory, and the
+[06:28] parts that do not shred under streaming and async.
+[06:33] Record at the boundary instead because you need to capture what enters each
+[06:40] node and what leaves it. The meaning of each step and not the packets. What
+[06:45] replay adds here is a deterministic CI where you stop the model, you rerun the
+[06:52] exact failure of line with zero model calls.
+[06:57] Let's talk about the loop end to end now. It starts with annotation,
+[07:00] recording, visualization, understanding, fixing, then the part we're working on,
+[07:06] which is deep playing, and finally verifying.
+[07:08] All right. Let's now see how to bring the workflow we just discussed into
+[07:13] action. >> So, we've established that replayability
+[07:17] is a core tenant of productionizing any AI agent. But, how do we build this in
+[07:21] code? As a proof of concept for this, what we
+[07:24] have done is we have built something called Chronicle.
+[07:26] At the heart of Chronicle lies the concept of a boundary.
+[07:30] Think of a boundary as a bounding box around any node in your agentic
+[07:34] workflow. A node can be a tool call. It can be a
+[07:37] call to an LLM or a retrieval from a rag.
+[07:40] It doesn't matter. As long as it's a method, it can be
+[07:43] annotated with the boundary annotation. Now, what does this annotation do? It
+[07:47] ensures that anything that goes into the method and comes out of the method gets
+[07:51] recorded. So, any input and output pair will get recorded. On top of that, you
+[07:55] can define parameters like your model version or the version of the code that
+[07:58] is running so that the entire state during which the agent run happened gets
+[08:03] frozen and saved as a trace. Now, let's see this in action.
+[08:07] We've been talking about this stock selling agent which went haywire in
+[08:10] production. This is a representation of the same. You have your initial planning
+[08:14] step which takes into account the user input. It can use the place order tool
+[08:18] to do the actual selling and buying of the stocks, and then finally it
+[08:22] delegates to the finalize agent which generates a succinct response for the
+[08:25] end user. We have annotated all three of these
+[08:28] methods with the boundary annotation. The first one is a tool, and the second
+[08:33] and the third one is an LLM. Let's run this.
+[08:40] So, here's what happened. You gave a user request to sell about $1,000 worth
+[08:44] of Acme stocks. You have the three nodes. You have the
+[08:47] input and the output recorded for every one of them. You can see that the LLM
+[08:51] mistook the thousand as the quantity and generated a tool call of place order
+[08:57] with the symbol Acme and quantity thousand. And the place order tool
+[09:01] obviously executed this input and sold $1,000 or 1,000 units of Acme stock at
+[09:07] $190 per piece. This is where the problem started. Now,
+[09:11] you have a trace for it, but is this all you can see? No.
+[09:14] We record much more details than this. So, you can go and see the hyper
+[09:19] detailed JSON for each of the nodes that the call went into or went out of. You
+[09:24] can see the metadata like the model version, the sampling versions that was
+[09:27] there in the LLM call. You can see the input and the output. For example, this
+[09:31] is for the place order tool. You can see the input went in as a sell of thousand
+[09:35] quantity on Acme, and the output was obviously that it sold that quantity.
+[09:39] And if you go one step back, you can see the agent one node
+[09:43] creating that tool call that caused this entire problem. It created a tool call
+[09:47] to place order with the symbol Acme and quantity 1,000.
+[09:51] Now, this is all good. You have a recording, you have a trace, you figured
+[09:55] out what the problem is. Now, what do you do with it?
+[09:58] You figured out that the problem is the LLM created a wrong tool call. You
+[10:02] cannot control the LLM. That's what this entire discussion is about. You cannot
+[10:06] enforce bitwise determinism. What you can do is you can put guardrails on your
+[10:11] tools to enforce some level of uh credibility on your production agent.
+[10:17] But, how do you test this? Once you have built the guardrails, how do you test
+[10:20] it? That is another tenant that Boundary offers.
+[10:24] Since the Boundary annotation is already providing a bounding box around your
+[10:27] methods, it can be used to stub your methods in during testing. So, think of
+[10:32] it like this. You have a run which is recorded.
+[10:35] That run recorded every input and output for every node. Now, you have fixed your
+[10:39] code at let's say the tool level, but you want the rest of the nodes to be
+[10:43] stubbed so that the entire exact stack trace remains the same.
+[10:47] How do you do it? You run a test suite with the same trace that was recorded
+[10:52] earlier. You stub every node other than the node that you changed, and you let
+[10:58] Boundary handle the rest, right? So, let's see this one in action.
+[11:02] This is your test case. You have loaded the trace, and you have enabled the
+[11:07] replay mode on Boundary, which allows Boundary to stub every node that you
+[11:11] want. So, for example, in this case, you want
+[11:13] to stub the first agent call which generated the tool output. But, you want
+[11:17] the tool to be run live so that you can test out your code changes. Once you do
+[11:22] this, you run your agent. Now, another good thing about Boundary is that since
+[11:25] it's already capturing the output of your tool as well, you can use it to run
+[11:29] assertions. So, you can take the output and assert that this time around the
+[11:34] tool call got blocked. So, let's run this once.
+[11:41] Perfect. So, you can see that agent one, which was the LLM, was stubbed. You can
+[11:45] see the same input output as the recorded trace, but the tool and the LLM
+[11:51] ran live. And you can see that for the tool, this time the output is blocked.
+[11:56] And your assertion on the tool has passed because the order has blocked.
+[11:59] So, this is the power of merging your replayability traces with auto-generated
+[12:05] testing and stubbing and assertions. tool and the LLM. So, we just saw how
+[12:10] Chronicle not only records your agentic sessions, but it also uses those
+[12:14] recordings as test cases. Now, when we talk about testing in AI agents, I want
+[12:18] to draw a very clear distinction here. There are two ways of testing AI agents,
+[12:22] and both of them are equally important. There's the deterministic testing, and
+[12:26] then the behavioral testing. The deterministic testing applies to,
+[12:29] obviously, the deterministic nodes of your agent graph. This could be your
+[12:33] guardrails or your tool calls. Now, this is exactly where Chronicle shines
+[12:37] because, as we just saw, Chronicle freezes the entire agent run as a
+[12:41] context. So, you can use the LLM nodes context to stub the LLM outputs. This
+[12:47] essentially kicks the probability out of the window, and your entire agent run
+[12:51] can become a test case. This is rerun-able, and since it never calls the
+[12:54] model, it is free. On the behavioral side of things,
+[12:58] you measure things like the tone of the agent or whether the trajectory it took
+[13:02] was right. This is more subjective, and this is where techniques like LLM as a
+[13:06] judge are better off. Now, at this point, I want to talk about
+[13:09] the key takeaways. First, stop chasing bitwise determinism
+[13:13] through the API. The fundamental principles on which the APIs are built
+[13:16] today do not make this possible. Second, know what are variables for your
+[13:21] session, for example, your LLM version or your build ID or your rag chunks, and
+[13:25] make sure that you are logging these. Third, capture the full envelope. Don't
+[13:30] focus on just the prompt. There are There are a lot more ingredients that go
+[13:34] into that final response. Fourth, use the replace to debug.
+[13:38] Make sure that you find the issues, fix the failures, and then finally, use the
+[13:42] same trace as a test case. Fifth and final, keep the generation
+[13:46] time variation alive. Don't try to pin the temperature to zero. After all, that
+[13:50] is what brings the agency into your agent.
+[13:52] So, the QR on your screen, you can scan that to get access to the code for
+[13:57] Chronicle and a bunch of nicely written articles. And finally, thanks again for
+[14:01] your time, and we hope that the traces that you put today in your agent make
+[14:05] sure that your on-call cycle tomorrow is much better. Thank you.

@@ -1,0 +1,309 @@
+# title: How Codex Works — Dominik Kundel, OpenAI
+# source: https://www.youtube.com/watch?v=shRR1e2HXMk
+# speaker: Dominik Kundel, OpenAI
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T06:24:15Z
+# sha256: 575bb517fd8862d16d170e906ebeffa356a695991b2dcd9d5d2aba0e5c9ee169
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:01] [music]
+[00:12] >> Hi everyone. Uh we're going to start right on time
+[00:15] because I'm going to speak basically at 2x. I'm sorry, I have a lot of content.
+[00:19] I'm trying to get you out of here on time.
+[00:22] I want to start with a quick raise of hands. So, how many of you have built
+[00:24] your own agents or are currently building your own agents?
+[00:27] Perfectly. You're the right audience for this. Um over the next 20 minutes, I
+[00:31] want to talk to you about a couple of different things that we're doing in the
+[00:34] Codex harness that hopefully you can learn to apply to your own use cases or
+[00:39] even just use the Codex harness with this in um
+[00:43] uh in your own projects or at bare minimum learn what happens when you
+[00:46] actually use Codex. Uh since we're at AI Engineer World's
+[00:50] Fair and we're actually on an energetic engineering track, I'm going to like
+[00:54] stop bothering you with like how does an agent work? What is an agent?
+[00:59] And instead I want to talk a bit more specifically about some key features
+[01:02] that we have in the agent that I think are particularly interesting and are
+[01:06] challenges you have to solve. And uh so let's cover it from the lens of like
+[01:11] what actually happens when you send off a message.
+[01:15] Uh also a quick reminder, if you're unaware, the Codex harness and
+[01:19] everything I'm showing you is actually open source. Uh it's MIT it's Apache 2
+[01:23] license and the harness is written in Rust. So, feel free to either learn from
+[01:27] it, ask Codex deeper questions about what I'm covering,
+[01:30] uh or fork it and make it your own. Also disclaimer, before we dive deep
+[01:36] into it, this is a current state of affairs. Like things change so quickly.
+[01:41] Um you can always refer back to asking Codex what the current state is, but
+[01:44] especially with new model releases, we often release new APIs and change sort
+[01:49] of how the harness works. Uh so, feel free to follow along as new models come
+[01:53] out. If we want to talk about how the Codex
+[01:56] agent works, we first need to talk about what actually happens when you send off
+[02:00] your message. Um namely there's two protocols that are involved with uh code
+[02:05] uh with the Codex agent. The first one is what happens when you send it off in
+[02:09] the UI and it goes to the harness. We call that the app server. I talked about
+[02:12] that yesterday, so we're not going to spend too much time about it. There will
+[02:15] be a talk online that you can follow along.
+[02:18] Um the second part is the responses API, which is handles the communication
+[02:22] between the harness and the inference. Both of these though are designed for an
+[02:27] open ecosystem, meaning if you're building your own UI,
+[02:31] you're building your own uh agent interface, you can actually build on top
+[02:35] of the Codex uh harness using the app server protocol. We use that same app
+[02:40] server to power the Codex app. So it has really all of that functionality uh that
+[02:44] you might expect from uh Codex, as well as like we have a lot of third-party
+[02:48] community projects that build on top of it, including Theos T3 code or uh Remote
+[02:53] X for example. I even used that same app server to put
+[02:58] Codex into Cloud code. So if you're uh Cloud code user and you want to leverage
+[03:02] uh Codex, you can use that plugin. And if you joined my talk yesterday, you saw
+[03:07] me using that same protocol to actually put Codex into Doom.
+[03:11] Um which is was a fun adventure as well. I mentioned the other part is the
+[03:15] responses API. So responses API was released last year as like a rethinking
+[03:21] of the chat completions API in a more agentic world, meaning um we redesigned
+[03:25] the slightly the structure, but more importantly we added a lot of like
+[03:29] building capabilities that are important for agents like web search, image gen,
+[03:33] or other other more complex capabilities that you will see as part of this talk.
+[03:38] We also want to make sure that this is like an open ecosystem, so we worked
+[03:43] with a lot of partners including Ollama, LM Studio, Nvidia, and others to uh
+[03:48] codify an open responses schema and have a governance body for that, so that
+[03:52] other uh companies and and platforms can
+[03:55] actually build on that same responses API, and you can use any responses API
+[04:00] compatible um harness
+[04:03] model provider and actually plug it into the Codex harness.
+[04:08] So, that's an overview of how these protocols work. We're going from the UI
+[04:12] to the harness with the app server protocol, and then from the harness to
+[04:15] the LM inference using responses. But, what happens in the actual harness?
+[04:20] The first step, arguably one of the most important ones, is context construction.
+[04:26] And during that, we care about three things
+[04:29] quite a lot. The first one is size. We want to make sure that, you know, we
+[04:33] don't blast through your token budgets and throw in a bunch of unnecessary
+[04:36] content, but also the more context you have in your in your context,
+[04:42] the higher it is that you have contradicting information and it causes
+[04:46] confusion for the model. The other part is flexibility. We want
+[04:49] to make sure that, regardless of how many or how little skills you're using,
+[04:53] you have a great experience regardless of how many plugins and MCPs
+[04:57] you install. And of course, we want to make sure that
+[04:59] things are performing and cost we know you're cost sensitive, so cashability is
+[05:04] important as well. To show you this and a couple of other
+[05:08] things, I actually built this little nano Codex here,
+[05:11] um which functions the same way. It's built on
+[05:14] built using the same code that is on the public repo, just turned into
+[05:17] TypeScript. But, we can see here when we send over a
+[05:20] message, we have a couple of different parts of
+[05:24] of the actual context that gets assembled.
+[05:29] And some of these are fairly standard and predictable, like the model
+[05:33] instructions. Again, these are open source if you actually want to read
+[05:36] them. But, these are fairly structured and
+[05:38] don't really change in size or like mess around with cashability.
+[05:43] But, there are some parts that are harder to predict. Namely, for example,
+[05:47] how many skills do you have available? Or the tool registry, where
+[05:51] especially if you install MCPs, for example, you might have additional
+[05:55] context that is like growing as you're installing more MCPs.
+[05:59] For that reason, we do two things to maintain cost. The first one is or the
+[06:03] size of the context. The first one is having deferred tools. So, we're marking
+[06:08] some of these tools as deferred, and that means that they're not added
+[06:11] directly to the context window, but instead are available through tool
+[06:15] search later on. Um
+[06:17] and then the other part is that for available skills, we actually cap the
+[06:22] available skills list at 2% of your context total like maximum context
+[06:27] window. And that means that if it gets longer, we're reducing slowly the amount
+[06:32] of like description that we're putting in there.
+[06:36] Tool search specifically is actually something that is available in the
+[06:39] responses API. So, even if you're building your own harness, you can
+[06:42] leverage this. Since GPT-5.4, you can mark any tool as deferred loading. Um
+[06:48] and that means that these tools are only available if you're using tool search,
+[06:52] and then you can give the model either our built-in tool search tool or
+[06:55] implement your own if you feel like you can better do that discovery yourself.
+[07:01] Great. We talked about how we're building the context, but an agent
+[07:05] really only becomes an agent if it performs actions. And there's three
+[07:08] common actions I wanted to talk about. The first one is async actions, things
+[07:12] that are happening while the agent has to continue to do work, computer use,
+[07:16] and then the file system. For async
+[07:20] actions, a good example is sub-agents, where we want to be able to delegate
+[07:24] tasks off and then have the main agent continue to do work if necessary.
+[07:29] The way that works in practice is that we give the agent a spawn agent tool,
+[07:35] which then allows the agent to create new new agent instances, and then use a
+[07:40] send input tool to either send new content to that to those new newly
+[07:45] created agents, wait for an agent, or shut it back down.
+[07:49] Um we use that same concept actually for
+[07:51] background terminals as well. So, the Codex agent has a tool to spin up a new
+[07:57] uh background terminal and then continuously interact with it by sending
+[08:01] new data through standard in to that new agent or wait for a specific amount of
+[08:06] time for that agent to finish a task.
+[08:12] Computer use is an interesting one because we actually introduced uh
+[08:15] computer use in the responses API last year and it was fairly limited. It only
+[08:20] allowed you to do one action at a time and um you had to basically declare that
+[08:26] you wanted it to do computer use and from there you were up to actually
+[08:30] implementing specifically the type of actions that were exposed to that tool.
+[08:35] This was uh great in terms of like that state uh that point in the journey of of
+[08:40] building agents, but since then we've evolved it and uh the recent models and
+[08:45] the recent API shapes allow you to use code execution instead to actually do
+[08:50] computer use, which means that the agent can script its own interactions with the
+[08:55] uh with whatever computer implementation you want to have. You can choose the
+[08:59] language like JavaScript or Python and you are you have a much more flexible
+[09:03] harness. In fact, that's what we use for browser
+[09:06] use. Um so, the what happens when uh Codex uses browser use is it actually
+[09:12] interacts with a persistent node repl that gets persisted throughout different
+[09:17] uh throughout the turns. And then it writes JavaScript um
+[09:21] essentially Playwright code to interact with that uh browser instance in the
+[09:26] node repl. Um so, here's an example where on the
+[09:30] right side we have a Chromium browser and the first time um it writes some
+[09:34] code to get the overall status and like pulls up the right tab.
+[09:39] And then on subsequent terms, we can see here that it is able to like reference
+[09:43] those new tabs, pull in information, and script the respective actions
+[09:49] um to understand what actually has to be done.
+[09:53] And so that may speeds up these actions significantly because uh Codex and
+[09:57] browser use can actually look at for example one page, understand the
+[10:00] structure, and then write a script to perform like scraping for example on
+[10:04] subsequent pages more easily.
+[10:08] The third thing is file system interactions. I think if you're using
+[10:11] Codex or any coding agent, of course you want it to be able to interact with the
+[10:14] file system. In the case of um our models, all of the
+[10:18] recent models starting with GPT-5 have been trained on the concept of an apply
+[10:23] patch tool to do file editing, which means that they're used to using that to
+[10:27] change files by giving it a a diff, and then um also using that same thing to
+[10:33] create new files. And then for everything else, it uses a shell tool
+[10:36] where it will uh do a file search or other file system navigation.
+[10:42] Uh you will see the model naturally trying to use Ripgrep um since that's
+[10:46] what what it got used to during training. So, we're actually in the
+[10:50] Codex harness shipping Ripgrep with uh with the harness if you don't have it
+[10:54] installed on your own. On Windows, we also trained the model to
+[10:58] use PowerShell natively. So, if you're running it on Windows, you'll see it uh
+[11:02] start writing uh PowerShell code instead.
+[11:06] One of the things you're seeing here is um the sandbox pulling in. So, all of
+[11:11] the interactions that you see with the file system actually go through our
+[11:15] sandbox layer. Um and on macOS, we use Seatbelt for
+[11:21] that, similar to most agents. And on Linux, we use Bubblewrap.
+[11:25] On uh Windows, it's slightly different where we actually had to build our own
+[11:30] custom um open open source Windows sandbox.
+[11:34] It's in the same GitHub repository if you want to take a look.
+[11:37] And there's a many reasons why we had to do this, and I could probably fill a
+[11:41] whole talk about that. So, instead, I would recommend you to actually check
+[11:43] out the check out the article that David wrote
+[11:47] about this. Um it goes into all of the other Windows alternatives and why we
+[11:50] actually had to build our own sandbox there. Highly fascinating if you really
+[11:55] want to nerd out about Windows internals.
+[11:59] With sandboxes though, uh one of the biggest complaints is
+[12:03] always approval fatigue. Um how many of you get like annoyed by
+[12:07] approvals, especially for long tasks and like have running full access?
+[12:11] All right. And I don't think the audience gets filmed, so like we're
+[12:14] going to do this again. Like how many of you know that like IT and security
+[12:17] really hates that you turn on full access?
+[12:19] >> Yeah. >> Yeah, I know. Uh
+[12:22] so, for that reason and uh you know, our own security team wanting to be happy as
+[12:27] well, um we worked on um an auto approval
+[12:30] mode. And the idea here is really to
+[12:34] um derisk some of the like full access
+[12:37] things because there are things that can go wrong. As much as these models have
+[12:40] gotten better, especially if you're trying to push the model through
+[12:43] prompting to really have high agency, that can be misinterpreted by the by the
+[12:48] agent to not match up with your expectation like you asking a model to
+[12:52] send out a file to through an email, pushing it to have high agency, and it
+[12:56] realizes it can't attach the file, so it uploads it to a file share,
+[13:01] um and like uses that instead, or messes up some escaping and accidentally
+[13:05] deletes too much data. Those things can still happen even with the models
+[13:08] getting better. And so, you want to still be careful
+[13:11] with these um full access modes. And so, instead, we
+[13:15] built auto review with this goal to cover all of the things that are harder
+[13:19] to predict that an agent might do and especially in the long run, and um
+[13:25] approve those automatically without having to escalate them to you while
+[13:29] keeping things like uh data exfiltration outside of it.
+[13:34] The way this works is when we um kick off a task that runs into a sandbox like
+[13:40] deleting a file in this case, um the model when it tries to escalate spins up
+[13:45] an auto review uh subagent. And uh let's see.
+[13:52] Didn't do it yet. There we go. So, it spins up an auto review subagent. And
+[13:56] this subagent runs entirely separate and can't spin up other subagents and has
+[14:00] read permissions only. Um but it we're giving it a bunch of context around sort
+[14:05] of how what what is user authorization,
+[14:08] which we'll see in a second. How do things like uh risk taxonomies work? How
+[14:13] do we want it want it to judge these things? Um and then eventually we give
+[14:18] it um the transcript as well as sort of the
+[14:22] tool calls that are actually happening. And this is important because the
+[14:25] context matters, right? Like in some cases you want the agent to actually
+[14:29] delete a file. In other cases you don't. If you ask it to or if it like is part
+[14:34] of the project, it makes sense. Especially like things like if you ask
+[14:37] it to delete a dot git folder, great. If you didn't ask it to, it should probably
+[14:41] not touch that part and like completely delete your history. Um and so we're
+[14:46] giving it all of this context and ask it to then come up with um a
+[14:52] judgment based on like the user authorization. In this case, it's high
+[14:56] because we explicitly told it to delete the file.
+[14:59] Um what is the impact of the deletion or like the action itself and what should
+[15:03] we do? So, this could apply both to file system actions, but also to network
+[15:08] calls for example where like curling Google to see if it if the internet
+[15:13] works is fine, but maybe not uploading a file for example.
+[15:18] This is a gross oversimplification of all of the thoughts and uh work that
+[15:22] went into this by engineers and and the research team. So, if you do want to
+[15:26] learn more about it, check out the auto review
+[15:29] um blog post that we wrote. The next thing I wanted to talk about is
+[15:33] speed. Um because agents can do a lot of tool calls,
+[15:37] and while we are doing a lot of work on speeding up inference, it's only part of
+[15:42] the equation. We noticed this when we uh launched GPT
+[15:46] 5.3 Codex Spark, uh and it's running on Cerebras at 1,000
+[15:51] tokens per second. So, with that, we realized that with all of these tool
+[15:55] calls and the interactions, inference wasn't no longer was no longer the
+[15:59] bottleneck. It was actually the network. So, for that reason, we introduced
+[16:03] WebSocket mode, which means that the responses API doesn't run through
+[16:07] service-side events and HTTP, but instead uses uses a persistent WebSocket
+[16:12] connection, which allows us to save both on network
+[16:16] overhead, but also provides stateful context, which means we only have to
+[16:21] send the data that actually changed. So, for example, if there's a tool call, we
+[16:25] only send back the result of the tool call rather than sending all of the
+[16:29] items back. So, in practice, oh
+[16:33] Great. In this case, my demo server crashed.
+[16:36] Um let me see if I have a backup here.
+[16:43] Um
+[16:46] Oh, spoiling the rest of the demo.
+[16:49] Nope. Uh All right.
+[16:51] Um in practice, you will see that it's going to send um one like it's going to
+[16:55] send only one item after another. Oh, wait. Sorry, I pressed the wrong button
+[17:00] for this one. There we go. Here's the backup. Um
+[17:04] So, it's going to only send like one item after another, rather than sending
+[17:08] like in this case, for example, like nine
+[17:11] items back. Um while for the other one, we're only sending one back. And so,
+[17:16] over time, this actually speeds up things quite significantly.
+[17:20] Um and can have a pretty drastic impact on the performance.
+[17:25] All right. We're at AI Engineer World's Fair in 2026. The only thing like I have
+[17:29] to talk legally about is loops. So, we're briefly going to talk about
+[17:34] it. Um specifically {slash} goal, because I got the questions a couple of
+[17:37] times during this event. How does this actually work?
+[17:40] Um and of course
+[17:45] since the demo server crashed, which also shows that that was real data.
+[17:50] We're going to show you the demo here.
+[17:53] This is a hosted demo, by the way, so you'll be able to replay this
+[17:56] afterwards. Um but basically what happens is in this
+[17:59] case we're having a try to guess a number, and it's only achieving that
+[18:02] goal when it's actually done with guessing that number.
+[18:07] And while it until it's done with that, um it will actually automatically the
+[18:12] harness will inject this continuation prompt. And this continuation prompt
+[18:16] includes, among other things, your objective. That's the goal that you set.
+[18:20] And then uh we continue to do this until the model
+[18:24] itself calls an update plan update goal tool, which specifies that the plan was
+[18:29] actually or the goal was actually achieved.
+[18:32] So, that is the reason why you actually
+[18:35] don't want to, you know, write full essays like I know a lot of you have
+[18:39] been trying to um into your goal, but instead have very concrete and very
+[18:45] fiable um prompts, so that uh it's easy to detect
+[18:49] when things are done. The last thing I want to talk about is
+[18:53] compaction. If we have these agents run for hours or days at a time, you don't
+[18:57] want to stand there and actually approve everything all the time.
+[19:01] Um and because of that we introduced uh end end of last year auto compaction,
+[19:06] and this has been uh used by Codex since then to automatically trigger compaction
+[19:11] on the server side in a way that the model got trained with so that the
+[19:14] performance stays the same. Um
+[19:18] the way this works is you can either trigger this manually or automatically
+[19:22] and it will turn your transcription into or your your previous context window
+[19:27] into a new one that you're going to use instead on subsequent turns and it
+[19:31] contains a compaction item that has all of the necessary information in it that
+[19:34] you need.
+[19:37] All right. To wrap things up, thank you for staying with me speed running
+[19:40] through these slides. Um three things I want you to take away from this. Uh the
+[19:46] first one is the Codex app server and the harness are open source. You can use
+[19:50] this as a blueprint to learn how we built our agents or you can actually use
+[19:55] it as the harness itself that you can build on top of.
+[19:58] The other part is that most of the features that are stand out for Codex
+[20:02] are actually features that are exposed in the responses API. So even if you
+[20:06] want to build your own agent, you can leverage these things like tool search,
+[20:09] apply patch, web sockets, or server side compaction. You can use those directly
+[20:14] regardless of what harness you're using. And the last thing is as models evolve,
+[20:18] keep an eye out on how we're evolving the responses API, how we're evolving
+[20:23] Codex, and uh use that as a way to understand how you want to update your
+[20:27] own agents to make make use of these new capabilities.
+[20:32] And with that, thank you so much. That's the link to the slides and I'll be
+[20:35] heading down to the booth if you have any questions.
+[20:52] >> [music]

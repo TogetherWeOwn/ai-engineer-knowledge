@@ -1,0 +1,317 @@
+# title: Large clusters for small models — Daniel Svonava, Superlinked
+# source: https://www.youtube.com/watch?v=g4SsanB0gMc
+# speaker: Daniel Svonava, Superlinked
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T04:58:35Z
+# sha256: debc8ac1a8eaa983867cb754f520c000bcb97410bc7f780b52bb818fc3ba147c
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:12] All right, I think you guys can hear me. I can certainly hear myself.
+[00:18] Um, whoever came closer gets a t-shirt. I I meant it. There's like back full of
+[00:23] t-shirts over here. Uh, and also for questions. Maybe there will be some
+[00:27] questions at the end. If you ask a question, you get the t-shirt as well.
+[00:31] And if you can guess what is on the background of this slide, you get a uh
+[00:36] you get the t-shirt as well. Any guesses?
+[00:42] What does that visualize? This picture in the background?
+[00:49] No. Anybody has seen a transformer model?
+[00:55] >> Uh yeah, positional encoding. Very good. You get the t-shirt, sir. All right. So,
+[01:01] today we'll discuss u basically small open source models and how they are
+[01:08] pretty good now and how they create unique challenges when you want to serve
+[01:13] a bunch of them in your own cloud. Uh everything we'll discuss is kind of open
+[01:18] source. Uh do it yourself. This is the kind of stuff you can just
+[01:23] uh you know run a command and own the stack. So there is no proprietary uh you
+[01:29] know pieces of the puzzle here. Uh let's get this uh underway.
+[01:35] Well, this works. Okay. So small models. What do we mean by small models? Um you
+[01:41] know depending who you ask, the way I think about it is basically models that
+[01:46] you can run on two three generations old Nvidia hardware. The whole model fits
+[01:51] into one GPU. um and therefore they are easy to serve
+[01:56] those GPUs are available and they are affordable as well. Um and then most
+[02:02] people think okay small models um there will be some kind of tradeoff in terms
+[02:06] of um you know quality of the results and hopefully I'll be able to do a good
+[02:12] job in this talk to convince you that actually for specific tasks you can be
+[02:17] at frontier or beyond frontier performance and get all the other
+[02:21] obvious benefits right uh orders of magnitudes of uh kind of cost savings
+[02:26] and uh potentially quite big uh latency or throughput improvements of course. Um
+[02:35] so this is kind of one of the charts we like to show. This is the artificial
+[02:40] analysis intelligence index over time. And what they typically don't show you
+[02:45] is that there is like a breakdown of the open source models you should think
+[02:48] about right there is the GLM 5.2 and so on those kind of frontier open source
+[02:54] models with let's say 750 billion parameters. Um but then there are the
+[03:00] small open source models kind of trailing the big ones and trailing the
+[03:04] frontier. You can see the frontier is kind of getting diminishing returns
+[03:06] these days and the small models are catching up right. So uh you see this
+[03:11] kind of convergence saturation on top and and kind of growth of the of the
+[03:16] small models um and you know let's say quen 3627b
+[03:21] somewhere around the performance of GPT 5.1. So if you have a workflow, if you
+[03:26] have a pipeline that uh you know can run with GPT 5.1, now you can move that to a
+[03:31] small model and uh you know get all the all the benefits we discussed. So small
+[03:37] models not dumb anymore. Um now it is also about how you use the small
+[03:44] models, right? So you can't just treat that 27 billion parameter quen 36 as
+[03:49] your kind of totally generalized I can prompt it to do anything kind of model.
+[03:53] Now you need to adopt the approach where um you basically figure out slice of
+[03:58] tasks from the generalized model workload and then per task you figure
+[04:03] out which model in the open source fits the task the best. You run some evals
+[04:07] maybe some adaptation we'll discuss um and then you know that's how you kind of
+[04:11] reach the the right quality uh to actually push this into production. So
+[04:16] here is some example of a contract review agent that uses you know nine
+[04:20] different models. This is the kind of shape that you will see in your
+[04:23] workloads in your agents as you move to using small models for your um setup.
+[04:28] you'll start to see that okay instead of kind of hammering one API with bunch of
+[04:34] different requests uh or one model you rather use a fleet of models and then
+[04:39] your problem is okay how do I serve all of these different things in a way that
+[04:43] my infra people don't go crazy right and this is just one of the agents that you
+[04:47] might be running and there might be you know 10 of these in your company so how
+[04:51] do how do we sort of you know that's the kind of expansion of infrastructure
+[04:56] scope let's say um Now all of those different tasks that I mentioned there
+[05:01] is an open source model that's uh sitting there waiting to be used um from
+[05:06] you know OCR to question answering on top of documents to labeling images
+[05:11] generating SQL you know reviewing code uh there are open source models
+[05:16] fine-tuned and trained for those tasks uh you know if you use an open source
+[05:20] model that's trained to do OCR on receipts in Vietnamese that project has
+[05:26] seen the most receipts in Vietnamese, right? There's somebody who like took
+[05:30] the time to gather as much data as possible and on that task that model
+[05:34] will outperform pretty much anything else. Um, and there is, you know,
+[05:38] hundreds of thousands of models on hagging phase that look like that,
+[05:42] right? So, it's just uh it's all sitting there and it's all free basically mostly
+[05:45] quite permissive licenses. So the models exist you know that that's not the
+[05:50] bottleneck and you know we've been talking about
+[05:54] like open source AI since 2024 and uh it's so far still not really
+[06:00] happening and to the extent it's happening in companies it basically
+[06:03] equals like open source AI equals AWS bedrock uh except when you look at the
+[06:08] model catalog in bedrock it's like very you know restrained in model types that
+[06:14] are available these models are old uh often you two, three years behind the
+[06:19] state-of-the-art. Um, and when you do any kind of fine-tuning in bedrock, you
+[06:23] don't actually own the fine-tuned or trained artifacts. So, you can't, you
+[06:27] know, use it as an actual advantage in your business. It kind of stays serving
+[06:31] from the bedrock infra. Um, so that's on the proprietary. Now if
+[06:35] you do small models serving on open source infrastructure blm sglank
+[06:40] different solutions just know that these things are not tuned for any specific
+[06:46] model or any specific hardware model combination you'll have to do the tuning
+[06:50] right this is the do-it-yourself all of these tools ship with guides on how to
+[06:54] actually do the tuning the parameter sweep tailoring to your traffic and so
+[07:00] on. This is a kind of open-ended research project every time you try to
+[07:04] adopt one of these tools. So this is not really something that sort of you you
+[07:08] take it and it's like an engineering project and a week later you have a high
+[07:12] performance surveying infrastructure doesn't work like that. Um and that's
+[07:17] kind of the typical problem with open source tools, right? This kind of like a
+[07:20] little bit too much do it yourself. Um, and then on top of this not being kind
+[07:26] of pre-tuned for small models, the small model workloads and traffic that uses a
+[07:31] bunch of different models kind of flips the equation for inference uh kind of
+[07:36] clusters, right? So normally when you try to serve one big model, um, your
+[07:41] problems are how do I share that model across multiple GPUs? How do I have a
+[07:46] router sitting on top that understands the state of all these workers? you know
+[07:50] the KV cache state and so on and then makes a top- down routing decision of
+[07:55] okay this request goes to this worker or this group of workers and and so on
+[07:59] right it's very top down setup but if you have small and fast requests and you
+[08:05] have many of them the this this sort of top down routing becomes the bottleneck
+[08:10] right because the router has a little bit obsolete version of the worker state
+[08:14] and it's just really hard to saturate the workers if you have that kind of
+[08:18] upfront decision on that's that has to get it perfectly right in terms of u you
+[08:24] know balancing the local cues on each of these workers because there's many small
+[08:28] requests right um and you know like we have experimented with the VLM and
+[08:33] SGline routers for small models and this sort of traffic and it's very hard to
+[08:39] get your GPU utilization beyond 20 30% under constant load and the problem is
+[08:45] that those batches are just not correctly sized basically because you
+[08:49] that routing bottleneck. Um, and then the third problem is that with small
+[08:54] models, you benefit a lot from Loras and just model adaptation in general. And so
+[08:59] the traffic that you have to serve, you know, contains, you know, people coming
+[09:03] to you and saying, "Hey, I have 10 loras. How do I, you know, use this with
+[09:07] our serving stack? Um, or I have this custom fine tune I made last night. You
+[09:12] know, um, I I want to serve this in production." And this conversation
+[09:17] between the AI engineer and the infrastructure person in getting those
+[09:21] you know lauras up there custom models up there that's the thing that takes
+[09:25] time and basically that's like the main killer in organizational uh velocity is
+[09:30] talking right like ideally you would want the infrastructure engineers to do
+[09:34] their job and you would want to those AI engineers to do their job and they don't
+[09:39] have to talk to operate on the day-to-day mode. So, so you know they
+[09:43] they are not blocking each other basically. Um and this kind of model
+[09:47] adaptation desire around small models kind of breaks that and creates a lot of
+[09:51] back and forth and uh that's a problem right uh so these are some challenges
+[09:56] related to okay we have a bunch of small models how do we have a cluster how do
+[10:00] we serve this efficiently um so we have been playing with this
+[10:04] problem for a while I'm Daniel actually from superl I kind of skip the intro um
+[10:10] so we are you know VC backed company out of SF and we have been building AI
+[10:15] powered search and document processing systems and and agents for the last
+[10:19] couple of years and our main painoint has always been inference. um
+[10:24] specifically these problems that I have described. And so we have iterated and
+[10:28] iterated and explored different topologies for clusters for uh running
+[10:33] you know large wide fleets of small models in different environments because
+[10:38] sometimes you need to deploy together with some platform in some environment
+[10:42] where who knows what is available there. um you know the small models make it
+[10:47] easier because in whatever environment you can get some L4s or some kind of
+[10:51] small GPU quota is much easier. So this is kind of I'll describe a little bit
+[10:55] about the topology of the cluster that we have kind of converged to and by the
+[10:59] way this whole thing is Apache 2.0 So completely open source. Um you guys can
+[11:05] just take it and wrap it and now we are an inference startup. Um this is open
+[11:10] source from kind of the control plane all the way down to the thing that runs
+[11:14] on the GPU. Um so we we didn't pull any any punches. Uh and the topology is
+[11:20] basically there is a gateway and instead of having a router that kind of
+[11:24] predecides what goes where there is a gateway that parses some of the request
+[11:29] and attaches some metadata to the request inserts that request into a
+[11:33] shared queue and into some side channels. I'll go a little bit into that
+[11:37] and then the workers pull from that centralized queue instead of kind of
+[11:42] pushing the data down to the workers. And this way they can saturate
+[11:46] themselves better. And then the worker um setup I think I have a slide for that
+[11:52] uh will describe how uh we basically absorb the complexity of different model
+[11:57] architectures into kind of a coherent set of workers that you know don't have
+[12:01] like competing Python requirements and stuff like that. Um so that's kind of
+[12:05] the overall topology. Um and this is kind of life of a
+[12:11] request. So maybe just uh I'll call out a couple of things from here. Um
+[12:17] we you know one of the things we don't like about the OpenAI kind of API
+[12:22] standard is the B 64 encoded kind of JSON not good for small models not good
+[12:27] for high throughput. So we use message pack throughout like a binary format. Um
+[12:32] this way we can also push all the multimodel data through the actual API
+[12:38] gateway. So there is no like hey you know binary data over here and then
+[12:42] request over here and then the cluster needs access to your cloud storage to
+[12:46] start loading some b some binary data images or videos. We kind of encode it
+[12:50] all and we push it through the gateway. Um and then the gateway kind of
+[12:55] separates some of these heavier pieces to not clog the internal queue and
+[12:59] differs it on cloud storage kind of inflight while the request is in Q. So
+[13:03] it kind of splits up some of these requests that are let's say over a
+[13:06] megabyte and then uses cloud storage in the back end. Um but as a user you push
+[13:12] all your bits and byes into the API layer and it's kind of clean interface
+[13:16] because of that. Um basically the whole stack is rest. So
+[13:22] gateway rest the the worker is rest and then over a socket locally it kind of
+[13:28] attaches to different runtimes and we have basically pytorch kendle and sglank
+[13:34] on the as as a runtime um and and then when we do the optimization I'll kind of
+[13:40] go into that on how we make sure that whichever runtime we are using and
+[13:44] whichever code is running in that runtime is the most efficient one. we
+[13:48] have an auto research loop for that basically. Um but yeah, so so life of a
+[13:54] request kind of looks like that. And like one tidbit is that you really want
+[13:59] to make sure that the gateway that's kind of the first thing that's hit by
+[14:03] the request doesn't do too much work because then it becomes a bottleneck,
+[14:07] right? So you don't even want to parse the whole request. You want to be able
+[14:11] to kind of look at the packets and uh figure out the general shape of what's
+[14:15] coming. do the annotation and then you have the workers however many workers
+[14:19] you have hundreds of GPUs that that uh look at the queue state and then pull
+[14:25] from there and and the queue we use u nats jetstream and that thing can do you
+[14:30] know million requests per second like that's very hard for that to become a
+[14:35] bottleneck um so yeah like ideally you don't want
+[14:40] to serialize this serialize as you go through all of these different
+[14:42] components that's basically the kind of obvious thing. Um this is a little
+[14:47] animation that shows the idea behind the centralized queuing, right? So instead
+[14:52] of the top down router trying to uh you know fill in the local cues just right,
+[14:58] which is basically impossible. um you know the the whole idea is hey can we
+[15:03] somehow centralize the queueing and can the workers uh rather pick up the task
+[15:08] of forming their own batches with their own prediction of the cost of the batch
+[15:13] uh and and then you know become much more efficient. Now one tidbit and kind
+[15:17] of side note once you kind of start working on these things uh you realize
+[15:21] that it's actually really hard to predict u how many things to pick up
+[15:26] from that share queue for the batch to be really like really the optimal size
+[15:30] and so you would want some mechanism that sort of allows you to put some
+[15:34] things back into the queue if you figure out oh like I pulled a little bit too
+[15:37] much and that's a network hop right so that's a problem and we have special
+[15:42] optimization for that for machines that have multiple GPUs locally, right? So
+[15:47] there is a there is additional kind of machine local queueing element that
+[15:51] takes advantage of the fact that the local processes that run on the multiple
+[15:55] GPUs on one machine can kind of negotiate with the queue a little bit
+[15:59] back and forth which over the network you know there's like milliseconds extra
+[16:03] that that would add and so uh we we don't do it over the network only when
+[16:07] we collocate the um workers on multiGPU machines
+[16:13] and you know the I mean we are not talking about like 5% differences here
+[16:16] Right? So like you centralize the queue and now you get double the throughput of
+[16:19] the cluster. So this is this is uh significant. Uh I mentioned three
+[16:24] different runtimes. So basically it's either you know we write let's say for
+[16:30] models that are encoder only we write the the PyTorch code and we kind of
+[16:35] optimize it and we have a auto research loop that optimizes it. Same for
+[16:39] Kendall. We started to play with Kendall not too long ago. We still can't get it
+[16:43] to perform anywhere near the PyTorch performance. So it's a little bit more
+[16:46] of a research project. It's just the dependency like you know the worker
+[16:51] Docker image with PyTorch is like 12 GB and the worker do basically binary
+[16:57] statically linked binary with Kendall is maybe like 10% of that right and if you
+[17:02] care about uh kind of waking up from the cold state and loading these images on
+[17:07] bunch of different machines the you know going from 12 gigs to a gigabyte or
+[17:11] something like this makes makes a huge difference. So that's kind of the
+[17:14] motivation behind Kendall. It's just the the getting the same performances from
+[17:19] PyTorch is is is really hard. And then SG lang we have there as a kind of uh go
+[17:24] to baseline like we should perform as at least as well as as SGANG with the
+[17:29] optimal tuning of all of those parameters that I mentioned that you
+[17:32] have to do the tuning. Um here is some numbers. So for example when we wrap SG
+[17:39] lang with the socket and with our kind of RAS side car um actually we can
+[17:44] improve on the bare sglank performance just because we kind of uh do something
+[17:50] on the batching side that natively sglang doesn't do and probably you can
+[17:55] make it to do that if you do like if you develop custom plugins into sglang and
+[18:00] stuff like that like probably you can match our performance because you know
+[18:05] you can just push the same logic into the SG Glang core server uh but now you
+[18:09] are developing custom code that only works with SGLAN and the whole lesson
+[18:13] here from small models is that the runtimes are super diverse right you
+[18:17] don't want to necessarily get staged with any one particular runtime because
+[18:22] there is you know we have I think on the order of 50 different adapters now that
+[18:26] that we parameterize for the different models and so you need to somehow deal
+[18:31] with this kind of underlying complexity and it's probably not by building a
+[18:35] bunch of plugins for one specific runtime it's probably some kind of
+[18:38] abstraction uh which in our case is this rust site car concept and then the
+[18:43] socket um
+[18:48] now I'll talk about couple different numbers but in terms of like language
+[18:52] around benchmarking you know the knee is this concept of like when you ramp up
+[18:56] traffic on a server uh when you sort of request more and more throughput from it
+[19:02] and it gives you more and more throughput that's when you go kind of
+[19:04] linearly up and And then at some point you hit this point where you kind of ask
+[19:08] for more and more is not coming. So you kind of flatten out and the latency goes
+[19:12] up. So we call that the the knee and it's it's like a useful concept in in
+[19:17] benchmarking. Uh because that's kind of the point of saturation, right? That's
+[19:21] that's kind of the maximal performance without hurting latency. Um
+[19:27] so just to give you some ideas of what is possible on relatively small
+[19:31] hardware, right? And different types of small models. So this is measured on the
+[19:36] RTX Pro 6000. We we kind of work with Nvidia L4, you know, A100's, RTX Pro
+[19:43] 6000, H100, that sort of range. Um, again, those GPUs are much more readily
+[19:50] available kind of on demand in any cloud. Basically, most continents have
+[19:54] quota, you know. Um and on this kind of stuff uh you can basically get uh for
+[20:00] embedding models even up to let's say uh hundreds of millions of parameters you
+[20:06] can get hundreds of thousands of tokens per second encoded into the embedding
+[20:12] right so imagine you are sitting there now like hitting your text embedding
+[20:16] tree on open AAI API instead you could be like having one GPU and push half a
+[20:21] million tokens per second into that thing and get the vectors out
+[20:27] right like is this like connecting right you
+[20:31] have half a million tokens that you are pushing into single GPU that's not even
+[20:36] that big per second and you are getting out vector embeddings for your search
+[20:40] system as opposed to like pushing all of that into a managed embeddings endpoint
+[20:45] somewhere and paying like orders of magnitude more money right and you can
+[20:50] get latencies like you know low tens of milliseconds for these calls like if you
+[20:55] use uh you know cohhere openai APIs and so on these are hundreds of milliseconds
+[21:01] right and and this is not rocket science you know you can have just like massive
+[21:06] costsaving massive latency improvements and relatively e easy operation um with
+[21:13] with like handful of GPUs and some some infra around them right so this is like
+[21:19] really low hanging fruit if you start anywhere with open source models small
+[21:23] models embeddings are like no-brainer, right? Uh but it doesn't end there. So
+[21:29] let's say u you want to look at uh named entity recognition, you want to look at
+[21:34] let's say multi vector search u even generation rate uh of text or structured
+[21:41] outputs and so on. um you you can be getting you know thousands of tokens per
+[21:45] second output from uh you know task specific generative models as well per
+[21:53] uh like let's say half a thousand per second for for one GPU there at the
+[21:58] bottom um and so let's say you are generating synthetic data you are
+[22:03] generating annotations for your finetuning for your evals you know don't
+[22:09] do that on a on a managed endpoint That's a perfect task because you have
+[22:13] it kind of under control. You can survey the quality. That's a perfect task for
+[22:18] uh open source model on your own infra. Um and then you like if the infra you
+[22:25] have around those GPUs is like reasonable you'll get linear scaling
+[22:29] with with the number of those GPUs. Um now another sort of u idea if you are
+[22:36] into small model serving uh is that you don't you know normally um you have kind
+[22:41] of worker pool per model right you have a set of workers set of nodes uh they
+[22:48] have GPUs you kind of bring those up you preload the models the models load for
+[22:53] tens of minutes because there are hundreds of billions of parameters uh
+[22:56] and so you're happy okay they finally loaded now I have a worker pool this
+[23:00] mentality doesn't really work with small models. Yeah. Yeah. Quickly. How how
+[23:05] what's the time left? >> Over.
+[23:07] >> Oh, six minutes is over. Okay. All right. So, pack models on the same GPU
+[23:11] is faster. Um,
+[23:15] this is a story of how you still want to pin some models, but you want to also do
+[23:20] u basically uh lazy loading and eviction uh as a kind of function of memory
+[23:26] pressure. You want to figure out how to combine the two. Um there is a little
+[23:31] bit about kind of auto research. We have auto research loops for uh adding
+[23:36] support for new models and for their performance. Um we build a lot of
+[23:40] internal tooling to do the measurement to feed into those out research loops to
+[23:44] basically push the numbers forward. Um and maybe perhaps most importantly when
+[23:50] we ship support for a model it has all the tuning done right. So there is no
+[23:54] okay let's do a parameter sweep. We bundle basically a config for end to end
+[23:58] the whole cluster. Um this is a setup for the auto research loop. There is
+[24:04] like a meta loop that builds the harness that then runs the loop and there is a
+[24:09] dashboard on top that helps you understand how it works. Um, we have
+[24:13] custom UIs for that. And one of the outputs of that was a Laura
+[24:19] that took 80 cents to train and it improved 18 it improved quality of
+[24:24] retrieval on German legalist STEX as a proof of concept by 18%. And that's it.
+[24:29] So small models are good. They are relatively easy to serve. uh they are
+[24:34] actually much cheaper, faster, is as smart and that QR code goes to the
+[24:40] GitHub repo of our cluster that I just described. Give us a star and happy
+[24:46] self-hosting. Thank you. [applause]

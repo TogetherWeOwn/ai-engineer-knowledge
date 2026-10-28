@@ -1,0 +1,1378 @@
+# title: From model weights to API endpoint with TensorRT LLM: Philip Kiely and Pankaj Gupta
+# source: https://www.youtube.com/watch?v=Lko9lTGD_9U
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T14:30:53Z
+# sha256: f5086be45a51b8b591faaf8d5a22a26891f3d7ac9891e1b701312b26312f3220
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:14] I am here with with Pankaj Gupta. He's the co-founder of Base 10.
+[00:19] Actually so today I was I was checking Slack and in the random Slack channel
+[00:24] one of the people in the company was saying like hey, you know, I heard
+[00:27] someone say call someone cracked. What does what does cracked mean?
+[00:31] And you know, those those of you who are you know, Gen Z like me or or know
+[00:36] someone like that is like laughing right now because cracked just means a an
+[00:40] exceptional engineer. And so Pankaj is the most cracked software engineer I've
+[00:44] ever had the pleasure of working with. He's from San Francisco. His favorite
+[00:49] model is Llama 38B. We're going to be working with a smaller version of that
+[00:53] today. I'm Philip. I do developer relations
+[00:56] here at Base 10. I've been here for about two and a half years. And I am
+[01:00] based in Chicago, but I'm very happy to be here in San Francisco with you all
+[01:04] today. And my favorite model is Playground 2. It's a It's a text to
+[01:09] image model that's kind of like SDXL,
+[01:13] but it's trained on Midjourney images. You're going to see a ton of Playground
+[01:16] 2 images in the slideshow today. So,
+[01:20] what are we doing here today? What is our agenda? So, we're going to cover
+[01:25] what is TensorRT LLM and why use it, model selection and TensorRT LLM support
+[01:31] because it supports a lot of stuff, but not everything. We're going to talk
+[01:34] about building a TensorRT engine, configuring a TensorRT engine
+[01:38] automatically, benchmarking it so you can know if you actually did something
+[01:42] worthwhile, and then deploying it to production. And you know, as much as I
+[01:48] love the sound of my own voice and I want to just stand here and grasp this
+[01:51] microphone for 2 hours and say things. This is not just going to be Philip
+[01:55] weeds off a slideshow. We're going to do tons of coding, debugging, live Q&A. So,
+[02:00] the way this uh sec presentation's kind of broken up is we've got some some
+[02:04] sections, we've got some live coding. Um, it's going to be, you know, a very
+[02:08] interactive workshop. I'm going to be taking questions all the time. So,
+[02:11] please don't hesitate uh to let us know if anything's confusing. We really want
+[02:16] everyone to come away from this with a strong working understanding of how you
+[02:20] can actually use this technology in production. So, let's get started.
+[02:25] Uh let me interject for a second and ask uh raise of hands, how many of you know
+[02:29] about TensorRT?
+[02:33] Great. Oh, this is so exciting. I'm so glad
+[02:35] that we get to teach you all this today. And how about TensorRT LLM?
+[02:41] Okay, few. So, we'll we'll cover the basics. I think uh I'm
+[02:45] I'm pretty sure that you'll get a sense of what it is. If you know PyTorch, this
+[02:48] shouldn't be too hard. And if you don't know PyTorch like me,
+[02:51] it's still not that hard.
+[02:55] So, uh we're going to start with the story of TensorRT LLM. What, who, why,
+[03:00] you know, once upon a time there was a company called Nvidia.
+[03:04] Um, and they uh they they noticed that there were these things called large
+[03:08] language models um that people love running. But, what do you want when you
+[03:12] want a large language model? You want a lot of tokens per second, you want a
+[03:16] really short time to first token, and you want high throughput. You know, GPUs
+[03:20] are expensive, so you want to get the maximum value out of your GPU.
+[03:24] And TensorRT and TensorRT LLM are technologies that are going to help you
+[03:29] do that. So, if we get into it here, what is
+[03:32] TensorRT? Here's one of my uh playground two images. Very proud of these. Uh if
+[03:36] the words on the slides are dumb, uh just look at the images uh because I
+[03:40] worked hard on those. Um anyway, so TensorRT is a SDK for
+[03:45] high-performance deep learning inference on Nvidia GPUs. Basically, what that
+[03:50] means is it's just a great set of tools for building high performance models.
+[03:56] Um it's a you know toolkit that supports both C
+[03:59] C++ and Python. Um our interface today is going to be entirely Python. So if
+[04:04] like me, you skipped the class that teaches C++, don't worry you're covered.
+[04:08] I know Punkaj reads C++ textbooks for fun, uh but but but I do not. So we're
+[04:12] going to do it in Python today. Um and so how does this work? You know,
+[04:16] do do you want to do you want to kind of jump in here and and and talk about this
+[04:19] little bit because you know, it's it's a it's a really cool process how you go
+[04:24] from a neural network to to an engine. Yeah, um yeah, exactly. So ultimately
+[04:30] what are machine learning models? They're the graphs. They are computation
+[04:33] graphs. You flow data through them. You transform them. And ultimately whatever
+[04:38] executes a model does that. They execute a graph. Your neural network is a graph.
+[04:43] TensorRT works on a graph representation. You take your model and
+[04:48] you express that using an API uh that graph in TensorRT. And then
+[04:53] TensorRT is able to take that graph, discover patterns, optimize it, and then
+[04:57] be able to execute it. That's what TensorRT is ultimately. When you write a
+[05:01] a PyTorch model, you're ultimately creating a graph. It's it's graph
+[05:05] followers, right? There is the data flowing through this graph.
+[05:08] Uh and that's what it is. TensorRT additionally provides a plugin
+[05:12] mechanism. So it says that, "You know what? I know this graph. I can do a lot
+[05:17] of lot of stuff, but I can't do very fancy things like flash attention. It's
+[05:21] just too complex. I can't infer automatically from this graph that this
+[05:25] is even possible. Like I'm not a data scientist." So it gives you a plugin
+[05:28] mechanism using which you can inspect the graph and say that, "Okay, I
+[05:32] recognize this thing and I can do it better than you, TensorRT."
+[05:35] So I'm going to do it through this plugin.
+[05:38] And that is what TensorRT LLM does. It has a bunch of plugins for optimizing
+[05:43] this graph execution for large language models. So for example, for attention,
+[05:47] for flash attention, it has its own plugin where it says that, "Okay, now we
+[05:52] are in TensorRT LLM land. Take this graph and let me execute it using my
+[05:56] optimized CUDA kernels." And that's what ultimately TensorRT LLM is,
+[06:01] um a very, very optimized way of executing
+[06:04] these graphs using GPU resources, uh not only to get more efficiency, uh
+[06:09] better better cost for your money, but also
+[06:13] better latency, better time to first token, all the things that we care about
+[06:16] when we're running these models. Uh in addition to that, it provides uh a
+[06:21] few more things like uh when you're executing a model, you're not just
+[06:24] executing a request at a time, you're executing a bunch of requests at a time.
+[06:28] And in-flight batching is a key optimization that is very, very key.
+[06:32] Like, uh in this day and age, if you're executing a large language model, you
+[06:36] have to have in-flight batching. This is no way, like it's like a 10x or 20x
+[06:40] improvement, like uh and you have to have that. And TensorRT LLM provides
+[06:44] that. TensorRT wouldn't. TensorRT is a graph executor. It doesn't know about
+[06:48] that. But TensorRT LLM has an engine that does that. It also has a language
+[06:52] to express graph, just like PyTorch, and it requires that there is a conversion.
+[06:56] But it makes it pretty easy to do that conversion, and there are tons of
+[06:59] examples in the repo. Exactly. So, TensorRT is this great sort
+[07:04] of engine builder, and then TensorRT LLM is a mechanism on top of that that's
+[07:10] going to give us a ton of plugins and a ton of optimization specifically for
+[07:15] large language models. So, TensorRT LLM, like Pankaj said, defines the set of
+[07:20] plugins for your LLMs. If you want to, you know, compute attention, do LoRA's,
+[07:24] Medusa, other fine-tunes, um and it lets you define optimization
+[07:29] profiles. So, when you're running an a large language model, you generally have
+[07:34] a batch of requests that you're running at the same time. You also have a input
+[07:39] sequence and an output sequence. And this input sequence could be really
+[07:44] long. You know, maybe you're summarizing a book. It could be really short. Maybe
+[07:48] you're just doing some LLM chat like, "Hi, how are you? I'm Fred from the
+[07:51] bank." Um depending on what your input sequence
+[07:55] and output sequence lengths are, you're going to want to build a different
+[07:58] engine that is going to be optimized for that to process that number of tokens.
+[08:05] Um So, yeah. So, TensorRT LLM is this
+[08:08] toolbox for taking TensorRT and building large language model engines in
+[08:15] TensorRT. Yeah, I want to say just one thing at
+[08:17] this point. Uh like, why care about input and output sizes? Like, how does
+[08:21] TensorRT LLM optimize for that? It actually has specific kernels for
+[08:25] different sizes of inputs, different sizes of matrices. And it's optimized
+[08:29] for that level. And sometimes it becomes a pain when I'm compiling TensorRT LLM.
+[08:33] It takes hours because it optimizes for so many sizes. But it also means that
+[08:37] giving it that size guidance is useful. It can use better kernels to do things
+[08:42] faster. And that's why uh a lot of the models you'll run, you don't have to
+[08:45] care about it. But there is always a trade-off. Here, it does care about that
+[08:50] and you can benefit using that trade-off.
+[08:54] Yeah. And TensorRT LLM is a great tool for a number of reasons. Um it's, you
+[09:00] know, it it's it's got those those built-in optimized kernels for different
+[09:03] sequence lengths. Um and that level of detail is really across the entire tool.
+[09:10] And what that means is that with TensorRT LLM, you can get some of the
+[09:13] highest performance possible on GPUs for wide range of models. And it's really a
+[09:18] production-ready uh system. We are using TensorRT LLM
+[09:21] today uh for tons of different client projects. And it's uh you know, running
+[09:26] in production powering things. Um TensorRT LLM has support for a ton of
+[09:30] different GPUs. Um basically, anything like Volta or newer. Uh the Volta
+[09:34] support is kind of experimental. Um but yeah, like you A10s, you A100s, H100s,
+[09:40] all that stuff supported. Um, and yeah, TensorRT LLM, it's uh developed by
+[09:44] Nvidia. Um, so, you know, they know their graphics cards better than anyone.
+[09:48] Um, so we we just kind of use it to run models quickly on that. Um, that said,
+[09:53] everything does come with a trade-off. Um, is is anyone from Nvidia here in the
+[09:58] room? It's okay, you don't have to raise Okay. Uh, so I I'm going to I'm going to
+[10:01] be nice. Um, uh no, we we really are big fans of this technology, but it does
+[10:06] come with trade-offs. You know, some of the underlying stuff is not fully open
+[10:09] source. Um, so sometimes if you're diving super deep, you need to uh go get
+[10:14] more information without just like looking at the source code. Um, and it
+[10:18] does sometimes have a pretty steep learning curve uh when you're building
+[10:21] these optimizations. So, that's what we're here to help flatten out for you
+[10:25] guys today. Hopefully we're still friends. Uh, what
+[10:28] makes it hard? So, the there's a couple things that make
+[10:32] building with TensorRT LLM really hard. And when you enumerate the things that
+[10:36] make it hard, that's how we know what we need to do to make it easy.
+[10:39] So, the number one thing in my mind that makes it hard to build a general model
+[10:43] uh to optimize a model with TensorRT LLM is
+[10:46] you need a ton of specific information about the production environment you're
+[10:50] going to run it All right. So, I I do a lot of sales
+[10:54] enablement trainings, and I love a good metaphor. So, I'm going to I'm going to
+[10:59] walk you guys through a metaphor here. Uh, apologies if metaphors aren't your
+[11:02] thing. So, imagine you go into a clothing
+[11:05] store, and it only sells one size of shirt. You know, it's just like a
+[11:09] medium. Um, you know, for some people that's going to fit great. For some
+[11:12] people it's going to be too small. For some people it's going to be too big.
+[11:16] And on the other hand, you can go to like a tailor, I don't know, in like
+[11:20] Italy or something, and you go there, and they've got, you know, some some
+[11:24] super fancy guy with a with a, you know, cool mustache and stuff, and he, you
+[11:29] know, he measures you like every single detail, and then builds a suit exactly
+[11:33] for you that's perfect for your body measurements like a made-to-measure
+[11:36] suit. So, optimizing a model is kind of like
+[11:41] making that suit. You know, everything has to be measured for exactly the use
+[11:45] case that you're building for. And so, when people come in and expect that they
+[11:49] can just walk in and grab off the shelf a model that's going to work perfectly
+[11:53] for their use case, that's like expecting you're going to go into a
+[11:56] store and buy a piece of clothing that fits you just as well as that
+[11:59] custom-made made-to-measure suit from the tailor.
+[12:03] So, in you know, to relate that more concretely to TensorRT-LLM,
+[12:08] you need information. You need like we talked about, you need to understand the
+[12:11] sequence lengths that you're going to be working at, the batch sizes that you
+[12:14] want to run at. You also need to know ahead of time what GPUs you're going to
+[12:18] be using in production. These engines that we're building are not portable.
+[12:22] They're built for a specific GPU. You build them.
+[12:25] So, if you build it on an A10, you run it on an A10.
+[12:29] If you build it on an H100, you run it on an H100. You want to switch to H100
+[12:34] MIG, okay, you build it again for H100 MIG. So, you need to know all of this
+[12:38] information about your production environment. Um,
+[12:41] and then also as we'll talk about kind of toward the end, there are some
+[12:44] infrastructure challenges as well. These engines that we're going to build are
+[12:47] quite large. So, if you're for example doing auto scaling, you have to deal
+[12:51] with slow cold starts you know, work work around the size of the engines,
+[12:55] otherwise your cold starts are going to be slow. Um, and overall also just model
+[13:00] optimization means we're living on the cutting edge of new research. You know,
+[13:04] I'm when I'm when I'm writing blog posts about this stuff, I'm often times
+[13:08] looking at papers that have been published in last 6 months. So, you
+[13:12] know, just combining all these new approaches and tools, there there can be
+[13:16] some rough edges, but the performance gains are worth it.
+[13:20] So, yeah. Oh, please go ahead. I want to add one thing is that there
+[13:24] are modes in TensorRT-LLM where you can build for a certain on a certain GPU and
+[13:29] it will run on other GPUs, but then it it's not optimized for other GPUs. So,
+[13:33] why would you do that? We never do that. We always build it for the GPU, but
+[13:37] there is that option. Exactly. That would be like if I went to
+[13:39] that fancy tailor shop, got a made-to-measure suit, and then was like,
+[13:42] "Hey Pankaj, happy birthday. I got you a new suit." Uh that's that's what it
+[13:46] would be like. So, you know, what what makes TensorRT LLM worth it? Well, it's
+[13:50] it's the performance. So, these numbers are from a Mistral 7B that we ran on
+[13:55] artificial analysis, which is a third-party benchmarking site. Um and we
+[13:59] were able to get with TensorRT LLM and a few other optimizations as well on top
+[14:03] of it, 216 tokens per second, uh perceived tokens per second, and 180
+[14:09] milliseconds time to first token. So, um unless any of you are maybe like some
+[14:14] super high-quality athletes like a UFC fighter or something, your reaction time
+[14:18] is probably about 200 milliseconds. So, you know, 180 milliseconds time to first
+[14:23] token, counting network latency, by the way, counting the round trip time to the
+[14:27] server, is great because that to a user feels instant once you're under 200
+[14:31] milliseconds. And actually, most of it is network
+[14:33] latency. The time on the GPU is less than 50 milliseconds.
+[14:38] Less than 50 milliseconds. So, uh we've got another one of these green slides
+[14:41] here. I like to talk really fast. So, these slides I put in this presentation
+[14:45] to give us all a chance to take a breath and ask any questions. So, you know,
+[14:50] we're going to cover a lot more technical detail moving forward, but if
+[14:53] there's anything kind of foundational that you're struggling with, like,
+[14:56] what's TensorRT, what's TensorRT LLM, anything I can explain more clearly, I
+[15:00] would love to hear about it. Going once.
+[15:05] Going twice. It's okay, we're all friends here. You can raise your hands.
+[15:08] All right. Well, sounds like I'm amazing at my job. I explained everything
+[15:12] perfectly, and we get to move on to the next section.
+[15:18] So, what models can you use with TensorRT LLM? Lots of them. There's a
+[15:23] list of like 50 foundation models in the TensorRT LLM documentation that you can
+[15:28] use and you can also use, you know, fine tunes of those models, anything you've
+[15:32] built on top of them. It supports open source large vision
+[15:36] models. So, if you're you know, building your own GPT-4
+[15:40] you can do that with TensorRT LLM and it also supports models like
+[15:44] Whisper. And then TensorRT itself, you can do anything with TensorRT. So, any
+[15:49] model custom, open source, fine-tuned, you can run it with TensorRT.
+[15:54] But TensorRT LLM is what we're focusing on today because it's a much more
+[15:58] convenient way of building these models. And
+[16:01] you know, on this list of models that it supports, there's there's one that maybe
+[16:05] stands out. Does that Does anyone know like what model kind of doesn't belong
+[16:09] in in this list of supported models? Like what what what up here isn't an
+[16:14] LLM? Whisper, exactly. Why Why is Why is
+[16:18] Whisper on here? Well, TensorRT LLM, it's it's called -LLM,
+[16:24] but it really is a little more flexible than that because you can run, you know,
+[16:29] a lot of different auto aggressive transformers models with it like
+[16:32] Whisper. So, if anyone doesn't know what Whisper is, it is a audio transcription
+[16:37] model. You give it you know, MP3 file with someone talking,
+[16:41] it gives you back a transcript of what they said. It's one of our it's one of
+[16:45] our favorite models to work with. We've spent a ton of time optimizing Whisper,
+[16:48] building pipelines for it, and all that sort of stuff.
+[16:51] And what's really cool about Whisper is structurally, like it's basically an
+[16:56] LLM. You know, that's a massively reductive statement for me to make, but
+[17:00] it's a auto aggressive transformers model. It has the same bottlenecks in
+[17:04] terms of influence performance. So, even though this is not a
+[17:08] not an LLM, it's an audio transcription model, we're actually still able to
+[17:12] optimize it with TensorRT LLM because because of its architecture.
+[17:18] Let me say one more thing. Of course.
+[17:20] So the the whole uh I think the recent ML revolution started
+[17:25] with the Transformers paper attention is all you need.
+[17:28] And that describes an encoder-decoder architecture.
+[17:31] And in a way Whisper is machine translation. That paper was about
+[17:34] machine translation. You're translating audio text audio into text, right? And
+[17:40] it's basically that. It's an encoder-decoder model exactly like the
+[17:44] Transformer architecture. And Tensor Tensor D LLM is about that. It's about
+[17:48] that Transformer architecture. So it actually matches pretty well.
+[17:52] Exactly. So um moving on um I want to run through a few things just
+[17:57] just some some things in terms of what Tensor RT LLM supports. So I assume it's
+[18:02] going to support Blackwell when that comes out like 99.999%
+[18:06] certain. Um but anyway, in terms of what we have today, we've got Hoppers of the
+[18:11] H100s, the L4s, RTX 4090s if anyone has a super sweet gaming desktop at home.
+[18:17] Number one, I'm jealous. Number two, you can run Tensor RT LLM on that.
+[18:21] Um Ampere GPUs, Turing GPUs, uh V100s are you know, somewhat supported. Um
+[18:28] and what's cool about what's cool about Tensor RT and hardware support is that
+[18:34] like it works better with newer GPUs. When you move from an A100 to an H100
+[18:40] and you're using Tensor RT or Tensor RT LLM, you're not just getting the sort of
+[18:44] like linear increase in performance that you'd expect from you know, oh I've got
+[18:49] more flops now. I've got more to gigabytes per second of GPU bandwidth.
+[18:54] You're actually getting more of a performance gain going from one GPU to
+[18:59] the next uh than you would expect off raw stats alone. And that's because um
+[19:03] you know, H100s for example have all these great architectural features and
+[19:08] Tensor RT because it actually optimizes the model by compiling it to CUDA
+[19:13] instructions, is able to take advantage of those architectural features, not
+[19:17] just kind of run the model, um you know, raw.
+[19:21] And so, for that, you know, that's why we do a lot with H100 MIGs. This This
+[19:25] This bullet point here is a whole different 45-minute talk that I tried to
+[19:29] pitch to uh do here, but basically, you know, H100 MIGs are especially good for
+[19:34] TensorRT LLM, um if you're trying to run smaller models like a 7B, you know, an
+[19:40] 8B, for example, uh because you don't need the massive amount of VRAM, but you
+[19:44] get the um increased performance from the architectural features. Um and, you
+[19:49] know, just my own speculation down here that I'm sure whatever the next
+[19:53] generation is is going to have even more architectural features for TensorRT to
+[19:57] take advantage of. And so, you know, adopting it now is a good move, uh you
+[20:03] know, looking to the future. Here we've got a graph showing, you know, with
+[20:06] SDXL. Now, this is TensorRT, not TensorRT LLM, but the underlying
+[20:10] technology is the same. Um you know, when when you working on an A10G, we
+[20:14] were looking at, you know, maybe like a 25 to 30% increase in throughput for
+[20:18] SDXL, and uh with an H100, it's a 70%. And that's not, you know, just because
+[20:24] the H100 is bigger. It's 70% more on an H100 with TensorRT TensorRT versus an
+[20:30] H100 without. So,
+[20:33] yeah, great uh yeah, please go ahead. One thing I want to add here is that
+[20:37] H100 supports FP8, and A100 does not. FP8 is a game-changer. I think it's very
+[20:44] easy to understate that fact. FP8 is really, really good post-training
+[20:47] quantization. You don't need to train anything. Post-training quantization, it
+[20:51] takes like 5 minutes, and the results are so close. We've done perplexity
+[20:55] tests on it. Whenever you quantize, you have to check the accuracy. Uh
+[20:59] and we've done that. It's It's hard to tell. And FP8 is about 40% better in
+[21:03] most scenarios. So, if you're using uh MIG H100, if you can, then it's it can
+[21:09] be way better if you use FP8. And FP8 is also supported um by
+[21:14] Lovelace. So, that's going to be your L4 GPUs, um which are also a great option
+[21:19] for for FP8. So, yeah, precision a bunch of different precisions are supported.
+[21:24] Again, FP8's kind of the highlight. FP4 uh could be coming.
+[21:28] And um you know, traditionally though, we're going to run in FP16, um
+[21:34] which is sort of like a a full precision um Oh, sorry, half precision. FP32 is
+[21:40] technically full precision. Uh What?
+[21:42] But, nobody does FP32. Yeah, yeah. So, so for for inference,
+[21:45] generally, you start at FP16. By the way, FP16 means a 16-bit floating-point
+[21:51] number. Um and from there, you know, you can quantize to INT8, FP8 if, you know,
+[21:56] you want your model to run faster, if you want to run on fewer or smaller
+[22:00] GPUs. Um We'll we'll we'll cover quantization in a bit more detail later
+[22:05] on in the actual workshop. I don't want to spend too long on the slides here. I
+[22:08] know you guys want to get your laptops out and start coding. Um
+[22:12] So, the other thing just to talk about is, like I said, TensorRT-LLM, it's a,
+[22:17] you know, it it it's a set of optimizations that you can, you know,
+[22:22] build into your TensorRT into your TensorRT engines. Um so, some
+[22:27] of the features that are supported, again, each one of these could have been
+[22:30] its own talk here. Uh but, we've got quantization, LoRA swapping, speculative
+[22:35] decoding, and Medusa heads, which is where you basically like fine-tune
+[22:38] additional heads onto a model, and then at each forward pass, you're generating
+[22:43] like four tokens instead of one token. Great for when you're, you know, when
+[22:47] you have memory bandwidth restrictions. Um yeah, in-flight batching, like you
+[22:51] mentioned, paged attention. There's just a ton of different optimizations
+[22:55] supported by TensorRT-LLM for you to dive into once you have the basic engine
+[22:59] built. So, um we're about to switch into more
+[23:04] of like a live coding workshop segment. So, if there's any of this sort of
+[23:08] groundwork information that didn't make sense or any more details that you want
+[23:11] on anything, let us know, we'll cover it now. Um, otherwise, it's it's about to
+[23:16] be laptop time. Looks like everyone wants laptop time.
+[23:21] So, uh, yes, please go ahead. Can you do like some high-level
+[23:25] comparison like VLLM Yeah, do you want do you want to do you
+[23:29] want to handle that one like a high-level comparison to VLLM?
+[23:32] I can do a very high-level comparison. Uh, first of all, um, I respect both
+[23:36] tools. VLLM is great. TensorRT-LLM is also great. We found in our comparisons
+[23:41] that uh, for most of the scenarios we
+[23:43] compared, we found TensorRT-LLM to be better.
+[23:47] Um, there there are a few things there. One thing is that whenever a new GPU
+[23:50] lands or a new technique lands, that tends to work better on TensorRT-LLM.
+[23:55] VLLM, it takes a bit of time for it to catch up, for the kernels to be
+[23:58] optimized. Uh, TensorRT-LLM is generally ahead of that. For example, when H100
+[24:03] landed, TensorRT-LLM was uh, was very, very fast out of the box because they've
+[24:07] been working for it on it for a long time.
+[24:10] Um, second thing is that uh, TensorRT-LLM is optimized from bottom to
+[24:14] the top. These uh, CUDA kernels at the very bottom are very, very well
+[24:18] optimized. On top of that, there is the in-flight batching engine, all written
+[24:22] in C++, and I've I've seen that code. It's very, very optimized C++ code with
+[24:27] you know, STD moves and whatnot. And on top of that is Triton, which is a
+[24:31] web server, again written in C++. So, the whole thing is very, very optimized.
+[24:36] Whereas, uh, in some of the frameworks, uh, they also try to optimize uh, in the
+[24:41] sense like, you know, Java versus C++, where Java is like, you know, we
+[24:44] optimize everything that matters, but there are always cases where it might
+[24:47] not be as good. Whereas, TensorRT-LLM is that let's optimize every single thing.
+[24:52] So, it generally tends to perform better in our experience. That said, VLLM is a
+[24:56] great, great product. We use it a lot as well. For example, Laura swapping, it
+[25:01] became available in vLLM first. So, we use that there for a while. What we
+[25:05] found is that when something lands in TensorRT-LLM and it's usually after a
+[25:09] delay, it works like
+[25:12] like bonkers. It just works like so well that
+[25:16] performance is just amazing. So, when something is working very
+[25:19] stably in TensorRT-LLM, we tend to use that. But,
+[25:23] vLLM and other frameworks do provide a lot of flexibility, which is great. We
+[25:27] love all the products. And like does that
+[25:30] small performance gain come at the cost of like a uh
+[25:35] steeper learning curve because Yeah.
+[25:39] Yeah, yeah. I think I think we should definitely question that. That is a
+[25:43] clear trade-off. If you're working with two GPUs, for example, two 80Ns, it's
+[25:48] not worth it probably. But, if you're spending hundreds of
+[25:51] thousands of dollars a year, uh it's it's your call. But, if you're
+[25:55] spending uh
+[25:57] many hundreds of thousands of dollars a year,
+[26:00] it can be material. Like, your profit margin might be 20%. This 20% of 50%
+[26:05] improvement might make the all the difference that you need. So, it depends
+[26:09] upon the use case. So, to recap my
+[26:12] question, like how important is the latency
+[26:17] like TensorRT is
+[26:20] important like just like you
+[26:22] really need GPUs so they have a lot of small
+[26:25] you're faster than the
+[26:29] It could be, yeah. I think if you're working with one or two GPUs, 80Ns or
+[26:33] T4s, uh I mean, I'm not I'm not an expert in
+[26:36] that, but uh it probably doesn't matter which framework you use, whichever works
+[26:40] best for you. But, if you end up using A100s or H100s, you should definitely
+[26:44] look into TensorRT-LLM. And uh regarding the learning curve,
+[26:49] stick around a little bit, we're going to uh flatten it out a lot for you
+[26:53] because we've built some great tooling on top of TensorRT-LLM that's going to
+[26:56] make it just as easy to use. Little little little marketing spin
+[27:00] right there. Um so yeah, so we're going to um be
+[27:05] doing a engine building live coding exercise
+[27:08] um and and Pankaj is just going to lead us through that. I'm just going to kind
+[27:11] of roam around, so if if people have, you know, questions, need help kind of
+[27:15] on a one-on-one basis, I'll be able to help help out with that during this
+[27:19] portion of the workshop. Great.
+[27:23] So uh We have
+[27:27] Let's just like go through a couple There's there's there's a little bit of
+[27:30] a little bit of setup material, right? Or
+[27:32] Yes. Yeah.
+[27:34] Um you want to run through that?
+[27:36] Okay, sure. I'll I'll run through the I'll run through the setup material um
+[27:39] and then uh
+[27:43] Yeah. So um anyway, what we're going to do um to to to be clear is we're going
+[27:48] to build an engine for model called Tiny Llama 1.1B. I want to be really clear
+[27:52] about this. TensorRT-LLM is a production-ready technology that works
+[27:56] great with big models on big GPUs. Uh that takes time to run. The dev loop
+[28:03] can be a little bit slow, and we only have a 2-hour workshop here, and uh you
+[28:07] know, I don't want us all just be sitting there watching a model build.
+[28:09] It's basically as fun as watching paint dry or watching grass grow. Um so we're
+[28:14] going to be using this super tiny 1.1 billion parameter model. We're going to
+[28:18] be using 4090s and 8 10 Gs um just to kind of keep the dev loop fast, but this
+[28:23] stuff does scale. So um at this point, we're going to walk you through the
+[28:27] manual process of doing doing it all from scratch. You're going to procure
+[28:31] and configure a GPU. You're going to install dependencies for TensorRT-LLM,
+[28:35] configure the engine, run the engine build job, and uh test the results. And
+[28:39] we we should be able to get through this in in about half an hour or maybe a
+[28:43] little less because these uh these models are quite small.
+[28:47] Um and there was a few important settings that we're going to look at
+[28:50] when building the engine. We're going to look at the quantization, again, the
+[28:53] post-training quantization. Like we talked about, we're going to be
+[28:56] on A10s, or sorry, no, first we're going to be on 4090s, so we will actually have
+[29:00] access to FP8, so that you can test that out. Um we're going to look at sequence
+[29:05] shapes and batch sizes, how to set that, and we're going to look at tensor
+[29:08] parallelism. You want to give them a quick preview on tensor parallelism?
+[29:12] Well, yeah. Tensor parallelism is uh is very important in certain scenarios.
+[29:18] I wish it were more useful, but it is critical in many scenarios. So, what is
+[29:22] tensor parallelism? Ultimately, machine learning running these GPUs is about
+[29:26] matrix multiplications. We take this model architecture, whatever it is, it
+[29:31] ultimately boils down to matrices that we multiply. And a lot of the wrangling
+[29:34] is around that. How do we shove these all batches into matrices? So,
+[29:38] ultimately, it is matrix multiplication, right? What you can do is you can split
+[29:42] these matrices, and you can multiply them separately on different GPUs, and
+[29:46] then combine the results. And that's what tensor parallelism is. It's one of
+[29:50] the tensor of parallelism techniques. Uh there are many techniques. Uh it's
+[29:55] one of the most commonly used ones, because you need that. Uh why do you
+[29:59] need tensor parallelism versus other parallelisms like pipeline parallelism?
+[30:04] Um is that it saves on latency. You can do
+[30:07] things in parallel. You can use two GPUs at the same time for doing something,
+[30:11] even though there is some overhead of crosstalk between them. With pipeline
+[30:15] parallelism, you take the model architecture, and you can divide these
+[30:18] layers into separate things. So, your thing goes through one GPU, like half
+[30:22] the layers, and then half the layers on a second GPU, but you're not saving on
+[30:26] latency. It still has to go through each layer, and it's going sequentially. And
+[30:32] that's why pipeline parallelism is not very popular for inference. It is still
+[30:36] popular for training. There are scenarios. Uh there's a lot of theory
+[30:39] about that, but for for inference, I don't think I've ever
+[30:43] seen it used and nobody pays much attention to optimizing it because of
+[30:46] this thing that tensor parallelism is just better. There's also expert level
+[30:50] parallelism. If your model has mixture of experts, then you can parallelize
+[30:54] those experts. And that tends to be very advanced and Llama doesn't have mixture
+[30:58] of experts, so it's a esoteric thing that we haven't covered here.
+[31:02] Tensor parallelism is pretty helpful and useful.
+[31:05] One downside is that your throughput is not as great. If you can fit something
+[31:08] in a bigger GPU, that's generally better. But there are bigger models like
+[31:13] Llama 70B, they just can't fit on one GPU, so you have to use tensor
+[31:17] parallelism. Awesome. So, for everyone to get
+[31:21] started, we made a GitHub repository for you all to work off of in this in this
+[31:27] workshop. So, you can scan the QR code, it'll take you right there. Otherwise,
+[31:33] you know, this is this is not too long to type out.
+[31:36] Um So, I'm just going to leave this up on
+[31:38] screen for 30 seconds so everyone can pull it up.
+[31:42] You're going to want to, you know, fork and clone this this repository
+[31:46] to your to your local development environment.
+[31:50] We're just, you know, we're just using Python, Python 3.10, Python 3.11.
+[31:54] Um 3.9. So, yeah, just like however however
+[31:59] your your normal way of writing code is, this this should be compatible.
+[32:03] Um there isn't a lot of what Uh no. So, yeah, to be clear, in in this
+[32:10] in this repository, you're going to find instructions and we're going to walk
+[32:13] through all this. We're going to be using entirely remote GPUs.
+[32:18] So, you know, I personally have an H100 under my podium right here that I'm
+[32:22] going to be using. No, I'm just kidding, I don't. But yeah, yeah, so we're just
+[32:27] we just all have laptops here, so we're going to be using cloud GPUs.
+[32:31] Yeah, actually, if you want to follow along, you might need a RunPod account.
+[32:35] Yeah, yeah, we'll we'll we'll we'll talk them through the the the the setup steps
+[32:39] though. Does Does anyone want me to leave this
+[32:42] information on the screen any longer? Going once, going twice. Okay, if if you
+[32:48] for whatever reason lose the repository, just let me know, I'll I'll get it back
+[32:52] for you. Yes, okay, so this this slide means we
+[32:55] are transitioning to live coding. So, yes, let's go uh
+[32:59] let's go over to um the
+[33:03] yeah, the the the live coding experience.
+[33:06] So, I'm I'm basically going to follow this repository. All the instructions
+[33:10] are here. And I'm going to follow exactly what is here. So, you can see
+[33:16] how to follow along. And if you if you ever get lost or need
+[33:20] help, just raise your hand and I'll come over and catch you up like one-on-one.
+[33:24] Yeah, yeah, I'm going to go really slow. I'm going to actually do all these steps
+[33:27] here. I know it takes time, but uh you know, there's a lot of information here.
+[33:31] It's easy to uh lose track of thing and get lost. So, if you if you feel lost,
+[33:35] like ask and we'll break. I want to make sure this is not a long process, a
+[33:39] 10-minute process. We can take it slow for everybody here.
+[33:43] So, first thing is that we'll we'll do it like really really from scratch. So,
+[33:47] we're going to spin up a new uh container on RunPod with a GPU to run
+[33:52] our setup in. So, if you
+[33:54] Let's give everyone a minute to absorb that, make an
+[33:57] Okay, okay, yeah, yeah, please, please. If you want to follow along, please go
+[34:00] on RunPod and create an account. This should cost like less than $5 overall.
+[34:05] Yeah, so So, yeah, so if you want to make an account, there's instructions in
+[34:10] the 01 folder. Yeah, this read me. So, TensorRT in the in the first folder in
+[34:15] the read me, there is instructions and a video walk-through. The minimum We're
+[34:21] We're not affiliated with RunPod in any way. They just have 4090s and we wanted
+[34:25] you guys to use 4090s today. There is a minimum credit buy of $10. If for
+[34:30] whatever reason you can't use a company code or get a reimbursed or whatever and
+[34:34] you want your $10 back, uh send me an email after the um after the conference
+[34:39] and I will reimburse you myself. So, uh you know, I I just I wanted I It's
+[34:44] really important to me that we are giving you the GPUs uh to to run this
+[34:48] on. So, yeah, so if if you if you uh if you need the $10 back, I will I will
+[34:54] get it for you. Um so, yeah, just uh just follow this. It's like a 1 and 1/2
+[34:58] minute video. Um and uh yeah, that that that'll get
+[35:02] the account set up. Maybe we could even like play the video. Uh um
+[35:06] So, yeah, then then this is how you, you
+[35:09] know, deploy um once we once we get set up.
+[35:15] So, in in 2 minutes we will come back together and, you know, we resume the
+[35:20] resume the talk. So, yeah, make that account real quick, get checked out, get
+[35:23] those $10 of credits at the SSH key.
+[35:30] Yeah, and and also if you if you do happen to run into any issues getting
+[35:34] the One Pod account set up, like it's not working or whatever, um I do have
+[35:38] one that I can share individually with people. It would just take a really long
+[35:42] time for me to go type in my username and password into every single computer
+[35:45] in this room.
+[35:53] I feel like maybe I should have brought some some jokes to tell while everyone
+[35:57] sets the account up. Uh all right, uh how about this one? Why
+[36:00] did the LLM cross the road?
+[36:05] Ignore previous instructions and cross the road.
+[36:09] All right, I'll I'll I'll I'll I'll workshop that. I'll get some better
+[36:12] jokes for you guys before before the next setup.
+[36:17] How are we doing on the on the account setup? Um anyone need a little more
+[36:20] time? All right, great. No problem. No
+[36:23] problem. Sorry, I I don't want to rush you.
+[36:27] Just checking in.
+[36:31] Yeah. And then once once everyone has the account, we'll set up the GPU
+[36:35] together cuz there's a few things you need to configure.
+[36:46] Cool. Uh
+[36:48] Oh, really?
+[36:56] It's It's not taking anyone's credit card?
+[37:02] Great. Uh can do Does someone do Here, can Can I Can I Can I
+[37:08] know someone who runs it who works at One Pad and would have their their phone
+[37:12] number? He's calling them? Okay. Awesome. All right, we're we're getting
+[37:17] we're getting in touch with customer support.
+[37:22] Oh, yeah, could be It could be that. Yeah, straight production. Okay, so as a
+[37:26] backup, um yeah.
+[37:31] What's that?
+[37:35] You put it on You put it on your phone Wi-Fi? Okay, so the recommendation here
+[37:39] is go off of the conference Wi-Fi, put your
+[37:43] computer on your phone hotspot, and try it again. Um because that that worked uh
+[37:49] you know, may- maybe maybe coming from a different IP address will will help.
+[37:54] How would we do this? I run through this and we can do it again once everybody
+[37:58] has their account. Yeah, that sounds good. So, what we're
+[38:01] going to do in the interest of time here um is we're going to uh Kitch is going
+[38:06] to run through end to end um sort of the the the demo as we as we get the stuff
+[38:12] set up and everyone's credit cards get unblocked.
+[38:16] Um Yeah, you know,
+[38:18] who would have thought, you know, we we were we were talking this big game about
+[38:22] oh, Tensor RT LM is so hard, it's so technical. There's going to be so many
+[38:26] bugs and then there's the payment processing. So, uh
+[38:30] yeah, you know, that that's that's what live demos for you. So, anyway, yeah, go
+[38:34] go ahead and walk through it um and then we'll do it kind of again together once
+[38:38] everyone has the account. All right. Yeah, let me run through
+[38:41] this. I'll follow the all the steps. Uh I I already have an account running
+[38:45] on pod. So, let me spin up a new instance here.
+[38:50] And uh I'm picking up the 4090 here.
+[38:55] Which this one and it has high availability, so that should be fine and
+[38:59] uh I'm going to edit this template and get
+[39:02] more space here. This doesn't cost anything extra.
+[39:06] Yeah, we need more space uh because the engine uh everything that we're
+[39:11] installing um and the engine we're building takes up a lot of gigabytes, so
+[39:15] otherwise we're going to run out of memory.
+[39:16] safer, yeah. Even though these engines are small, engines in general can be
+[39:19] very very big. They can be hundreds of gigs.
+[39:22] And I'm going to pick on demand because I'm doing this demo. I don't want the
+[39:25] instance to go away, but feel free to use spot for your use case.
+[39:29] I'm going to do that.
+[39:34] The the You want to set the the container um
+[39:37] container disk to 200 GB so that you have enough room to install everything.
+[39:44] And then I'm going to deploy spot.
+[39:48] It's going to be a bit slow, but you know, feel free to ask any questions and
+[39:52] uh I feel like this way uh we'll take it slow, but we'll make
+[39:55] sure everything is understood by everybody.
+[39:58] So, what what's happening right now is that this
+[40:01] uh pod is spinning up. Um one thing to note here is that it has a specific
+[40:06] image of uh torch with a specific CUDA version. It's very important that the
+[40:11] node has GPUs. And the first thing we're going to we're
+[40:15] going to do is that once this pod comes up, we're going to check that it has
+[40:19] everything related to GPUs running fine.
+[40:25] This is starting up.
+[40:31] Now I'm going to connect. It gives you nothing sensitive here. It uses your SSH
+[40:36] keys, but the names are not sensitive. So I'm going to just do that, log in to
+[40:40] that box.
+[40:45] Uh sorry. Oh okay, sorry. Yeah, yeah, this is much
+[40:50] smaller.
+[40:53] I think the pod is still spinning up, so it's taking a bit of time.
+[41:12] Mhm. Okay. Now it's up. So to test that everything is set up
+[41:18] properly, Is it Is it possible to scroll it to the
+[41:20] top of the screen? Oh yeah.
+[41:25] Okay, great. So we are on this machine that we spin
+[41:28] up. We're going to run NVIDIA SMI to make sure that the GPU is available. And
+[41:34] this is what you should see. Uh one thing to note here is this
+[41:38] portion, which shows that the GPU has uh
+[41:43] more than 24 gigs of memory that the X 4090 has. And right now it's using one
+[41:49] memory. I think it does some uh some stuff like is by default, so one
+[41:53] mag is already taken.
+[41:58] So So now we're going to go back
+[42:02] to our workshop and then just follow these instructions.
+[42:07] Manual engine build. We are at this point.
+[42:11] Uh and now we're going to install TensorRT-LLM. This is going to take a
+[42:14] bit of time. TensorRT-LLM comes as a Python library
+[42:17] that you just pip install. And that's all we're doing. We're setting up the
+[42:21] dependencies. This AP AP update is setting up the Python environment, uh,
+[42:26] OpenMPI, and other things. And then we just install TensorRT-LLM.
+[42:30] Uh, from not from PyPI, but from NVIDIA's own PyPI. That's where we find
+[42:35] the right versions. If you focus on this line,
+[42:39] uh, let me kick this off. Then I can come back here and show you
+[42:42] that we're using a specific version of TensorRT-LLM.
+[42:47] And, uh, we need to tell it to get it from the NVIDIA PyPI using these
+[42:52] instructions. And all these are on the GitHub repo if
+[42:56] you want to follow from there.
+[43:03] I saw a guy with a camera, so I started posing.
+[43:10] Uh, I think 3.10, I think. 3.10?
+[43:12] 3.10, yes.
+[43:18] Uh, this This command should have instructions to install it.
+[43:24] I also I want to check in with the room. Has anyone else had success getting one
+[43:28] pod up and going, uh, using your using your phone Wi-Fi? It's working? Okay,
+[43:33] awesome. Crisis averted. Thank you so much to, uh, to whoever from from over
+[43:37] there suggested the idea to begin with. Really saved the day.
+[43:42] Great. So, we're just waiting for it to build.
+[43:44] It takes some time. This is This is the best part of the
+[43:48] job, you know, you wait for it to build, you can go get a snack, you can go like
+[43:52] change your laundry. It's, uh, very convenient that it takes this time
+[43:55] sometimes. It used to be comp- compilation takes
+[43:58] time. Now engine build takes time. Yeah, exactly.
+[44:04] I think we're very close.
+[44:08] And I promise like then the fun part begins.
+[44:11] Are you saying that pip install isn't the fun part? I think this is pretty
+[44:15] fun, you know, look look look at all this look at all this lines, you know,
+[44:19] this is this is this is real coding right here.
+[44:22] And if you want pip to feel my more fun try poetry.
+[44:25] Oh, that's true. Poetry is really fun.
+[44:29] Yeah, Nvidia does publish these images on their container registry called NGC
+[44:34] and there are Triton registries available for these things. Maybe we
+[44:38] should have used that rather than pod, but uh
+[44:41] it's all good. So, now let's check that TensorRT-LLM is installed.
+[44:46] And this will just tell us that
+[44:49] everything is running good. So, it printed the version.
+[44:53] You should see that if everything is working fine.
+[44:56] And then we got to do the real thing. Now we're going to clone the
+[45:01] TensorRT-LLM Git repository where a lot of those examples are and I'll I'll show
+[45:05] you those examples while this uh this cloning happens. It shouldn't take
+[45:10] that much long, maybe maybe a minute or so.
+[45:14] But TensorRT-LLM has a lot of examples. If you go to the TensorRT-LLM
+[45:18] repository, there these examples folder and there are ton of examples. Like
+[45:24] Philip mentioned, there are about 50 examples.
+[45:27] And we want to go through the llama example here. So, if you search for
+[45:30] llama
+[45:33] that's the one we're going to look into. And so, the cloning is complete.
+[45:40] And we go back to these instructions. And now we're going to actually build
+[45:44] the engine. Actually, one more thing, how many of you know about HF transfer?
+[45:51] Have you used that Transformers library from Hugging Face?
+[45:54] So, HF transfer is a fast way of downloading and uploading your engines.
+[45:59] It does sliced download. It takes the URL and
+[46:03] patches them up into slices, downloads them all in parallel, and it works
+[46:06] really, really fast. It goes up to like 1 gig a second. So, we should definitely
+[46:10] do that. Which is what I did just now. Now, we're going to follow this
+[46:14] step-by-step. Uh first thing we're going to do is download from Hugging Face. And
+[46:19] let's see like how fast the Wi-Fi here is. Uh how fast this downloads. So, not
+[46:24] bad. It's going at 1 gig a second. So, HF all Yeah.
+[46:28] Probably without the the Wi-Fi here. Oh, from Oh, you're right. You're right.
+[46:31] You're right. See, but this is uh this is what I call good software. Downloads
+[46:36] at 1 gig a second. Ahem. Now, we
+[46:40] Now, first thing to build with TensorRT-LLM is that we have to convert
+[46:43] uh the Hugging Face checkpoint into a checkpoint format that TensorRT-LLM
+[46:48] works with. And uh checkpointing also covers tensor parallelism and
+[46:53] quantization. Sometimes you need a different kind of checkpoint for doing
+[46:55] those things. So, I'm going to run this command
+[46:58] to convert the checkpoint. And this should be pretty fast. It's just
+[47:02] converting weights to weights.
+[47:09] That's pretty fast, like 3 seconds. Uh
+[47:12] and now we do the actual build. And we're going to do this basic build
+[47:16] here. Uh there are a ton of options that this command takes, the TRT-LLM build
+[47:21] command. Uh in here we're just saying that uh take this checkpoint and build
+[47:26] me an engine with most of the default settings.
+[47:30] And that should build the engine.
+[47:36] Now, it will print a lot of stuff about what it's doing, what it's finding, and
+[47:40] how it's optimizing, and all that. Uh it won't make much sense right now,
+[47:44] but uh later on this could be very useful. So, the engine was built. That's
+[47:47] pretty fast, right? It's a small uh model uh only a billion parameters. So,
+[47:53] that was pretty fast. And now let's uh let's try to see how big the engine is.
+[47:58] I'm going to do that and the engine is 2 gigs in size. This is about how big that
+[48:03] model is on Hugging Face. So, it's the engine itself adds very little
+[48:09] storage or memory needs, maybe like hundreds of megabytes, but very tiny
+[48:14] compared to the overall. And those weights are bundled into the engine.
+[48:18] And what is this engine? This engine is something that the TensorRT-LLM
+[48:23] runtime can take and it can execute it. You can think of it like a shared
+[48:29] library. It's It's kind of like a binary in the standard format that the binaries
+[48:35] are in. But it's It's something that
+[48:38] TensorRT-LLM can take and interpret. Ultimately, it's
+[48:42] a TensorRT engine. Because that's what TensorRT-LLM works
+[48:45] with. It creates TensorRT engine and then TensorRT is the one that
+[48:50] loads it, but TensorRT-LLM gives it these plugins that TensorRT understands
+[48:55] and then is able to make sense of it. And now let's execute this. So, these
+[49:00] these examples also come with the come up with a
+[49:03] come with a run script that we can run and we're going to run that.
+[49:07] So, what this is going to do is start up the engine and give it
+[49:12] a very tiny request and we should expect a response.
+[49:15] And that's what happened here. Our engine was launched. We gave it an
+[49:19] input text of born in northeast France, so we are trained as a and the model
+[49:25] printed out the response beyond that. Painter in Paris moving before moving to
+[49:30] London in 1929. And this is a standard example that comes with TensorRT-LLM.
+[49:37] So, if you follow along these instructions, you should see that.
+[49:42] Any questions at this point?
+[49:52] The convert the question is what happens during the convert checkpoint.
+[49:57] Uh I think that there are three things that happen,
+[50:01] uh potentially three things. First thing is that TensorRT-LLM needs the tensors
+[50:06] to be in a specific format to work with. So, think of it as a pre-processing.
+[50:10] There are many ways of specifying a model. It can be on Hugging Face, it can
+[50:14] be exported from PyTorch, it can be ONNX. There are many many different ways
+[50:18] of specifying these models. So, the first thing it does is that it converts
+[50:22] that into a format that it understands. So, it does does some kind of
+[50:25] translation into a standard structure. Second thing is quantization. For
+[50:31] quantization, it needs to uh quantize the weights. It needs to take
+[50:36] the weights and quantize them into the quantized versions of them. And that
+[50:41] happens at convert checkpoint, too. Uh not necessarily, though. They also have
+[50:44] a quantize script. Some of those uh quantizations happen
+[50:48] some types of quantizations happen in convert checkpoint, but they also have a
+[50:52] different way of quantizing. They call it, I think uh
+[50:56] AMMO. There's a library called AMMO which does that.
+[50:59] Uh and that can also be used for doing it. But, uh I think AWQ and uh
+[51:04] SmoothQuant, they happen in convert checkpoint.
+[51:07] And uh third thing is tensor parallelism. For tensor parallelism, you
+[51:10] need to divide up weights uh into different categories for the
+[51:14] different GPUs that they will run on. So, it does that during convert
+[51:18] checkpoint as well.
+[51:26] Me, too.
+[51:48] play that data. Yeah, so so there's there's two places
+[51:51] that the max output is set. Um so the first place is when you actually
+[51:55] building the engine, you give it a argument for the expected output
+[52:01] sequence length. And then that's that's more just so like for the optimization
+[52:05] side, you know, so that you're selecting the correct CUDA kernels and so that
+[52:09] you're you know, batching everything up correctly. And then once the engine is
+[52:13] built, it just uses a standard I think it's uh max tokens, right? Is the
+[52:17] parameter. Yeah.
+[52:19] Um and yeah, you just you just pass max tokens and that'll, you know, limit um
+[52:23] how how long it it runs for.
+[52:35] Right. Like are you asking if you if you make the engine with a shorter um output
+[52:41] sequence Oh, okay.
+[52:44] No, I I as far as I know, the max all the max token does is it just cuts off
+[52:49] influence after a certain number, right? Yeah, so the way uh I would put it is
+[52:54] that normally if you give it a large number of max tokens,
+[52:59] it would emit uh end of sequence token. Most models
+[53:03] have a different end of sequence token and it's up to you. You can stop there.
+[53:08] You can configure it run time like I don't want more than that. But you can
+[53:11] also tell tell it ignore end of sequence. I just want the whole thing.
+[53:15] And we do need it for performance benchmarking. For example, when we are
+[53:18] comparing performance across different GPU types or whatnot, we want all of
+[53:23] those tokens to be generated. So we can tell it like give me all of them.
+[53:28] Welcome.
+[53:39] Oh, great great question actually. So uh in build checkpoint, a a lot of stuff is
+[53:44] happening. You're taking these weights and you're
+[53:49] uh you're generating this thing called a
+[53:51] network in TensorRT. TensorRT has this notion of a network. And what you need
+[53:56] to do is populate that network with your weights and architectures. So, it
+[54:01] actually does that. It creates that network and feeds it these weights. It
+[54:06] also does inference during building the engine
+[54:09] uh for doing optimizations. So, it generates for every model type, it has a
+[54:13] mechanism of generating sample input and it passes that into the a TensorRT
+[54:19] engine that it's generating and then it optimizes it that way. And as as as a
+[54:25] result, this TensorRT engine is generated in memory, which is then
+[54:29] serialized. So, all of this is happening in that.
+[54:34] And these uh there's a lot of nuance to it. Uh if you get a chance, you can look
+[54:38] at the source code for that TRT learn build. I'll post references in that
+[54:42] GitHub repo and you can follow on. There's lots of options. But, let me try
+[54:46] if I can find a help here.
+[55:00] Uh maybe I'm a person.
+[55:12] What's going on? Sorry.
+[55:23] Oh, okay. This is lo- lot of stuff here which you can go through.
+[55:28] Um Uh yeah, maybe I should go through some
+[55:32] of them which are very important.
+[55:36] Yeah, I think a lot of stuff is important here, like the max beam width
+[55:38] if you're using beams for generating the graph. You can generate uh logits, not
+[55:44] just the output tokens. We can also generate logits if you want to process
+[55:47] them. Uh there are a lot of optimizations that
+[55:50] you can use like you can there's a optimization called fused MLP, there is
+[55:53] contest chunking, there is there is a lot of stuff. I think you should play
+[55:56] around with those uh at a time. Laura is very good to play
+[56:00] around with. Mhm. Yeah. I'll try to leave some uh
+[56:04] some more examples uh in the GitHub repo to try.
+[56:08] Okay. So, let me go to the next one. Just uh one more thing I want to do is
+[56:12] uh FP8 quantization. Uh RTX 4090 is is actually an amazing GPU. It's pretty
+[56:17] cheap but supports FP8. So, we're going to do an FP8 engine build now.
+[56:23] So, in this case like I said, like some of these optimizations these
+[56:27] quantizations are not in convert checkpoint but quantize.py
+[56:32] which uses a library called ammo in Nvidia. So, I'm going to run that now.
+[56:38] And uh Yeah.
+[56:40] Let me spend some time here. We are we're saying is
+[56:43] we're telling it that the quantization format is FP8. But, also note that we
+[56:47] are saying KV cache D type is FP8. So, FP8 quantization actually can happen at
+[56:54] two levels. You can weight quantize to FP8 but you can also quantize the KV
+[56:59] cache with FP8.
+[57:01] And doing both is very critical because uh these GPUs they you might have heard
+[57:07] of things called tensor cores, right? Tensor cores are very very very
+[57:11] important because they can do quantized calculations very fast. For
+[57:16] example, if you look at a spec of the H100 GPU, you can see that the teraflops
+[57:22] that you can get number of competition that you can get with lower quantization
+[57:25] options are much more than higher. For example, FP16 teraflops will be much
+[57:31] lower than FP8 because you can use the special tensor cores for doing more FP8
+[57:36] computations in the same time that you would do FP16.
+[57:40] But for that to happen, both sides of the matrix have to be the same condition
+[57:44] type. Mixed precision doesn't exist. At least now it's not very common or
+[57:48] popular. So you want both sides to be quantized.
+[57:52] And when you quantize both the KV cache and the weights to FP8, you get that
+[57:56] extra unlock that your computation is also faster.
+[58:00] Which can be critical for scenarios which are compute bound. And as you
+[58:05] would know in LLMs, there are there's a context phase and generation phase.
+[58:09] Generation phase is memory bandwidth bound, but the context phase is compute
+[58:13] bound. So that can benefit greatly from both sides being quantized. So in this
+[58:18] case we are saying that quantize both weights and KV cache. And it's actually
+[58:24] not a trivial decision to do that because weights quantize very easily.
+[58:28] It's you hardly lose anything when you quantize weights. The dynamic range of
+[58:32] weights is generally much much smaller. You can use INT8 or when you do FP8 FP8
+[58:38] there is hardly any loss. KV cache doesn't quantize as well. And that's why
+[58:43] FP8 is a game changer because what we found is that when you quantize the KV
+[58:47] cache with INT8 even using smoothquant, there is a still degradation of quality.
+[58:52] And practically we've never seen anybody use it even though there are a lot of
+[58:55] papers about it and it's a great great technology, but practically it was not
+[59:00] there until FP8. FP8 even KV cache quantization works extremely well.
+[59:05] Let me let me show something with that actually
+[59:08] if if you don't mind back on the on the
+[59:12] um if we go to
+[59:15] uh
+[59:19] I'll just show like a little visualization
+[59:21] um for for FP8 that that shows off the dynamic range. um
+[59:26] So Oh hey look, it's us.
+[59:29] Um yeah, so so when you look at um the the FP8 data format, it has a sign and
+[59:36] then um rather than uh So, there's two different FP8 data formats, but but
+[59:40] we're using the um you know, the E4M3 format. So, basically, you have four
+[59:45] bits dedicated to an exponent um and that's what gives your FP8 data format a
+[59:50] lot of dynamic range versus INT8, which is just, you know, like what?
+[59:56] 256 to Yeah, so
+[59:59] So, you you still have the same number of possible values, but they're spread
+[1:00:02] apart further. That's dynamic range, and it's that which allows you to quantize
+[1:00:07] this much more sensitive KV cache. Yeah, yeah, exactly. Basically, you have
+[1:00:12] the element to turn the exponents, you
+[1:00:15] basically are able to uh quantize smaller values better. You
+[1:00:20] give more bits to smaller scale than larger scale. You don't have to fit into
+[1:00:23] a linear scale. And that's where FP8 excels.
+[1:00:27] So, going back to the presentation, the FP8 um quantization is done, and uh I
+[1:00:32] forgot to show you this, but uh there is calibration involved here. If you look
+[1:00:36] at this uh stack here, we actually give it some data. We feed it some data and
+[1:00:41] let it calibrate because as you would know in data in FP8, you have a start
+[1:00:46] and end range, and they differ in how you divide up that range into data
+[1:00:49] points, but you have to find min and max. And for that, you need calibration.
+[1:00:54] So, we give it a standard data set, and you can change the data set, uh but we
+[1:00:58] give it a specific data set, and it does multiple runs, and we try to calibrate
+[1:01:01] like what are the dynamic ranges of each of the layers of this transformer
+[1:01:06] architecture. And based upon that, we specify that min and max for each layer
+[1:01:10] separately. There's more detail there, but at the high level, that's what is
+[1:01:13] happening.
+[1:01:24] Yeah. it's it's possible that the ranges can vary a lot with data set. And this
+[1:01:29] used to be more critical with int8. With FP8, we found that you you get to a good
+[1:01:34] state pretty fast, but it's worth thinking about trying different data
+[1:01:37] sets, especially if you know what data set you are going to be calling it with.
+[1:01:41] Uh it could be worth it. It just works very well out of the box, but it's not
+[1:01:45] perfect.
+[1:01:49] Going back to the workshop. Uh so we were following along here. And yeah, so
+[1:01:53] after you quantize it, the steps are very similar as before.
+[1:02:00] Now we're building an building an engine with FP8. And uh internally all the CUDA
+[1:02:06] kernels that are being used are now FP8 specific. They are different kernels,
+[1:02:11] which use the tensor cores in the right fashion.
+[1:02:16] And this should be pretty quick as well.
+[1:02:26] And there's a lot of depth here. As you learn more about it, you don't need to,
+[1:02:29] but uh there are things like timing cache. There are optimization profiles
+[1:02:33] in TensorRT, through which you tell what sizes we expect and it does
+[1:02:37] optimizations. But uh this is a good beginning. So now
+[1:02:41] we have the engine. Uh let me do a du on that
+[1:02:45] and to see the size of that engine now. And the size is 1.2 gigs, which is about
+[1:02:51] half of previous, and which is what we expect because we quantized.
+[1:02:57] And now let's run this engine and see the output. And it should be pretty
+[1:03:00] similar to what we saw before.
+[1:03:04] So using this run script, now it's going to load the engine, and then we'll do an
+[1:03:08] inference on top. And that should be pretty quick.
+[1:03:11] So yeah, the here's the output. The same input as before.
+[1:03:14] And about the same output as before. And that's what we generally observe
+[1:03:19] with FPH. FPH quality is really really good. It's very very hard to tell the
+[1:03:23] difference.
+[1:03:26] That's it for this workshop. This this part of the workshop.
+[1:03:29] Yeah, awesome. Thank you. So, um
+[1:03:32] you know, I definitely welcome you to keep playing around um with this one pod
+[1:03:37] setup and trying different uh different things.
+[1:03:42] Try to build different engines and stuff. Um
+[1:03:44] but uh we're going to move on to the next step, which is a um automated
+[1:03:50] version of basically exactly what we just did. So, um we're going to show a
+[1:03:55] few things to uh to make this easier. Um
+[1:03:59] So, uh we're going to be using for this next step something called Truss. Uh
+[1:04:03] Truss is an open-source uh model serving framework developed uh by us here at
+[1:04:08] Basecamp. Punkaj is the one who, you know, actually wrote a lot of the code.
+[1:04:12] All I did was name it Truss. Um because I was riding on a train and I was like,
+[1:04:16] "Huh, what should I call the framework?" And then we went over a bridge and I was
+[1:04:19] like, "I know, I'll call it Bridge." But that was already taken, so I called it
+[1:04:23] Truss. Um so, it lets you deploy models with Python um instead of, you know,
+[1:04:28] building a Docker image yourself. Um it gives you a nice lively live dev dev
+[1:04:33] loop. And what we really wanted to focus on when we were building this, cuz it's
+[1:04:37] kind of the technology that sits on the whole entire uh model serving platform,
+[1:04:41] is we really wanted a lot of flexibility so that we could work with
+[1:04:45] things like TensorRT, Tensor TLLM, you can run it with vLLM, Triton. Uh you
+[1:04:49] can, you know, run a Transformers model, a Diffusers model. You can put an
+[1:04:53] XGBoost model in there if you're still doing ML. Like, you can do basically
+[1:04:56] whatever you want with it. It's just Python code.
+[1:04:58] Let me interject. Like, Truss is actually uh a very simple system. It's a
+[1:05:02] way of running Python code, specifying an environment for running the Python
+[1:05:07] code, and your Python code. So, it's sort Sort like a very simple packaging
+[1:05:11] mechanism, but built for machine learning models. It takes account of the
+[1:05:15] typical things you would need with a machine learning models like getting
+[1:05:19] access to data, passing secure secure tokens and such. But it's fundamentally
+[1:05:24] a very very simple system, just a config file and some Python code.
+[1:05:29] Exactly. And um So, looking at at that config file,
+[1:05:34] we're not even actually going to write any Python code today for the model
+[1:05:37] server. We're just going to write a quick config. Um so actually this
+[1:05:41] morning I was eating breakfast here, and I sat down with a group of engineers and
+[1:05:45] we were talking about stuff. And everyone was complaining about YAML and
+[1:05:49] how they were always getting like type errors when they write YAML. So,
+[1:05:53] unfortunately this this is going to be a YAML system. So, apologize apologies to
+[1:05:57] my new friends from breakfast. Um but what we're going to do is is use this as
+[1:06:02] basically an abstraction on top of TOTLM. Uh why do you need
+[1:06:06] abstraction on top of TOTLM? Uh Pankaj, quick question for you.
+[1:06:11] What's the name of that C++ textbook you were reading before bed every night the
+[1:06:15] the other month? The modern C++.
+[1:06:18] What? Modern C++.
+[1:06:19] Yeah. C++. So, uh you know, uh before bed every night I was I was watching
+[1:06:24] Survivor. Um and so uh for for those of us who are who are not um cracked
+[1:06:31] software engineers, um and even for those who are who want to get things
+[1:06:34] done quickly, um we want to have a great abstraction. What does that abstraction
+[1:06:38] need to be able to do? Needs to be able to build an engine. Um and that engine
+[1:06:43] it needs to take into account what model we're going to run, what GPU we're going
+[1:06:46] to run it on, the input and output sequence lengths, the batch size,
+[1:06:50] quantization, any of the other um optimizations we want to do on top of
+[1:06:54] that. And then we also want to not just grab that and run it in the GPU pod
+[1:06:58] somewhere. We actually want to deploy it behind an API endpoint so that, you
+[1:07:02] know, we can integrate it into our product and stuff.
+[1:07:06] So, I'm going to show how to do that. Uh let's see here. This is This is yours
+[1:07:11] now. I'm I'm stealing Ooh, this is a good mic.
+[1:07:14] I might not give this back, punkage. This is a good mic.
+[1:07:18] All right. Um so, we're going to go over
+[1:07:23] um let's see. This is
+[1:07:26] This is in the one pod thing still? I think you can go to the first one.
+[1:07:29] Uh Great.
+[1:07:32] The second one. Perfect.
+[1:07:36] Let me know what you want. Okay. Yeah, here. You You do that. This
+[1:07:39] is his computer, not my computer. So, I don't know where anything is.
+[1:07:43] It's like uh walking into someone else's house.
+[1:07:46] There you go. All right. Thank you. Thanks so much.
+[1:07:49] Um Okay. So, um what we're going to do in
+[1:07:53] this in this second step is we are going to do basically exactly the same thing
+[1:08:00] we just did um just automated. So, for this step, we're going to use
+[1:08:05] Base 10. Um we're going to give you all some some GPUs to play with you.
+[1:08:10] Um so, if you want to follow along, I really encourage you to do so. Um you're
+[1:08:13] going to go sign up at Base 10. We're going to you know, your account will
+[1:08:16] automatically get free credits. If um our fraud system uh is a little freaked
+[1:08:21] out by everyone uh signing up at the same time, well, fortunately, uh we have
+[1:08:26] some uh admin panel access ourselves over here. So, we'll just unplug this,
+[1:08:31] approve you all, and plug it back in. Um so, yeah. So, everyone go ahead and
+[1:08:36] um sign up for Base 10. We're also going to want you to make an API key real
+[1:08:41] quick and save that. Um and then once that's all done, we're
+[1:08:45] going to jump into this uh this part of the uh of the project.
+[1:08:53] Yeah. Can we use your account on this?
+[1:08:58] Okay, everyone. So, I know there was a uh few errors going on. Um we have We
+[1:09:03] have pinged the team about that. Let me let you in on a little secret. We
+[1:09:06] shipped this on Thursday as an internal beta, and this is the very first time
+[1:09:11] anyone who doesn't have an @baseten.co email address is using our new TensorRT
+[1:09:17] LLM build system. So, if there are uh
+[1:09:23] If Yeah, so sorry for tricking you all into beta testing our software,
+[1:09:29] but hey, that's what demos are for, right? So, we'll we'll get that sorted
+[1:09:33] out. In the meantime, we have an image cached locally, which means we can keep
+[1:09:37] going with the demo as if nothing ever happens.
+[1:09:41] So, um Let's see. So,
+[1:09:45] what you what you would see in the logs as you build as you
+[1:09:51] uh deploy this.
+[1:09:54] Yeah. Oh, well, I mean, I can just kind of look through the look through the
+[1:09:56] logs right here. Let me actually just
+[1:10:00] Let me just wake it up. So, what was that?
+[1:10:03] Okay, yep, yep, yep. I got you.
+[1:10:07] Um Yep.
+[1:10:10] All right, big logs. Um Let's see.
+[1:10:17] All right. So, um what what you're seeing here
+[1:10:22] um as we Sorry, we got a We got a lot of logs here.
+[1:10:26] Right, cuz we tested a bunch with the
+[1:10:30] with the scale up. Anyway, what you see is you see the
+[1:10:34] engine getting built and then and then deployed. And to walk through the YAML
+[1:10:39] code really quick, uh yes. Here. So, we talked about that there were a bunch of
+[1:10:45] different settings that you need to do when you are working with TensorRT LLM.
+[1:10:50] And you can set all these settings right here in build. So, right now we're doing
+[1:10:54] something with an input sequence and output sequence of 2,000 tokens each and
+[1:10:59] a batch size of 64 concurrent requests. We're using the INT8 quantization
+[1:11:04] because we're running on a A10 and that does not support FP8 because it's an
+[1:11:09] Ampere GPU, which is one generation before FP8 support.
+[1:11:14] And then of course you you pull in your model and stuff.
+[1:11:18] And then if we want to you know call the model to test that it is working,
+[1:11:25] we can come over here to the call model.
+[1:11:30] We can just test this out really quick. Yes.
+[1:11:37] So we do not. On Base 10 we have T4s, A10s, A100s, H100s and H100 MIGs and L4s
+[1:11:45] as well. We we generally stick with the more like
+[1:11:48] data center type GPUs rather than the consumer GPUs.
+[1:11:52] It's a good GPU though. Yeah. I want one for for
+[1:11:58] well, Punkaj Saini. So I'm going to say that I want it for legitimate business
+[1:12:02] purposes and it should be an approved approved expense. I don't want it for
+[1:12:06] playing video games. Definitely not. So
+[1:12:09] One more question. Yes.
+[1:12:20] No, but I bet he can. Yeah, you all of that
+[1:12:24] all of this source code is open source. And typically when new models come up,
+[1:12:29] those companies provide convert checkpoint scripts. But if you can
+[1:12:34] follow those scripts, it's not terribly difficult. It's mostly like if you're
+[1:12:38] familiar with the Transformers library, it's about
+[1:12:41] reading weights from a Hugging Face Transformer model and converting that
+[1:12:47] into something else. This is simple transformation. So it should be be to do
+[1:12:50] it yourself if you want.
+[1:12:57] Awesome. So, once once your model's deployed, again, you can you know, you
+[1:13:01] can just test it really quick. You can call it with a API endpoint.
+[1:13:05] Um but uh yeah, we're coming up on on 2:30
+[1:13:09] here, so I'm not going to spend too long on this example. Um
+[1:13:14] let's see. But, you know, we've been talking a big
+[1:13:18] game up here about performance, right? And performance is not just, okay, I'm
+[1:13:22] testing it by myself. Performance is in production for my actual users, is this
+[1:13:26] meeting my needs at a cost that is reasonable to me.
+[1:13:30] And in order to, you know, validate your performance before you go to production,
+[1:13:35] you need to do benchmarking. And you need to do a lot more rigorous
+[1:13:38] benchmarking than just saying like, hey, you know, I I I called it, it seemed
+[1:13:42] pretty fast. Um so, what do you want to measure when
+[1:13:46] you benchmarking? Uh you know, say it with me, everyone, it
+[1:13:50] depends. That's what us software engineers are always saying. So, um you
+[1:13:54] know, depending on your use case, you might have different things that you're
+[1:13:57] optimizing for. If you're say like a live chat service, uh you probably
+[1:14:01] really care about time to first token for your streaming output because, you
+[1:14:05] know, you're you're trying to give people, you know, instantaneous
+[1:14:08] responses. Um you might also care a lot about
+[1:14:11] tokens per second. Um so, that's, you know, how many how many tokens are are
+[1:14:16] generated. Generally, some some good numbers to keep in mind is somewhere,
+[1:14:21] depending on the tokenizer and the data and everything and the reader, somewhere
+[1:14:25] between 30 to 50 tokens per second is going to be about as fast as anyone can
+[1:14:29] read. So, you know, if you're at 50 tokens per
+[1:14:32] second, generally, it's going to feel pretty
+[1:14:35] fast. People aren't going to be waiting for your output. However, if you're
+[1:14:39] doing something like code, you know, code takes more tokens per word than say
+[1:14:43] natural language, so you're going to need even more tokens per second for
+[1:14:46] that, you know, it's nice smooth output. And then from there I'll getting into,
+[1:14:49] you know, 100, 200 tokens, that's when it just feels kind of, you know,
+[1:14:53] magically fast. But again, we'll we'll our influence is all about trade-offs,
+[1:14:57] right? When we're optimizing. So, you know, sometimes you might want to
+[1:15:01] trade off a, you know, a few, you know, maybe maybe you're going to go at 100,
+[1:15:05] not 120 tokens per second because that gets you a bigger batch size, which is
+[1:15:09] going to lower your cost per million tokens.
+[1:15:12] Another thing you're going to want to look at when you're running your
+[1:15:14] benchmarks is your total tokens per second. So,
+[1:15:18] there's the tokens per second per user, right? Like per request, how many tokens
+[1:15:22] is your end user seeing? And then there's tokens per second in terms of
+[1:15:25] how many tokens is your GPU actually producing?
+[1:15:28] And that's a really important metric for throughput, for cost, especially if
+[1:15:32] you're going to be doing anything that's a little less than real-time.
+[1:15:36] You want to look at this not just once, you want to look at the 50th, 90th,
+[1:15:41] 95th, 99th percentile, make sure you're good with all those. And you want to
+[1:15:45] look at the effects of different batch sizes on this.
+[1:15:48] And so something is that benchmarking actually reveals really important
+[1:15:52] information. It's not linear and it's not obvious. The sort of
+[1:15:56] performance space of your model is not this nice nice flat piece of paper that
+[1:16:02] goes linearly from batch size to batch size. So, this is a graph of time to
+[1:16:08] first token for like a Mistral model that I ran a long time ago. I just
+[1:16:11] happened to have a pretty graph of it. So, that's how it ended up in the
+[1:16:15] presentation. Um so, if you look at the batch sizes as it's, you know,
+[1:16:19] increasing, doubling, 32 to 64, the time to first token like
+[1:16:24] barely budges. But as it goes from 64 to 128, doubling
+[1:16:28] again, the time to first token increases massively. And in this case, you know,
+[1:16:33] the reason behind that is well well in the, you know, compute-bound prefill
+[1:16:38] step when we're talking about computing the
+[1:16:40] first token and there's these different sort of slots that this computation
+[1:16:44] could happen in and as you increase the back increase the batch size you're
+[1:16:48] saturating these slots until eventually you have an increased chance of a slot
+[1:16:51] collision and that's what's going to lock it your time to first token. I'm
+[1:16:55] glad you're nodding. I'm glad I'm glad I got that right. Um, but yeah, all of
+[1:16:58] this to all of this to say um, you know, the performance that you get out of your
+[1:17:04] model once it's actually built and deployed is not necessarily just going
+[1:17:08] to be linear. It's not going to be something super predictable. You have to
+[1:17:12] actually benchmark your deployment before you put it into production.
+[1:17:16] Otherwise, these sort of surprises can can happen quite often.
+[1:17:20] Um, so yeah, so Punkaj, do you want to take over the the benchmarking script?
+[1:17:27] So, um, just for this workshop, we wrote a benchmarking script. It's not the
+[1:17:32] script we use ourselves, but it's a simpler version so
+[1:17:36] that you can follow along that if you wanted to modify it, you can play around
+[1:17:40] with it and understand it easily. Now, if you go into that repository,
+[1:17:44] it's it's a very simple script where we send requests in parallel just using
+[1:17:48] Python using async libraries. And, uh,
+[1:17:53] all you give it is the URL of the endpoint of the model where your model
+[1:17:58] is deployed and you can give it different concurrencies and input
+[1:18:01] lengths and output lengths and give it number of runs. You want to run these
+[1:18:05] benchmarks a number of times to get, uh, an idea of values. One different might
+[1:18:08] be off. So, I'm just going to run that script
+[1:18:12] and it's all it's all in the benchmark repository. Um, it's all structured
+[1:18:16] using make files and there is a make file target for benchmark that we're
+[1:18:20] going to use. And, uh, I think the readme should also
+[1:18:25] have instructions on that.
+[1:18:30] So, we're basically going to run this and we're going to need the base URL.
+[1:18:35] You need two things. We need to export the API key
+[1:18:38] and then we need to uh, supply the URL. So, once you deploy your model on Base
+[1:18:43] 10, you you would see deployed and like Philip said, there is a call model
+[1:18:48] button. There are various ways you can deploy it. Ultimately, it's an HTTP API
+[1:18:53] and you can just copy this URL for that model for our benchmarking script. Uh
+[1:18:58] but if you want to play around, there are examples in all kinds of
+[1:19:02] uh languages. And you can also click streaming, so it'll give you streaming
+[1:19:05] code. Streaming is very important with large language models because you want
+[1:19:08] to see the output as soon as possible. We're going to take this output and uh I
+[1:19:14] don't know if I exported the API key. So, give me 1 second to export the API
+[1:19:18] key.
+[1:20:01] Right. And uh you know, if you lose the API key, you
+[1:20:05] can always revoke it. So, that's good.
+[1:20:08] Yes, uh would this be a good time to mention
+[1:20:10] that Base 10 is SOC 2 Type 2 certified and HIPAA compliant?
+[1:20:15] Uh and that is why we cannot show you our API keys.
+[1:20:21] And now, we're just going to give it the URL. Here, let me go back.
+[1:20:30] This
+[1:20:32] called model. All right.
+[1:20:36] So, I'm going to do this first run with a concurrency of 32 and input and output
+[1:20:42] lengths of 1,000. And uh
+[1:20:46] let's see it work. So, first it does a warm-up run just to
+[1:20:51] make sure that there is some traffic on the GPU. Always want to have a warm-up
+[1:20:55] run before you get the real numbers. Now, as this is running and you can see
+[1:21:00] the TPS here. The total TPS is 5,000.
+[1:21:04] And this is on 8N G. 8N G is not the most powerful
+[1:21:09] uh GPU, but this TPS is still very, very high. 5,000 is very, very high. It's
+[1:21:14] because this is Tiny Llama model. Tiny Llama is a tiny model just like a
+[1:21:18] billion parameters and that's why we see this very high.
+[1:21:22] Um but yeah, on bigger GPUs with the with
+[1:21:25] Llama 8G, you should also see very, very high values because H100s are very, very
+[1:21:29] powerful and TensorRT-LLM is very, very optimized. I think we see up to like
+[1:21:33] 11,000 tokens per second and you should do a comparison. It's really, really
+[1:21:37] high. Uh in this case, we have two runs and
+[1:21:41] you see these values. Uh let me try a different run. Now, I'm going to
+[1:21:45] concurrency of one and one is good to know
+[1:21:48] how best of a time to first token you can get.
+[1:21:51] So, you just sending one request at a time and many requests, but one at a
+[1:21:54] time with the same input and output length.
+[1:21:58] And uh this should run Okay, I think I ran into an error. Let's
+[1:22:01] try again.
+[1:22:08] So, uh you see time to first token of 180 milliseconds here and this is from
+[1:22:13] this laptop. I'm running it right from this laptop on this Wi-Fi and my model
+[1:22:17] is deployed somewhere in in US Central. And this is uh 118 milliseconds for
+[1:22:22] that. Uh what
+[1:22:24] Yeah, so so the so the vast majority of that time to first token is going to be
+[1:22:28] network latency, right? Not model Not the model itself. Should be pretty
+[1:22:31] fast. Uh yes, sir. Over there.
+[1:22:40] Uh not not that one. Um This one.
+[1:22:45] None of
+[1:22:54] This is from this uh script uh script that I'm running. I didn't do a thorough
+[1:22:58] job of cleaning up everything. It's saying that uh we're just making an RPC
+[1:23:01] call. We don't need PyTorch or whatever. This this
+[1:23:06] Yeah, local runtime something um wrong with the machine. This script uh if you
+[1:23:10] look at that all it's doing is RPC. Uh let me go through that real real
+[1:23:15] quick. Benchmark script. Uh it's
+[1:23:19] a simple Python using a sync. And it's amazing how good Python has got. With
+[1:23:23] this async API, you're able to load uh load this model with thousands of tokens
+[1:23:28] per second. All of them coming in streaming. Uh Python has actually gotten
+[1:23:32] really really well. There was a There was a case where I was loading with K6.
+[1:23:36] And K6 client became a bottleneck because Edge 100s are so fast, but
+[1:23:40] Python could keep up. Python was able to load it very well.
+[1:23:44] Um but I would I'm getting distracted. So uh we tried to concurrency one, which
+[1:23:49] is like the best-case scenario. Latencies are very very good. And TDFT
+[1:23:52] should be very low. Now, let's go to the other extreme. If you look at this uh
+[1:23:56] model that we deployed, uh we created it with the batch size of 64 maximum. So
+[1:24:03] now we'll do 64. And uh I'm hoping we see
+[1:24:07] throughput improvements.
+[1:24:11] So ignore the warm-up run.
+[1:24:14] And this is going to take a bit longer cuz now we're going to send
+[1:24:18] 64 requests at the same time. 64 is not uh not that high. We can go even higher.
+[1:24:23] So, in this case you see total TPS of uh uh of 7,000.
+[1:24:28] Which is uh even higher than before. We saw 5,000
+[1:24:32] before, this goes up to 7,000. But maybe this is a fluke. Let's wait for the
+[1:24:35] second run. And you can run uh this is also 7,000.
+[1:24:38] So, this is uh this is much better than what we saw before.
+[1:24:42] So, uh if you increase batch size, you would fee find that your latencies
+[1:24:47] become become higher. Latencies in the sense that for every request that a user
+[1:24:51] is sending, now tokens are coming slower and slower. And then you have to make a
+[1:24:55] trade-off at some point, like is it still good enough? Is it still more than
+[1:24:59] say 30 or 50 tokens per second that users won't perceive? And at some point
+[1:25:04] it will become unusable. Uh and as you increase batch size, the
+[1:25:08] pressure on your GPU memory also increases because all these extra
+[1:25:12] batches, they require KV cache to be kept in GPU memory. So, you might hit
+[1:25:17] that bottleneck. So, depending upon all these scenarios, you want to experiment
+[1:25:21] with different batch sizes and find the sweet spot. And uh that's uh that takes
+[1:25:25] a bit of time, but it's not terribly complex.
+[1:25:30] Um yeah, so this script is there there for you to modify and play around with.
+[1:25:35] It's pretty simple. It's pretty much a single
+[1:25:38] uh Python file. Not much in there. You can modify it. You can run it.
+[1:25:44] Yes.
+[1:25:58] Uh the question was uh did I have max batch size in mind when I was running?
+[1:26:02] Yes, because I deployed the model with the config in this
+[1:26:07] uh workshop. Let me show you that. I build the model with a max batch size,
+[1:26:12] and you can increase that batch size. So, let me show you that.
+[1:26:16] Uh
+[1:26:20] So in this tiny llama model that I deployed, I specified a max batch size
+[1:26:24] of 64. So uh if I go beyond 64, it's not going
+[1:26:29] to help me because all those requests will just wait. And yeah, actually
+[1:26:32] there's one one interesting thing I want to show you. Uh so this is a good
+[1:26:36] question. You can look at the logs here. And in the logs we put these uh
+[1:26:43] metrics for what's going on. Think maybe I'm not
+[1:26:48] Yeah, and and if you wanted to increase your batch size past 64, you just change
+[1:26:52] the YAML and say like, "Oh, max batch size should be like 128." And build a
+[1:26:57] new engine by deploying it. Yeah.
+[1:27:00] So if you look at these logs here, it shows how many requests are running in
+[1:27:04] parallel, active request count. Uh you can actually observe how many
+[1:27:08] requests are being executed in parallel right on the GPU. Cuz there are chances
+[1:27:13] that you haven't uh configured something right. And that
+[1:27:18] uh for whatever reason the uh requests are not all getting
+[1:27:22] executed in parallel. For example, uh common mistake one could make is that
+[1:27:26] when you deploy on on base 10, and this is base 10 specific, but just to take an
+[1:27:30] example, there are scaling settings in base 10. You can specify the scale, and
+[1:27:35] you can specify what is the max concurrency the model will receive. In
+[1:27:38] this case, I've set it to a very very high value, so it won't become a
+[1:27:42] bottleneck. But there are chances that that, you know, you forget, you make a
+[1:27:45] mistake there, you you can check these logs, and they will actually tell you
+[1:27:50] what's happening on the GPU. And I think I lost that again.
+[1:27:54] Uh let me go here.
+[1:27:58] So yeah, these are actual uh metrics from the TensorRT LLM batch manager,
+[1:28:02] which tells you what's going on. It also tells you about the KV cache blocks that
+[1:28:06] are being used, and that helps tune you uh
+[1:28:10] helps you tune the KV cache size. For example, in this case it says it's using
+[1:28:14] 832 KV cache blocks and 4,500 are empty, which means there is a there is there's
+[1:28:20] way more KV cache than is needed for this use case. So, just to mention that
+[1:28:24] as a as an aside. Yeah, I think that's it for that
+[1:28:29] presentation.
+[1:28:33] I'm going to I'm going to I'm going to talk about that next slide.
+[1:28:37] Thank you. You're reading my mind. Yes.
+[1:28:51] It does, yes. TensorRT LLM does come with a benchmarking tool kit. So, it's
+[1:28:55] very very good. Uh the only downside is that
+[1:28:59] you have to build it from source. It's not bundled with the TensorRT LLM Python
+[1:29:04] library, which is my gripe. I'm going to ask anybody
+[1:29:07] to fix that. Uh they they have benchmarking tools.
+[1:29:10] There are two benchmarking tools. One that uh that just sends a single batch
+[1:29:15] and um and measures the raw throughput you can get without serving it through
+[1:29:20] in-flight batching. And there is a separate second second tool uh called
+[1:29:25] like the GPT manager benchmark, which actually starts up a server and does
+[1:29:29] in-flight batching on top. So, there are two tools and they're very very good
+[1:29:32] quality, but they're not available easily. Building TensorRT LLM is like
+[1:29:36] with 96 CPUs, it takes us 1 and 1/2 hours to build it. Uh it's not for the
+[1:29:40] weak of heart. Or for the short of workshop.
+[1:29:44] So, um we just we just have a We have a a few minutes left. Um so, I want to run
+[1:29:50] through a few slides and then leave time for last-minute questions. So, um I was
+[1:29:55] asked um you know, how do we how do we actually run this in production? What
+[1:29:59] does the auto scaling look like? How does that all work? So, um how do you
+[1:30:03] run a TensorRT engine? So, you use something called Triton, the Triton
+[1:30:07] influence server, Um and that's what helps you, you know, take the engine and
+[1:30:12] actually server requests to it. We're actually working on our own server that
+[1:30:16] uses the same spec, but supports C++ tokenization, de-tokenization, custom
+[1:30:22] features for even more performance. Um,
+[1:30:26] but the, you know,
+[1:30:28] as we've talked about, the engine is specific to versions, GPUs, batch sizes,
+[1:30:33] sequence lengths, all that sort of stuff. So, that causes some challenges
+[1:30:37] when you want to get in production. We've talked this whole time about
+[1:30:40] vertical scale, right? Like, how do I get more scale off a single GPU? There's
+[1:30:45] also horizontal scale. How do I just like get more GPUs? How do I, you know,
+[1:30:49] auto automatically scale my my platform up to meet my traffic demands? So, you
+[1:30:55] know, some challenges in scaling out in general, you know, you have to
+[1:30:59] automatically respond to traffic, you have to manage your cold start times,
+[1:31:03] you have to manage the availability and reliability of your GPU nodes, you have
+[1:31:08] to route requests, do batching, all that kind of stuff. And then TensorRT LLM
+[1:31:12] adds a few more challenges. You've got these large image sizes.
+[1:31:16] So, that's going to make you cold starts even slower. You've got these specific
+[1:31:19] batching requirements, so you can't just like send whatever traffic however you
+[1:31:23] want. And you have these specific GPU requirements. So, when you spin up a new
+[1:31:27] node, it's got to be exactly the same as your old node, or your model's not going
+[1:31:31] to work. Um, and you know, um, fortunately our
+[1:31:35] workshop is almost over, otherwise I would love to give you an in-depth
+[1:31:39] answer of how to solve all these problems, but the quick answer to how
+[1:31:42] all to solve all these problems is you run your code on Base 10, because we
+[1:31:46] solved it all for you. Um, so Base 10 is a model influence
+[1:31:49] platform. It's the company that we both work at.
+[1:31:53] With Base 10, you can deploy models on GPUs. You can use TensorRT LLM, but you
+[1:31:58] don't have to. You can use any other service, vLLM, TGI,
+[1:32:02] just like a vanilla model deployment. Um you get access to auto scaling, fast
+[1:32:07] cold starts, um scale to zero, tons of other great infrastructure features. You
+[1:32:12] get access to all of our model optimizations. We have a bunch of
+[1:32:15] prepackaged and pre-optimized models for you to work with.
+[1:32:18] Um so yeah, uh the last thing before we go um
+[1:32:23] is we are co-hosting a um happy hour tomorrow on Shelby's rooftop bar. Um I
+[1:32:31] was not really involved in organizing it, but the sales guys who organized it
+[1:32:34] told me that it's a super sweet spot and that we're going to have a great time.
+[1:32:38] Um so yeah, so I'm going to be there um and a bunch of other great uh AI
+[1:32:42] engineers are going to be there. So please feel free to sign up, come on
+[1:32:46] through, we'd love to have you. Um it's going to be super sweet cool party
+[1:32:51] for the cool kids. Um
+[1:32:55] Well, you've been you you've been really great. Thank you for listening to us and
+[1:32:58] we open it up for questions. Uh I feel one question we didn't answer about auto
+[1:33:02] scaling, right? Maybe I should take that on now.
+[1:33:04] Yeah, go ahead. So how does auto scaling work? Yeah,
+[1:33:07] yeah, please uh yeah, please feel free to I'll just uh finish that question
+[1:33:10] because you asked that I wanted to answer it. And uh how auto scaling works
+[1:33:14] is that we use a system called K native, but we forked it to make it work for
+[1:33:18] machine learning use cases. K native if if I understand correctly was built for
+[1:33:22] microservices where your requests are very, very quick, like, you know, 1
+[1:33:25] second or 2 seconds. It doesn't exactly apply to machine learning model use
+[1:33:29] cases where your request is long-lasting and you're streaming and you need to uh
+[1:33:34] still scale, but uh some of the considerations are different. So we had
+[1:33:39] to actually fork it to be able to apply settings dynamically. For example, a lot
+[1:33:43] of settings that you see on Base 10, they apply immediately, like, within a
+[1:33:46] second. Whereas in K native, you would need to deploy a new revision for those
+[1:33:50] settings to apply. And it's prac- it's not even practical because the way you
+[1:33:55] deploy a new model, it gives so much hassle and requires extra capacity that
+[1:34:00] it's not good. So, we made changes to KNative to cater to the machine learning
+[1:34:03] use case. But, fundamentally, the idea is is very simple. As the requests come
+[1:34:08] in, you specify the capacity of your pod that it can take in. And if it's if it
+[1:34:13] reaches near there, we spin up a new pod. And then the traffic spreads. If
+[1:34:18] your traffic goes down, it goes your GPUs are your pods are reduced, your
+[1:34:23] GPUs are freed up up all the way up to zero.
+[1:34:27] And when the traffic arrives, it kept it's kept in a queue, and then the model
+[1:34:30] is spin up, and the requests are are sent there. A lot of the machinery
+[1:34:35] at Base 10 is around improving cold starts. How do we start up these, you
+[1:34:38] know, giant models, 50 gig models in under a minute? Right, minute sounds
+[1:34:43] like a long time, but when you're talking about 50 gigs, 50 gigs is also a
+[1:34:46] lot. And for for 10 gig models, we aim for less than 10 seconds. For 50 gig
+[1:34:50] models, we aim for less than a minute. Because that's really important. Unless
+[1:34:54] you can scale up in a minute, your request is going to time out. So, you
+[1:34:58] really can't scale to zero. So, it's it seems like a detail, but it's very
+[1:35:02] critical. You can't have scale to zero without very very fast cold starts. Uh
+[1:35:06] so, we have the whole machinery built out for that. Even before LLMs became
+[1:35:10] popular, we've had this machinery in place.
+[1:35:37] I think if you optimize it I can I Yeah. What what are you saying like
+[1:35:41] deploy it with TensorRT versus deploy it on Base 10?
+[1:35:44] Uh so so you you would deploy it on Base 10 using TensorRT under the hood to run
+[1:35:49] it. Uh so so Base 10's just going to like facilitate that Tensor RT
+[1:35:53] deployment for you. Right, but I I could deploy it, I guess,
+[1:35:56] on hardware. Yes.
+[1:36:01] Yeah, no no difference. Base 10 runs Tensor RT LLM. We just make it very easy
+[1:36:06] to uh run Tensor RT LLM. So, you it's uh easier and faster for you to get at the
+[1:36:11] optimum point. Uh, but if you could do it yourself, yeah, it's it's the same
+[1:36:15] thing under the hood. And then, you know, I'm compelled by the
+[1:36:19] fact that I'm in the marketing department to say things like, "We also
+[1:36:22] provide a lot of infrastructure value on top of that, so that you're not managing
+[1:36:26] your own, you know." Yeah, yeah, actually, that is that is
+[1:36:28] true, yeah, because we we have a large fleet. We we get good cost, so you
+[1:36:32] actually won't pay higher on Base 10. Like, it's not that you want to it's
+[1:36:36] going to cost you more on Base 10. Yes, over there.
+[1:37:11] Yeah, so only the packaging part is open source. The serving part is that I mean,
+[1:37:14] that that's kind of that's kind of the platform. So.
+[1:37:19] I I don't want to mention is that uh from Truss, you can create a Docker
+[1:37:22] image, and that Docker image can be run anywhere. So, you get pretty close. You
+[1:37:26] don't get auto scaling and all of those that nice dev loop, but you do get a
+[1:37:31] Docker image, and you can do a lot with a Docker image.
+[1:37:36] It builds it locally, yeah. You can build there is a Truss uh image build
+[1:37:40] command. You point it to a Truss, it will build the Docker image locally.
+[1:37:48] Serving on a single pod or container, but there is also
+[1:37:52] spreading across multiple containers, the auto scaling
+[1:37:56] and all of the dev loop. Uh that is not, yeah. Yeah, but the serving, yeah. I
+[1:37:59] mean, single model serving is interest with that image.
+[1:38:02] Can I ask like a I'm just kind of curious. I don't
+[1:38:06] how long it takes Yeah,
+[1:38:08] what is the stack that you have for
+[1:38:12] Yes. It's a
+[1:38:14] It's uh fast API at the trust server level, then internally we have our own
+[1:38:20] server layer that we wrote to interact with TensorRT-LLM.
+[1:38:24] Uh that part is not open source. We It's very new, so we're still figuring out
+[1:38:27] when to or where to open source it, but there is also a version that uses
+[1:38:31] Triton. So, there is the fast API, then there's Triton, and then there is the
+[1:38:35] TensorRT-LLM library, and then it runs the engine.
+[1:38:39] Yeah, yeah, yeah, exactly, exactly. We have
+[1:38:41] We have We work on multiple cloud providers. We are spread across
+[1:38:45] Uh I don't want to say globe, like mostly US, but also Australia and a few
+[1:38:49] other places. So, we have access to many different kinds of hardware. We find the
+[1:38:52] right hardware to build the engines and then we deploy it.
+[1:38:55] Do you use like
+[1:39:02] Yes, you can Yeah, you can use self-hosted clusters. Our stack is built
+[1:39:06] that way. That's one of our selling points. We're not giving you an API. You
+[1:39:09] can run the entire stack in a self-hosted way.
+[1:39:13] Awesome. Well, look, the conference organizers were very clear with us. All
+[1:39:17] sessions and workshops are to end on time. So, I'm going to wrap it up here,
+[1:39:22] but um we're going to be right outside if you have any questions. If you have
+[1:39:25] any easy questions, come see me. If you have any hard questions, please go talk
+[1:39:29] to Pankaj instead. Thank you all so much for being here. It was so much fun doing
+[1:39:33] this workshop with all of you. Again, I'm Philip. This is Pankaj. We're from
+[1:39:36] Base 10, and thank you so much for being here. Have a great conference, everyone.
+[1:39:41] Thank you.

@@ -1,0 +1,342 @@
+# title: From Chaos to Choreography: Multi-Agent Orchestration Patterns That Actually Work — Sandipan Bhaumik
+# source: https://www.youtube.com/watch?v=2czYyrTzILg
+# speaker: Sandipan Bhaumik
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T09:55:53Z
+# sha256: 708ee7427714e572a417dd7ccdfbfd4bc5572a59ef566ca4516678e2b3cb622e
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:00] Hi everyone, I'm Sandy. I have spent 18 years building data systems, a major
+[00:04] part of it focusing on building and scaling distributed data systems in the
+[00:08] cloud. I've done it for multi-tenant systems for software and SaaS companies,
+[00:13] and then for scaling data and AI platforms in regulated industries like
+[00:17] financial services and healthcare. I've learned a great deal about production
+[00:21] grade distributed systems while I have been working at AWS and now in
+[00:25] Databricks. For the last 2 years, I've been deploying multi-agent AI systems in
+[00:29] production. And I have watched brilliant engineers make the same mistakes over
+[00:35] and over. They think adding more agents is just like adding more features. It's
+[00:40] not. It's building a distributed system. And today, I'm going to show you the
+[00:44] patterns that actually work when you make the transition. These are lessons
+[00:49] that I have learned working in the trenches, and today I'm here to share it
+[00:53] with you. Here's what we're covering today. First, the problem. I'll share
+[00:57] you a very basic production war story about race conditions and why complexity
+[01:03] explodes when you go from one agent to five agents.
+[01:07] Um I'll I'll talk about the patterns, choreography and orchestration patterns
+[01:11] for coordination of agents. I'll talk about state management, uh talk about
+[01:16] failure recovery and how we can um design for failure in production
+[01:21] systems. And then I'll I'll share how a production grade architecture will look
+[01:24] like uh in as simple way possible. And I'll also show you an example on how we
+[01:30] build this on Databricks. So, let's dive into it. You see, one agent works
+[01:34] beautifully. You have got your LLM, some prompts, maybe a retrieval augmented
+[01:40] generation pipeline, maybe some tool calls. It demos great. Leadership loves
+[01:45] it. You feel happy and your team is happy. And then, product comes back with
+[01:51] a request that changes everything. They want five more agents. And here's what
+[01:56] happens. You think, "Okay, I know how to build agents, and I will add five more."
+[02:01] Except, now you have coordination problems. Agent A produces data that
+[02:07] Agent B needs. Agent C is waiting on both Agent A and Agent B. Agent D just
+[02:12] updated the shared state that Agent B was reading, and Agent E just crashed
+[02:18] and took the down this entire workflow. This is no longer an AI problem. This is
+[02:24] a distributed system problem. And most of you didn't sign up to be distributed
+[02:29] systems engineer. Let me tell you about a production deployment where this went
+[02:33] very wrong. We built a credit decisioning system for a financial
+[02:36] services company. The first agent, credit score calculation, worked
+[02:40] perfectly. It worked great in demos, 2 weeks in production, zero issues. Then
+[02:45] we added four more agents, income verification, risk assessment, fraud
+[02:49] detection, and final approval. Uh we deployed all five. In 3 days'
+[02:54] time, we started seeing weird approvals. Uh 20% of the decisions had incorrect
+[03:00] risk ratings. Customers who should have been flagged were getting approved. The
+[03:04] business team was panicking. It took us 2 days to find out what was happening.
+[03:09] Credit score agent calculated a score of 750 and wrote to the database. The risk
+[03:14] assessment agent, on the other hand, read from the database 500 milliseconds
+[03:19] later and got a score of 680 for the same customer. Why did it happen?
+[03:25] Because we had a caching layer for customer records. The write to
+[03:28] PostgreSQL SQL succeeded, but the cache was not invalidated. The risk agent read
+[03:35] from the cache, and it got stale data. Use It used the wrong score and made the
+[03:43] wrong decision. This is a classic distributed systems problem. We had
+[03:47] caching layer between the agents and the database. Cache invalidation failed, and
+[03:53] the agent was reading stale values. The race condition wasn't in the database,
+[03:58] it was in the architecture. Multiple agents, shared cache, no coordination on
+[04:04] cache invalidation. This took us quite a while to find the pattern. It created
+[04:09] delays in delivery and led to wrong decisions. And here's the lesson we
+[04:15] learned. The problem was, of course, not with the model. The problem wasn't with
+[04:19] the prompts. The problem was we built a distributed system without distributed
+[04:24] system thinking. And that's what kills multi-agent projects, not bad AI, but
+[04:30] bad architecture. Now, I will show you the architecture that works. We will
+[04:34] also look into a production grade architecture. But first, let's
+[04:39] understand why this complexity explodes so quickly. Now, when you move from a
+[04:44] one agent system to a multi-agent, let's say five agent systems, it doesn't get
+[04:49] just five times harder. It gets 25 times more complex. Coordination complexity
+[04:55] grows exponentially. One agent has got zero coordination problems. Two agents
+[04:59] have got at least one connection. Five agents have got at least 10 potential
+[05:04] connections and coordination. Each connection is a failure point, a race
+[05:09] condition, a state synchronization problem. You are not just building five
+[05:13] agents, you are building a coordination problem across multiple relationships
+[05:19] and across and and possibility to have multiple failure modes. And that's why
+[05:25] the complexity increases very, very quickly. Now, I'm going to show you two
+[05:29] critical patterns. First pattern is about how to coordinate multiple agents.
+[05:35] Then we will talk about how you can manage state. And then we'll talk about
+[05:38] how you can recover and design for failure. Now, these patterns come from
+[05:42] multiple years of distributed systems work, and I can directly apply them on
+[05:46] multi-agent AI system. Once you get the basics, it's really hard to miss these
+[05:51] patterns when you build multi-agent AI architecture. The first decision you
+[05:55] need to make is about choreography or orchestration. These are the two
+[05:59] fundamental patterns for distributed coordination. Choreography means agents
+[06:04] coordinate through events. They are decentralized, they are autonomous.
+[06:08] Orchestration means a central coordinator manages the workflow. This
+[06:13] is centralized and controlled. Most teams pick one instinctively and regret
+[06:18] it. Let me show you when to use each. Let's start with choreography.
+[06:23] Choreography is event-driven. Um the research agent finishes uh
+[06:28] research and publishes a research completed event to a message bus. Agent
+[06:33] B subscribe to that message bus and listens for the event type it is
+[06:38] interested in. The analysis agent subscribes to that event type, picks it
+[06:43] up, does analysis, and publishes analysis ready. Then the report agent
+[06:48] picks that analysis ready event, generates the report. There is no
+[06:52] central coordinator here. Each agent is autonomous, listening for events it
+[06:57] cares about, publishing when it is done. This is the beauty of choreography.
+[07:02] Agents are loosely coupled. It's easy to add add new agents and make
+[07:07] them subscribe to the events that they're interested in. This drives high
+[07:11] autonomy and scales really well. However, the nightmare of choreography
+[07:15] is debugging. When something fails, you're playing detective with no real
+[07:20] clue. Which agent failed to publish? Did the event get consumed? Did the event
+[07:25] get consumed twice? You need bulletproof observability to make choreography work.
+[07:31] Even with the event propagation, you need strong uh guarantees across
+[07:36] delivery of these events. Without it, debugging is really hard. So, when
+[07:40] should you use choreography? You use choreography when your workflow is
+[07:45] naturally event-driven, when agents need to operate independently, when you are
+[07:50] adding agents frequently and don't want to update a central coordinator. But it
+[07:55] is important to understand it is possible only if you have strong
+[08:00] observability. If you can't trace events through your system, choreography will
+[08:04] destroy you. I have seen teams choose choreography because it feels more
+[08:09] agentic, more autonomous. Then they spend months firefighting because they
+[08:14] can't debug distributed event flows. Don't make that mistake. Now, let's look
+[08:18] at the alternative, orchestration. Orchestration is centralized. You have a
+[08:23] workflow orchestrator that calls each agent directly. Agent A runs first. The
+[08:28] orchestration calls Agent A, waits for the result, gets the result back. Then
+[08:34] the orchestrator calls Agent B and C in parallel if they are agents that need to
+[08:38] run in parallel. The orchestrator manages the parallelism, not the agents.
+[08:43] B and C return their results to the orchestrator. Then the orchestrator
+[08:46] calls Agent D with the combined results from B and C. Every call goes through
+[08:51] the orchestrator. Agents never call each other. The orchestrator is the single
+[08:55] source of truth. It knows the entire execution graph. It manages state. It
+[09:01] handles retries. It logs every step. Agents are dumb. They just take the
+[09:07] input, they do the work, they return the output. The orchestrator does all the
+[09:12] smart coordination. In Databricks, one way to implement this pattern would be
+[09:16] with LangGraph wired into AI agent framework as the orchestrator. But any
+[09:22] workflow that gives you DAGs, directed acyclic graphs, and
+[09:27] proper retry mechanisms would fit in this kind of orchestrator patterns. You
+[09:32] use orchestration when you have complex dependencies that need central
+[09:37] management, when you need to roll back, compensate for failures, when you want
+[09:41] one dashboard showing the entire system state, when your workflow is relatively
+[09:46] stable. In financial services, for example, we use orchestration almost
+[09:51] exclusively. Why? Because it provides easy debugging and the ability to roll
+[09:56] back, and that matters more than autonomy in these kind of industries.
+[10:01] When something goes wrong with a credit decision, for example, we need to know
+[10:05] exactly which agent made that call, in what order, and with what data.
+[10:10] Orchestration gives us that. Choreography doesn't. So, how do you
+[10:14] choose? Here's your decision framework. Two axis.
+[10:18] Workflow complexity, simple to complex. Autonomy requirements, low to high.
+[10:24] Simple workflow, high autonomy, you go with choreography. You need complex
+[10:28] workflow with low autonomy tolerance, you go with orchestration. The
+[10:32] interesting quadrant is the top right, where you need complex workflow, but
+[10:36] agents need autonomy. This is where you use hybrid patterns. Choreography with
+[10:42] saga patterns for compensation. I'll talk about this pattern later in this uh
+[10:47] session as well. Uh tools like Agent Bricks on Databricks
+[10:52] are starting to package these orchestration patterns for common
+[10:56] multi-agent use cases. So, you don't need to rebuild them every time. It
+[11:01] makes building these patterns really easy in
+[11:04] production environments. Now, I use the decision metrics uh every time to make
+[11:09] decisions with customers based on their use cases. Uh
+[11:12] it's worth you take a screenshot. I'm sure you'll reference it. Let me show
+[11:16] you what a production orchestration actually looks like at the tail end of
+[11:20] the session. All right. Now, we have chosen a call coordination uh pattern.
+[11:24] Now, let's talk about the thing that actually when you scale. State. How do
+[11:29] agents share data without race conditions? Without stale reads? Without
+[11:34] mystery bugs? Here's what most people do first, and it's wrong. Shared mutable
+[11:39] state. Multiple agents writing at the same database records at the same time.
+[11:44] Agent A reads credit score, calculates the value, writes it back. Agent B does
+[11:49] the same thing at the same time. Both read 680. Agent A writes
+[11:55] 750. Agent B writes 720. Last write wins. Agent A's update disappears. Lost
+[12:03] update. Uh I understand, yes, modern databases have protections in place, row
+[12:08] locks, isolation levels, etc. But, you have to use them correctly. Explicit
+[12:13] transactions um you have to build uh serializable isolation. Uh you have to
+[12:19] make sure that you select for update. Uh and and many teams don't.
+[12:24] Uh they use default isolation. They don't use explicit locks, and they ship
+[12:30] race condition to production. We did it. We did that mistake, and that resulted
+[12:34] in delayed value to the business. We just assumed that the database would
+[12:37] handle these conditions, but they don't. When it gets really complex, you have to
+[12:42] handle them explicitly in the code. Now, here's what works. Immutable state
+[12:46] snapshots with versioning. Agent A produces a state version, let's say
+[12:51] version one. It's sealed. It's immutable. Nobody can modify it. State
+[12:56] is stored in the orchestrator database as an append-only log. These are insert
+[13:01] operations, not not any update. Agent A hands state version one to agent B.
+[13:07] Agent B validates the schema, checks that the data contract matches with its
+[13:11] expectations. It processes it, produces state version two. Also immutable. Agent
+[13:17] B inserts version two as the new row. It doesn't update version one. And then
+[13:22] hands it to agent C. Same thing. Schema validation version tracking,
+[13:26] immutability guarantee at each handoff. Agent C fails. Now, if agent C fails,
+[13:32] you roll back to version two. If you need to debug, you replace state
+[13:36] evolution uh from version one through version N.
+[13:40] You can see exactly what each agent received and produced. This eliminates
+[13:45] race conditions. No concurrent modification to the same record. Each
+[13:50] agent appends a new version instead of updating the shared state. Now, of
+[13:56] course, if you want to uh save these state snapshots, they can
+[14:00] be logged uh in any sort of append-only storage
+[14:04] for audit replay, but they are never shared for read or write. Now, here's
+[14:08] how it looks like in code. Agent state class, the frozen means immutable in
+[14:12] Python. It has a version number, the data payload, and who created it. The
+[14:17] handoff function does three things. First, it validates the schema.
+[14:21] Uh this is the contract enforcement. We are checking that agent A's output
+[14:26] matches agent B's input contract. This is critical, and we will come back to
+[14:31] this. Second, increment version. Create a new immutable state object with
+[14:37] version N plus one. Third, execute the next agent with that immutable state.
+[14:43] The agent can't modify the input state. It can only produce a new state. This
+[14:48] prevents an entire class of bugs. It prevents race conditions on shared
+[14:54] state. No stale reads. It provides a clear lineage. Every state has a
+[14:58] version, and you know who has created it. When something goes wrong, you can
+[15:02] trace back through state evolution. Version seven produced bad output, look
+[15:07] into version six that went into the agent. Look at version five before that.
+[15:11] You can binary search through your state history to find where things went wrong.
+[15:17] And this becomes really, really powerful. Now, state management is half
+[15:20] the battle. Data contracts are the other half. Agent A can just throw um
+[15:26] arbitrary data at agent B and hope it works. This doesn't work that way. They
+[15:31] need a contract in place. In this example, research agent promises to
+[15:37] output findings, confident score, sources, timestamp, etc. Analysis agent
+[15:42] declares it requires research agent output with type and first.
+[15:47] Uh and it validates. If confidence is below 0.7, it will reject the handoff.
+[15:55] This is the contract. If the research hand if the research agent tries to
+[15:59] handoff low-quality data, the contract catches it at the boundary. You find out
+[16:05] immediately, not three agents downstream when it produces a report in garbage.
+[16:10] When we work with our customers um using Databricks, one way of doing it is
+[16:16] uh registering these input-output schemas in Unity Catalog. Uh so, every
+[16:20] agent's contract is versioned and governed in one place. All right. We
+[16:24] talked about coordination patterns. We talked about state management. Now, talk
+[16:28] about Now, now let's talk about another thing that you need to keep in mind, and
+[16:32] that's failure and recovery. And and the reason this is important is because
+[16:36] agents will fail. That's inevitable. The LLM will time out. The API will rate
+[16:41] limit you. The agent will crash mid-workflow. What happens then? What
+[16:45] happens then is what you need to plan for and design in the system. Let's talk
+[16:49] about a few patterns. Let's talk about the first pat- pattern, which is a
+[16:52] circuit breaker pattern, and this comes straight from distributed system. When
+[16:57] agent A calls agent B, it wraps that call in a circuit breaker. If agent B
+[17:02] fails repeatedly, say five times in a row, the circuit breaker opens. Now,
+[17:07] instead of waiting for a timeout every single time, you basically fail fast.
+[17:12] Circuit open, agent B is down, you just try again later. You are not bombarding
+[17:17] agent B with requests. You're protecting your system. After a time- timeout
+[17:22] period, let's say 60 seconds, it the circuit goes half open. Then you test
+[17:27] agent B again with one request. If it succeeds, the start circuit closes, and
+[17:32] normal operation resumes. If it fails, the circuit opens again, and it resets
+[17:37] the timer. This prevents you from cascading failures into the system.
+[17:42] One agent going down doesn't bring your entire workflow down. You gracefully
+[17:48] degrade. Maybe you skip that agent and continue with a reduced functionality.
+[17:54] Uh maybe you use cached results. Maybe you alert a human. But, you don't crash
+[17:59] the entire workflow. Circuit breakers are the single most important failure
+[18:06] recovery pattern for multi-agent systems. Every agent call should be
+[18:10] wrapped with a We enforce these circuit breaker
+[18:13] policies at the serving layer on Databricks through model serving or
+[18:16] through AI Gateway. Here's how it looks like in code. You track the failure
+[18:20] count, and you track the state. When you call an agent, you check the state
+[18:24] first. If it is open, you fail fast. You don't even try. If it is closed, you
+[18:29] make the call. If the call succeeds, you reset the failure count and stay closed.
+[18:34] If it fails, you increment the failure count. If you hit the threshold, you
+[18:38] open the circuit. After the timeout period, you transition to half open. You
+[18:43] test one request. If it succeeds, you close the circuit. If it fails, you open
+[18:47] it again. This is a simple pattern, but it has got a massive impact. And in
+[18:52] Databricks, you can log every open-closed transition in MLflow, so you
+[18:57] can see when an agent started flaking out. Now, let's talk about another
+[19:02] pattern. We call it the compensation pattern. Also called saga pattern. Every
+[19:07] agent has two methods, execute and compensate. Execute does the work.
+[19:12] Compensate rolls it back, undoes it. The orchestrator
+[19:17] agents have executed. If the execution agent fails, the orchestrator walk walks
+[19:23] backward through the executed agents.
+[19:27] And it calls compensate for each one. Analysis agent compensates, it deletes
+[19:33] the draft recommendation from the system that it has written originally. And then
+[19:37] the research agent compensates by clearing the cached research data that
+[19:41] it gathered previously. So, you're back to the initial state. No partial
+[19:45] transactions. No stuck workflows. This is a simple rollback pattern that you
+[19:50] can implement in multi-agent system. Compensation gives distributed agents.
+[19:55] It is not sexy, but it's how production systems handle partial failures. Every
+[19:59] orchestrated workflow needs this kind of compensation pattern, and you need to
+[20:04] plan for it depending on what you're doing with your workflows. Here's how
+[20:07] compensation looks in code. Every agent, as I mentioned earlier, has got two
+[20:12] methods, the execution method and the compensate method. The execution does
+[20:17] the work, the compensate undoes it. Uh that's the contract. Every operation
+[20:23] must be reversible. The orchestration tracks which
+[20:26] uh the orchestrator tracks which agents have run successfully, and then it keeps
+[20:31] a list. Agent A executes, gets added. Agent B executes, gets added. Agent C
+[20:37] fails, now we walk backward through the list in reverse order. Agent B
+[20:41] compensates first, it undoes the work that it has done. Agent A compensates
+[20:46] next, it undoes the work that Agent A has done, and it goes back to the
+[20:50] initial state. This is saga pattern from distributed databases. Financial
+[20:54] services requires this. Now that we have covered these different patterns, I
+[20:59] wanted to show you what a production architecture would look like when you
+[21:01] bring these things together. You've got the orchestrator at the left-hand side.
+[21:05] Um it's the brain of the workflow. It
+[21:09] contains the workflow engine, it contains the state store uh holding
+[21:14] versions through zero to n, and it has uh it it it can look into the
+[21:18] observability layer. It handles the observability data. Every call goes
+[21:22] through the orchestrator. Orchestrator calls Agent A, Agent B, Agent A returns
+[21:27] state version one to the orchestrator. Orchestrator then calls Agent B and C in
+[21:32] parallel if they need to run in parallel.
+[21:34] Uh both receives state version one from the orchestrator. They return results.
+[21:40] Orchestrator stores at version three two and three. Finally, orchestrator calls D
+[21:44] with these combined results. Agents never call each other. All coordination
+[21:48] happens through the orchestrator. And this is what gives us control,
+[21:53] observability, capability to roll back. This runs 24/7 across billions of
+[21:58] transactions because the orchestrator is the single source of truth. All right,
+[22:03] here's a production architecture that you could implement with the Databricks
+[22:08] Data Intelligence Platform. In the orchestration layer, you can have
+[22:12] LangGraph wired into Mosaic AI Agent Framework. It handles multi-agent
+[22:17] orchestration. It manages the workflow graph and knows which agents to call in
+[22:21] what order. Each agent is implemented as a Unity Catalog function. It could be
+[22:27] written in SQL or Python, or it could be a model registered in a Unity Catalog.
+[22:32] Um they are When you register these assets in Unity Catalog, they are set
+[22:38] discoverable centrally within the organization. Uh they can be governed in
+[22:42] one place, and they can be versioned, which is really critical uh in terms of
+[22:46] operating these uh workflows in production. We expose these agents
+[22:51] through a Databricks Model Serving or Function Serving, and that's where we
+[22:55] enforce these circuit breaker style policies like retries or timeouts or
+[23:00] rate limits uh at the serving layer, typically via AI Gateway configuration.
+[23:05] Now when we talk about the data layer, Delta Lake stores everything. It not
+[23:09] only stores the state versions from the agent, it also stores customer data and,
+[23:15] you know, all all all the data that you need for your workflows to work.
+[23:21] Um
+[23:23] Talking about the snake state snapshots, Delta table
+[23:27] uh is immutable and versioned. For us, those state versions are just rows in a
+[23:32] Delta table. Uh we never update them in place. Each agent run is tied to a state
+[23:38] version via MLflow Traces, so we can step through the evolution when
+[23:42] something breaks. Now, uh I just wanted to touch upon uh Unity Catalog. It It
+[23:48] governs everything access control, lineage, audit trail for both data and
+[23:53] agents. MLflow gives us per agent tracing evaluation capabilities with
+[23:58] out-of-the-box LLM as judges and and metrics on every call. And as I
+[24:05] mentioned earlier, um tools like Agent Bricks
+[24:09] is the higher level way of Databricks packaging these orchestration patterns
+[24:14] for common multi-agent use cases, so you don't need to rebuild them every time.
+[24:19] So just to wrap up this workflow, I see the LangGraph orchestrator calls Agent
+[24:24] A, a Unity Catalog function or model. It gets a result, writes version one state
+[24:30] to Delta. It then calls Agent B with state version one, writes version two,
+[24:36] and so on. MLflow traces every call, latency,
+[24:40] inputs, outputs, token usage. A circuit breaker at the serving layer guards each
+[24:45] call. If Agent C fails, LangGraph triggers compensation logic and walks
+[24:51] backward, calling the compensate functions for previous successful steps.
+[24:55] These kind of patterns run in production day in and day out. So thank you for
+[24:59] hearing me out. You can reach out to me over LinkedIn. You can scan this keyword
+[25:03] that will take you directly to my LinkedIn profile.
+[25:07] Uh I I would like to like to leave you with
+[25:09] three final thoughts. First of all, agent chaos is inevitable. When you
+[25:14] scale past one agent, you will you will hit coordination problems, race
+[25:20] conditions, cascading failures. That's guaranteed. The complexity curve doesn't
+[25:25] lie. Your agent choreography is a choice. You can build systems with
+[25:30] proper patterns, orchestration, choreography, immutable state, circuit
+[25:35] breakers, compensation patterns, data contracts. Make sure you understand
+[25:40] these patterns and bring them to your production architecture. Doing so will
+[25:44] help you build systems, not demos. Demos are easy. You use an LLM to show
+[25:50] something cool. Everyone can do it. These things don't work in production.
+[25:54] In production, you have to build systems, and systems are hard. Systems
+[25:59] are what create value for businesses. Everything I showed you today,
+[26:03] choreography versus orchestration, immutable state, circuit breakers, these
+[26:07] are all unsexy infrastructure work. You won't get applause for implementing a
+[26:12] circuit breaker, but you make your systems more reliable. They don't fail
+[26:16] at 2:00 a.m. in the night. That is what people notice over time. Be a systems
+[26:20] engineer. The patterns here, they work. Apply these patterns in your production
+[26:25] architecture. Thank you very much for watching. Bye.

@@ -1,0 +1,253 @@
+# title: AI Engineering at Jane Street - John Crepezzi
+# source: https://www.youtube.com/watch?v=0ML7ZLMdcl4
+# speaker: John Crepezzi
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T13:24:56Z
+# sha256: 085e8b3a046109ae3bc64bd593a14df06740cb627e03f190e3c5e6b4f7a13124
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:00] [Music] my name is John kzi and I work on a team
+[00:19] at Jane Street called AI assistant our group roughly uh is there at Jan Street
+[00:24] to try to maximize the value that Jan Street can get from large language
+[00:28] models and I've spent my entire career uh in Dev tools before I worked at Jan
+[00:33] street I was a GitHub for a long time and then before that I worked at a
+[00:36] variety of other Dev tools companies and llms kind of present this really amazing
+[00:40] opportunity in that they're so open-ended that we can build kind of
+[00:43] anything that we can imagine and it seems like right now the only thing
+[00:47] moving faster than the progress of the models is kind of our creativity around
+[00:50] how to employ them uh at Jan street though we've made some choices that make
+[00:55] adoption of off-the-shelf tooling a little bit more difficult than it is for
+[00:59] other companies and kind of the biggest reason that we
+[01:02] have this problem is that we use o camel as a development platform for those not
+[01:08] familiar with oaml it is a a functional very powerful language but it's also
+[01:13] incredibly obscure language uh it was built in France and its most common
+[01:17] applications are in things like theorem proving or formal verification it's also
+[01:22] used to write programming languages um we use oaml kind of for
+[01:28] everything at change so just a couple quick examples when we
+[01:32] write web applications of course web applications have to be written in
+[01:36] JavaScript but instead we write oaml and we use a library called JS of oaml that
+[01:41] is essentially a oaml bik code to JavaScript
+[01:45] transpiler when we write plugins for Vim those have to be written in Vim script
+[01:50] uh but we actually use a library called vaml which again is oaml to vimscript
+[01:55] transpiler and uh even people at the company that are working on fpga code
+[02:00] they're not writing verog they're writing in an O camel Library called
+[02:04] hard camel uh so why are the tools on the
+[02:08] market available not good for working with oaml I think it kind of comes down
+[02:12] to a few primary reasons the first and the most important is that models
+[02:16] themselves are just not very good at oaml and this isn't the fault of the AI
+[02:20] labs this is just kind of a byproduct of the amount of data that exists for
+[02:24] training so it's there's a really good chance that the amount of okl code that
+[02:28] we have inside of J street it's just more than like the total combined amount
+[02:32] of oam code that there exists in the world uh outside of our
+[02:36] walls the second is that we've made things really hard on ourselves
+[02:40] partially as a byproduct of working in O camel we've had to build our own build
+[02:44] systems we built our own distributed build environment we even built our own
+[02:47] code review system which is called iron we develop all of our software on a
+[02:53] giant monor repo application and just for fun instead of storing that monor
+[02:57] repo in git we store it in mercurial
+[03:02] and uh at last count 67% of the firm uses emac instead of normal editors
+[03:08] maybe like vs code uh we do have people using vs code but emac is the most
+[03:13] popular and the last thing is we're dreamers I mean kind of everyone in this
+[03:16] room hopefully is is a dreamer in a way uh and what I mean by this is we want
+[03:20] the ability to kind of take llms and apply them to different parts of our
+[03:24] development flow and light up different parts so maybe we want to use large
+[03:27] language models to resolve merge conflict or build better feature
+[03:31] descriptions or figure out who reviewers for features be and we don't want to be
+[03:34] hampered by the boundaries between different systems when we do
+[03:40] that over the next 15 minutes I'm going to cover our approach to large language
+[03:44] models at CH Street uh particularly when it comes to developer tools um I'm going
+[03:49] to talk about custom models that we're building and how we build them I'm going
+[03:52] to talk about editor Integrations so these are the Integrations into uh to vs
+[03:57] code emac and neovim and I will talk about uh the ability
+[04:02] that we've built over time to evaluate models and figure out how to make them
+[04:05] perform best and I guess at first glance it's
+[04:08] not really obvious that training models at all is a good idea I mean it's very
+[04:12] expensive proposition it takes a lot of time and it can go wrong in a ton of
+[04:15] different ways who here has trained a model before or tried to train something
+[04:18] like a model maybe took a foundation model and trained on top of
+[04:22] it cool we were more convinced after we
+[04:26] read this paper this is a paper from meta about a project called code compose
+[04:31] and in this paper they detail their results fine tuning a model specifically
+[04:34] for use with hack uh hack is actually pretty similar to O camel uh not in its
+[04:39] like syntax or function but really just in the fact that it's used primarily at
+[04:43] one company and not really used much outside of that company even though it's
+[04:47] open source so oh actually a fun fact hack is implemented in no camel I think
+[04:53] that's just like a total coincidence but uh we were pretty naive early on we
+[04:58] read this paper and we decided that it would be really cool if we could
+[05:01] replicate the results we thought we would just take a model off the shelf we
+[05:05] would show it a bunch of our code and then we would get back a model that uh
+[05:08] worked like the original model but knew about our libraries and
+[05:12] idioms it turns out that's just not how it works uh it's not that easy in order
+[05:16] to get good outcomes you have to have the model see a bunch of examples that
+[05:20] are in the shape of the type of question that you want to ask the model so we
+[05:24] needed to First create a goal a thing that we wanted the model to be able to
+[05:27] do and in our in our world the goal that we came up with was this we wanted to be
+[05:32] able to generate diffs given a prompt so what that means is we wanted a user
+[05:37] inside of an Editor to be able to write a description of what they wanted to
+[05:40] happen and then have the model suggest a potentially multifile diff so maybe you
+[05:45] want to modify the test file an ml file and an mli which is kind of like a
+[05:49] header file we wanted the diffs to apply
+[05:52] cleanly and we wanted them to have a good likelihood of typechecking after
+[05:56] they had been applied and we were kind of targeting this range of up to 100
+[06:01] lines as an ideal zone of what we thought llms would actually be capable
+[06:07] of and in order for that to work we needed to collect data like I was
+[06:11] talking about before we needed data of the training shape that looked just like
+[06:13] the test shape and this is what that shape looks like for this task you need
+[06:17] to be able to collect a bunch of examples of what context the model would
+[06:21] have had beforehand and then some prompt of what you want the model to do written
+[06:25] hopefully in the same way that a human would write it and then some diff that
+[06:28] would accomplish that goal so context prompt diff and we need a bunch of these
+[06:32] examples so how do we get these how do we get these training
+[06:36] examples kind of the first place to look is features features is I mentioned a
+[06:41] code review system that we built internally this is what it looks like
+[06:43] it's called iron uh features are very similar to poll requests I think you can
+[06:48] just you know swap that term in your head and features at first glance have
+[06:52] exactly the data they want on the description tab they have a human
+[06:55] written description of a change and on the diff tab they have the code that
+[06:59] accom is the goal of the developer but on closer look they're not
+[07:03] exactly what you want right the way that you write a feature description or a p
+[07:07] request description is really very different from what you might want to
+[07:10] say inside of an editor so you're not writing multiple paragraphs in the
+[07:13] editor you're just saying something like fix that error that's happening right
+[07:16] now and that's just not how we write feature descriptions another problem
+[07:20] with these features or P requests is that they're really large right often
+[07:24] it's a feature is 500 lines or a thousand lines so in order to use it as
+[07:28] training data we would need to have an automated way to pull features apart
+[07:32] into individual smaller components that we could train
+[07:35] on so we need smaller things than features what are those well maybe
+[07:39] commits commits are smaller chunks than features uh this is what a typical
+[07:43] commit log looks like at Jan street so this is not like a git short log this is
+[07:47] literally just like an actual I want you to look at this as an actual git log and
+[07:52] where it says summary Z that's my commit message we don't really use commits the
+[07:59] same way the rest of the world use system so we use commits mostly As
+[08:02] checkpoints between different parts parts of a development cycle that you
+[08:05] might want to revert back to commits don't have a description and they also
+[08:09] have the same problem in that they're not isolated changes they're they're a
+[08:13] collection of changes what we actually ended up with was a approach called
+[08:17] workspace snapshotting and the way that that works is we take snapshots of
+[08:21] developer workstations throughout the workday so you can think like every 20
+[08:25] seconds we just take a snapshot of what the developer doing and as we take the
+[08:28] snapshots we also take snapshots of the build status so the build that's running
+[08:32] on the box we can see what the error is or whether the build is green and we can
+[08:36] kind of notice these little patterns if you have a green to Red to Green that
+[08:40] often corresponds to a place where a developer has made an isolated change
+[08:44] right you start writing some code you break the build and then you get it back
+[08:47] to green and that's how you make a change maybe this one the red to Green
+[08:51] this is the place where the developer encountered an error whether that's a
+[08:54] type error or a compilation error and then they fixed it so if we capture the
+[08:58] build error at the Red State and then the diff from red to Green we can use
+[09:02] that as training data to help the model be able to recover from
+[09:06] mistakes the next thing we need is a description and the way that we did that
+[09:10] we just used the large language model so we had a large language model write a
+[09:13] really detailed description of a change in in as much words as it possibly could
+[09:17] and then we just kept filtering it down until it was something that was around
+[09:20] the right level of what a human would write so now we have this training data
+[09:26] and training data is kind of only half the picture of training a model so you
+[09:29] you have the the supervised training data and then you need to do the second
+[09:32] part which is the reinforcement learning this is really where models get a lot of
+[09:36] their power right we we align the model's ability to what humans think is
+[09:41] actually good code so what is good code I guess on the surface good code is I
+[09:47] mean it's it's code it has the parse is code meaning if a piece of code doesn't
+[09:52] go through the O camel parser and come out with a green status that is that is
+[09:55] not good code I would say by most definitions
+[09:59] uh good code in oaml because it's statically typed is code that type
+[10:03] checks so we want to have good code be code that when it is applied on top of a
+[10:08] base revision can go through the type Checker and the type Checker agrees that
+[10:11] the code is valid and of course the the gold
+[10:15] standard is that good code is code that compiles and passes tests so ideally in
+[10:20] during the reinforcement learning phase of a model you could give the model a
+[10:23] bunch of tasks that are like verifiable we have the model performs some some
+[10:28] edit and then we check whether or not it actually passes the test when applied to
+[10:32] the code so we did that uh we've done this
+[10:36] as part of our our training cycle and we built this thing that is called uh CES
+[10:41] it's the code evaluation service you can think of it kind of like a build service
+[10:45] except with a slight modification to make it much faster and that's that
+[10:50] first we pre-warm a build it sits at a a revision and is green and then we have
+[10:55] these workers that all day just take diffs from the model they apply them and
+[10:59] then we determine whether the build status turns red or green and then we
+[11:02] report that error or or success back up to the build function and through
+[11:07] continued use of this service over the course of like months we're able to
+[11:10] better align the model to write code that actually does compile and past
+[11:17] tests it turns out this exact same setup is the one that you would want for
+[11:22] evaluation so if you just hold out some of the RL data you can also use it to
+[11:26] evaluate model's ability to write code kind of looks like this you give the
+[11:29] model a problem you let it write some code and then you evaluate whether or
+[11:33] not the code that it writes actually
+[11:37] works and training is hard and it can have kind of uh catastrophic but
+[11:42] hilarious results so at one point we were training a code review model and
+[11:47] this is a totally separate model but the idea was we want to be able to give some
+[11:50] code to this model and have it do a first passive code review just like a
+[11:53] human would do to try to save some of the toil of of code review we train this
+[11:58] model we put a bunch of dat dat into it we worked on it for months we're real
+[12:01] excited and we put our first code in for uh for code review through the automated
+[12:05] agent it spun for a bit and it came back with something along the lines of um
+[12:10] I'll do it tomorrow and like of course it did that
+[12:15] because it's trained on a bunch of human examples and humans write things like
+[12:18] I'll do things or I'll do this tomorrow uh so it's it's you know not very
+[12:22] surprising so having evaluations that are meaningful is kind of a Cornerstone
+[12:26] of making sure that models don't go off the rails like this and you don't waste
+[12:29] a bunch of your time and money in the end though the real test of
+[12:33] models is whether or not they work for humans so I'm going to talk a little bit
+[12:37] about the editor Integrations that we've built to expose these models to
+[12:40] developers at Jan Street kind of when we were starting
+[12:44] building these Integrations we had three ideas in mind the first idea was wow we
+[12:48] support three editors we have neovim vs code and emac and we really don't want
+[12:52] to write the same thing three times so ideally we don't want to write all the
+[12:56] same context building strategies and all of the same prompting strategies we want
+[13:00] to just write at once the second is that we wanted to maintain flexibility so we
+[13:04] had a model that we were using at the time uh that was not a fine tuned model
+[13:08] we were pretty convinced that a fine tuned model was in our future we wanted
+[13:11] the ability to do things like swap the model or swap the prompting strategy out
+[13:15] and lastly we wanted to be able to collect metrics so in a developer uh in
+[13:20] their in their editor developers care about latency and they care about
+[13:24] whether or not the diffs actually apply so we wanted to get kind of on the
+[13:27] ground real experience of whether or not the diffs really were meaningful for
+[13:32] people this is the simplified version of the architecture that we settled on for
+[13:36] this service the AI development environment essentially you have llms on
+[13:41] one side and then Aid handles all of the uh ability to construct prompts and to
+[13:46] construct context and to see the build status and then we are able to just
+[13:49] write these really thin layers on top of Aid uh for each of the individual
+[13:53] editors and what's really neat about this is that Aid sits as a sidecar
+[13:57] application on the Developers machine which means that we when we want to make
+[14:01] changes to Aid we don't have to make changes to the individual editors and
+[14:05] hope that people restart their editors we can just restart the Aid Service on
+[14:08] all of the boxes so we restart Aid and then everyone gets the most recent
+[14:15] copy uh this is an example of Aid working inside of vs code so this is the
+[14:19] sidebar in vs code very similar to something like co-pilot except this
+[14:23] thing allows you to uh ask for it and get back multifile diffs uh and you can
+[14:28] see it kind of looks like what you'd expect in VSS code it's it's you know a
+[14:31] visual interface that lays things out really
+[14:34] nicely this is what we built in emac though so in emac developers are used to
+[14:39] working in text buffers they move around files they want to be able to copy
+[14:42] things the normal way that they copy things so we actually built the eight
+[14:46] experience in emac into a markdown buffer so users can move around inside
+[14:50] this markdown buffer they can ask questions and then there are key binds
+[14:53] that essentially append extra content to the bottom of the markdown
+[14:58] buffer AIDS architecture lets us plug various pieces in and out like I
+[15:02] mentioned uh so we can swap in new models we can uh make changes to the
+[15:07] context building we can add support for new editors which I think probably
+[15:11] sounds far-fetched but this is something we're actually just doing right
+[15:14] now uh and we can even add domain specific tools so different areas of the
+[15:19] company can supply tools that are available inside of the editors and they
+[15:23] kind of end up in all the editors without having to write individual
+[15:26] Integrations eight also allows us to AB test different approaches so we can do
+[15:30] something like send 50% of the company to one model and 50% to another and then
+[15:34] determine which one gets the higher acceptance rate a is kind of a an
+[15:39] investment that pays off over time every time something changes in large language
+[15:43] models we're able to change it in one place Downstream of the editors and then
+[15:47] have it available everywhere and things change like really
+[15:53] often and we need to be ready uh when things change what I what I've had time
+[15:57] to show you today is only a small portion of what my team is doing we've
+[16:01] got a lot of other things going on so we're finding new ways to apply rag
+[16:05] inside of the editors we're applying similar approaches to what you've seen
+[16:08] here to large scale uh multi-agent workflows we are working with reasoning
+[16:14] models more and more but the approach is the same through all of these we keep
+[16:18] things pluggable we lay a strong Foundation to build on top of and we
+[16:22] build the ways for the rest of the company to add to our experience by
+[16:26] adding more domain specific tooling on top of it
+[16:30] uh if you think what I've said is interesting and you want to talk more
+[16:32] about this I would love to hear from you you can just find me outside and thank
+[16:36] you for your time [Music]
+[16:38] [Applause]
+[16:43] [Music]

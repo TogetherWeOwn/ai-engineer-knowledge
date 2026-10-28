@@ -1,0 +1,411 @@
+# title: Strategies for LLM Evals (GuideLLM, lm-eval-harness, OpenAI Evals Workshop) — Taylor Jordan Smith
+# source: https://www.youtube.com/watch?v=89NuzmKokIk
+# speaker: Taylor Jordan Smith
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T11:10:21Z
+# sha256: bbce4424c661206f5448612f8501957f37862abda12ed376ca74a9d79741bd45
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:00] [Music]
+[00:15] Hello everybody. Um, my name is Taylor Smith. I am an AI developer advocate
+[00:22] slashevangelist slashtechnical marketing and other titles depending on where I
+[00:27] am. Um, I work at Red Hat in our AI business unit because yes, we do also do
+[00:33] AI too now. Great. Um, I'm really happy to be here. This is my first time at
+[00:39] this conference. So, I'm new to the conference, new to speaking at this
+[00:43] conference, ready to have a good time and also relax in about an hour and a
+[00:47] half and just learn stuff. stoked that this was at 9:00 am. Um, my presentation
+[00:53] clicker isn't working, so I'm gonna be a little bit glued over here. But to kind
+[00:57] of overview what we're going to do today, I'm going to talk a little bit
+[01:00] about kind of the issues of setting up a large language model in production and
+[01:05] the reason why you need evaluations and benchmarks and all of these things and
+[01:10] why that is so critical. And then I do have some hands-on activities that we'll
+[01:15] get to do to use some evaluation um methods and benchmark tools to kind of
+[01:20] get a sense of what is out there to use, how we can use those tools, what that
+[01:25] might look like to put it all together for an actual production system. So,
+[01:31] ready? Are you excited? >> Yay. First thing in the morning. Love
+[01:36] that. I'm glad it's 9:00 a.m. because that feels like a reasonable start time.
+[01:39] I don't like that 8 am stuff that happens. Um, setting up generative AI
+[01:45] tech in production. If you think about it, crazy pants. Okay, there's so many
+[01:50] things that could go wrong. This is such a complex type of technology that is
+[01:54] very creative. Setting this up to be scalable and reliable and safe is
+[02:01] challenging. Okay, that's why we need evaluations. That's why we need all of
+[02:04] these tests and we need to be careful. We need to understand the technology
+[02:07] we're working with when we're looking to implement this as well. So hard to do
+[02:13] most organizations. So they don't typically start off with a multi- aent
+[02:19] framework, right? And go crazy. Typically, they're going to have a kind
+[02:23] of standard repeatable path to maturity. They might start out with, okay, how can
+[02:28] I automate some things with AI? How can I have like a chatbot type of situation?
+[02:31] That's kind of the standard that everybody starts out with. Okay, I maybe
+[02:35] want to implement a rag setup. All right, let's start to look at agents to
+[02:39] for on the Red Hat side. We're still dealing with probably like the first
+[02:42] three phases of this maturity with our customers and that's where a lot of
+[02:46] people um still are. But we get to talk about all the cool advanced stuff at
+[02:49] this conference so we can plan ahead and think about what we want to implement.
+[02:54] But enterprises, they need to take an incremental approach to do this
+[02:59] successfully. Genai models, they have a number of
+[03:04] drawbacks, right? And we all know about these things. Policy restrictions.
+[03:09] Typically, if you're a developer at a company or have whatever type of role,
+[03:13] you're restricted in the type of AI that you can use. Red Hat was just um allowed
+[03:18] to use m Gemini was just made available to us, but before that, we weren't
+[03:22] really allowed to use anything officially. Um, so the company policy
+[03:30] restrictions of the tools you can use and the AI you can use is pretty locked
+[03:33] down. Typically the legal exposures and risks of these models, you know, there
+[03:39] was the glue incident. Um, they're going to say crazy stuff
+[03:44] sometimes. How do we guard rail against that and how do we protect our customers
+[03:49] against that and account for that when that does happen? Because it's hard to
+[03:52] um, completely avoid. There's the bias and discrimination issues. Most of the
+[03:56] internet data is still largely eurosentric and US-based. So the models
+[04:02] trained on this public internet data of course is going to be a little skewed,
+[04:06] right? So we need to be aware of it just like in regular everyday life. We know
+[04:11] that bias and discrimination exists. How do we account and kind of provide guard
+[04:15] rails to make sure that we adjust and prevent what we can?
+[04:20] Cost and performance. That's probably kind of a baseline big one. how much
+[04:25] these genai models cost to run at scale in production and the performance
+[04:30] throughput latency etc that we need to account for when we have these
+[04:34] production system set up and then the knowledge cut off as well is another
+[04:38] limitation you know these large frontier models have a knowledge cut off because
+[04:42] they're not consistently trained so you might be working with a model that was
+[04:46] cut off a year ago so it's not going to have that up-to-date information which
+[04:50] is why they you know implement rag systems and agent systems to look out
+[04:54] into the internet for more up-to-date info. But these are just some of the
+[04:57] kind of drawbacks we need to be aware of and account for.
+[05:01] Inference at scale, no matter how I'm going to go kind of into these
+[05:04] categories a little more in depth. No matter how good your model is, if it's
+[05:09] not fast, if it's not reliable, if it's not affordable, you're screwed a little
+[05:14] bit from the get-go. Okay, so this graphic, it shows a classic bottleneck
+[05:18] type of scenario. You got concurrent user requests which might be represented
+[05:22] by those green, yellow, and orange dots flowing into a system. But then
+[05:26] traditional inference runtimes typically can't handle that kind of load
+[05:29] efficiently. Um to serve real world traffic, whether you're powering a
+[05:34] customer support agent, a developer type of co-pilot system, or maybe a rag
+[05:39] pipeline, you need an inference engine that's purpose-built for scale. So
+[05:43] that's where inference runtimes like TRT SG lang which I know we have a session
+[05:48] on or at least a couple sessions on VLLM um that's where Red Hat's kind of
+[05:52] focusing that's where those type of production grade inference runtimes
+[05:56] really need to be utilized. There's a lot of pain points with
+[06:01] inference that I just want to double down on and some of the activity will be
+[06:05] benchmarking and evaluating um these types of metrics. model inference
+[06:11] performance evaluation under enterprise level workload scenarios. It's very
+[06:16] complicated to actually evaluate this appropriately. It requires manual setup
+[06:22] of evaluation runs with various parameters you have to test. The compute
+[06:26] load just for performance evaluations as well is also pretty taxing. Um you have
+[06:32] to make sure the data sets that you're using for benchmarking are compatible
+[06:36] with the models that you're using. the resource optimization and identifying
+[06:41] sizing so that you're efficiently using your hardware appropriately for whatever
+[06:46] model size you're using. That's a big challenge um for enterprises today.
+[06:51] Making sure they're efficiently using their GPU investments. And then actually
+[06:56] cost estimating is a little bit of a black magic thing. Like it's really hard
+[07:00] to do that appropriately. um you have to like backwards mathmap imperence
+[07:05] performance to tokens and it's a whole thing. So these are what enterprises are
+[07:10] trying to achieve and it's hard. Um just a little kind of more examples
+[07:16] of the challenges. So we have you know this is just an example of stable
+[07:19] diffusion bias. Like I said most of our data is euroentric. This is going to be
+[07:24] there. So how do we what tools can we use to provide guardrails against this
+[07:28] type of behavior? the glue incident. This was because
+[07:33] there was something on Reddit was like it's like a joke um satire and did this
+[07:39] AI overview tool used that information and didn't have the right mitigation
+[07:43] techniques in place to identify that satire. So then it came out in that um
+[07:48] AI overview uh suggestion and then we have this um like MAD
+[07:56] situation where a lot of the we're getting into a lot of synthetic data on
+[07:59] the internet and each generation of these AI models that come out are
+[08:05] consuming more and more AI generated data which over time is going to get you
+[08:11] oh there's music happening um further away from that original human anchored
+[08:15] data. So this is going to lead to a loss of output diversity, a loss of pre a
+[08:20] loss of precision. This would be an area where you would need to use those kind
+[08:24] of accuracy evals to mitigate again and identify that this is occurring.
+[08:31] So just to cover of course Google and the stable diffusion project they have
+[08:37] introduced additional evaluation frameworks and mitigation techniques to
+[08:41] address this. um just like anytime we have any story like that right they are
+[08:45] certainly working to make sure that that does not happen again we don't know with
+[08:50] the closed source um AI offerings how exactly they're doing that but we can
+[08:54] speculate you know the AI overview technology maybe introduced more rag
+[09:00] mitigations to where it helps to identify that that was satire or
+[09:04] whatever the case is um it has more safeguarding triggers um the stable
+[09:10] diffusion model likely introduced is some level of bias mitigation guard
+[09:13] rails. So we need so of course that they've been working to fix this but
+[09:19] ideally we don't run into this and we prevent it ahead of time before a model
+[09:23] release or before an application release.
+[09:26] So how do we prevent these kinds of issues at scale in production
+[09:30] environments? I want to just look at a couple of definitions because sometimes
+[09:35] evaluation and benchmarking are terms used um kind of they kind of conflate a
+[09:40] little bit and people kind of use them for whatever they want. So benchmarking
+[09:44] is just a subcategory of evaluation. Evaluation is a comprehensive process to
+[09:50] assess a model end to end and it could include a lot of different kinds of
+[09:54] evaluations about a lot of different components. Benchmarking is very
+[09:58] specifically controlled specific data sets and specific tasks typically used
+[10:03] to compare models against one another. So this would be like a latency score
+[10:09] that compares different hardware setups and different models or like the MMLU
+[10:14] benchmark scoring things like that. We'll look at both custom evals that
+[10:20] aren't benchmarking and also some benchmarks in their hands-on.
+[10:24] These are just some examples of what is typically considered a model evaluation
+[10:30] versus a benchmarking specific test just to kind of get a little bit of a sense.
+[10:35] Um, but again like there's so many types of evaluations, so many tools, you can
+[10:40] customize it in so many different ways, but this kind of helps hopefully a
+[10:44] little bit with the definitions. So hopefully kind of seeing all these
+[10:50] challenges with Genai. We understand that this is a critical process. Um you
+[10:55] need to manage risk for customers like there's less of a concern right when I'm
+[10:59] tinkering on my laptop whatever if you know I see something weird who cares.
+[11:03] But when we're talking about a production level environment we're
+[11:06] serving thousands whatever customers we need to think about these things
+[11:09] obviously more in these types of scenarios. the credibility of the
+[11:13] company. When those stories come out, that takes a hit for a good chunk of
+[11:17] time. Um, and you obviously also need to continuously improve your evaluation
+[11:22] frameworks as well because you're not going to catch everything. You need that
+[11:26] CI process to make sure you are continuously improving your evaluations
+[11:31] and benchmark setups. It's also going to very much depend on
+[11:36] the type of system that you have, what you set up. So again, it's very much
+[11:40] there's tons of tools. This could look a lot of different ways. We'll get a sense
+[11:44] of it today. If you have a Rag setup, you're going to be maybe focused on a
+[11:48] the Ragas um benchmark or evaluation tool, agents, you need to look at
+[11:54] function tool calling capabilities, etc. you can kind of get a sense there's
+[12:00] going to be specific metrics that you need to set up and look for depending on
+[12:04] the system that you have which requires a lot of planning in advance and kind of
+[12:09] architecture scoping. I'll give an example of a rag use case
+[12:16] and also it's incremental too because you could and I'll I'll talk about this
+[12:20] a bit like you could literally evaluate every single part of things but that's
+[12:25] going to be um time and resource extensive to set up immediately. So you
+[12:30] likely want to take an incremental approach with these types of setups. So
+[12:33] you might start out with okay I'm just going to evaluate the chunk retrieval my
+[12:39] retrieval application in a rag system. I want to set up some kind of evaluation
+[12:43] test there. I might just want to set up a latency throughput um benchmark test
+[12:48] for my LLM output. You can start with those kind of incremental approaches for
+[12:53] specific components and then from there based on priority levels as well branch
+[12:59] out into a full system eval that covers all the components the integration layer
+[13:04] of how the components work together the UI endto-end experience and kind of have
+[13:09] a software engineering kind of test period approach to this where you have
+[13:14] that unit test layer kind of approach at the bottom um integration layer in the
+[13:19] middle and that UI end to end at the top and you can take that layer by layer as
+[13:25] you're building this evaluation framework for your systems.
+[13:30] So there we created this or we there is this pyramid also for model evaluation
+[13:36] that represents the same kind of setup for um that that software engineering
+[13:41] pyramid um represents as well. So the base layer and uh very base layer is the
+[13:46] system performance because like I said no matter how good your model is if you
+[13:50] don't have fast throughput you aren't able to handle concurrent users you're
+[13:54] going to be in a bit of a pickle GPU utilization etc. you need to make sure
+[13:58] kind of the basics are handled uh the as the main kind of event. Um and we'll
+[14:04] talk about that'll be the first hands-on activity is is evaluating the system
+[14:07] performance. Formatting might be making sure it's um religiously giving you JSON
+[14:14] output that you need for your application. Something like that. The
+[14:17] factual accuracy which we'll also talk about um in one of our hands-on that
+[14:22] would be like the MMLU benchmark. So evaluating that it's performing well on
+[14:27] various subjects kind of standard large language model accuracy as well as if
+[14:32] you've fine-tuned a model potentially making sure that it's accurate based on
+[14:36] the information that you fine-tuned that model on and you kind of go up from
+[14:40] there into you know safety bias there might be specific custom evaluations
+[14:45] that are very specific to your application. So gives you kind of a
+[14:49] sense of the tiered approach that can be taken here.
+[14:53] So, we're going to talk first system performance and we're going to have our
+[14:56] first hands-on around this. We're going to be looking at guide LLM, which is
+[15:01] kind of a new project that's associated with the VLM inference runtime project.
+[15:06] Um, we're going to use that for system performance benchmarks like latency
+[15:11] throughput and you'll get a little bit of hands-on there. The general user flow
+[15:15] there is like you you know you select your model you select your particular
+[15:19] data set that you want to use to test throughput and to test inter token
+[15:24] latency time to first token those types of metrics and then guide LLM allows
+[15:30] gives you a nice kind of um internal UI to visualize the results of that. Uh and
+[15:37] then once you get kind of the results that you want based on your use case
+[15:41] again then you're ready to deploy. We you'll see this in the hands-on as
+[15:47] well but you want to test based on the use case and the p one of the primary
+[15:51] ways you test via guide LLM is adjusting the input and output tokens. So, if you
+[15:56] have a chatbot use case, a rag use case, you can adjust the um input and output
+[16:01] token levels based on your use case. And you'll see that in the hands-on and have
+[16:04] an opportunity to kind of play around with that depending on what you're most
+[16:07] interested in. So, we're going to start with the
+[16:11] hands-on. That is the link that red.htvals
+[16:18] is the link to the workshop. You will be signing in with your email.
+[16:23] I have no marketing game. It just requires you to do that. So, I'm not
+[16:27] going to haunt you after this. Um, you'll put in your email and that is the
+[16:31] password. And
+[16:36] me, hold on. I just want to show you. Well, I don't want to take up one of the
+[16:39] systems. Um, otherwise I would show you, but you're going to get instruct once
+[16:44] you are in the workshop. You're going to get your instructions on the lefthand
+[16:47] side and you're going to have two terminals avail two terminal sessions
+[16:50] available to you on the right hand side to the same system. It's a rail system.
+[16:55] Um the instructions will overview what the system includes a little bit for you
+[16:59] so you get a sense. Um they each have an L4 GPU as an example. Um anything else I
+[17:06] want to call out before we get started. That'll be primarily what you use. It
+[17:10] has T-Mox enabled if you like to use that to open up different things and
+[17:15] gives you some flexibility. We have three different activities. I'm going to
+[17:20] pause after each activity so we can have a little bit of a discussion in between.
+[17:26] Um, we'll kind of get this my first time running this particular uh activity. So,
+[17:31] we'll gauge kind of the time it takes, but I'm going to give it about 15 20
+[17:35] minutes for this first one. Okay. So, I'm also pulling up a system
+[17:41] and I'm just going to like walk through some of the stuff. The initial page is
+[17:44] just going to give you if of course if it loads Jesus the internet. Um the
+[17:49] initial page is just going to give you a little bit of background and preparing
+[17:52] your system instructions and then my terminals are on this second tab
+[17:57] and everything is going to be glacial pace. Um
+[18:02] so the first thing I have to do these systems don't have the container toolkit
+[18:06] installed so I just got to do that some uh system logistics because I'm going to
+[18:11] be running VLM inference runtime in a container and I need that to work. So
+[18:16] that's what that's doing. And then I'm gonna deploy a model with VLM. I So
+[18:24] you're gonna have to grab a hugging face token. Probably have gotten there by
+[18:27] now. Probably most of us have a hugging face token, but just disclaimer there.
+[18:30] So incognito window if you're hitting the hugging face rate limit to grab a
+[18:35] new token. So VLM you can also install locally like
+[18:41] if you have a Mac or whatever um Linux machine, but we're deploying it as a
+[18:45] container here. So I'm going to get that deploy and I'm
+[18:49] um you can see the VLM serve command at the end. So that's just the VLM CLI tool
+[18:54] and I'm using an IBM granite model because you know Red Hat IBM
+[18:59] um so we'll be working with that for a chunk of the activity and it takes a bit
+[19:05] for VLM to load the model. So you're going to be waiting for info the words
+[19:10] info like four times in green and then it's deployed.
+[19:16] What's nice about VLM is that it is um it's compatible with the safe tensor
+[19:20] formats. So I has anybody used TRT to load up a model. Okay. Anyway, it's
+[19:26] crazy um because it requires you to also convert the model formats initially. Um
+[19:31] so there's less kind of configuration steps with VLM. Takes up less space too.
+[19:37] So when you do these kinds of system and performance um benchmarks, you can make
+[19:42] a lot of adjustments like the um the input and output tokens that I mentioned
+[19:47] um for the guide LLM configurations, but there's a lot of also configuration
+[19:51] opportunities for the inference runtime itself um depending on what you're
+[19:56] trying to do. sometimes will reduce the max um the context window of the model
+[20:02] so it runs more quickly because it's if it's a big context window it's going to
+[20:05] be pretty beefy. There's a lot of knobs you can use for VLM. We're not really
+[20:09] going to touch that um this particular time but just so you're aware. So I have
+[20:13] my my three in green infos. So that means it's working and the model is
+[20:18] successfully deployed. So I'm going to um get into my virtual environment which
+[20:27] is already in place and then I already have guide LLM installed but I'm going
+[20:32] to pip install guide LM and these are copy buttons by the way so you can just
+[20:36] easily copy paste things over. So once I have that up then this command
+[20:42] is set up to just work with the um model deployed by VLM and that I'm just
+[20:47] keeping up here in the top terminal. can run this in the background but I'm just
+[20:51] not doing that and this is so I have my target um the rate type is a sweep of uh
+[20:59] various benchmarks like inter token latency there's various types of
+[21:04] benchmarks that it'll run that you'll see in the output um but these are all
+[21:08] things that can be adjusted you can run one particular benchmark at a time for
+[21:11] instance you can take a look at I think it's uh guide lm-help typical type of
+[21:16] commands you can kind of see what the where all the knob are. And the
+[21:19] documentation is pretty good, too. So, that'll take a couple of minutes to
+[21:25] run because I have it um set at a rate of five to reduce the amount of time
+[21:29] that it takes to process. >> So, you can kind of get a sense of the
+[21:35] output here once it all processes. And I have explainers on the left hand side of
+[21:40] kind of how to read some of this. Um the mean performance for each. is we have
+[21:45] the the benchmark info on the top and then benchmark stats on the bottom. Um
+[21:52] so the for the constant rate the on the very left hand side so those are the
+[21:57] number of requests sent to the model per second at that particular rate. So three
+[22:02] the constant at 3.63 6.93 if I did in um the guide LLM command rate and it was
+[22:10] five. If I did rate 10, you would see more lines of that at at um more
+[22:15] progressive rates
+[22:21] >> and like whether or not these numbers are good also totally depend on your use
+[22:25] case as well. And I would be comparing I would have a better hardware
+[22:29] configuration obviously in production as well because again I'm I'm running an 8
+[22:33] billion parameter size or two two billion parameter size model. Um
+[22:40] on an L4, >> which is like okay, but obviously if
+[22:44] you're doing anything concurrently and at scale, like that's going to go
+[22:47] bonkers pretty quickly.
+[22:53] >> So you get like the mean performance, the median performance and P99, which is
+[22:58] like the the extreme level um which matters for SLOs's and things like that.
+[23:04] And you can also output this into um JSON format as well
+[23:08] >> to take a closer look. >> So once you reach this, you can try also
+[23:14] with an additional like tweak the parameters and then maybe compare the
+[23:18] results and kind of see what what that changed if you do a rag setup. Um so I
+[23:24] think we had I forget what we had what the initial command said. Um, but you
+[23:28] can adjust those based on a different use case and kind of compare and
+[23:31] contrast what the stats look like after because it just takes a couple minutes
+[23:34] to run.
+[23:43] Who's done with this first exercise? Okay, good. Great. We're a few minutes
+[23:49] away from the additional um 10 to 15 systems being ready. So,
+[24:02] Just for the sake of time, I am not going to do breaks for kind of
+[24:08] discussion in between if everybody's okay with that and we can kind of just
+[24:12] converse independently and I'll just awkwardly walk around the room. Um, so
+[24:15] if you're done with activity one, move on to activity two because there are
+[24:19] three activities and I want to make sure everybody has appropriate time for each
+[24:23] that they would like. Um, but we will also have the systems up until probably
+[24:28] about noon, I don't know, early afternoon. Um, we'll keep them up if you
+[24:32] wanted to also go back and look at it after. So, is that good with everybody?
+[24:37] We just kind of steamroll power through. Okay.
+[24:45] Yes.
+[24:50] >> So, I have a new URL where we have three more available so far, but others are
+[24:54] provisioning. And I just wanted to go ahead and put the URL up. It'll come
+[25:00] they'll appear here. And it's the same password, right? You
+[25:04] said >> it's the same password. It's the same
+[25:06] password you said. Okay. Uh,
+[25:14] >> okay. So, that's the new URL. Three more systems, but they'll more will appear.
+[25:33] >> Um, I put descriptions on the left um to explain that, but I just wanted to heads
+[25:37] up. We're kind of moving from system performance to now that kind of factual
+[25:41] accuracy part of the pyramid. Um so you get a sense of so we're going to be
+[25:46] doing the MMLU pro um in the second activity and then the third activity is
+[25:51] going to be focused on safety and bias and more custom evals. So that's the
+[25:54] trajectory of activities. Feel free if one is also more interesting than the
+[25:59] other feel free to skip around. Totally fine.
+[26:02] explain more about the pro. I'm curious about
+[26:07] >> or you know like proprietary data sets if that's a thing
+[26:12] >> you can c you can basically customize everything because like all these things
+[26:16] are open source so you can create a similar type of eval in that multiple
+[26:19] choice format that MMLU does with your own data set. Um there's different ways
+[26:25] to do custom accuracy evals with your fine-tuned data. So we kind of do it in
+[26:31] a we have so as part of one of the products we we incorporate an eval for
+[26:36] um our fine-tuned models on your proprietary data and we do like a branch
+[26:40] of MMLU essentially. So there's kind of there's a lot of ways to skin a cat even
+[26:44] though I love cats um in regards to how to set up the eval tools available.
+[26:51] >> Yeah. So yeah. Yes. >> You can just like fork it and ch and
+[26:58] change the data sources. Yeah. Yeah.
+[27:10] >> Put that link back up. The instructions don't some of the
+[27:15] instructions don't look updated as I expected. So, I'm going what I'm going
+[27:19] to do um is everybody in the Slack for a engineer worldfare?
+[27:24] I created a um Slack channel called work workshop beyond benchmarks. Um and I'm
+[27:31] going to put some of the so activity three. Does
+[27:35] anybody see activity 3? >> No.
+[27:38] >> Okay. I'm putting content in this um in this slack.
+[27:44] >> If people can it's a public channel. If people can go there my um you'll see
+[27:50] starting I'm the link is at activity 2 but then you'll also see the page for
+[27:54] activity three
+[28:00] it didn't
+[28:05] um approaching activity three and are looking for that the systems for some
+[28:11] reason didn't render my latest changes yesterday where I improved on activity
+[28:16] three But I put the link to it to my repo in the Slack channel in this
+[28:21] channel if you search for it. But there's information about the Slack in
+[28:24] the emails that we got about the event, but also on the back of our badges as
+[28:28] well to navigate there. And this will be good for after if anybody has any
+[28:31] questions and I can send more info about any particular tool here as well.
+[28:40] I wanted to have a wrap-up moment because we have we have about eight
+[28:43] minutes. So please feel free to continue working. I put the link to the
+[28:47] activities in the slack channel. These environments will be available um until
+[28:51] the end of the day today. So you have time also to tinker around with whatever
+[28:55] you want. Um so you would just to kind of recap we went through the fir
+[29:02] sounds funny. Um >> the first was at that system performance
+[29:06] latency throughput level. Did everybody kind of get through that successfully?
+[29:11] Of course, there's I tried to include reading material and stuff to kind of
+[29:14] look more into things after because it is it is a very big topic and there's a
+[29:19] lot going on and there's a lot of terms and it is very complicated. Um, so
+[29:23] hopefully you can use it as a learning res my GitHub repository as a learning
+[29:26] resource to kind of poke around after. But we started there and then we moved
+[29:30] into the MMLU Pro with MLE Valh harness um which also allows you to do a lot of
+[29:34] other evaluation um benchmarks as a part of that MLE valh harness framework. Um I
+[29:40] happen to choose MMLU Pro because it took the least amount of time even
+[29:44] though it took still 10 minutes. Um but there's other ones also that you can
+[29:48] play around with um within that ML val harness repository. You can see the
+[29:53] different um eval there. And then we ended with a safety evaluation with
+[29:58] prompt which with prompt fu which um is a tool that allows you to do a lot of
+[30:03] customizing um and your own eval like you can do all kinds of custom tests
+[30:08] with prompt fu. So I wanted to get you exposed to that tool so that you can
+[30:13] start looking around there as well. That repository on github also has a lot of
+[30:17] different examples. So we used that particular um safety focused example,
+[30:21] but if you look at the promptu repository, it's very easy to play
+[30:25] around with other types of examples as well. Um so we kind of moved up the
+[30:30] pyramid throughout the activity. So hopefully you get a sense of kind of how
+[30:34] you can layer this approach when you're looking at and trying to plan for how to
+[30:40] strategically implement evals across your entire system. Um does anybody have
+[30:45] any kind of questions or general what they experienced
+[30:53] notes of import
+[30:57] does this feel like valuable? I'm curious also about use cases and happy
+[31:01] to talk to you after too. Yeah. >> So um I'm like super new to evals and
+[31:05] stuff. Uh so like when I'm doing evals it's like uh testing my prompts and like
+[31:11] my data sets or if I want to switch like models out and stuff. Right now I'm
+[31:15] actively thinking about like those eval connecting those actually to like my
+[31:20] production like running like use cases to like track that like my real
+[31:25] performance matches kind of like the scene. what is like is there like a word
+[31:30] for that concept or like >> um so for me what I hear is the kind of
+[31:35] CI/CD automation implementation of an evaluation framework just like with
+[31:39] software engineering testing is kind of what I hear from that um
+[31:44] >> you know yeah so I don't know it it's evaluation but in a more CI/CD format
+[31:49] >> like when it's actually running for like customers and stuff
+[31:52] >> yeah you should have a CI/CD framework that includes these evaluation tests
+[31:55] just like for unit testing setups got Yeah.
+[32:03] >> Anybody else? >> Okay. Thank you everybody. I really
+[32:08] appreciate it. Of course, feel free to Thank you.
+[32:12] Feel free to um continue to use the repo, message me on Slack. Again, the
+[32:17] environments will be up until about 6 pm, 5:00 pm tonight. So, thank you
+[32:21] everybody.
+[32:26] [Music]

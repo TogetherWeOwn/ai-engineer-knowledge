@@ -1,0 +1,291 @@
+# title: Your Agent Fix Just Broke Something Else - Sofia Jakovcevic, Arize AI
+# source: https://www.youtube.com/watch?v=v5tm5EAzsAs
+# speaker: Sofia Jakovcevic, Arize AI
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-25T04:41:16Z
+# sha256: 8414a9447f1ebf52158ed744f6e361168d09da58a9c7b68d17b41bd93f367ef2
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:01] [music]
+[00:12] >> Hello everyone. My name is Sophia Yakoubovitch. I'm a forward deployed
+[00:16] engineer at Arize, and for those who aren't familiar, Arize is an
+[00:19] observability backend that is designed to make AI work. Now, what does that
+[00:24] mean? Building AI systems can be inherently
+[00:28] intuitive in some sense, especially when a lot of that low-level abstraction is a
+[00:33] low-level programming is abstracted into the mind of an agent. Unfortunately
+[00:38] though, that mind can be a bit of a black box.
+[00:41] When that black box is difficult to understand, it's difficult to predict,
+[00:45] and therefore difficult to debug. And that's where observability becomes
+[00:48] essential. Observability helps you understand what your systems are
+[00:52] actually doing. It's essentially shining a light in the black box. And once you
+[00:57] understand what the system is doing step-by-step, you can then evaluate it.
+[01:01] Run evaluation metrics to track its performance, and then use that data to
+[01:05] iterate and improve your agents over time.
+[01:08] But I want to take this one step further, because the biggest challenge
+[01:12] isn't determining what broke, the biggest challenge is that when you
+[01:15] do submit a fix, you want to make sure that you don't break 10 other things
+[01:19] along the way. Now, raise your hand if you've had that exact issue before. You
+[01:23] push Yep, seeing a lot of hands. You push a
+[01:26] simple change, you know, should be a should be
+[01:30] easy, no issues, and next thing you know, everything's on fire.
+[01:34] So, today we're going to discuss how you can use your observability as a way to
+[01:37] build a robust regression process. Not only something that your engineers can
+[01:42] do, but an automatic process that feeds into your CI/CD.
+[01:47] We're going to break this down to three parts. First, we'll discuss why agent
+[01:51] regression is so different and difficult to detect. And the first thing we're
+[01:54] going to touch on is that agents don't fail at the code level, they fail at
+[01:58] runtime. We're then going to use this premise to build out our regression
+[02:03] loop. It's going to be a five-step process. We'll touch on it at a
+[02:06] high-level overview, and then we'll move on to the Arize platform and show you
+[02:09] exactly how you can do it today. Then, we'll close off the session by
+[02:13] closing that regression loop at agentic speed and touching on where we're seeing
+[02:18] the next frontier of agent observability move to. And if you stick with me till
+[02:22] the end, I'll introduce a paradigm shift that I hope you'll all find interesting.
+[02:26] So, let's get started. First, with a concrete example.
+[02:29] So, imagine with me that you have a support agent, and you have a security
+[02:33] engineer that has approached you. And that security engineer has reviewed the
+[02:35] policy of your support agent and determined that he wants to add one
+[02:39] line, a simple one line to your agent that will ask your agent to confirm
+[02:45] before it takes any action. Sounds simple. Sounds harmless. Your
+[02:50] security engineer says he has the intuition, and oftentimes we're quick to
+[02:55] make this change. I'm not even going to ask if you've done this before cuz I
+[02:58] know everyone has pushed a one-line prompt change and just assumed
+[03:01] everything will go well. And the reason we make that assumption is because we
+[03:05] think that because it's written in natural language, that we have this
+[03:08] intuition on how these agents are performing.
+[03:11] We're really coding on vibes, and we don't want to be. We want to be able to
+[03:16] code with a numeric evaluation suite backed data. We want to have scores that
+[03:22] prove that these changes are actually making a positive impact and not just
+[03:26] crossing our fingers. But let's say in the scenario you did push that one-line
+[03:29] change, and now you are running your evaluations on your production data a
+[03:33] week after it's been submitted. And the first thing you notice is that
+[03:37] you actually have a 17-point improvement on a action safety. So, your security
+[03:41] engineer was correct. It asking the agent to confirm before taking any
+[03:45] action does improve its overall safety. But your observability engineers are
+[03:50] continuing to evaluate, and they also check for task completion and they
+[03:54] notice a 17-point degradation.
+[03:58] Now, this is occurring because if you have an agent that's confirming before
+[04:02] every single action it's taking, now tasks are being uncompleted. If a user
+[04:07] leaves the session, that session is never completed to the end and I have
+[04:11] incomplete task and you see this unlikely result.
+[04:17] You may not have caught this initially when you were thinking about the
+[04:19] project, but your evaluation suite has caught this. And ironically enough, the
+[04:23] overall average of both is net zero. And what I want you to take away from here
+[04:27] is just because you improve the dimension of one agent does not mean
+[04:30] that you're improving the agent as a whole.
+[04:32] The question I have for you is, would you have shipped this change?
+[04:37] Many of us would have before the evaluation test. And this is why it's so
+[04:40] important that we get these numeric results so that we're not shipping on
+[04:43] vibes, we're shipping with backed data. So, to understand where the mistake that
+[04:49] we made is is we made an unrealistic assumption. And that assumption is that
+[04:54] the error is going to occur at the code, but the error rarely occurs at the code
+[04:58] level. Instead, these agents are failing at runtime.
+[05:03] What the code reviewer saw is here on the left-hand side. It was a one-line
+[05:08] change in the system prompt markdown file.
+[05:11] Easy change, simple to understand, simple to approve. But in reality, this
+[05:16] code change was local, but the behavioral changes of this code change
+[05:20] was in production. It was in the runtime. This one simple line has
+[05:24] shifted how the agent operates. It's adding additional steps. It's changing
+[05:27] how the agent works with other sub-agents. It's changing how the agent
+[05:31] calls tools. All of these different trajectories, which could be thousands
+[05:34] of possible trajectories, are not in your static code. They're only in your
+[05:38] observability back end. They're only in your traces. And so, what we are saying
+[05:43] here is that the diff tells you what changed, but the trace tells you what
+[05:47] actually happened. And there's a shift here, that traces are becoming the new
+[05:52] source of truth. These structured logs of what your agents are actually doing
+[05:56] actually is what truly represents what these systems are doing. In traditional
+[06:01] software, logic was written down. It was very clear to determine what that
+[06:04] runtime was before you ever pushed production. But now the logic only
+[06:09] exists at runtime. The observability becomes essential when we're looking at
+[06:15] regression testing. This gap between what was written and what actually
+[06:18] happens is filled with silent errors. So to capture that, we need to start our
+[06:22] regression testing by looking at our traces.
+[06:26] So let's build out this regression loop together.
+[06:28] It's a five-step process. We're going to start with our production traces. We're
+[06:32] going to build evals, run experiments, and then close it all up to be an
+[06:36] automatic gate at CI. First, I'm going to do a five-step
+[06:41] high-level overview. And then we're going to go into the actual product and
+[06:45] show you how you can do it yourself. So step one is we're going to select a
+[06:49] data set. Seems simple enough. We want to pull real production traces. We don't
+[06:54] need to synthesize data. If we already have real user queries, real inputs,
+[06:58] real tool calls, we're pulling from that directly. It's important that our data
+[07:02] set is a representative work is representative of the average workflow
+[07:06] that our users are going to be pushing into our systems. But it's also
+[07:10] important that we capture known failures. We filter out com
+[07:14] moments where often errors, often fails at eval metrics. Capture those into your
+[07:19] data data sets. You also want to capture edge cases. Maybe not as common, but
+[07:24] just as important. And one thing that we often see users forget is capturing
+[07:29] successful workflows that we want to protect. Because again, we're not just
+[07:34] trying to make sure that the fix is going to work, but we also want to test
+[07:38] that we're not going to break something that was already working. So it's
+[07:41] important that we capture all four of these in our data set. Once we have this
+[07:45] production data set, we can then build out the rest of our regression testing
+[07:49] suite. The second step is we want to have a
+[07:51] scoring mechanism. And this is where we bring in evaluators. Now, show of hands,
+[07:56] how many here are familiar with the concept of evaluating agents?
+[08:01] I'm so happy to see so many hands. This is a core foundational part of agentic
+[08:05] engineering. Evaluators allow us to take metrics and
+[08:08] dimensions that are important to your engineers, your product team, and
+[08:12] actually quantify them. What do I mean by that? Let's take some metrics that
+[08:17] are important for your agents, things like hallucination, accuracy, tool
+[08:21] trajectory, step efficiency. All of these metrics are subjective in nature.
+[08:28] And you may have a human that reviews them and can potentially determine
+[08:31] whether or not something was hallucinated, whether or not the most
+[08:33] efficient pathway was taken. But we want to be able to automate this process. We
+[08:37] want to turn a subjective metric into a numeric score. And we do this by
+[08:42] leveraging LLMs. We use a concept of LM as a judge, where we judge a span, a
+[08:48] trace, some log data against an LM. The LM has a particular guide of how it
+[08:55] determines whether or not something was hallucinated or factual, something was
+[08:59] efficient or not efficient. And now we've done essentially a binary
+[09:03] classification. In this example at the top right corner, you could see a task
+[09:07] completion eval, where the LM as a judge is
+[09:10] has a task of determining whether or not something was complete or incomplete.
+[09:14] Now we've taken a subjective metric and we've essentially turned it into a
+[09:17] binary score, 0 1. You can translate the score across 0 to 5. You can have
+[09:22] multiple different labels. But you've now turned a quantitative measurement
+[09:26] into a qualitative score that you can measure against. You're not limited to
+[09:29] LM as a judge, you can also use code-based evals or ML-based evals as
+[09:33] well, determine based on what that metric is. A code evaluator is great for
+[09:38] your deterministic checks, but an LM as a judge is good for your
+[09:41] non-deterministic checks. So, once we have a list of all of our metrics that
+[09:45] are important to us, we build evals for each of them. Now, we have a testing
+[09:49] suite that we can go against. Step three is we're going to run our
+[09:52] baseline experiment. And what this experiment is is we're going to take our
+[09:56] agent and run it against all of our production traces, um all of our
+[10:00] production data sets. We're after we get the output of those
+[10:04] production data production data sets, we're then going to run our eval testing
+[10:08] suite on top of that. And that's what's going to be our baseline. Now, you can
+[10:11] do this in the SDK, it's just run experiment. You'll pass in that data
+[10:15] set, pass in that task, pass in your evaluation suite, and you'll get those
+[10:19] results. We're going to touch on how you can do this in the UI, as well as how
+[10:22] you can do this with your coding agents. But, once you have that baseline
+[10:25] experiment, you're then going to add your one change. Change that policy,
+[10:29] rerun the evaluation, what are the eval results? A simple process. Now that you
+[10:34] can quickly iterate on, and not just with one policy change, but test
+[10:39] multiple changes within your prompts. Test multiple models. If your team comes
+[10:44] with you comes to you and says, "We want to switch the new fable model, it's five
+[10:47] times more expensive." You're not going to switch without proving that you're
+[10:50] going to get a good ROI. This is how you can prove that with a numeric set of
+[10:54] measurements to determine whether or not it actually is improving your investment
+[10:58] to switch to a more expensive model. And you can adjust this policy, rerun,
+[11:03] and compare. Rerun and compare how changing the prompt, changing handoffs,
+[11:06] changing tools, changing models is all going to affect your overall output. All
+[11:11] without having to deploy to production. And then we can automate this. We push
+[11:16] this experiment into CI to complete this automation. Now, each time that you have
+[11:22] a pull request, let's say you set this up in GitHub actions, for example, each
+[11:26] pull request each PR is run through an experiment workflow against the
+[11:29] evaluations that your team has deemed important. And you don't merge until it
+[11:34] meets all of the regression criteria that you have listed. Now, you're no
+[11:38] longer pushing on vibes, you're pushing with confidence that you actually do
+[11:42] have a positive impact on your performance. And if it is negative, you
+[11:45] go back, you test, and you reiterate. So, let's actually show how to do this
+[11:50] in the platform. Let me switch over. Um here we have Here
+[11:54] we have the Arize platform, and I'm showcasing this exact refund agent. You
+[11:59] can see in our baseline experiment what our scores were, and then you can see
+[12:02] that plus 17 points on action safety and minus 17 points on task completion. Each
+[12:08] one of these points Each one of these line items here is a different test that
+[12:12] I ran with different prompt changes, potentially different model changes, and
+[12:15] I'm evaluating each one of them to see which one has the best trade-off to get
+[12:20] to where my end goal is. And I can see that overall I'm going to have a plus 18
+[12:24] 18 points on action safety and plus six on task completion. Now, how can we
+[12:28] build these individual points? Well, there's a couple ways. We'll do this
+[12:32] first in the UI. I'm going to jump into the playground here.
+[12:36] I'm going to create a new playground. We're going to start with the prompt
+[12:39] playground to test a single agent. Let's call this AIE NYC.
+[12:46] Perfect. Once I'm in the prompt playground, here is where I can test a
+[12:49] single agent. An agent A single agent all is essentially just a single prompt
+[12:54] with a set of tools attached to it, a model LLM configurations, and so we're
+[12:58] going to replicate that here. Now, I've already stored my prompt in my prompt
+[13:02] hub, so I can pull it right here. I've got version one, and then I can pull up
+[13:06] my data set. I've already selected a data set that I can use here
+[13:11] and that I've gone through and pulled out those edge cases, those known
+[13:14] failures, and those successful workflows that I want to protect, all listed in
+[13:18] this 100-row data set. I can test this right now, or I can test
+[13:24] multiple prompts at the same time. So, I'm actually going to duplicate this,
+[13:27] and I can change a line item directly in here, or I can load up a separate
+[13:33] version right here and test side by side. So, I can see just how quick just
+[13:38] how both of these prompts are affected. Now, of course, we have to add our
+[13:42] scoring mechanism. So, that's going to be our evals. I'm going to click here.
+[13:46] I'm going to add in my task completion, and then I'm also going to add in my
+[13:50] action safety. And you can see here that there's a ton of other pre-built halluc
+[13:55] pre-built evaluators you can select from, hallucination, user frustration.
+[13:59] And we've got some code templates, security checks, etc. And you always
+[14:02] have the ability to customize your own. Once I run this, it's going to run on
+[14:07] every single record, and then it's going to pull out those eval scores. And then
+[14:12] when I go into my data sets here,
+[14:18] go into my experiment run flow, it'll pop up
+[14:24] under here as well. And I can pull up all those metrics that are important for
+[14:27] me. I can look at latency, I can look at my evals, I can look at my total cost
+[14:31] and error rates, and track that over time. So, I can look this for PR
+[14:35] changes, for playground runs. And there's one more other option that I
+[14:39] want to show here, too. And that's if I go into playground, click here, and I do
+[14:43] agent playground. Call this AIE. Oh.
+[14:48] There we go. Agent playground allows you to not only
+[14:51] evaluate at a single agent, but at multiple agent levels. If you give us
+[14:55] access to connect to your agent remotely, for example, through a HTTP
+[15:00] call. If I go into remote agents here, you can connect your remote agent
+[15:04] directly here, so that you can change how different sub sub agents communicate
+[15:08] with each other, all directly in your code base, and then we can call that.
+[15:12] So, each record in your data set will call against your agent, will test, will
+[15:17] get the output, will run those evals, and then score it in the same mechanism.
+[15:20] So, you have two ways of running play running these experiments within the UI.
+[15:24] You can run them in the prompt playground testing a single agent or run
+[15:27] them in the agent playground and test a very complicated multi-agentic system.
+[15:32] Now, this is in the UI, but of course you can do this programmatically with
+[15:35] the SDK, rest, or CI or CLI, but my favorite method to do this is actually
+[15:41] with coding agents. How familiar is this group with the concept of agent skills?
+[15:47] Ah, I love to see when people are saying advanced.
+[15:50] Agent skills allows you to connect your coding agents with external databases
+[15:54] and advanced contexts. Arize has a public repository of skills that allows
+[15:58] you to connect to every feature available in the Arize UI. This means
+[16:01] that you can close the loop between what your coding agents are producing in your
+[16:06] IDE, the code that they're producing, with what is actually happening in your
+[16:09] observability back end. So, let's actually touch more on that closing the
+[16:13] loop. So, how we're going to close this loop
+[16:16] at agent speed. We've got the same loop, but instead of running it by people, we
+[16:20] want to run it by agents. Now, I'm going to highlight two key takeaways. We only
+[16:24] have 2 minutes left here. And the first key takeaway I want to touch on is what
+[16:28] the engineers are doing. Today, engineers are the ones that are closing
+[16:32] the loop. And to summarize what that loop is, is we have observability first.
+[16:36] That is as your systems are running, we are taking that log data, that tracing
+[16:40] data, and we are tracking it for every run in production. We then take that,
+[16:44] evaluate it, get those scores, then we can implement a change at that could be
+[16:49] a prompt change, model tool scale policy change. And then we test that change. We
+[16:55] iterate on it with the experiments workflow.
+[16:58] Finally, we improve it. If it passes, great, ship it. But if it fails,
+[17:03] we close the loop. We take those failed cases and we bring it back to the
+[17:06] observability layer. These new production traces that failed then
+[17:10] become new cases in our regression testing suite. And that's the first
+[17:14] takeaway here, is that every failure should become a test. Every failure
+[17:19] should make your agents stronger and harder to break.
+[17:24] Once you have these regression tests that are regression test suites that are
+[17:27] constantly building on themselves, you have a more robust method of
+[17:31] continuously iterating and improving. That's takeaway number one. Now,
+[17:35] takeaway number two, going back to that loop, I have a question for the group
+[17:38] and that is, what if an agent could do the investigation and propose a fix?
+[17:43] Because right now, the manual investigation is that that's the
+[17:47] bottleneck. Humans are the bottleneck here.
+[17:49] So, what we're seeing is a shift from observability to self-improvement. The
+[17:54] manual bottleneck here is that humans are still reviewing dashboards. They're
+[17:57] still triaging and shipping those fixes and reviewing those PRs and that is the
+[18:01] ultimate bottleneck. So, we want to not only close this loop, but we want to
+[18:04] close it at agentic speeds. We don't want to just give humans the
+[18:08] ability to debug agents. We want to give agents the ability to debug and
+[18:12] understand themselves. And that's the shift that we're seeing in
+[18:15] observability. Is observability is no longer about humans understanding
+[18:19] agents, it's about agents understanding themselves. Agents having the tools to
+[18:24] improve themselves. Agents having the tools to be accountable. Remember what
+[18:28] we talked about in the very beginning. That is that traces is where the real
+[18:32] runtime is. That's where the real logic is stored. If your coding agents are
+[18:36] pushing PRs and I know they are, they're pushing PRs without actually knowing
+[18:39] what's happening in production. That means they're pushing PRs blind. They're
+[18:42] reliant on the static code. They don't know what's actually happening in
+[18:46] production. By closing that loop, by connecting your coding harnesses, your
+[18:50] coding agents with what is actually happening happening in your production
+[18:54] database, you are giving your agents the full understanding of what these changes
+[18:59] are actually making. And that is the second and final takeaway. That is that
+[19:02] the best agents don't just learn from failures. The best agents fix
+[19:07] themselves. And that's the future of observability that we're seeing is that
+[19:10] agents can not only see, but they can evaluate and improve themselves on their
+[19:14] own. Thank you.

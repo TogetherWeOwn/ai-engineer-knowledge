@@ -1,0 +1,212 @@
+# title: Remote MCPs: What we learned from shipping — John Welsh, Anthropic
+# source: https://www.youtube.com/watch?v=0NHCyq8bBcM
+# speaker: John Welsh, Anthropic
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T12:42:29Z
+# sha256: afef4932caa1e6412b70d06785b497b862e47da63787f7210d192b80c76b0216
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:00] Awesome. [Music]
+[00:17] Thanks so much for coming. Um, I wanted to give a bit of a talk on implementing
+[00:22] MCP clients and talk to more about MCP at scale within a large organization
+[00:27] like Anthropic. Um, I wanted to give first a little introduction from me. Uh,
+[00:33] my name is John. I've spent 20 years building large scale systems and dealing
+[00:36] with the problems that that causes. And so I've made a lot of mistakes and uh
+[00:41] I'm excited to give maybe some thoughts on avoiding some of those mistakes. I'm
+[00:45] currently a member of technical staff here at Anthropic and I've spent the
+[00:49] past few months um focusing on tool calling and integration and implementing
+[00:54] MCP support for all of our internal like external integrations within the or
+[01:00] so looking at tool integration with models
+[01:04] we've kind of hit this timeline where uh models only really got good at calling
+[01:08] tools uh like kind of late midl last year and
+[01:13] suddenly Everyone got very excited because like
+[01:17] your model could go and call your Google Drive and then it could call your maps
+[01:20] and then it could send a text message to people. And so there's a huge explosion
+[01:24] with like very little effort you can make very cool things and so um teams
+[01:29] are all trying to move fast. Everyone's moving very fast in AI. Custom endpoints
+[01:32] start proliferating for every use case. there's a lot of like services popping
+[01:36] up with like slashcall tool and slash like get context and then people um
+[01:41] start to realize there's additional needs some authentication a b a bunch of
+[01:45] stuff there and this kind of led to some integration chaos where you're
+[01:49] duplicating a bunch of functionality around your org nothing really works the
+[01:54] same you have an integration that works really well in service A but then you
+[01:58] want to use it in service B but you can't because it's going to take you
+[02:01] three weeks to rewrite it to talk to the new interface And so we're in this kind
+[02:05] of spot and the place that we came to at Anthropic is realizing that over time
+[02:12] all of these endpoints started to look a lot like MCP. Uh you you end up with
+[02:17] some get tools, some get resources, some elicitation of of details. Um,
+[02:24] and even if you're not using the entire feature space of MCP uh as a whole
+[02:29] immediately, like you're probably going to go extend into something that kind of
+[02:33] looks like it over time. And when I'm talking about MCP here, there's kind of
+[02:39] two sides to MCP that in my mind feel a bit unrelated. There's this JSON RPC
+[02:45] specification which is really valuable as engineers. It's like a standard way
+[02:49] of sending messages and communicating back and forth between uh providers of
+[02:53] context for your models and the code that's interacting with the models. And
+[02:57] uh getting those messages right is the topic of huge debate on like the MCP
+[03:03] uh repos. If you're involved with any standardization process ever, you know
+[03:07] how those conversations end up going. And then on the other side there's this
+[03:10] global transport standard which is the stuff around streamable HTTP oath 2.1
+[03:15] session management. And global transport standard is hard because you're trying
+[03:21] to get everyone to speak the same language. And so it's really nitty but
+[03:25] there's not a lot of like most of the juice of MCP is in this the message
+[03:29] specification and the way that the uh servers are interacting. Um and so we
+[03:35] started asking ourselves like can we just MCP for everything and we said yes
+[03:38] with the caveat that yes is for everything involved in presiding model
+[03:43] context to models. Um we have this format where your client is sending
+[03:50] these messages. Something's responding with these messages. Um where that
+[03:54] stream is going it really doesn't matter. It can be on the same process.
+[03:58] It can be another data center. can be through a giant pile of uh enterprise
+[04:03] networking stuff. Um, it doesn't really care at the point that your code is
+[04:08] interacting with it. You're just calling a connect to MCP and you have a a set of
+[04:12] uh a set of tools and methods that you can call. So, uh,
+[04:19] standardizing on that seemed useful. Um, standard why standardize on anything
+[04:22] internally? Um, being boring on stuff like this is good. It's not a
+[04:27] competitive advantage to be really good at making Google Drive talk to your app.
+[04:33] It's just a thing that you need to do. It's not your differentiator. Uh having
+[04:38] a single approach to learn as engineers makes things faster. You can spend your
+[04:44] cycles working on interesting problems instead of trying to figure out how to
+[04:47] plum uh integration. And uh if you're using the same thing everywhere, then
+[04:51] like each new integration might clean up the field a bit for the next person who
+[04:54] comes along. Um it's it's over overall a good thing in cases like this where
+[04:59] we're we're not really doing anything interesting. We're plumbing context
+[05:02] between integrations and things that are consuming the integrations. Uh
+[05:07] what is standardized on MCP internally? Um I this is where I might make an
+[05:11] argument to everyone that there's already ecosystem demand. You have to
+[05:15] implement MCP because everyone's implementing MCP. So why do two things?
+[05:19] Um it's becoming an industry standard. there's a large coalition of engineers
+[05:24] and organizations that are all involved in building out the standard. Uh all of
+[05:28] the major AI labs are represented in that. So you you know that as new model
+[05:34] capabilities start to be developed uh those patterns will be added to the
+[05:37] protocol because all the labs want you to use their features. So I think the
+[05:42] standardizing on MCP internally for this type of context is a is a good bet. And
+[05:47] one of the things you get with MCP is that it solves problems that you haven't
+[05:50] actually run into yet. like there's a bunch of stuff in the protocol that
+[05:54] exists because there's a problem and a need and
+[05:57] having those solutions at hand when you run into them is really important. So
+[06:00] sampling an example of where this might be valuable in your company. You might
+[06:03] have four products that have four different billing models uh for reasons
+[06:08] because you're building fast. Um you might have a bunch of different token
+[06:11] limits. You might have different ways of tracking usage. This is really painful
+[06:15] because you want to write one integration service to connect your
+[06:19] slides and how do you go and like hook the billing and the tokens up correctly
+[06:24] and MCP has uh already has sampling primitives so you can build your
+[06:28] integration you can just be like okay your integration sends a sampling
+[06:32] request over the stream uh the other end of the pipe fulfills that request you
+[06:36] can go and hook it in everything works great and so this is a thing that uh a
+[06:40] shape problem that might take you a bunch of effort
+[06:44] uh internally without this, but you already have the answer kind of gift
+[06:47] wrapped for you in the protocol. And so at Anthropic, we're running into
+[06:51] some requirements converging. We're starting to see external remote MCP
+[06:55] services popping up like mcp. We wanted to be able to talk to those.
+[07:01] Talking to those is complex because you need external network connectivity, you
+[07:05] need authentication. Uh there's a proliferation of internal
+[07:09] agents. people have started building uh PR review bots and like Slack management
+[07:16] things and just lots of people have lots of ideas. No one's really sure what's
+[07:20] going to hit. So, we're having a huge explosion of LLMbacked services
+[07:24] internally. Uh with that explosion, there's a bunch of security concerns
+[07:27] where uh you don't really want all of those services to be going and accessing
+[07:34] user credentials uh because that ends up being being kind of a nightmare. don't
+[07:39] want uh outbound external network connectivity everywhere. Um auditing
+[07:44] becomes really complex. Uh and so we are looking at this problem. We wanted to be
+[07:50] able to build our integrations once and use them anywhere. And so, uh, a model I
+[07:55] was introduced to by a mentor of mine and a while ago is the pit of success,
+[07:59] which is the idea that, um, if you make the
+[08:05] right thing to do, the easiest thing to do, then everyone in your org kind of
+[08:10] falls into it. And so uh we designed a service which is just a piece of shared
+[08:16] infrastructure called the MCP gateway that provides a single point of entry
+[08:19] and provided engineers just with a connect to MCP call that returns a MCP
+[08:24] SDK client session on the end and we're trying to make that as simple as
+[08:28] possible uh because
+[08:32] that way people will use it if it's the easiest thing to do. Um, we used URL
+[08:36] based routing to route to external servers, internal servers, it doesn't
+[08:39] matter. It's all the same call. Uh, we handle all the credential management
+[08:43] automatically because you don't want to be implementing OOTH five times in your
+[08:46] company. Uh, gives you a centralized place for rate limiting and
+[08:50] observability. Uh, I have an obligatory diagram here of
+[08:54] a bunch of lines going in and out. But, uh, here's a a gateway in the middle.
+[08:58] This is kind of the thing. Just one more box will solve all our problems. Uh, can
+[09:03] I go next? Uh where is my
+[09:08] yeah ah uh so the uh the code that we have here we just made some client
+[09:13] libraries where we just MCB gateway connect to MCP uh we pass in a URL an
+[09:18] org ID account ID this is like a bit simplified we actually pass a signed
+[09:22] token to authenticate because it's accessing credentials but this is the
+[09:26] basic idea and then importantly this call returns an MCP SDK object which
+[09:31] means that when new features get added to protocol. You just update your MCP
+[09:35] packages internally. You get those features across the board. Everything
+[09:39] works great. The same code seamlessly connects to internal external
+[09:42] integrations. When it comes to transports, uh, and
+[09:47] this is a bit high level and handwavy because everyone's setup is different.
+[09:50] Um, internally within your network, it really doesn't matter. You can do
+[09:54] anything you want. We've got the standardized transport for connecting to
+[09:57] external MCP servers. Um, but really just picking the best thing for your
+[10:02] org. So we went and picked uh websockets for our internal
+[10:08] transport. And here's just a quick code example. It's nothing special. We just
+[10:13] have a websocket uh that's being opened. We are sending these JSON RPC blobs back
+[10:18] and forth over the websocket. And then if I can make this scroll down
+[10:25] at the end, we just pipe those uh read streams and write streams into an MCPS
+[10:30] SDK client session and we're good to go. We've got MCP going. Um you might want
+[10:35] to do this with gRPC because you want to wrap these in some multipplexed
+[10:39] transport so you don't have to open one soocket per connection. That's pretty
+[10:42] simple. Also, uh we have read stream right stream at the end. Uh starting to
+[10:47] see a pattern here. You can do like Unix socket transport if you want. You can
+[10:50] just have uh messages be passed that way. Read, stream, write, stream at the
+[10:54] end. MCU works great. Um I threw in an enterprisegrade email transport
+[10:58] implementation over IMAP. Um which is pretty much the same thing. You just go
+[11:03] through here is our server. We're sending emails back and forth. Uh dear
+[11:08] server, I hope this finds you well. Uh MCP request start. And then we pipe
+[11:13] those into a client session at the end. And so it truly doesn't matter like
+[11:16] whatever it takes inside your organization is great. We set up this
+[11:21] unified authentication model where we're handling
+[11:25] ooth at the gateway uh which means that consumers don't have to worry about all
+[11:29] that uh all that complexity in their apps. Uh we added a get ooth
+[11:35] authorization URL function and a complete ooth flow because you might
+[11:39] have different endpoints at anthropic. We have api.anthropic.com and we have
+[11:42] cloud.ai AI and we might want those redirects to go back to different
+[11:45] places, but uh this is tied on the gateway. It's really easy to start a new
+[11:49] authentication. Uh a real advantage of having this put on your gateway is that
+[11:54] the credentials are portable. If you have a batch job that you're kicking
+[11:57] off, um your users don't have to reauthenticate to that. You're just
+[12:01] calling the same MCP with your internal user ID and they get everything added
+[12:05] correctly. You're also internal services don't have to worry about your tokens.
+[12:09] Um so your request comes in internally for us. We're hitting a websocket
+[12:14] connection to MCP gateway uh with O token provided as headers to that. Uh
+[12:20] the gateway receives your stored credentials. You create an authenticated
+[12:24] SDK client. You just pass in the bearer token to the O header. Uh and then
+[12:31] you're good to go. The MCP client receives a readstream and a right
+[12:34] stream. And so you just plum those read stream and write stream into your
+[12:37] internal transport and you're and you're you're good to go. Uh one of the things
+[12:42] that this gives for your org that's not immediately obvious but is really
+[12:46] valuable is a central place for all of your context that your models are asking
+[12:52] for and all the context that's flowing into your models for your org. Uh
+[12:57] there's some papers written on MCP prompt injection attacks. There is a
+[13:03] general risk of uh models going and having access to Google Drive and
+[13:07] deleting everything in Google Drive. There's some need of uh enforcing
+[13:12] policy. You might want to be able to like ban
+[13:16] malicious servers. Um do some content classification on the request, see
+[13:21] what's coming in, kind of given audit. And the really nice thing about this is
+[13:24] that because it's MCP, all of your messages are in a standardized format.
+[13:28] So it's really easy to hook into that stream and be like, "Okay, here is my
+[13:31] tool execution message processor or here is my tool definition thing or here's my
+[13:36] resource management." And so the payoff that you get from this is um adding MCP
+[13:41] support to new services is as simple as possible. You just go and import a
+[13:46] package. Uh it doesn't matter what language you're in. We've got multiple
+[13:49] languages internally. They all have their own kind of packages. Engineers
+[13:53] can focus on building features and not plumbing. uh you have the operational
+[13:57] simplicity of having a single point of ingress egress and standardized message
+[14:00] formats and you get future features for free as the protocol involves you get
+[14:05] all of that work uh naturally and so just wanted to go through some
+[14:13] takeaways from this that I I want to put to you is that MCP is really just JSON
+[14:18] streams and how you pipe those streams around your infrastructure is a small
+[14:21] implementation detail. That's a couple lines of code hook the stream into the
+[14:24] client SDK that makes the messages. Uh the
+[14:30] you should standardize on something, anything. I think MCP is a good idea. If
+[14:34] you don't think it's a good idea, like just pick something. Um your future self
+[14:37] will thank you. Uh build some pits of success. You really want to make the
+[14:41] right way to do a thing the easiest way to do a thing and then everyone just
+[14:44] falls into doing the right thing naturally. And also centralizing at the
+[14:48] correct layer. So solving some shared problems off and external connectivity
+[14:53] once allows you to spend your time working on uh more interesting problems
+[14:57] that are more valuable to you and your your business.
+[15:01] Thanks. That's all I got for you. Uh thank you so much for coming out.
+[15:06] [Music]

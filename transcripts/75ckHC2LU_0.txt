@@ -1,0 +1,254 @@
+# title: What's New in Inference Engineering — Philip Kiely, Baseten
+# source: https://www.youtube.com/watch?v=75ckHC2LU_0
+# speaker: Philip Kiely, Baseten
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T04:59:07Z
+# sha256: 9fc82a76edd04ec409f1286969e7ec2ff71e58c1c2a34a8269ebea290a0cceef
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:12] Um I am here to talk about what is new in inference engineering. So hi I'm
+[00:18] Philip and I'm here because I wrote a book. Uh this is my third year at the AI
+[00:22] engineer worlds fair. This is my favorite conference in the entire world.
+[00:26] It's the highlight of the calendar every single year. I really got my start as a
+[00:31] speaker and as an engineer here in 2024. I came back in 2025 and did a bunch of
+[00:36] stuff. I'm here again. I love it here and I'm very thankful to the organizers
+[00:41] for always having me. Um I wrote this book called Inference Engineering. We
+[00:46] published it three or four months ago and I've just been overwhelmed by the
+[00:50] response. Uh we've done more than uh I yeah I published it in on February 23rd.
+[00:56] Um at this point we've done more than 11,000 paper copies. We're coming up on
+[01:01] 30,000 digital copies and 24 million people around the world or 24 million
+[01:07] Twitter accounts. So we'll see how many people that actually is um have seen
+[01:11] something out of inference engineering. And with all of this, you know, great
+[01:16] reception, there has been one question that people have been asking me.
+[01:22] Why in the world would you do this? Like why would you write a book about
+[01:25] something that's changing so fast? Well, you know, I believe that a lot of the
+[01:30] principles of inference engineering at this point have been pretty solidified
+[01:33] and there's a lot that we can, you know, learn and and kind of repeat over
+[01:38] generation and generation of model. But today I'm here to talk about what's new
+[01:43] in inference engineering. This is the first public addendum of all new
+[01:47] information since the book came out. We are going to review the inference
+[01:51] engineering principles a little bit and then we're going to talk about all the
+[01:55] stuff that's happened since February 23rd of 2026 in the inference world.
+[01:59] We're going to talk about what happened to Turboquant. Talk a little bit about
+[02:03] KV compaction. We're going to spend a lot of time on deflash and some other
+[02:07] new exciting things in speculative decoding. And then I'm going to do a
+[02:12] little bit of prognosticating, a little bit of forecasting of what I think is
+[02:16] going to happen in influence coming up here and what I'm excited about. You
+[02:20] know, hopefully being able to talk about next time you guys see me up here. Cool.
+[02:25] So, let's get started. So, you know, one thing I've been identifying now out of
+[02:30] tons and tons of conversations with people about influence is a handful of
+[02:35] of shared principles. And one of the big ones I was on this uh
+[02:39] podcast the other day with uh so uh we were talking about inference and you
+[02:44] know there's two types of inference engineering that have really emerged.
+[02:48] There's local inference where the overwhelming strategy is just get it
+[02:52] working on whatever hardware you have by squishing the model with quantization,
+[02:58] distillation, pruning, however you can, you know, splitting it across whatever
+[03:02] GPUs you happen to have in your house. And first you get it working and then
+[03:07] you make it less dumb. you take away whatever you know catastrophic issues
+[03:12] all of this compression of the model has created and you try and get it back to
+[03:16] that baseline intelligence running at a batch size of one and then there's
+[03:20] there's my world which is the batch size and data center world where it's get it
+[03:25] working you know just day zero get the build of VLM up get it working and then
+[03:30] make it less slow do stuff like KVAware routing speculation disagregation and
+[03:35] you know with within these two worlds I think that we a lot to learn from each
+[03:39] other. I am in this talk going to be focused on advances in data center
+[03:44] oriented inference engineering because that's what I know but there's a lot of
+[03:48] really cool stuff happening in the local world as well.
+[03:52] So in the book in inference engineering I generally assume that the weights are
+[03:56] a finished product and I do think that the handoff from training to inference
+[04:01] is an important one to keep in mind and it's a good way of kind of delimiting
+[04:04] the space. However, what I've found more and more recently is that many
+[04:10] optimizations for inference come from a dedicated training process. And so the
+[04:16] lines between training and inference are getting blurriier and blurriier. And
+[04:20] that's an interesting thing to keep in mind. We're seeing this cycle where you
+[04:24] get faster inference, which gives you more data, which you use to train a
+[04:28] better model, which gives you faster inference, which gives you more data,
+[04:32] and you just kind of like keep doing that until you're super rich. Uh so with
+[04:36] with training for inference uh we have a bunch of new techniques to talk about
+[04:41] across what I like to call the big three. So we're going to talk about some
+[04:46] news in quantization, some news in caching, specifically the the KV cache
+[04:50] mechanism, and some news in speculation because these are, you know, there's a
+[04:55] lot of other stuff in the world of inference, including some stuff I'm
+[04:58] going to talk about at the end. But when it comes to the practical day-to-day of
+[05:02] how do I make X model faster usually these are the three techniques that
+[05:07] people are reaching for. So first thing I publish a book it's
+[05:14] February I'm feeling awesome about myself. I'm like wow everything you need
+[05:17] to know about influence in one place. And then uh we uh we had some news in
+[05:23] the quantization world. So just as a quick review, quantization is when we
+[05:28] use a smaller, less precise number format in order to save ourselves on
+[05:34] bandwidth, save ourselves on compute, make TTFT better, make TPS better. Uh,
+[05:39] it's usually kind of hardware specific, gives you cost savings, but potentially
+[05:43] degrades model quality a little bit. And by the way, if you want to hear my
+[05:48] whole rant about quantization, I did a talk at AI Engineer Miami last month
+[05:53] about how quantization is is not necessarily as evil as it sounds and
+[05:57] that there's many things you can do to preserve quality through that process.
+[06:02] So I was feeling good about my treatment of quantization and then 20 million
+[06:07] people saw Toboquant and in fact it like made the memory stock macro dip for for
+[06:13] a minute just because everyone was like oh memory is going to be so much more
+[06:16] efficient now like we don't need any more flash memory uh which which was
+[06:21] wrong but anyway it was this new quantization approach um that was
+[06:25] popularized in March of this year that uses polar coordinates for quantization
+[06:31] and allows you to quantize the KV cache down to four bits. And it was like super
+[06:35] hot and I was like, "Oh man, like there's this whole thing that that I
+[06:38] left out." And like what what is this going to look like?
+[06:44] And so our team did a bunch of research on this. Um this is if you know uh shout
+[06:49] out Waterlue intern on Twitter. Um Ali from our model performance team. Um I'm
+[06:55] not sure if he's still an intern actually. Uh but yeah, he is from
+[06:58] Waterlue. Um anyway, so he he wrote this great piece about the math behind
+[07:03] turboquant. And basically the benefit you get out of turboquant is that you
+[07:08] get to represent the KV cache with four bits instead of eight bits. You save
+[07:11] half the room and half the band and and you get effectively double the bandwidth
+[07:16] when you're moving KV cache around in your system memory. But the drawback is
+[07:20] pretty big um for turboquant. Turns out that you need to do additional
+[07:24] computation in the forward pass to account for this during decode and it
+[07:28] cuts TPS by more than half and that's just an unacceptable trade-off for a lot
+[07:33] of the production use cases. So we we took a good hard look at toocquant but
+[07:37] but are not using it for you know any any of these real workloads. We're we're
+[07:41] still on the traditional NVFP4 quantization. That said it actually is a
+[07:46] great technique for the local inference folks. So if you are running a model
+[07:51] especially a long context language model on your local computer on GPUs in your
+[07:56] basement um you have a very limited amount of memory that's the number one
+[08:01] bottleneck and so anything that can free up memory from KV cache and allow you to
+[08:05] put those longer sequences on there is going to be very valuable and the
+[08:10] additional forward pass computation is going to be like less of a a drawback.
+[08:15] Um, so still Turboquant is a fantastic research paper, a really great technique
+[08:20] that just ended up not being as applicable in the data center inference
+[08:24] world as it might have first appeared. Um, you know, instead we're focused on,
+[08:30] you know, NVFP4 with a focus on quantizing the weights versus the KV
+[08:34] cache. Um, you know, doing our best to find rough edges in the quantized
+[08:39] weights. um make sure that we're not flattening out of probability
+[08:42] distributions for the KV cache itself. Focusing instead on KV aware routing, KV
+[08:47] offloading, KV sharing using uh you know nickel and using Nvidia Dynamo and other
+[08:53] tools in order to move the KV cache around the system and potentially
+[08:57] offload to CPU, ordinary memory, etc. um versus trying to use uh to Turboquant to
+[09:04] to compress it. Um and then we're also focused on quantization across
+[09:09] modalities. Um so thinking about how can we apply the benefits of NVFP4 not only
+[09:14] to language models but also to you know image and video models. Ali also wrote a
+[09:19] lot of great stuff on Twitter about that which you should check out. So that said
+[09:24] the KV cache is still very important. Let's talk about it. Let's talk about KV
+[09:28] compaction. Again quick review. KV cache. If you put in the same prompt
+[09:32] with the same prefix, uh you get to reuse the tokens that you calculated
+[09:36] prefill on last time. That makes your whole system faster and more efficient.
+[09:42] Broadly, KV cache is lossless memory. There's only a couple sources of
+[09:47] lossless memory. When we think about our inference system, we have the content of
+[09:52] the prompt, the context, you have the the KV cache, and that's going to scale
+[09:56] linearly with the amount of data you pass in. And now if you're thinking
+[09:58] about you know million token sequence lengths uh that actually gets pretty
+[10:03] substantial. So a lot of people are thinking about how do you compress
+[10:06] memory? How do you compress context? Agent harnesses will compress context.
+[10:11] Rag search all these techniques that we've been talking about for years are a
+[10:16] sort of compression of a larger context into something that you can give to a
+[10:20] model. You can write to files. All of these things scale sublinearly with the
+[10:24] amount of data that you have. But what if there was a middle load? What if
+[10:28] there was a way where you could get quite a bit of compression in the data
+[10:32] that you remembering with near lossless information retention?
+[10:37] So we uh you know we have a lot of different ways that we can think of what
+[10:41] to keep in the cache. You know recent compaction methods have shown that we
+[10:45] can replace the cache with a much shorter one. We've got papers like
+[10:48] attention matching and cartridges that have given really promising uh outcomes
+[10:53] here with uh high compression ratios. But both of these are run at inference
+[10:58] time. Again, one of the techniques I want to talk about or one of the themes
+[11:01] I want to talk about is training for inference. So in this case I want to
+[11:06] introduce something called still by the base 10 research team where the
+[11:10] synthesis on top of the cache where we're keeping a loaned representation of
+[11:14] the information rather than a the information directly or a sort of
+[11:19] deterministic subset of it is amotized via training. So Charlie and Mudith from
+[11:25] our post training team did a fantastic chalk talk at Kosa compile recently. Um
+[11:30] it's up on YouTube. So I would encourage you to take a look at it if you're
+[11:33] interested in learning about KV compaction. Um I do not unfortunately
+[11:38] have the time or the genius to explain everything up here. Um but the the basic
+[11:45] mechanism is that still is a perceivable bottleneck um that takes a fixed set of
+[11:51] loan query vectors crossends it against the full KV cache and produces a set of
+[11:56] compact keys and values in a single forward pass. This creates a fast
+[12:00] differentiable compressed memory that the LLM can attend to as if it was real
+[12:04] context. So if you're interested in KV compaction, definitely check out Charlie
+[12:08] and Mudith's work. Um it's been a really fantastic thing to learn about.
+[12:14] So that's two of the techniques. We've talked about quantization. We've talked
+[12:18] about caching. The final one is speculation. And there's been a lot of
+[12:21] change here. Um as a review, uh speculative decoding, we're going to use
+[12:27] draft tokens. We're going to verify them during the forward pass and we're going
+[12:31] to use that to generate more than one token per forward pass. It helps a lot
+[12:35] with tokens per second and it is a fully lossless optimization which is great
+[12:40] because we don't have to worry about quality at all. Now in in the sort of
+[12:45] history of speculation we started with speculative decoding. All of these are
+[12:48] in the book. Um you have spec where you use a small model from the same family
+[12:52] to generate draft tokens. Turns out small models are like not great draft
+[12:57] token generators. They're great small models. So we invented as an industry a
+[13:02] bunch of new methods like Medusa where maybe just you add decoder heads to the
+[13:06] model and then eventually Eagle 3 which was hey what if instead of taking a tiny
+[13:12] model from the same family, we actually train a billion parameter model on the
+[13:15] hidden states of the target model to generate draft tokens. And that actually
+[13:19] worked really well. And so, you know, as of of maybe February last year of of
+[13:24] February of this year, Eagle 3 was the best method in speculation.
+[13:30] Now, we got Dlash. Dlash is even better. So, it's diffusion for speculation. Uh,
+[13:35] Dlash creates a sequence of draft tokens instead of a single token. So the model
+[13:41] is a diffusion language model which means it creates a whole sequence of
+[13:45] tokens in the same way that a video or image generation creates a sequence of
+[13:50] frames or a sequence of pixels and iterates over it rather than doing a
+[13:54] auto reggressive token generation. Dlash models might be two or four times slower
+[13:59] to run, but they're going to predict eight or 16 tokens at once um in that in
+[14:04] that window while Eagle is only doing one at a time. So a single D flash
+[14:08] forward pass is faster than the entire eagle draft phrase and predicts more
+[14:13] tokens. These tokens are able to cross attend to each other and generally
+[14:17] create a higher acceptance rate because in speculation acceptance rate is
+[14:21] everything. So in the wild we're seeing a more than 3x improvement uh from deep
+[14:28] flash. Um this is measured with a single B200 quen 38B. Um and we can see it
+[14:35] versus Eagle. It's a substantial improvement in the tokens uh both the
+[14:40] token acceptance rate and the tokens per second. These deflash models are trained
+[14:45] with a attention mask for birectional drafting. Um so the target model is
+[14:50] going to provide the context. Um and within each block we're going to have a
+[14:54] subset of clean tokens that are sampled and the attention mask is going to
+[14:59] enforce causal consistency. Uh but it is still going to allow for birectional
+[15:04] attention. um where in you know a traditional auto reggressive model
+[15:08] you're only looking at the tokens in a single direction. So that's why we're
+[15:12] able to you know take advantage of this diffusionbased architecture
+[15:17] and then you know I thought I was done and then a couple days ago uh DSpark
+[15:22] came out. Now Dlash we do have up and running in production. Uh DSpark is is
+[15:26] new research. Um so this one I can basically only say like hey it exists.
+[15:31] It's cool. We're looking at it. Um the difference versus Dlash, it still has
+[15:35] that diffusion model, but it also pairs it with a sequential model. And the idea
+[15:40] is that we're going to improve acceptance weights um by having these
+[15:45] two models work together rather than having just the iterative speculator uh
+[15:50] just the diffusion speculator or just the auto reggressive speculator. So
+[15:54] DSpark very exciting um but we don't have any production results with it yet
+[15:59] to share. Um hopefully you know we'll have those for next time.
+[16:03] Um what we do have production results though on is continuous speculator
+[16:08] retraining. So this is we're back to Dlash here. Um and this is the idea that
+[16:12] you know speculative decoding is very dependent on the actual content of the
+[16:17] prompts and responses that you're looking at in your system. And so if you
+[16:21] are continuously retraining on those prompts and responses in your live
+[16:26] system, you can see a 20% to even 2x improvement in your token acceptance
+[16:31] rates. This is actually like really hard to do.
+[16:35] Uh it takes a lot of storage and you have to make sure that you have
+[16:38] permission to use the data that you're processing in this way. Uh it takes a
+[16:42] ton of compute and you have to move all of this information around. And if you
+[16:46] change the underlying model, you also have to change the speculator model. But
+[16:50] when I look forward into the future, I do think that continuous speculation for
+[16:54] very very large scale systems is going to be a worthwhile optimization.
+[17:00] So what is next in inference? Um the following is like personal opinion and
+[17:06] speculation and public information and like if I knew anything that was
+[17:10] actually coming out, I wouldn't be able to talk about it. Um so so this is just
+[17:14] like what I think is going to happen. You know I've been through three
+[17:18] hardware cycles um through the Ampio release, the Hopper release, the
+[17:22] Blackwell release. Um and it always takes time for you know when these chips
+[17:26] get shipped to when they get installed in data centers when the entire software
+[17:31] stack really is able to take advantage of their capabilities. But some things
+[17:35] that I'm excited about are, you know, with with Reuben, it looks like the
+[17:41] NVFP4 performance is going to be fantastic. So the more we can like
+[17:45] honestly borrow techniques from local inference and get a lot of confidence
+[17:49] running models in this NVFP4 data format, the more we're going to be able
+[17:53] to take advantage of the awesome performance of of the upcoming Ruben
+[17:56] systems. I think that like disagregation and systemwide communication is going to
+[18:01] be increasingly important. um we're seeing really excellent early gains from
+[18:05] PD disagregation and the ability to you know move information like KV cache data
+[18:11] around the system is going to be increasingly important and then like I
+[18:15] said the theme of training for inference is going to be something that continues
+[18:19] to have a big impact in the industry moving forward so thank you all so much
+[18:25] for the talk uh for coming to the talk um I am on Twitter I'm on LinkedIn um
+[18:30] and I'm giving out free books um you can download a PDF at the QR code or come
+[18:35] down with me to the base 10 booth to get your free copy of Inference Engineering.
+[18:39] Uh we've got a bunch there, maybe enough for everyone. If not, we will have a CO
+[18:44] bring some more from the office. Um so yeah, I'll be downstairs at the base 10
+[18:47] booth. Thank you all so much and have a great day. [applause]
+[19:06] >> [music]

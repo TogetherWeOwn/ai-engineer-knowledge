@@ -1,0 +1,311 @@
+# title: Scaling up Continual Learning — Ronak Malde, Trajectory
+# source: https://www.youtube.com/watch?v=zL1kLftVTlo
+# speaker: Ronak Malde, Trajectory
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T06:21:27Z
+# sha256: a9be29fbefe7b853022a744b5d0e42683686672dd9ce39189df8cf45e1a12a3d
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:01] [music]
+[00:13] All right. Hey everyone. Uh, thanks for coming by over here. Hope you enjoyed
+[00:17] the chat by part on uh, how to measure continual learning. Now I'm here to talk
+[00:22] about how we scale it up. So a bit of background about me. I uh went to this
+[00:27] company called WinSurf where I was growing the research team over there. Uh
+[00:31] we trained this model called sui 1 that ended up leading to the two billion
+[00:34] acquisition at deep mind and then I ended up giving up all the acquisition
+[00:37] money to start trajectory where we're building the platform for continual
+[00:41] learning. So uh right to dive in I think it's useful to talk a little bit about
+[00:47] what AI progress uh has looked like for the past couple years. So we've been in
+[00:52] this mode where we've been rapidly scaling up benchmarks that have
+[00:55] saturated within first years and then months and that has continued on for the
+[01:01] past couple years and and will continue to grow as well.
+[01:05] The problem is it's becoming more time consuming and more expensive. Uh we're
+[01:10] seeing domains where it takes 4 hours, 6 hours, 24 hours or even several days in
+[01:16] order to scale up benchmarks. And obviously you guys have seen the massive
+[01:21] amount of money that the labs are pouring into scaling up RL environments
+[01:25] and data. Now the thing is uh we are left with a bunch of benchmarks that are
+[01:32] getting more time consuming uh more and more expensive and and perhaps more
+[01:36] concerningly uh they're not tied to real world use cases where people are using
+[01:41] AI. Now the uh trillion uh token problem here is that we are actually spending
+[01:48] hundreds of trillions of tokens every single day on inference uh and we're
+[01:53] generating great amounts of data on how models in the real world are are
+[01:56] failing, how they're doing well. And that should be signal that we should be
+[02:00] capturing and training on. Uh and this is actually how humans learn, right?
+[02:05] We're continuously updating in the real world and getting smarter every single
+[02:08] day. And uh we're seeing now the entire field talking about continual learning
+[02:14] from AI experts like Ilia Carpathi Schol and Demis to also many industry leaders
+[02:21] as well. Satya talking about how it helps companies and there was actually a
+[02:26] great video by Daresh a couple days ago talking a lot about the intricacies of
+[02:30] scaling up continual learning and obviously the goal is we started with
+[02:35] more data training on internet skill pre-training scaling up to benchmarks
+[02:39] but the real unlock moving forward will be continual learning so what's the
+[02:44] problem why aren't we here yet the main thing is uh there's several problems
+[02:48] right now with our current algorithms so first is we have a task distribution
+[02:54] mismatch. We're scaling up these benchmarks which might not even be tied
+[02:58] to reality of what people are training on. And second, uh oftent times some of
+[03:03] these methods aren't even sampling truly on policy with what what's happening
+[03:08] online. Third is uh we have a paradigm right now where we're sending out
+[03:14] multiple rollouts and this requires huge amounts of infrastructure to make sure
+[03:18] our environments are onetoone copies of the real world. uh and it ends up being
+[03:22] a bias that we're adding to our training paradigm. And then finally, third is we
+[03:28] are shoving every single reward into one scaler in order to train on when the
+[03:32] real world is messy. It's noisy and it has rich amounts of data uh that should
+[03:36] be per token signal. So we have all of these kind of broken criteria uh and
+[03:42] we're training on it. And I want to take a little bit of a step through memory
+[03:45] lane to to see how we've been dealing with algorithms in the past. Um so the
+[03:50] first part you know we started with SFT these were the the days of instruction
+[03:54] fine-tuning GPT 3.5 chat GBT and uh if you take a look at these four criteria I
+[04:01] mean we had parallelism solved back then it was just one roll or one uh use case
+[04:06] or example that we needed to train on so that was a solved problem and then the
+[04:10] reward for SFT is per token which is great but we are not sampling on policy
+[04:16] and the task distribution is just some sort of benchmark that we've cured or
+[04:19] some sort of data set. Then we moved on to the DPO, RLHF age. Uh this is when
+[04:26] Chad GBT really started taking off and we finally got online task distributions
+[04:31] that we were able to train on. Uh but sampling it was a little bit better
+[04:35] because we were actually sampling from a model, but it was still off policy. But
+[04:40] then we ended up losing some of the uh the key infrastructure, easy
+[04:44] infrastructure that we had with SFT. Now we suddenly had pairs that we were
+[04:48] training on. Uh and then the reward went back to sequence level. Then we moved on
+[04:54] to GRPO which is kind of the mode that we're in right now. Uh we basically took
+[04:58] a Fouian bargain and wanted to max on on policy rollouts which is extremely
+[05:03] powerful right we now have models that are capable of amazing things uh because
+[05:08] they are on policy and able to grow and and not have all of the catastrophic
+[05:12] forgetting problems that we've had with previous methods. But on the other hand,
+[05:17] we're working with off policy task distributions. Uh our parallelism is now
+[05:22] exploded, meaning that we need really robust environment infrastructure. And
+[05:26] then finally, for rewards, uh we're back to this paradigm of training on the
+[05:30] entire sequence. So can we get to a world where all of these are true where
+[05:36] we have an online task distribution where sampling on policy we have one
+[05:42] parallelism so we don't need any of this crazy infrastructure and then finally
+[05:47] our reward is actually token level well this is what I'm excited to share and
+[05:51] and see how we can scale this up so first let's just go through what our
+[05:56] best algorithm of post training is today hopefully you guys are all familiar with
+[06:00] how gpo works high level. Uh you start off with some sort of task as an input.
+[06:05] You do a bunch of parallel rollouts. So we'll call these 01 through 04. And then
+[06:10] you have some sort of endstate reward. So you classify these, let's say, as a
+[06:15] couple numbers. And then GRPO works on advantage. The idea that you have some
+[06:19] sort of mean that you're calculating over and you're trying to shift the
+[06:22] distribution of the model to be uh better on the ones that you're better on
+[06:26] uh and then obviously move away from the ones that were worse than the mean. So
+[06:30] this is how GRPO works. Now let's take a look at a new continual learning
+[06:34] algorithm called self-distillation policy optimization or sorry first we'll
+[06:40] we'll talk through why GRPO actually is uh still not enough. So um the first
+[06:46] part is uh if you remember the tasks so these benchmarks are obviously very
+[06:50] different. Uh it requires a bunch of parallelism and then it's almost like
+[06:55] you're drinking through a straw in order to get the reward. The way to think
+[06:58] about it is imagine you were trying to write an essay and your teacher just
+[07:01] gave you a score of 87 out of 100. You would have to run through so many
+[07:06] different examples to get to the idea of what a good essay is and it's very
+[07:09] simple and efficient. And so these are the fundamental problems with RL.
+[07:14] Now uh we're we're going to go through a new algorithm uh called on policy
+[07:18] self-distillation. So you guys are probably familiar with distillation in
+[07:24] general. Uh there's been obviously a lot of talk about mythos and and blocking
+[07:27] that from happening for a lot of open source models. Uh the high level here is
+[07:31] that you start with some sort of data set. Uh it's usually uh off policy and
+[07:36] not actually tied to reality but some sort of fixed data set. And what you
+[07:40] have is a student model and then a smarter teacher model. So usually a
+[07:45] bigger model uh and you're trying to basically fit the log probs of the
+[07:49] student to the teacher and both of these are passed in with the same data. All
+[07:53] right. So this is normal distillation. Now there's a new innovation called on
+[07:58] policy distillation. The only thing we're doing is actually swapping out the
+[08:02] fixed data for instead a roll out of what the student would have rolled out.
+[08:07] All right. So we take a a now roll out of the student that is our trajectory
+[08:12] and then we're trying to fit the log props again of a smarter teacher model
+[08:15] to the student. Great. Now the problem is when we're trying to push the
+[08:19] frontier we don't magically have some smarter model, right? uh like a teacher.
+[08:25] And so now what do we do if we're we're already at the smartest model? Well,
+[08:29] here's the final algorithm. Uh and this is where the self distillation part
+[08:33] comes in. If you basically take the the student model and give it some sort of
+[08:38] what we call privileged information, a hint about the world and put that into
+[08:43] the prompt. Well, suddenly that student is a little bit smarter. And that's
+[08:48] essentially the key idea of on policy self-distillation. You take what's
+[08:51] called this hint, put it into the beginning of the prompt, and now you
+[08:55] match the log props of the student without that hint to the teacher with
+[08:58] that hint. And this is an extremely powerful algorithm. To visualize it a
+[09:03] little bit more, let's say you have this student prompt, right? Uh find the
+[09:06] derivative of this function. What a hint would be is if you had some sort of
+[09:11] environment information or or some sort of guidance on how you should actually
+[09:15] solve the problem. The simplest form of this is is literally just a example of a
+[09:19] golden solution. You put that into the teacher prompt and then say here is
+[09:23] guidance on how you would solve the problem. And you can imagine now that
+[09:27] solving that problem from the teacher's perspective becomes a little bit easier
+[09:30] and we're we're trying to shift to those log problems had it known the answer in
+[09:33] the first place. Um and so by doing this we've solved
+[09:38] several key problems that existed with RL. Uh so if you remember uh the task
+[09:43] distribution now we can suddenly take something that is truly from online
+[09:47] without needing to have sort of benchmarks that are created. Uh the
+[09:51] second part is we're still on policy sampling which is great. Uh but now
+[09:55] there's no parallel rollouts. We don't need a group of eight in order to roll
+[09:59] out but just from a single example we're able to get information. So that takes
+[10:03] away the environment bottleneck and all of these other infrastructures. And then
+[10:06] finally the most exciting part is we're matching every single log problem of
+[10:09] every token. So there's massively rich feedback about what this algorithm is
+[10:13] doing. Uh to see it a little more in action. And this is a really exciting
+[10:18] part of self-distillation is it's actually not just the top token that you
+[10:23] sampled uh that you're actually making better, but instead the entire
+[10:27] vocabulary. So for every single token, there's a vocabulary of let's say 65k
+[10:31] tokens that you're optimizing over. And let's say the model generated some sort
+[10:36] of uh for loop or range in Python. And essentially what we're doing is saying,
+[10:42] hey, the teacher for some of these areas where it's blue, it wasn't the top
+[10:46] sample token of the student, but instead we're pushing that distribution to
+[10:50] sample a brand new token. And this is really exciting because we're not just
+[10:54] taking now a distribution like RL and slightly sharpening it, but we're
+[10:59] instead actually shifting entire distributions. So this is a really
+[11:03] exciting part about opsd. Now we might be saying uh you know opsd is is awesome
+[11:10] and and we've solved this problem. So I mean for short horizon tasks it works
+[11:13] incredibly well. If you take a look at live codebench uh actually we found that
+[11:18] gpo saturates around sonnet level performance and and doesn't really push
+[11:22] the frontier but because we're actually shifting distributions we're able to get
+[11:26] to brand new territory of results with a lot of data sets. And then the really
+[11:31] cool part is um with RL a fundamental limitation and if you guys have ever
+[11:36] trained RL models is the models like to think a lot right the more tokens that
+[11:40] you expend it's it's just going to do better but with opsd you don't have that
+[11:45] problem and so the actual tokens to solve some of these really difficult
+[11:48] challenges actually collapses which is really exciting for token efficiency
+[11:54] and uh for some of these short horizon tasks you can actually plugandplay opsd
+[11:58] right now with several open source projects So uh open claw is a really
+[12:02] good example of this open claw rl uh and you can actually use it to do simple
+[12:06] chat bots learn from your behaviors with unstructured data uh which is super
+[12:10] super awesome. All right so we might be thinking okay continual learning is
+[12:14] solved we can all go home and and be super happy. Uh the thing is this works
+[12:18] really well for small models short horizon tasks like something like a
+[12:23] chatbot. Uh but this is where academic papers kind of end uh and where you
+[12:28] really need to scale things up to start to to see the limitations. Uh so at
+[12:32] trajectory we've been scaling up this algorithm to 120bs to 500 bs to one
+[12:39] trillion parameter models. And as soon as you get to the 120B range with not
+[12:44] just one or two tool calls but 50 or 100 well things start to break apart a
+[12:49] little bit. So uh first of all eval accuracy is all over the place right the
+[12:54] range is going really high uh run-to-run variance is extremely high and then also
+[13:00] we start to see a lot of tool call errors uh the model is not behaving
+[13:04] accordingly to the format that it was trained on in the first place with the
+[13:07] instruction fine-tuning all right so what are the problems that we started to
+[13:11] see with this algorithm as we were scaling it up so the first part is
+[13:16] actually really funny and what I call it the buttweight problem. So on shorter
+[13:21] tasks, you're fitting to a distribution. Everything's great. But when you move on
+[13:26] to longer tasks, what you get is is basically this student model. It's going
+[13:31] off and doing whatever it thinks is on policy. And then at some point, because
+[13:35] you're so divergent in a long task, the teacher is going to try to course
+[13:39] correct every single time it gets a chance. And so what you end up with is
+[13:43] the teacher model just uh continuously trying to improve this token of wait or
+[13:48] uh maybe or some of these kind of hedging words. And there's this really
+[13:53] interesting wordle in the the uh bottom left that you can see or wordcloud uh
+[13:57] that as steps go on with opsd and you really scale it up uh you start to see
+[14:02] some of these words like wait and then but uh start to appear. And then you
+[14:07] actually end up in this really interesting local suboptimal position
+[14:11] where everything just turns into maybe. And on the right here you can kind of
+[14:15] see some visualization of this. As the task goes on you get two different
+[14:19] distributions that are really divergent. And what you end up with is the model
+[14:23] trying to be in the middle of both of those. Uh which is obviously really
+[14:26] suboptimal. All right. So there's a couple ways to solve this. Uh one
+[14:31] potential solution is to define step level divergence. So uh in a tool
+[14:37] calling trajectory, let's say you have a 100 tool calls going on. Well, what we
+[14:41] can do is start to look at the KL divergence of the student model and the
+[14:45] teacher model as time goes on. And now we can use this as a waiting factor. So
+[14:52] not just like normal KL where we use that as a KL penalty, but instead we're
+[14:56] actually multiplying the token weight uh of every single step based on this
+[15:01] divergence property. And now the cool part of this uh is that
+[15:07] so on the left side we have a normal trajectory that is like pretty in
+[15:10] distribution and everything's fine, right? It's everything is a weight of
+[15:13] one. On the second part, we have a trajectory that diverges pretty heavily.
+[15:19] And so in here, we're only going to modify W1 as the first step. Uh and and
+[15:25] so that we can train that, get that right, and then move on, which is
+[15:28] awesome. And then finally, on the third part, and this is really cool, by having
+[15:31] independent waiting for every step is we can actually have a scenario where uh
+[15:35] the model might go off tracks. We don't want to heavily weight that in, but then
+[15:40] later on in the trajectory, it might get back on track again. and and we're fine
+[15:44] with that and we'll mildly shift the distribution. So this is one way that
+[15:49] we've been able to overcome this for a long horizon tool calling. The second
+[15:53] part and this is actually really nefarious with uh ops. So with RL the
+[15:58] number one problem that people face is reward hacking as you guys are are all
+[16:02] aware of uh and that's a game that continuously RL researchers have had to
+[16:06] play. Well there is an equivalent for OPSD as well and that is hint leakage.
+[16:11] The way you can think about it is we're we're taking this hint, right? Putting
+[16:14] it in the the beginning of a prompt. Well, if the student had no way of
+[16:18] knowing what that hint would be, uh then you're going to end up with some weird
+[16:22] scenarios and and kind of skipping some steps along the way. So, the way this
+[16:26] manifests u is let's take this example here where you're trying to find the
+[16:31] last three digits of of this formula. uh and a normal hint might be uh actually
+[16:37] giving the correct steps and then maybe a final answer and saying, "Hey,
+[16:40] actually hint, the last three digits are all zeros." Well, you can see on the
+[16:44] right here that when you actually roll out the model, uh you end up with
+[16:49] something that's says, "Oh, actually, I know what the solution is. It's 00 0.
+[16:53] So, let me go back and put that into my reasoning trace and then figure out
+[16:56] what's going on." Well, you can imagine that this is not going to occur
+[16:59] whatsoever in the real world. And so we've ended up in this really strange
+[17:02] position. Uh and so there's a lot of care that you have to put into how you
+[17:07] design these hints and making sure there's not leakage of information. So
+[17:11] uh there's one kind of trivial solution to this that you can imagine and this is
+[17:14] just literally using an LLM to filter out these hints. So an example of this
+[17:19] is uh you know let's say a user can't log in. you have some sort of problem
+[17:23] like this uh and there might be some sort of information like exactly the
+[17:28] solution right you'll find their SSO token that is expired and you can have
+[17:32] an LLM basically translate that into what is something reasonable that they
+[17:36] should have known and that's the process of looking through the logs but not
+[17:39] actually giving it the solution that it would shortcut some of its vital
+[17:42] reasoning. So this is one trivial uh solution and it works decently well but
+[17:47] there's some more satisfying algorithmic approaches too. One of these is called
+[17:51] residual guidance. The general idea is in a hint uh most of the time you need
+[17:58] to actually get through the entire hint in order to get the full information. So
+[18:02] what if you let's say cut it in half then you have a partial hint and then
+[18:07] you basically say okay this is the partial teacher we're able to get the
+[18:11] log props of a slightly smart teacher and then we have the full teacher as
+[18:16] well and that's with the full hint. Now what we can do is actually take the
+[18:20] linear combination of both of these and this gives us a good idea of how strong
+[18:25] the hint is and how out of distribution it is for the original model. And what
+[18:30] you end up with here is so on the left you have normal OPD uh where you might
+[18:35] be entirely shifting distributions and there's almost no overlap between your
+[18:38] model and the original solution. uh to this kind of cool world where uh let's
+[18:43] say half the hint is actually quite close to your distribution but the full
+[18:46] hint is very off and you take a linear combination and so then you're not
+[18:50] shifting the model into unknown territory. So these are just some of the
+[18:54] solutions to uh a lot of the challenges that we've had with scaling up opsd. Uh
+[19:00] but it is a very very powerful algorithm and uh with a lot of these combinations
+[19:04] together we're actually able to scale this up to uh a 12b model on mercur apex
+[19:09] agents uh which often requires 100 and or plus tool calls in order to achieve
+[19:15] and it's a really powerful algorithm that has even surpassed RL as well.
+[19:20] So now we've finally arrived at a algorithm. It's not necessarily the
+[19:24] algorithm to solve continual learning, but uh definitely one that is a huge
+[19:28] step forward that keeps the on policy nature that makes RL so powerful. But
+[19:33] then it also has uh finally the task distribution that is online. Uh it has
+[19:38] parallelism uh that is singular. So we don't need all of this infrastructure.
+[19:42] And then finally it is per token dense reward.
+[19:46] So the uh the really exciting part for us and and what we're really focused on
+[19:50] now trajectory is uh this just gives you one taste of the entire continual
+[19:55] learning loop and there is a really exciting world that is about to come
+[20:00] where software in general just gets smarter every single time it's used and
+[20:05] that is the most exciting unlock that's going to happen in 2026 2027 and as we
+[20:10] scale up. So a little bit about trajectory. We are uh building the
+[20:15] platform that turns every interaction into model improvement, harness
+[20:19] improvement, uh and the entire agentic loop just getting smarter over time. Um
+[20:23] and we're we're building this platform where we take in agent traces data from
+[20:28] production. We're able to optimize that uh as a self-s served loop and then
+[20:32] deploy that uh as a continually learning system. And uh we have a control plane
+[20:37] that goes over all of that. Um, so very quickly, our team is super awesome.
+[20:41] We're from DeepMind, Meta Super Intelligence, OpenAI, uh, and a lot of
+[20:45] great product builders as well. Um, and we we've given early access to a lot of
+[20:50] companies. So, Harvey, Dakagon, Rogo, um, and they're super excited about what
+[20:54] we're doing. Uh, if you're interested in any of the research that we're doing,
+[20:57] uh, or any of the product that we're building, uh, definitely let me know.
+[21:01] Keep in touch and, uh, happy to answer any questions.
+[21:06] >> [applause]
+[21:16] >> Is it in the sense of like very little latency so that you can learn time or is
+[21:22] this something that >> Yeah, that's a great question. Uh so
+[21:27] what I would say is as a research community right now we're in this zone
+[21:31] of what I call pseudo continual learning. uh where there's some still
+[21:36] level of like batch updates offline uh and then re-uploading the model. I think
+[21:41] it's partly an infrastructure question. It's partly still an algorithmic
+[21:44] question as well of how do you truly get when you have 10,000 rollouts going out
+[21:47] in a product merging those together the infrastructure to pull all of those
+[21:51] together. So those are some of the problems that we are solving at
+[21:53] trajectory. Uh but I wouldn't say we're anywhere close to the the end solution.
+[22:01] >> Question about hardness. studies
+[22:08] in terms of effectiveness. >> Totally. I I think that's actually one
+[22:13] of the most underexplored and most exciting questions is not only just
+[22:17] harness improvement, right? And I think there's some literature out there now
+[22:21] starting to explore that. But the really exciting part is how does the model and
+[22:24] the harness interplay with each other as you're both updating them. That's some
+[22:28] of the stuff that we're now exploring with our current customers and and
+[22:30] really doing those things online. Uh, but it's completely unexplored territory
+[22:34] and there's some really exciting innovations to be made there as well.
+[22:41] >> Cool. All right. Thanks so much, guys.

@@ -1,0 +1,239 @@
+# title: Don’t be data poor — Anuj Iravane, Anterior
+# source: https://www.youtube.com/watch?v=XAsb7MIAzm8
+# speaker: Anuj Iravane, Anterior
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T06:02:46Z
+# sha256: ac000f2303f0f33ba6f0865b8ca6e3612ebb5f4536e0aa5c368a475ec1db36d0
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:01] [music]
+[00:12] Hello everyone. Uh welcome to uh don't be data poor. Uh my name is Anoj. I uh I
+[00:18] lead AI at Interior. Um just a bit about Antior. We are a
+[00:22] clinicianled AI company um built for health plans uh backed by SEOA and NEA.
+[00:28] Um and what we do is we run AI transformations for health plans. Um as
+[00:32] part of which we build um agents for uh several high stakes uh healthcare
+[00:36] administrative workflows in production uh things like pri authorization,
+[00:40] payment integrity, uh heat measures etc. Um it's it's okay if you're not familiar
+[00:46] with any of these workflows uh because a lot of the work that we do can actually
+[00:50] be summarized uh in in the same way. It's uh policy guided decision-m over
+[00:55] highly unstructured data. And the unstructured data looks
+[01:00] something like this, right? You have uh uh you have these scanned fax bundles
+[01:04] containing medical records full of patient information. Um a not so fun
+[01:08] fact uh is that I think around 70% of medical communication still happens via
+[01:13] fax. Um and fortunately or unfortunately this is the data that we end up working
+[01:16] with the most. It is a very uh rich uh and information
+[01:22] dense uh data that we see here. Um the data distribution here is uh it comes
+[01:27] from a very long tale of rare uh cases with very nuance scenarios. Uh it models
+[01:33] an entire clinical trajectory for a patient. Uh and every single person's
+[01:36] journey is very different. Uh it also presents itself in uh varied formats. So
+[01:41] you have like uh things like bad handwriting, tables, checkboxes, um key
+[01:46] value pairs, images, um a lot of tough data to deal with.
+[01:50] But I I personally think it's a very fascinating source of data that we see
+[01:53] here. like it's it's it's like sort of like an observation through a very fuzzy
+[01:56] lens over an entire person's lifespan. Uh it's really unique
+[02:02] and I'm sure you must have heard this like enough times today already but uh
+[02:05] in healthcare uh the the baselines for accuracy are just uh exceptionally high.
+[02:11] Uh 95% is not good enough. Um at interior this is why we invest very
+[02:16] deeply in data sets and evals. uh and these unstructured medical records are
+[02:20] are a staple source of uh data for these evals
+[02:24] and we we work with this kind of data in almost every workflow that we try to
+[02:27] automate but the problem is we can't really keep
+[02:31] this data u it's phrase
+[02:35] it uh we can't even derive information from it and most of our contracts
+[02:39] prohibit us from uh from doing anything like that um even things like uh
+[02:43] redacting it anonymizing it and keeping derivative copies like there's a strict
+[02:47] no completely off the table. So nothing
+[02:49] really survives in any sort of data set that we want to persist over a period of
+[02:52] time. [snorts] So so what this talk is about
+[02:56] is like what do you do when the data set you most need is also the data you're
+[03:00] least allowed to keep
+[03:05] and the and the bet that we the answer that we put our bets on is that we can
+[03:09] kind of synthetically generate this data ourselves.
+[03:13] There's been a lot of focus on synthetic data recently. uh you've like frontier
+[03:16] labs uh uh striving to generate synthetic data for continued
+[03:20] pre-training for RL for computer use for agents uh so it's it's it's a hot topic
+[03:24] and it's it's a hot topic on our minds as well uh and the moment you say
+[03:28] generate like the first thing that comes to mind is okay can we can we try to use
+[03:31] an LLM to generate synthetic data and I think you can I personally believe
+[03:37] LLMs are a fantastic tool to generate synthetic data and several teams have
+[03:41] already demonstrated uh this already there's been some papers uh in the
+[03:45] healthare space outside the healthcare space people have successfully used uh
+[03:49] LLMs to generate synthetic data for for different purposes there are some known
+[03:53] challenges in trying to use these LLMs uh uh to create data especially we're
+[03:57] trying to oneshot the whole process it's really hard to generate diverse
+[04:02] realistic looking synthetic records and this is even more of a problem uh when
+[04:06] you're trying to doing when you try to do this at scale so u often times these
+[04:10] medical records uh are over 300 pages long and it's like imagining if you
+[04:15] wouldn't ask an LLM to write a novel for you in one shot, right? So, it's the
+[04:18] same reason why you wouldn't use an LLM to just one shot in synthetic record for
+[04:21] you. Um, and LM seem to suffer from this very strange mode collapse problem when
+[04:26] it comes to generating like diverse uh data, creative data. And I think there's
+[04:30] two main reasons for it. The first one is uh like Aish mentioned in his talk
+[04:35] earlier, there's very little exposure to this data source in the pre-training
+[04:39] data corpus. Um, and today's objectives for pre-training and post- training are
+[04:43] are largely uh they're only they're not incentivized for creativity or diversity
+[04:48] really. They're incentivized to be helpful assistance.
+[04:53] So with these challenges in mind, I'll walk you through like one of our
+[04:56] approaches in how we uh manage to build a pipeline to generate synthetic data.
+[05:00] Um earlier I mentioned our our forward tasks look something like this, right?
+[05:04] You have workflows and tasks that start with some unstructured data and a policy
+[05:09] um and you execute your policy against that data. You follow this reasoning
+[05:13] trace through it u and you arrive at some sort of an outcome which is your
+[05:17] label. So this is our forward task. Uh and the idea we had was to try and
+[05:23] reverse this process. uh can we actually sort by sampling a random label um
+[05:30] figuring out a reasoning trace for that label and then trying to generate data
+[05:33] backwards from that. Uh the idea here being that if you can actually uh sample
+[05:38] these two things uh with enough diversity u we will have we will be able
+[05:43] to generate data that's conditioned on diverse set of inputs allowing us to
+[05:46] kind of circumvent the diversity problem a little bit.
+[05:51] Uh so just a quick aside on policies. We've talked about policies a bit but uh
+[05:54] let me just clarify what these really mean. Right? So this is an example
+[05:57] policy we have for for a CPAP device for patients. Uh this particular one is for
+[06:02] a medical necessity review workflow. Uh and it it sort of outlines all these
+[06:06] diverse set of conditions uh that a patient might have um in which a CPAP
+[06:11] device should be approved or or rejected. Um so and this policy as well
+[06:16] as many other policies you can think of these as uh essentially decision trees
+[06:20] that outline all these sorts of conditions um um that that dictate how
+[06:24] some outcomes are met. And at Antier actually we we spend a lot
+[06:29] of time and energy in trying to model these policies explicitly as decision
+[06:32] trees. We work with symbolic representation
+[06:37] similar to decision trees and it helps us achieve a better accuracy and
+[06:40] consistency score when executing them in LM based workflow.
+[06:44] And and the reason why I'm bringing this up is that uh by having this sort of
+[06:48] symbolic representation of a policy, you actually have a way to kind of
+[06:53] deterministically sample different reasoning traces for a given outcome.
+[06:59] So back to our idea of like reversing the process, right? uh this this
+[07:02] sampling of reasoning traces from the policies uh what helps us get that
+[07:05] diverse conditioning input to then generate medical records from uh and the
+[07:10] key idea here is that the distribution here uh that we sample from is is a much
+[07:14] more uniform uh and effective prior distribution than what you'd normally
+[07:17] get from an LLM and one added benefit of sampling this
+[07:21] way is that in theory you're able to test uh for far more scenarios than you
+[07:25] would likely get from production data sources. So what I mean by that is like
+[07:29] say you get a sample of 200 cases from your customer uh um and and and you try
+[07:34] to like have an eval that measures performance against that and you get a
+[07:37] 95% score uh it doesn't really tell you about uh what you what your performance
+[07:42] would be in those rare edge cases that are not in that data set. There'll
+[07:45] always be rare edge cases uh that outside that distribution just because
+[07:48] of the fact that our data is so uh highly variant.
+[07:53] So for those for those familiar with Cynthia like uh they follow a similar
+[07:56] pattern uh of sampling scenarios from a symbolic causal state representation
+[08:00] there's a few other folks in the space who are working with these symbolic
+[08:03] representations to uh to generate diversity and synthetic data generation.
+[08:09] So let me walk you through the rest of the pipeline. All right. So uh once we
+[08:12] have this diverse set of samples as our conditioning input, what we did was we
+[08:17] built an LLM based pipeline that uh follows uh a course to find pattern to
+[08:22] progressively uh build up a medical record layer by layer. So here we first
+[08:28] start with creating some patient invariants like the biological sex, the
+[08:31] birth date, the blood group. uh we use that along with our reasoning
+[08:35] trace uh with NLM again to produce an ordered list of uh events and provider
+[08:40] encounters that a patient might have had and we call this the patient journey. So
+[08:44] this is a high level uh you can think of as a high level uh overview of what a
+[08:47] patient might have gone through in their lifespan um captured by a list of events
+[08:52] on a high in natural language
+[08:56] and in the real world it is actually only during these uh encounters provider
+[09:01] encounters that documentation is really generated at least for the data that we
+[09:04] get uh most of our data source data is generated during these provider
+[09:08] encounters. So we model exactly that in our pipeline. uh uh we first generate a
+[09:13] document plan for each encounter and then based on that and the preceding
+[09:17] history of the of the patient. We uh we fan out into generating the actual
+[09:21] documents uh um to hydrate them with actual synthetic information. Uh and
+[09:26] this course to fine layering uh is actually what allows us to keep uh the
+[09:31] different prompt payloads in the pipeline very token efficient from both
+[09:34] input and output perspective while also enabling uh we this also
+[09:39] helps us enable to scale across uh longer patient journeys. So you can
+[09:42] scale this uh pipeline. You can have a much longer patient journey uh and you
+[09:46] can just fan out and generate documents that way without uh overloading the
+[09:49] context windows of your LMS.
+[09:54] Finally, we have the sort of refinement loop in the end uh that we that uses a
+[09:58] set of eval to provide feedback uh to improve specific parts of the generated
+[10:02] documents. Uh for example, one of the eval is an LLM based check for
+[10:06] consistency um between all documents. So this makes sure that there's no
+[10:11] contradictions or uh u inaccuracies or conflicting information between two
+[10:16] documents that are generated. And this is important because we we have a
+[10:19] parallel fan art process uh that is used to generate these documents
+[10:22] independently. And because we started with the labels
+[10:26] for this particular uh pipeline run, uh what we actually also have is uh an
+[10:32] ability to kind of use those labels uh run uh and and compare those against the
+[10:36] generated uh uh medical records to see if uh the task that we originally used
+[10:41] actually matches is the data is in concordance with the task inputs and
+[10:45] outputs. So we can do this sort of roundtrip check to ensure that our data
+[10:48] is actually in sync and by default get correct labels by construction. So um in
+[10:53] theory uh this is a really nice property to have like you can basically skip the
+[10:58] ground truththing expensive ground truthing process you need uh for for
+[11:01] data for for your data. Uh one thing to clarify here is that uh
+[11:07] so far all the generation has been happening just in plain text and
+[11:10] markdown text. Um it is possible to go from that to a rendered PDF. uh but we
+[11:16] don't really see much value in in doing that uh because uh we have
+[11:20] state-of-the-art PDF parsers today. They're available to everyone and they
+[11:24] just allow you to convert any sort of complex PDF into a nice markdown
+[11:27] representation. So all of the synthetic generation uh um and evaluation happens
+[11:31] in the text domain. So this is just an example of like a
+[11:35] pipeline that we created from scratch and it's uh it's very easy to build.
+[11:38] It's largely fully LM based. Um but but who came up with this, right? like who
+[11:43] who am I to know anything about what a good um medical record looks like? U so
+[11:49] how do we know if this is any good? And I think this has been mentioned a few
+[11:53] times today already but like you really don't like uh no AI engineer would ever
+[11:58] would like you want your domain experts to be the ones telling you what's good,
+[12:02] what's not good. Um and which is why we believe that uh it is of great value to
+[12:06] empower your domain experts to own your whole data pipeline.
+[12:13] And specifically we uh we do this in two ways right uh we enable our clinicians
+[12:18] to kind of interject at each point u in the generation process with a human in
+[12:23] the loop mechanism. So at any point a clinician can steer the generation
+[12:26] process to make a medical record in the way they want it. Uh we often see our
+[12:30] clinicians use this uh to to first look at cases that happen in production, get
+[12:35] some interesting ideas uh and then use that uh use those ideas along with this
+[12:40] uh the steering in this pipeline to make cases that look similar to what we might
+[12:44] see in production or they have seen in production. And this is what makes the
+[12:47] data generated from this really useful, right? Like you can actually model your
+[12:51] uh your failure cases beforehand or even after they after you see them in
+[12:55] production. And secondly, I think most importantly,
+[13:00] we let our clinicians also own the whole logic of the pipeline. Um, we do this by
+[13:05] modeling the whole pipeline as a skills-based workflow running on a
+[13:08] generic uh agent harness that we built internally.
+[13:12] So, every every uh kind of section here you see uh all the way from the patient
+[13:16] journey to the document generation to the document enrichment to the evals all
+[13:20] of these things are skills uh that run on our agent harness.
+[13:27] As an example, if a clinician wanted to say maybe add support for a new document
+[13:31] type, let's say for a new customer, they wanted their intake forms uh to look a
+[13:36] certain way, uh they could easily just make a new skill file for it, uh attach
+[13:40] it to the pipeline, um and and and voila, there wouldn't be any engineering
+[13:44] changes required. So, it's completely clinician own from that perspective. And
+[13:47] just an aside, generally, I feel like skills are really an amazing interface
+[13:51] between AI engineers and domain experts, especially in vertical AI. uh we see
+[13:55] this being um we we see this being modeled in several of our other
+[13:59] workflows both for internal use cases and in production as well.
+[14:07] So some results from this right so even though we only really use uh synthetic
+[14:12] data for evaluation at the moment there's already a lot of merits that we
+[14:15] get from it. Um roughly 90% of our data sets are already made of synthetic data.
+[14:21] Uh this helps us uh maintain a very high uh production accuracy score um for
+[14:27] across many customer deployments. Uh the pipelines that that I just showed you uh
+[14:32] already we are able to achieve a a very high fidelity on this generated data. Uh
+[14:37] in a blind review clinicians were not a were only able to distinguish uh
+[14:40] synthetic from real about 60% of the time. So room for improvement but uh uh
+[14:45] but but it's but it's it's close and I'm I'm quite quite it's quite promising
+[14:50] avenue for us to invest more more here and and the the the the fact that is the
+[14:54] most interesting to me and uh what I really what I'm really excited about is
+[14:57] that all of these data sets well most of our data sets today then are created
+[15:02] just in time for these customer deployments right you can you when you
+[15:05] have the ability to like create data from scratch so quickly uh you can kind
+[15:08] of uh you don't need to depend on on on waiting for data from a customer you
+[15:12] kind of just model all your edge cases, simulate them and test your workflows
+[15:16] before you go live with the production class go live in production.
+[15:22] So some takeaways if you're looking to build your own synthetic data pipeline
+[15:26] in healthcare or even another domain um try reversing your inference workflow.
+[15:33] Diversity should always be sampled from a from an appropriate distribution for
+[15:37] your use case. uh try to emulate the process in which
+[15:41] uh uh the data was actually generated. So like I showed you we were trying to
+[15:46] sort of like we were using LLMs. We're trying to emulate how uh our medical
+[15:51] records might actually be generated during patient encounters. Uh so and I I
+[15:55] would highly recommend you try doing that. Uh and the fourth most important
+[15:58] thing I think is uh when you're when you're making a data pipeline like this,
+[16:01] it's really important to give your domain experts the keys because uh these
+[16:04] are the people who know uh about your data and and and they will help you uh
+[16:08] drive towards a recursive self-improvement and not the engineers.
+[16:15] Cool. So you don't need a PHI problem for this. Uh anywhere uh the data you
+[16:19] need is ephemeral, sensitive or even expensive to label, you can think about
+[16:22] uh generating data yourself. Uh, and hopefully you won't be data bored.
+[16:27] Thank you everyone.

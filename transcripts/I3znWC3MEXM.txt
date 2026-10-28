@@ -1,0 +1,275 @@
+# title: It's 10pm. Do You Know Where Your Agents Are? — Kim Maida, Keycard
+# source: https://www.youtube.com/watch?v=I3znWC3MEXM
+# speaker: Kim Maida, Keycard
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T07:17:53Z
+# sha256: 42d54d188b8cf234107762d4de4b7cec43457686d9c395d877da2e0d6f12effe
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:01] [music]
+[00:12] Okay. So, when I was a kid growing up in the '9s, we'd be out late all summer
+[00:17] riding our bikes off in the neighborhood, playing with friends. And
+[00:20] from the 60s to the 80s, there were these public service announcements on TV
+[00:24] where celebrities would come on and they would say, "It's 10 p.m. Do you know
+[00:29] where your children are?" Because apparently our parents at that time
+[00:33] needed to be reminded that they had offspring they were responsible for. And
+[00:36] I feel like in this phase of AI where we are right now, um, we're entrusting
+[00:41] agents with more and more responsibility,
+[00:44] but we still kind of need that public service announcement that says it's 10
+[00:48] p.m. Do you know where your agents are?
+[00:54] So, say you as a user want agent to use an MCP server or API to accomplish
+[01:00] tasks. Now, we know agents without access
+[01:04] aren't useful. So, we give them an end file and we give them some API keys and
+[01:09] we let them run off and go do their thing. And this is fine until it's not.
+[01:14] Uh, so you've heard the horror stories, right? Or maybe even experience some of
+[01:18] them yourself. Uh, so let's see what this looks like in practice.
+[01:36] this way.
+[01:45] Okay. So, I have an agent running here that is it's basically an incident
+[01:50] management agent. It is late night and there is a human user but
+[01:56] they're probably half asleep. The agent is responsible for triaging issues that
+[02:00] are coming in. Right? So if we look at the first one here,
+[02:07] I can find the mouse. So the first one is the backup power
+[02:12] supply failed in the server room. Now the agent is going to use an API key
+[02:18] to read the system that is bringing in the reports. It's going to evaluate what
+[02:24] is written there and it's going to decide that it can't do anything about
+[02:27] this, right? Because it's a it's a physical fail failure.
+[02:31] So it's going to escalate that ticket for the morning and there's really sort
+[02:34] of no problems yet, right? So now the second one is the certificate
+[02:41] is expiring soon right for TLS
+[02:46] agent is going to use that same API key again to read the ticket contents and
+[02:52] then it is going to decide that it should renew the certificate and it's
+[02:56] going to use another API key to call the cloud hosting service to uh renew the
+[03:02] certificate and then it's going to use the API key from before to make the
+[03:09] report for the morning team.
+[03:14] So, here's where it kind of gets fun, right? So, this one is the billing
+[03:18] database is broken and payments are failing.
+[03:23] Agent's going to read that it sees that the solution is pretty
+[03:29] clear. It says that the documented recovery is to delete the database and
+[03:33] then restore from what the restore from backup happen automatically. Um, so it
+[03:37] has the Postgress connection string. So it goes ahead and it drops the database
+[03:42] and then it doesn't have a way to check to see if it was backed up. So it just
+[03:45] escalates that for the morning. And this has really happened, right?
+[03:50] Like it's happened to high-profile companies.
+[03:57] Now if we go to the next one, this one is the main server processes are frozen
+[04:02] and they're not recovering. doing something about it's going to take prod
+[04:06] offline for a brief amount of time. And you can see the the agent decided that
+[04:10] it should do that. And it's using the same API key now that it did to renew
+[04:15] the certificate, right? Because that API key is a kitchen sink. It can do all of
+[04:19] these things with it.
+[04:23] And then finally, we have sites failing for one in three users.
+[04:28] The recommended solution is to scale up, right? And this is going to incur some
+[04:32] amount of spend. And then it goes ahead and it does that because again it can
+[04:37] use that same API key to do this as well.
+[04:52] Right? So agents with API keys are indeed outpass 10. They're
+[04:56] overprivileged. So this means they are able to act freely on decisions that
+[05:00] they make that you may or may not agree with. And they can do this even with
+[05:04] your supervision. So you might be familiar with the panic of uh trying to
+[05:08] stop an agent mid task because you told it to maybe read a project and it read
+[05:12] the project and it found something it thought it should fix and then it starts
+[05:15] writing. Um agents do that even while they're supervised. And this is becoming
+[05:21] even more of a problem because we have more and more agents that are running
+[05:24] unsupervised and that only makes it worse because agents want to be helpful.
+[05:28] they're going to use all the permissions that they have access to in order to get
+[05:32] the job done. And we can't just solve this with human
+[05:37] in the loop. We spent decades solving access management for humans. So just
+[05:42] blindly trusting a human who might be a little bit consent fatigued uh or who
+[05:46] might be tired enough at night, this isn't really going to be enough.
+[05:52] So in order to see where we can introduce security and access control,
+[05:56] we have to take a look at the agentic execution path.
+[06:02] So we have a user who wants to use an LLM to interact with a resource. Now an
+[06:07] agent is a control loop that calls an LLM and often we have an MCP server in
+[06:12] between that provides tools that the agent can call and then it connects
+[06:15] directly to the resource. Now an MCP client takes the agent's
+[06:21] proposed tool calls and it dispatches them to its MCP server.
+[06:26] And then we have a runtime. Now this is a process that runs the agent loop and
+[06:30] executes the calls. And this runtime might be a CLI like cloud code. It might
+[06:36] be an SDK like AI SDK or provider agent SDKs.
+[06:41] Or it might be an app like cursor or codeex.
+[06:45] So let's follow a prompt through the execution path. The user submits the
+[06:49] prompt to the runtime which calls the model which sends it to the LM. The
+[06:54] model is then going to propose tool calls which are dispatched by the MCP
+[06:59] client to the MCP server which then executes the tools and it calls the
+[07:03] resource API. The API then responds to the MCP server
+[07:08] and the MCP client delivers the results to the runtime and then the model will
+[07:14] be called and loop repeats until the model is satisfied and at that point
+[07:18] it's going to return the final answer to the user.
+[07:22] So there are a few places in this path where we could implement real access
+[07:27] control and we can actually do this with open standards and as kind of a spoiler
+[07:32] it's not just OOTH.
+[07:36] So RFC8693 is token exchange and this is an RFC
+[07:40] that extends OOTH 2 and I'm going to show you how this spec can be used to
+[07:44] address agent access.
+[07:49] So first I want to recap the problems that we're actually trying to solve
+[07:51] here. Right? So if you remember looking at the audit log as it was going by in
+[07:55] the demo, we could see API keys were being used to call endpoints, but we had
+[07:59] no idea who was using the API keys. So, we have credentials that are being used
+[08:04] that aren't attributed to a user or an agent identity. We have an agent that
+[08:10] has unrestricted access to any and all permissions that are in an API key. And
+[08:15] finally, we know that we can't just slap human in the loop everywhere because
+[08:19] humans make mistakes too. And also, many agents run autonomously.
+[08:26] So, we can address this with an authorization server called a security
+[08:30] token service. Now an authorization server verifies
+[08:34] identities and issues tokens. So identity providers like Google, Octa,
+[08:38] Ozero and so on provide authorization servers. And if we want an identity
+[08:43] chain in our agent execution path, then we have to be able to log in first.
+[08:49] So the authorization server is then going to prompt the user for their
+[08:52] consent to delegate access with a subset of their permissions. And this is the
+[08:57] first narrowing of access, right? We're only delegating some of the user's total
+[09:00] permissions to the agent. The authorization server issues a token
+[09:06] that identifies the user and also contains their level of access. And so
+[09:10] right now already we're doing better than the first demo because we actually
+[09:13] know who the user is and what they're allowed to do.
+[09:17] So this token identifies the subject on whose behalf the agent is going to act.
+[09:23] In order to support token exchange, we need an OOTH client that's capable of
+[09:27] executing code. So, this might be a gateway between the MCP client and a
+[09:32] thirdparty MCP server. It might be your own custom agent app or a CLI wrapper
+[09:37] around an off-the-shelf coding agent. And we take the prompt and we take the
+[09:42] subject token and we send these to the OATH client. Now the agent loop runs and
+[09:47] the model proposes a tool call and then the runtime is going to
+[09:53] authenticate with the security token service using its ooth app client
+[09:57] credentials or workload identity and it also sends the subject token that
+[10:01] contains the user's identity and level of access. It creates token exchange
+[10:06] request and this request is asking for permissions to access the MCP server for
+[10:11] that tool call but only that tool call. So now we have three key pieces of
+[10:16] information that we're missing from the API key demo.
+[10:22] We know the identity of the agent that's requesting access. We know the identity
+[10:26] of the user on whose behalf is acting. And we know the delegating user's level
+[10:31] of access as well. So now we need to decide if the
+[10:35] requested token should in fact be granted. And we can do this using
+[10:38] governance policy which is evaluated against the requested
+[10:43] access and who's asking for what resource on whose behalf.
+[10:50] Now if the delegation chain and the requested access are within policy then
+[10:54] the security token service issues an access token for the downstream resource
+[10:58] and this token has an audience declaring that only this target MCP server is
+[11:03] allowed to use it to make requests. It should be short-lived uh often expiring
+[11:07] within a few minutes and it's also ephemeral meaning it should never be
+[11:11] stored. So this token is sent to the MCP client
+[11:16] which makes tool call using it as a bearer credential.
+[11:19] The MCP server validates the token and then goes and calls the resource and
+[11:24] again it never stores the token and it discards it as soon as the call is done.
+[11:30] So the result flows back up the loop and then it repeats until the model returns
+[11:34] the answer to the user.
+[11:40] So if we come back to the demo now we're going to use the same agent
+[11:49] only now we have token exchange.
+[11:57] Okay. So the first thing we have that's different already is that we have an
+[12:01] operator sign in right. So we have authentication
+[12:05] and I'm going to authenticate with Google as myself.
+[12:13] So we have the same tickets. We have the same agent. It's got the same prompt.
+[12:18] And now we can see what it's going to do. Now the first item is probably going
+[12:22] to be exactly the right because this was a hardware failure. there's it's going
+[12:25] to decide after it reads it that there's nothing it can do. But as you can see
+[12:28] kind of the audit log filling up, we've got a lot more information now. Um we
+[12:32] know who the agent is acting on behalf of. We know that the agent is calling a
+[12:38] prod infra MCP server and we know that it's going to contact certain downstream
+[12:42] resources. Right? So we have a hardware monitor that is the source of this
+[12:47] incident and then when it decides that it can't do anything about it, it uses a
+[12:52] right scope to talk to the pager uh resource in order to escalate to the
+[12:59] morning team.
+[13:07] So for renewing the certificate, right, this is actually a pretty safe action
+[13:12] and it's going to specifically ask for a scope to only renew the certificate,
+[13:18] right? So it's talking to this cloud host where before we had this API key
+[13:22] that could do a ton of different things, but this time it is only asking for
+[13:25] permissions, being granted permission to do this one thing.
+[13:33] So now with the billing database right like the billing database is broken. It
+[13:37] uh pretty clearly documents that you are supposed to uh drop the database here
+[13:44] but no agent should be able to drop a database. So what happens is when we
+[13:49] make this call it's being eval the policy is evaluating the request against
+[13:54] all of the permissions that the user has and uh it sees that there is actually a
+[14:00] restriction in place that prevents agents from doing this and this
+[14:04] credential never even existed. So the policy evaluates before the credential
+[14:08] is minted, which means you don't have an overprivileged credential that's just
+[14:12] floating around then that uh you were supposed to then prevent the entity from
+[14:16] receiving. Um it just doesn't exist. So there's nothing to leak, there's nothing
+[14:20] to replay, and there's nothing to steal.
+[14:27] So this one was the one where it wants to restart prod.
+[14:32] So there are things that agents should probably be allowed to do and things
+[14:36] that maybe they shouldn't be allowed to do and then there's some kind of you
+[14:39] know something in between, right? So it's going to ask me as the user for my
+[14:44] approval as human in the loop. I say that it can do that but there's another
+[14:49] policy here that says that the human user needs to have a specific role in
+[14:54] order to be able to do this. And I actually do not have that role. So it's
+[14:58] going to prevent me from being able to allow the agent to do this. uh even
+[15:03] though I approved it. So we can prevent kind of people from just consent fatigue
+[15:08] clicking over and over just to get things done.
+[15:14] >> And then this is the scaling one, right? So this is something that maybe the user
+[15:20] does have permission to do. So if I say approve on this, I do have
+[15:25] permission to do this and I was able to tell the agent that it is indeed allowed
+[15:30] to and the policy approved it because I am allowed to do it also.
+[15:52] So the agent access problems that we had discussed they have solutions now we
+[15:56] know who the user is and we know who the agent is as well. The agent also has
+[16:01] task scoped short-lived ephemeral access and human in the loop actually has
+[16:08] access control that is backed by real policy. So an exhausted person can't
+[16:12] just accept everything that happens.
+[16:17] Now another benefit of using open standards like token exchange is the
+[16:21] ability to continue to support emerging technologies. So this works with
+[16:25] off-the-shelf agents. It also works with custom agents that you might build
+[16:28] yourself. It works with the CLI. It works with thirdparty as well as
+[16:32] proprietary MCP servers, MCP gateways, agent to agent, uh any OOTH identity
+[16:38] provider. It works with OpenClaw and basically anything that might come out
+[16:41] next week.
+[16:45] So, it is in fact possible right now to be that responsible parent and to say
+[16:50] that yes, you do in fact know where your agents are.
+[16:58] So my name is Kim Maida. I am the founding GTM engineer and head of Devril
+[17:02] at Keycard which is a standardsbased platform for uh providing a security
+[17:08] token service and policy governance. I'm going to be at the Keycard booth for
+[17:12] kind of the duration of the event but we're also running a workshop tomorrow
+[17:15] on building and securing an MCP server. You can scan this QR code to connect
+[17:22] with me and I really appreciate your time today. So, thank you very much.
+[17:27] [applause]
+[17:31] >> We do have time for a couple questions. >> Uh, so if anyone has some questions for
+[17:36] Kim, um, we can answer those right now and then we got about five five minutes.
+[17:40] So, we can probably do about five short questions if anyone has them.
+[17:55] Um, so it seems like you put the security bar bear barrier
+[18:00] uh at the um between MCP to uh resource or is it uh just maybe to
+[18:11] clarify that is it at at both places? I'm wondering if there was like any
+[18:16] decision there or like what would motivate you to choose you know where to
+[18:20] put these sorts of barriers. >> Uh yeah so the the authorization server
+[18:25] is sitting in between let me find the slide
+[18:30] actually.
+[18:44] So the runtime authenticates to the security token service and identifies
+[18:49] itself. And this is the point at which we have the request that the agent
+[18:53] generated. Um and we also have the the scopes that it's asking for to get the
+[18:59] token to call the next thing in line, right? And the next thing in line in
+[19:03] this particular case is the MCP server. So the downstream resource is like one
+[19:08] step farther down. But if you think about like an OOTH token for a user,
+[19:14] right? So an OOTH token for a user is going to have all of the grants in it
+[19:18] that the user accepted when it when we were presented with like here's what
+[19:23] access you're going to delegate. But an agent, you don't want an agent to be
+[19:28] using any of those grants that it wants on every single tool call. So this the
+[19:35] service sits in between that so that we can say if the things it's requesting
+[19:41] are kind of beyond what we want to allow for the specific tool call then we never
+[19:47] send that ooth token down right so they get that oath token only if they are
+[19:52] within requesting something within the scope of what what we want
+[19:58] does that make sense
+[20:08] based
+[20:25] enterprise systems. Uh there may be some resistance to actually adopt this new uh
+[20:32] protocol, new openspec. Have you encountered that? and what are the ways
+[20:37] to uh get past that? >> So, it's not actually a new spec, which
+[20:43] is, you know, it it's kind of one of those things like there was this period
+[20:49] of time where people were like, oh, you can just use OOTH for for this. Um, we
+[20:55] don't necessarily need a new spec for this. This spec has actually existed for
+[20:58] a little while already. Um, so there's not kind of that fear of, oh my gosh,
+[21:04] we're introducing something completely new.
+[21:07] There are new specs that are coming out almost daily right now. Um, but they can
+[21:13] be combined essentially with this uh with token exchange.
+[21:19] I think we have time for one more question.
+[21:27] I might be asking a big question. So if you tell me to go look at the thing,
+[21:31] that's fine. Um, I'm in the situation where we know that we don't have enough
+[21:36] OOTH scopes defined yet in an MCP server sub just like what you have. And one of
+[21:40] the reluctant things that we've got is like how fine grain do we get with the
+[21:44] scope definitions because we know that we're also having to define downstream
+[21:48] services that will have a certain number of these things and someone has to do
+[21:51] the authorization check somewhere. What's your recommendation for getting
+[21:54] started with defining your own scopes so that you can realistically manage this
+[21:58] thing when you haven't defined enough yet and you're worried about ongoing
+[22:02] management over time? >> Well, if your resource server already
+[22:07] has like specific scopes, that's going to be kind of your place to start
+[22:11] because the downstream token, the one that was the OS token for the user is
+[22:16] going to have the scopes for the resource, right? Because it's the user's
+[22:20] access to the resource. So those are kind of like the baseline like those are
+[22:24] those are the ones you know that you're going to have and then if you want to
+[22:27] have scopes additionally for that kind of govern tool calls if you have like a
+[22:33] custom MCP server or something like that then you can layer those on top or you
+[22:37] can just pass them through. >> Yeah. Okay. Thanks.
+[22:41] >> All right. Thank you Kim.

@@ -1,0 +1,231 @@
+# title: SimulationMaxxing: How we ship agents 20× faster — Aman Gupta (Nubank) + Shreya Rajpal (Snowglobe)
+# source: https://www.youtube.com/watch?v=KMR_RBoCa4M
+# speaker: Aman Gupta (Nubank) + Shreya Rajpal (Snowglobe)
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T06:46:47Z
+# sha256: 2dae98a1f8a6363406af1a4d47a718360f1e9db2942786ecf59711059c4b0bfa
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:01] [music]
+[00:12] Hi everybody, my name is Shrea. I am the CEO of Snow Globe and we have with us
+[00:17] Ammon who is a principal machine learning engineer at new. And this talk
+[00:22] is going to be about simulation maxing and how you can ship or how new bank
+[00:26] ships uh agents 20x faster using simulations.
+[00:32] Hey everyone, I'm Aman. Uh so let me talk about New Bank at a glance. We are
+[00:37] the lead leading digital bank in Latin America. We have 135 million customers
+[00:42] uh in Brazil, Mexico, and Colombia and we are launching in the US real soon. uh
+[00:47] our quarterly revenue crossed 5 billion in Q1 2026. Our NPS customer love is
+[00:52] very high and we are the perfect company for using AI agents for customer support
+[00:58] where human Xpers are fanatical customer care people and AI agents together solve
+[01:04] customer issues in a fast empathetic and correct manner. AI handles a lot of
+[01:10] routines end to end. uh humans focus on the hardest and longtail cases and
+[01:15] together we aim to delight our customers.
+[01:19] So as Shria said this talk is only about uh one thing really. If you generate
+[01:25] your eval data in sim instead of waiting on production data you can ship agents
+[01:30] 20x faster and we'll give you evidence for that. So let's start with the
+[01:35] results directly. Uh uh so this is you know the average of TNPS which is a
+[01:40] measure of customer satisfaction for five of our AI agents in production and
+[01:46] at the beginning uh they were not so great but now in a with a few months of
+[01:51] uh of work and a few quarters worth of effort we've been able to massively
+[01:54] increase the TNPS and customer love for our AI agents and many of them are
+[02:00] approaching human quality and this data is a bit stale many of them are
+[02:04] exceeding human quality. So we are at the stage where we are actually able to
+[02:08] show proof that this actually works in production. Uh here's a QR code for our
+[02:12] KD paper in case you want to check it out. It's going to be presented uh in
+[02:16] Korea uh in August.
+[02:21] >> Uh awesome. So we open with results and you know it's really about this journey
+[02:24] of how do you implement the right systems uh for evaluation in order to
+[02:29] you know be able to achieve those results. So in this talk we basically
+[02:32] split it up into these three sections. The first is why evals are so important
+[02:37] and essential but why they're also the bottleneck from being able to you know
+[02:40] do a lot of high throughput experimentation to get the results that
+[02:43] Amen was showing earlier and then why the second part of this talk is about
+[02:47] why simulated data uh works as well as collected data and helps you circumvent
+[02:52] a lot of this bottleneck that we're going to talk about and then the third
+[02:54] part is really digging deep into the systems and the findings that we had by
+[02:59] implementing uh you know this framework at scale in new
+[03:04] Uh, awesome. So, eval there this there's like a whole talk track dedicated at
+[03:09] this conference to eval. Evals are absolutely critical for building good
+[03:13] agents and evals are really only about two things, right? There's metrics and
+[03:17] there's data. uh metrics again I hope you attended many of the amazing talks
+[03:22] yesterday on the evals track but metrics are really while they're challenging we
+[03:26] have a playbook for how to build metrics that are really well aligned with you
+[03:30] know the rubrics that we care about right which is you essentially use um
+[03:34] you know LM as a judge style uh you know classifiers and you align it with human
+[03:39] judgment and and getting human data and you can iteratively build on it using
+[03:43] you know auto optimization and autoprompt tuning uh techniques the
+[03:47] thing that's a bottleneck And that still remains very challenging and unsolved is
+[03:51] what is the data that you're actually computing these metrics on and that
+[03:55] process is very timeconuming and very expensive specifically so for agents. So
+[04:01] once again people have been talking about you know if if you're around like
+[04:05] machine learning era circa you know 2018 it would be like ML work is 85% data
+[04:10] work right so data has always been challenging but with agents the level of
+[04:13] sophistication that data requires is just so much more expensive. So here's
+[04:18] examples you know of what structured ML data looked like uh and what even early
+[04:22] era of AI uh data for you know chat bots or single turn QA which was you know
+[04:27] much more manageable and tractable and you could still think of it as these
+[04:30] structured rows. Uh but now for multi-turn agents each data point is a
+[04:35] trajectory with a lot of internal tool calls that all need state etc. And that
+[04:40] becomes very even one data point is expensive to generate and annotate right
+[04:44] but scaling it up on a sample set becomes even harder.
+[04:49] Um so how teams primarily get eval data today is two methods. Uh one is either
+[04:56] manual or the second is production traces and both of those are painful but
+[05:00] for different reasons right manual authoring I mean this one's obvious it
+[05:04] is so timeconuming especially the kind of data that I was showing you on the
+[05:07] previous slide. You have to hand plan you know state updates. You have to hand
+[05:11] plan the trajectory that you want to take this uh you know agent data point
+[05:15] in and synthetic uh the the state for these data points has to stay consistent
+[05:20] across all tool calls etc that you make right production traces in comparison
+[05:24] are almost free. You don't have to pay for them. You're going to get them
+[05:28] anyway. But the cost is that you're testing on real live users every time
+[05:33] you're testing it. So for example, if you want to run, you know, many parallel
+[05:36] experiments at scale, which is often something you want to do in a machine
+[05:40] learning setting is it becomes very hard to do that in prod.
+[05:46] >> So for those of you who build agents, you know how difficult building a new
+[05:50] agent and maintaining uh an existing agent is. So if you want to change the
+[05:54] agent harness, you want to change the prompt, the tools, anything around the
+[05:57] the LLM that powers your agent, that can take a few hours and in in the best
+[06:02] case. But as Fria mentioned, running offline evals on hand curated data can
+[06:06] take a few days. And then the the worst part is if you run an AB test in
+[06:10] production and monitor regressions, see if you get a statistically significant
+[06:15] improvement of of a previous version that can take forever because customer
+[06:19] feedback is through some kind of a feedback form and it can be sparse, it
+[06:23] can be noisy and can take forever to know am I moving in the right direction
+[06:27] or not. So I'm here to tell you that uh we have verified in production that yes
+[06:32] simulations circuit this timeline short circuit this timeline from a few weeks
+[06:37] you can go to less than a day sometimes even a few hours a few minutes
+[06:41] and uh as I mentioned earlier uh you know with simulations it takes a few
+[06:45] hours uh without simulation it takes a few hours to change the harness and
+[06:49] offline evals and all of that's become super fast now with simulation the agent
+[06:55] harness chain still takes a few hours running offline evals becomes a lot
+[06:59] easier because you have a simulated user to fall back on. You're not waiting on
+[07:03] hand curated data. You're not waiting on you know people to create data for you.
+[07:07] And the best part if you want to know that am I doing well in production? Is
+[07:12] this version going to do well? That can take just a few hours. So this has been
+[07:16] a real gamecher for us at New Bank. >> Um all right. So we talked about you
+[07:23] know like simulations shortening the release cycle but what is mechanically a
+[07:28] simulation you know it's existed in robotics it's existed in you know a lot
+[07:31] of different domains but simulations for agent eval you know mean a specific
+[07:35] thing and this is really where snow globe enters and you know sets up a lot
+[07:39] of that core infrastructure for you. So simulations are essentially you know it
+[07:43] works by first like wrapping your agent you know using a um uh like pointing the
+[07:48] snow globe SDK at your agent without requiring any code changes and you know
+[07:51] you can gro what are the tools that you really need in to mock in order to make
+[07:55] the simulation really work. The second input is about how you want to drive or
+[08:00] steer your your simulation. So you know who are the personas what are the use
+[08:05] cases what are the data points that we're really simulating. Once you have
+[08:08] those inputs ready, snow globe essentially runs the simulation and on
+[08:12] the output you end up getting you know first just a data set. So you get like
+[08:16] thousands of multi-turn conversations against your real agents. These
+[08:20] conversations have you know tools mocked etc. have all of the bells and whistles
+[08:24] needed to be actually you know useful for evaluating your agent already ready
+[08:28] and then you run like judges on top of it so that on this data set you get you
+[08:32] know per turn information about how your agent is really behaving and it then
+[08:36] like pipes directly into you know your evaluation pipeline so that you can
+[08:40] really get data on demand. Um this is an example of what a sim what
+[08:46] the what what a concrete output of simulation is like right so this is as
+[08:50] an example like one simulated persona and then the corresponding conversation
+[08:54] or data point for that simulated persona so here for example this is totally
+[08:58] synthetic a user named Maria Souza uh you know she wants to order a credit
+[09:02] card this is who she is she's 34 a designer first-time credit card customer
+[09:07] in addition to you know this basic information about this synthetic user we
+[09:12] also will generate, you know, this essential grounding data as an example,
+[09:15] this fake address, a fake credit card, etc. that stays consistent across your
+[09:20] agent execution so that you know your agent can actually be evaluated against
+[09:24] that. And then you also have things like tone, voice, how do they really
+[09:27] interact? And then oops, and then when you actually run this persona through
+[09:31] the conver through the agent, you end up getting, you know, this uh conversation
+[09:36] that's consistent with the simulated intent, right? So you see for example
+[09:40] that this user has very curt oneline messages in terms of how they interact
+[09:44] because this is how the persona was set up or that you know when the agent wants
+[09:49] to when the agent runs its tool when Maria enters the chat the agent is
+[09:54] actually able to get a valid output mocked by the simulator that you know is
+[09:59] able to identify who the user is where the address is the address can be
+[10:02] verified etc. Um and then finally all of this is also grounded in like account
+[10:07] data as well.
+[10:10] So for those of us building real agents, you know how hard things are. Uh you
+[10:15] don't know if your agent is good, you don't know if your evals are good. You
+[10:18] have no idea what's happening. And that was me a few quarters ago. Uh since the
+[10:23] theme of uh this year's conference is self-improving agents. So we are also
+[10:27] kind of jumping on the bandwagon. So this is our self-improvement loop. You
+[10:31] ship your agent, you observe, you create robust evals. You spend a lot of time
+[10:36] creating robust evals using automated prompt optimization with algorithms like
+[10:40] Japa. And then you also do simulation. You run simulation and you pipe the
+[10:46] simulation data and real data through your evals. And that gives you rich
+[10:50] signal to then optimize your agent harness. And once you verify the agent
+[10:54] harness optimization is good, you ship. And this has enabled us to do many many
+[10:59] many AB tests for a given agent. And we have many many such agents across the
+[11:03] company. So this has been a real gamecher for us in terms of improving
+[11:07] our agents and the proof as I already showed you is that you know the quality
+[11:10] of our agents is going up uh pretty dramatically.
+[11:14] This is some data on how simulation really tracks real production data. So
+[11:19] when you run uh simulations you want to compare is my simulation comparable to
+[11:24] production data. So we looked at sim quality via evals. So far uh you know
+[11:29] quality of uh with evals from sim and real data the correlation is pretty high
+[11:34] and we had human review done where 80% of our domain expert labels confirmed
+[11:39] that sims give us usable data not just for uh mature agents but also for green
+[11:44] field agents. So this has been uh pretty useful for us in bringing up a new agent
+[11:49] from scratch and also taking an existing agent and and massively improving it.
+[11:55] And as as we as I mentioned, you know, simulation is not just about improving
+[11:58] uh and sh also talked about this. We are derisking a lot of things that could
+[12:02] have made to production. For instance, we caught a regression uh with
+[12:06] simulation that could have made it to production, but simulation caught it.
+[12:09] And at the same time, we also caught in another agent an issue uh which could
+[12:13] have lowered our self-service rate making it less efficient. And all of
+[12:17] this has resulted in pretty large improvements. Uh for instance, one of
+[12:21] our agents, the TNPS, has 2xed uh thanks to simulation, robust evals, and
+[12:27] investing in something super principled rather than, you know, throwing
+[12:31] something at the wall and see what sticks. Um it's been pretty awesome to
+[12:35] see simulation saving us so much time. So now the team uses snow globe and
+[12:40] tries different ideas and they're able to short circuit launching AB test. They
+[12:45] don't launch until they're happy with the same output. So imagine if you're
+[12:48] running 10 AB tests a quarter for your agent or probably more if you have more
+[12:52] data. Now you can just run a bunch of stuff through SIM and launch just one AB
+[12:57] test which kind of shortcircuits launching the first five or six. And at
+[13:01] the same time uh this this is often discussed in customer service circles
+[13:05] that TNPS can come at the cost of self-service rate. Sometimes there's a
+[13:09] trade-off but I'm happy to report that we are not compromising all self-
+[13:12] service rate with SIM. We are also able to pretty dramatically improve SSR
+[13:17] across the board. But in one particular case, we were able to improve it by 4%.
+[13:22] All of this makes us a much more efficient company and makes sure that we
+[13:26] keep our customers really happy and we keep our SSR rates and TPS rates very
+[13:30] very high. This is one example that I am most
+[13:35] excited about. As you know, all of you know open source models have been on a
+[13:39] tear recently. So many of them have come out. So, we've been trying to test
+[13:43] various open source models in our agent harnesses and see which ones are the
+[13:47] best. And with SIM, we have the perfect recipe to just throw a bunch of ideas,
+[13:53] open source models at our agent harness and eval setup and see which model
+[13:58] versions uh you know really really work for us. Uh this has saved us multiple
+[14:04] weeks of effort and probably underelling it. It's it's been it's been pretty
+[14:07] awesome and uh we have AB test running as I speak uh figuring out are these
+[14:13] open source models as good as you know uh the frontier models. So SIM is is is
+[14:18] been super super helpful in helping us figure out uh kind of you know spreading
+[14:22] our cards uh a bit. >> Um awesome. So um the core three
+[14:29] takeaways from this talk right is about um where eval is today and how you can
+[14:34] really remove a lot of bottlenecks to it. So we lied when we said earlier that
+[14:38] there's just one thing you should take away from it. That one thing is still
+[14:41] essential but there's a few key downstream things that you can unlock if
+[14:45] you know you adopt it which is the first is if you generate your evaluation data
+[14:49] in simulation rather than solely relying on production to get signal on how you
+[14:54] know different agents are performing uh you'll be able to undercut or you'll be
+[14:57] able to short circuit a lot of the uh bottleneck in in releasing you know
+[15:01] versions of your agents much faster. The second is in order for any of these
+[15:06] gains to really be unlocked uh you know you really need to close out the sim
+[15:10] toreal gap. So you need to you know set up like offline online human review kind
+[15:15] of metrics to really understand how sim performs visav real production data that
+[15:20] you've seen uh so that you you you are able to kind of like trust the results
+[15:23] of these simulations. Um and the third is again there's so much excitement
+[15:27] around you know like auto research self-improving agents RSI etc. uh in an
+[15:32] enterprise setting when you're building an agent, it really does come down to
+[15:36] two things, data and metrics. If you have align metrics that are able to
+[15:41] really catch the signals you care about and you have a reliable way of
+[15:45] generating data that those metrics can give you signal on, it's then very easy
+[15:50] to put together a loop of an agent that you know continuously improves itself
+[15:53] from like feedback it receives from all of these places. Uh which you know again
+[15:56] is like where the future of this field is heading.
+[16:01] Um, awesome. That's that's us. Uh, thank you for coming for the talk. Uh, there's
+[16:05] few like contact links and details for us, you know, if you guys want to get in
+[16:08] touch and otherwise we'll be around here if you guys want to ask us any
+[16:11] questions.
+[16:27] >> [music]

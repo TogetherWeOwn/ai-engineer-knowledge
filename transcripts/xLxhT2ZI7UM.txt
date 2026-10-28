@@ -1,0 +1,269 @@
+# title: Your LLM Judge Is a Confident Liar: Building Better Verifiers — Browserbase
+# source: https://www.youtube.com/watch?v=xLxhT2ZI7UM
+# speaker: Browserbase
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T04:12:23Z
+# sha256: 56c97ba71edf2f88c800527078326a86e0fc4ca00f5c4caad3843a8a1e1c6260
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:01] [music]
+[00:12] Good afternoon everyone. Um, thank you for coming. Hope you've had a great expo
+[00:17] so far. We're in the last stretch, but I know it's been a wonderful, wonderful
+[00:21] expo, at least for me. So hopefully you're learning a lot and we can teach
+[00:24] you a little bit more. Um, so I'm Miguel. I'm the tech lead for uh our
+[00:28] agent platform at Browserbase. For those of you who don't know, browserbase is a
+[00:34] infrastructure company for deploying agents on the web. Um it basically
+[00:39] unlocks all of the web, not just what is easily accessible uh by managing
+[00:44] browsers in the cloud and all the runtime that uh requires to do agentic
+[00:50] web automation at scale. So um let >> and I'm Corby. I'm a researcher at
+[00:56] Microsoft and I've been collaborating with with browser base to help build
+[01:00] really good verifiers. >> So today we're here to talk about some
+[01:04] research that we published about a month ago. Um and it is regarding evalance. It
+[01:11] is regarding RL environments and LM judges as verifiers. So
+[01:17] early on so I've been working on this open source framework called stchen for
+[01:21] about a year and a half now. And from the beginning as any good agentic
+[01:26] product needs to have we were building evals to make sure that the changes that
+[01:32] we were introducing in the framework and that the model capabilities continue to
+[01:36] improve and hill climb on those evals and at the beginning all those evals
+[01:41] were deterministic environments. um it was relatively simple. Model
+[01:44] capabilities were some somewhat constrained and so we were able to build
+[01:48] a lot of deterministic environments as model capabilities continue to improve
+[01:52] as we continue to make improvements on the agent harness that just didn't
+[01:56] scale. We found ourselves constantly patching or generating static sites um
+[02:03] coming up with longer trajectories with a lot of checkpoints to make sure that
+[02:07] the evals were deterministically verifiable. And so there's many
+[02:12] different project problems with automating the web at scale and
+[02:16] verifying that what you intended to do actually succeeded. And it's that the
+[02:20] web is very open-ended. There's not just one path to correctness. Um there is no
+[02:26] ground truth. Sometimes the web changes and the product that you were checking
+[02:31] for before is no longer there. So that breaks the whole determinism of your
+[02:35] environment and there's blockages. there's a lot of the environment errors
+[02:39] that you face that don't let you get sort of a verifiable deterministic
+[02:45] signal. So we recurred to what most people do which is trying to use an LLM
+[02:50] judge to help improve um and scale this operation.
+[02:56] But we quickly found out that a lot of the leading benchmarks and some of you
+[03:00] may know about OS World uh for computer use but there's some analogous
+[03:05] benchmarks for web use called online minor web and web voyager.
+[03:10] Those come with LLM judges as verifiers. And what we noticed when we were using
+[03:17] our sort of human expert annotators to verify the verifier is that in many
+[03:21] instances they're very confidently wrong. And that leads to results that
+[03:27] you can't really trust.
+[03:30] So very quickly we realize that even if you were using this as an RL reward or
+[03:36] as a signal to improve your hardness and auto research, you're not really
+[03:40] training a better agent. You're just training a more competent liar.
+[03:47] And so in a real world use case at Microsoft, we trained this FARS 7B model
+[03:52] which is a a web browser agent. And the same model on the same benchmark, we
+[03:57] judged it according to the official web voyager judge, which is GPT40. Uh and it
+[04:03] said that it had 74% uh success rate. But there's a huge gap between the real
+[04:08] truth which is when we used our new universal verifier uh which has high
+[04:12] agreement with human labels that that number quickly becomes 30 like 38%. So
+[04:16] there's a huge gap between what the existing verifiers say and what is
+[04:21] actually the ground truth. And so we needed to find a way to to close this
+[04:24] gap. The existing verifiers have lots of weaknesses. Um they're they use smaller
+[04:31] and like much dumber models. uh as the LM as a judge they use 04 mini or GBT40
+[04:36] they don't even use rubrics so rubrics are the most critical thing that you
+[04:40] need to have because you need to assign credit to where credit is due they don't
+[04:44] look at the the relevant screenshots or they or they try to look at all the
+[04:47] screenshots and they quickly get lost and overflow the context window of the
+[04:50] LLM as a judge and sometimes they don't even look at the final answer or the
+[04:54] action history of the model so our verifier checks all of these boxes um
+[04:59] and this is kind of how it works uh at a very high level you And you can look in
+[05:03] the paper for more details, but given a task like book a cheapest flight from
+[05:07] Seattle to Boston, the first thing we do is we generate a really good rubric and
+[05:11] I'll give some examples of that. And a rubric has like maybe 10 different
+[05:15] criteria of what success looks like. And then given that that criteria in the
+[05:20] rubric, we look at the agents trajectory. All of the screenshots in
+[05:24] this case are the the evidence of the ground truth. and we rank what are the
+[05:29] most relevant screenshots in the trajectory for each criterion. And then
+[05:33] we use that group of of top K evidence to determine whether that criterion was
+[05:39] met or not and if there's any like differences or contradictions between
+[05:43] what the agent said it did and what the state of the environment actually
+[05:47] showed. And then given that we output uh a scored rubric which we we call like a
+[05:53] process score because it gives partial credit in some cases. and we give an we
+[05:57] output a uh an outcome boolean uh value to turn to basically say whether the
+[06:03] agent accomplished the task according to what a reasonable user was would expect.
+[06:08] Um and so this is an example of what the rubric uh the rubric output is. It's
+[06:14] basically a list of criteria um as well as the outcome verifier is basically a
+[06:20] true false flag with an explanation as to why a reasonable user would expect um
+[06:25] this trajectory to have succeeded or not. There were four guiding principles
+[06:30] when we created this universal verifier. One is around rubric creation which is
+[06:35] we wanted to grade only what was asked and not any extraneous criterion. Uh we
+[06:40] also did not want errors to cascade from one rubric uh criterion to another. We
+[06:45] wanted them to be isolated. And I'll give an example of that. You also wanted
+[06:48] to look at the ground truth screenshots. Like this is a must. The agents will
+[06:52] often overconfidently claim that they did something when in fact they did not
+[06:56] do it. And so you have to look at the ground truth state. And then we also
+[06:59] needed to separate um what the agent could control versus what the agent
+[07:04] could not control. The agent operates in a web browser. The web browser is an
+[07:07] environment that it doesn't always have ability to control and I'll show some
+[07:10] examples of that too. So this is an example of what a good and bad rubric
+[07:15] looks like. The task here is to uh find a cheap uh hotel in Jakarta for these
+[07:22] dates and then use the hotel's address to search for the closest coffee shop
+[07:26] and then output the name and address of that coffee shop. Now a bad rubric which
+[07:30] we did see happen would output a criteria saying like please tell me the
+[07:35] total price for the stay at the hotel. This is actually an extraneous criterion
+[07:38] that was not asked for in the task but we saw a lot of rubrics naively
+[07:42] generated do something like this and they would artificially deflate the
+[07:46] scores because the agent didn't do something it wasn't asked to do. Um when
+[07:52] it comes to not cascading errors, um there are very subtle mistakes because a
+[07:58] lot of tasks build on each other uh if they are like multi-step tasks. So in
+[08:02] this example here, the task was to um determine the net worth of the
+[08:08] individual with the longest last name from among the members of NSync and
+[08:12] Backstreet Boys. Okay. And so the agent in this case mistakenly thought that
+[08:17] Timberlake had the longest last name which is only 10 letters whereas
+[08:22] Kirkpatrick actually had the longest last name. So the model made one
+[08:25] arithmetic mistake in one criteria of the rubric and that should not cascade
+[08:29] to the next criteria of the rubric which is report the net worth of of the person
+[08:34] that you chose. Right? So if you're able to report the net worth of Timberlake uh
+[08:39] accurately then you shouldn't get penalized in this criteria. you should
+[08:42] only get penalized in that one. Hallucinations is the biggest one uh
+[08:47] that we really wanted to focus on. So in this task, this is an example of a very
+[08:51] subtle hallucination uh where you wanted to find some information about some
+[08:56] image captioning model and the agent said that this model had plus 6.2% in
+[09:01] some cider score, but in reality the abstract of the underlying paper said it
+[09:06] was only 2.8% in cider score. And so this was a like a very subtle mistake
+[09:11] that even humans will not catch unless an LLM will flag it. Um so this kind of
+[09:17] gives uh an overview of of how process scores and outcome scores differ. Um in
+[09:24] the case we mentioned one of the principles was we wanted to separate
+[09:26] controllable versus uncontrollable um failures. So, if the task is to buy,
+[09:32] say, this uh plushy toy from Amazon, and the agent accurately searched for the
+[09:37] plushy toy, but found that it was out of stock, it could not continue. And so,
+[09:42] here we say that the agent gets full marks for doing its best effort uh to
+[09:48] achieve the goal, but the outcome was still not met because it couldn't buy
+[09:52] the thing that it wanted to buy because it was out of stock. Um, so we basically
+[09:55] enumerated a bunch of scenarios as to what could happen and how do we assign
+[09:59] credit if the agent was able to find a similar alternative plushy toy in a
+[10:04] different way. Um, it would still get success there uh for both for both cases
+[10:08] and it would get penalized if it made a controllable mistake. Uh, it would get
+[10:12] penalized if it made hallucinations and so on and so forth. So we basically
+[10:15] enumerated a a schema of like all the possible failure modes and how we would
+[10:19] assign credit to that and the universal verifier adheres to those to those
+[10:23] schema. So
+[10:26] >> basically in in order to evaluate the verifier and really tell whether or not
+[10:34] we were able to hill climb the accuracy of that verifier, we started designing a
+[10:38] lot of experiments with human experts and built a whole platform to collect
+[10:42] data on what we call the ground labels that we've also released under cool
+[10:46] verify bench for others to train upon. But the process that we followed was the
+[10:52] following. At first, we would show the full
+[10:55] trajectory of evidence to the human verifiers and the annotators would judge
+[10:59] based on the evidence and the result of all the actions that the agent took.
+[11:05] After that, they would be prompted to a seeing the judgment of the universal
+[11:12] verifier to say whether they agree or disagree with a human with a universal
+[11:18] verifier. And we found this to be a very reliable signal to tell whether
+[11:24] or not we were working in the right direction
+[11:28] because I'll jump to this one straight up, but
+[11:32] the verifier started correcting humans at one point. They it would identify
+[11:36] things that the humans were missing. And so ultimately the result of the of the
+[11:41] universal verifier on these golden labels was that we were able to reduce
+[11:47] false positives from almost half to zero and coins cappa isometric to measure
+[11:54] inner annotator inner annotator agreement. Um and what we can see here
+[11:58] is that the h universal verifier agrees with humans as often as humans agree
+[12:04] with one another. So we can see that 0.58 coins scalpa score uh versus the
+[12:10] two annotators per task um where we computed coins scappa as well to see how
+[12:16] much they agreed with one another.
+[12:20] >> Another way another way to uh verify the another way
+[12:26] to verify the quality of our verifier is to actually train on data filtered by
+[12:31] it. So what we did was we did ran an experiment where we held constant the
+[12:36] number of training examples. In this case it was 3k or 9k training
+[12:39] trajectories, but we filtered those training trajectories based on whether
+[12:43] our verifier said they were pass or not. And so when you're doing SFT, which is
+[12:48] what we did here, you want to train only on SFT examples where they were true uh
+[12:52] like successful trajectories. And so if you train on 3,000 trajectories filtered
+[12:56] by the process score of our universal verifier, you will get a much higher
+[13:01] quality model than if you were to train on a worse verifier like our own a
+[13:07] baseline verifier. And this held at larger scales as well. And so this
+[13:11] basically this experiment told us that uh if you have a higher quality
+[13:15] verifier, it means you can filter higher quality data uh and training on that
+[13:20] data leads to a higher quality model. And so this was like the ultimate
+[13:23] experimental proof in addition to the um uh to the to the human agreements uh
+[13:28] that this model this verifier is working and is and is reliable um in a real
+[13:33] production uh scenario. Um the last thing we did kind of as a
+[13:38] side project is we wanted to determine whether AI
+[13:44] in auto research can build the same verifier that we built. So basically
+[13:48] what I did and what Miguel and I did is we sat down for three weeks um to build
+[13:53] the universal verifier and to tweak the prompts and to write the code for it.
+[13:56] And we basically ran about 30 different experiments over the course of three
+[14:00] weeks to determine whether the verifier we were building agrees with human
+[14:04] labels. Okay. And so that's what the Coen Kappa score here on the Y-axis is
+[14:08] measuring. It measures whether an individual verifier system is agreeing
+[14:14] with the human labels. And so the blue line here is the model Miguel and I, the
+[14:19] system Miguel and I were were creating this auto research uh this uh universal
+[14:24] verifier. And then we wanted to see if if we stripped everything that we did
+[14:29] away, could AI um in an auto research loop build the same verifier that we
+[14:34] built with the same level of quality and fidelity? And that's what the red and
+[14:37] green lines here are. The red line is if we took away all of our code and
+[14:41] prompts, could AI replicate that? The conclusion that we got from this is that
+[14:46] while we took about three weeks to build this verifier, uh an auto research loop
+[14:50] could do it in about one day. It ran the same number of experiments in about one
+[14:54] day. However, it only reached about 70% of the agreements that our verifier uh
+[15:01] was able to reach. So there's still a gap there. And so the kind of the
+[15:04] conclusion that I would draw here is that uh you can use auto research to
+[15:09] build uh metrics and verifiers um at least to help you speed up uh
+[15:14] experimentation. Um but you probably still need some level of human
+[15:18] intervention here. Um then again, these these results were from Opus 4.6. I
+[15:24] haven't tried it with Fable yet. Maybe it will do better, but it's a pretty
+[15:27] powerful baseline and it got pretty far um along the way. So, not only can auto
+[15:32] research help you build a model, but in this case, auto research can help you
+[15:36] build a verifier as well, which we thought was a pretty cool um thing. And
+[15:39] and building verifiers is as important as building the models themselves is one
+[15:44] of the takeaways I want to leave you with. So
+[15:47] >> yeah, and just to double emphasize um the green light is the auto research
+[15:52] verifier um primed with a lot of the findings that we had gotten from the
+[15:57] three weeks of experimentation and in that optimization it was able to reach
+[16:03] higher percentages than we were ever before. So combining that human
+[16:07] intuition with auto research loops has proven to be the most powerful recipe
+[16:12] for many research tasks. Um so the all of the work is open source. The
+[16:21] paper is published under this uh as a preprint um on archive. Um and the
+[16:28] Microsoft repo contains the golden labels on kua verifier bench. It
+[16:33] contains the code to run the experiments.
+[16:37] But beyond that um this research also yielded an entire new benchmark. So
+[16:44] we've talked briefly about online minor web and web voyager. I spend a lot of
+[16:48] time working with labs helping make sure that we can provide them quantitative
+[16:52] signal to improve their models. A lot of those open source benchmarks
+[16:57] are very quickly getting saturated and it is very difficult to provide any sort
+[17:01] of signal because it feels like the the test data is already in the distribution
+[17:07] of the training data. And so this new benchmark has proven to have the biggest
+[17:12] gap to complete success and it's my daily driver to make sure that I can
+[17:19] tell whether model capabilities are strong, whether they lack and how to
+[17:24] continue to close the gap. So >> did you have more slides?
+[17:28] >> No. >> Okay,
+[17:30] >> we can take a little bit of I think questions, but uh we're good on time.
+[17:36] >> Yes.
+[17:44] Yeah. So the question is the question is whether we've used the uh the universal
+[17:48] verifier for other kinds of tasks beyond just web web tasks. So one thing we're
+[17:52] working on in Microsoft right now is to apply a version of this verifier for
+[17:57] desktop tasks like things that you would do on your laptop like kind of
+[18:00] enterprise workflows. And so we hope to publish another benchmark uh of not just
+[18:05] web data but also like enterprise style desktop data. Uh and we would have
+[18:10] basically the similar the same kind of verifier for that too. It would look at
+[18:14] a little bit more information because on desktops you have the terminal, you have
+[18:18] more telemetry, more logs than just the browser. So the verifier would take
+[18:22] those things into account as well. Yeah. Any other questions?
+[18:28] >> Yeah. >> So I personally never
+[18:33] when you present I was thinking about like how do you think about
+[18:43] that show?
+[19:00] Yeah. >> Yeah. So, the question is about how do
+[19:04] you make sure you're not overfitting the verifier to the human labels because
+[19:07] that is a problem. Uh Miguel and I spent a lot of time uh working on this
+[19:12] question. And so like one thing that we did was we uh kind of held out uh two
+[19:19] sets of labels. One we we basically had a set of like 150 trajectories. um on
+[19:25] about 50 of those trajectories, I labeled them myself and I used them to
+[19:28] hill climb in those 30 experiments. But for the other hundred trajectories, they
+[19:33] were basically held out to us. They were done by humans uh that we had paid uh
+[19:38] with like 2x overlap. So once our verifier was done being built, we gave
+[19:43] it to those human annotators and each human labeled each trajectory, sorry,
+[19:48] two humans labeled each trajectory and then that's what we published in KUA
+[19:52] verifier bench. And so those are the numbers that we report here. Um so we're
+[19:58] pretty confident that we didn't overfit because we held out at least twothirds
+[20:01] of the labels. Um like we did not train like iterate on them.
+[20:08] >> Yeah. So that's very important is you don't want to train on like
+[20:18] to be able to
+[20:24] >> Yeah. Yeah. Yeah. The gold standard is uh is to hire humans um and train them
+[20:29] to do the the verification task themsel and then see whether your system agrees
+[20:34] with it. Yeah. Any other questions? Anyone want to help
+[20:40] us build more benchmarks? >> Yeah.
+[20:44] Oh yeah. Okay. Okay. Yeah. Yeah. Yeah. >> Awesome. Well, thanks a lot. Uh
+[20:51] hopefully you enjoyed the rest of the expo. It was a pleasure.
+[20:54] >> Thank you so much. >> Thank you so much.
+[20:56] >> Yeah. Yeah.

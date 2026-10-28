@@ -1,0 +1,179 @@
+# title: Hacking Subagents Into Codex CLI — Brian John, Betterup
+# source: https://www.youtube.com/watch?v=5eJqXtevlXg
+# speaker: Brian John, Betterup
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T10:37:14Z
+# sha256: dd5fd636704160ee63bb3aed3fba5ca6edef041c56fa66e109ed67270f45f2fa
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:02] Hi everybody, my name is Brian John and I'm excited today to talk to you about
+[00:07] hacking sub agents in the codeex CLI. So who am I? I'm a principal fullstack
+[00:13] engineer. My current focus at work is AI enablement for R&D. So think helping our
+[00:19] R&D team members get their work done faster and with higher quality using AI.
+[00:25] The company I work for is BetterUp. It's an awesome place to work. We've been
+[00:29] using AI since the very beginning. I've been there for over eight years now,
+[00:33] which is longer than any place I've ever worked before. And our mission is to
+[00:37] help people everywhere live their lives with better purpose, clarity, and
+[00:41] passion. If that sounds interesting to you, you work want to work on cool stuff
+[00:45] with LLMs, please hit me up. I'll add my contact
+[00:49] info in the last slide. So, why would we want to hack sub agents
+[00:55] into Codeex CLI?
+[00:59] Well, I've been using Clog Code as my daily driver since the very beginning.
+[01:04] It's a great tool. It's got tons of bells and whistles. It's got great
+[01:08] models, and I use sub agents all the time. But I
+[01:12] don't want to be locked in to one tool, and I really don't want to be locked in
+[01:16] to one model family. I wanted to be able to use other tools,
+[01:22] particularly codec CLI, because the models look really good and I want to be
+[01:27] able to still use sub aents with them so that I can use my workflows
+[01:31] with other tools. Context management. So, as you all know,
+[01:38] sub agents are amazing for context management. The main agent can give a
+[01:43] problem to a sub agent. It can go off, do its work, use its tokens, and pass
+[01:49] just the answer back to the main agent. And all that context got used up by the
+[01:53] sub agent doesn't end up in your main context window, which is incredible.
+[02:00] And I don't think I have to say any more about this one. We've all seen this way
+[02:03] too many times and it gets annoying. And I have to give credit where credit
+[02:08] is due. This talk by Dex Hory changed the way that I work with AI.
+[02:15] The workflows he proposes here I found to be really effective especially in
+[02:22] working with large code bases. I'd recommend you check out this talk. He's
+[02:27] also talking at AI engineer code this year and I recommend you check out that
+[02:31] one too because I'm sure it's going to be great.
+[02:36] All right, so let's talk about design. At the end of the day, a sub aent is
+[02:42] really simple. It's just another instance of the main agent. So our
+[02:46] design can also be really simple. In this case, we're going to have our
+[02:50] parent codec session. We're going to have it run a script.
+[02:54] It's just going to be a wrapper script that's going to kind of take care of
+[02:58] like figuring out what agent to run. It's going to build the prompt, etc.
+[03:02] It's going to kick off codeex exec. So that child codeex is going to run as the
+[03:07] sub aent. It's going to respond to the prompt. It's going to do its work and
+[03:10] it's going to write its answer into a file and then our wrapper script is
+[03:15] going to read that file and it's going to print that result to standard out and
+[03:19] give it back to the parent codec session.
+[03:22] Pretty straightforward.
+[03:26] Well, this is simple, so it should be easy, right? Well, that's what I thought
+[03:30] too. And I started to get all these errors from Codeex when I tried it.
+[03:36] Codex's sandbox really seems to not want to let you do this. Now, you can of
+[03:41] course run it with dangerously skip permissions or whatever. I don't do
+[03:45] that, but to get it to work with the normal
+[03:49] set of permissions actually was really, really hard and I bang my head against
+[03:53] the wall a long time trying to get this to work.
+[03:59] So, figuring out the minimum required permissions is probably the hardest part
+[04:04] about this. getting the combination just right. On the parent, you need at least
+[04:08] sandbox of workspace, right, to be able to run the codeex command. You can
+[04:12] always run that dangerously whatever whatever command if you want. Again, I
+[04:17] don't really do that. The child process is a little bit trickier. The sandbox
+[04:22] prevents its access to the OpenAI credentials in your home directory since
+[04:27] it's outside of the workspace. the you need at least sandbox workspace
+[04:32] write again so that it can write the file that the uh wrapper script is going
+[04:38] to read and you need to disable this thing called the rollout recorder
+[04:44] which is like a logging thing the just because the parent sandbox again it
+[04:48] prevents file system access to any subcomands
+[04:52] that are outside of the workspace
+[05:00] All right, before we go any further, I have to give a quick note about
+[05:03] security. Meta recently wrote a great paper called
+[05:07] the agents rule of two that I think explains this really, really well. And
+[05:12] what it says is there's three things you need to care about with your agent when
+[05:15] it comes to security. whether it's processing untrustworthy input, whether
+[05:20] it has access to sensitive systems or private data, and whether it can change
+[05:24] state or communicate externally. In our case, we're not processing
+[05:29] untrustworthy inputs. We do have access to sensitive systems
+[05:33] or private data because we're probably working with a proprietary codebase.
+[05:39] And it can change state and it also can can communicate externally. Now the
+[05:44] state that it can change is really kind of dependent on your system. In my case,
+[05:48] it's really not very high risk and the communication it does externally is just
+[05:53] to OpenAI's API endpoint. So again, not a major risk, I would say. So that
+[05:59] puts us in the lower risk category. But importantly,
+[06:04] lower risk does not mean no risk. So your mileage may vary here. you need to
+[06:09] make your own determination on if this is something you feel comfortable with.
+[06:15] With that, let's move forward. All right. So, to get codeex to be able
+[06:20] to use sub agents with this wrapper script and everything, we have to tell
+[06:25] it how to run them. So in our agents MD we're going to have just a little bit of
+[06:30] information here that tells codeex hey when I say use the whatever sub agent go
+[06:38] and actually like run this script and you know with these commands or whatever
+[06:43] and that's how you do it. Also we have to tell it when to run sub
+[06:50] aents. So that would be you know when the user asks or just when you think
+[06:54] helpful. Then we want to tell it what sub aents are available and what they
+[06:58] do.
+[07:04] All right, with that, let's do a quick demo.
+[07:10] I've put together a really quick and small proof of concept repository. It's
+[07:16] open source. You can go and take a look at it yourself. I'll have the URL at the
+[07:20] end of the talk. Let's just take a look at what's in here.
+[07:24] So, first of all, let's take a look at our agents.
+[07:28] I just created a couple of toy agents here. Let's go take a look at them how
+[07:32] they're defined. You can see here each agent has a name.
+[07:38] It also has a reasoning effort. So, depending on what kind of work it's
+[07:42] doing, you can give it a light, medium, you can give it a high reasoning effort,
+[07:47] whatever you think is appropriate. Then you just give it, you know, the prompt
+[07:51] for the agent. So very similar to kind of how claude code sub aents work. In
+[07:55] this case, it's just counting words. You know, this other one is a file writer
+[07:59] agent. Just going to take some text and put it in a file. Don't need much
+[08:03] reasoning for that.
+[08:07] All right. So now let's look at our wrapper script.
+[08:15] It's really small, only 72 lines. basically just takes in the inputs.
+[08:24] It's going to call this agent exeutor Python class, which I'll show in just a
+[08:28] minute. Also very small, and it's going to return that uh the agent's output to
+[08:34] standard out so that the main agent can see it. Let's look at that agent
+[08:39] executive class. Not going to go through this whole
+[08:43] thing. Again, it's pretty small. basically just kicks off the child sub
+[08:48] agent with the proper permissions and with the right reasoning effort
+[08:53] and it disables the rollout recorder all that kind of stuff just does all that
+[08:56] for you. So pretty handy. One thing that I think I didn't cover you look at
+[09:02] agents MD is it's kind of important here is this
+[09:08] part. So when we're telling Codeex how to invoke the sub agent, we're going to
+[09:15] have it write the agent name to a file. We're going to have it write the user's
+[09:19] query to a file and then we're going to have it run this command.
+[09:22] You know, another alternative to this would be to actually pass the agent name
+[09:27] and the query as command arguments. The reason why we don't want to do that is
+[09:32] because of Codex's permissioning system. As long as the command looks exactly the
+[09:38] same, you only have to grant permission once. But if you have different
+[09:44] arguments to the command, you have to approve it every time. So it gets really
+[09:49] annoying if you have to approve every time that codeex wants to call sub
+[09:55] agent. So in this case, we make the command
+[09:58] look exactly the same. Codex is just going to run it.
+[10:03] Now, if you run again with dangerously skip permissions or whatever, you don't
+[10:06] have to worry about this. But all right, let's go in. Oh, then
+[10:10] we've got this also this wrapper script around codeex. So, let's take a look at
+[10:13] that real quick. Super simple. Uh, what it does is it takes the codeex home
+[10:19] files from your home directory. It's going to sync them into a subdirectory
+[10:23] so it has access to them and it's going to set codeex home to that directory.
+[10:27] And it's just going to launch codeex. In this case, I'm launching in full auto
+[10:31] mode, which is just like shorthand for workspace, write plus, I think, approval
+[10:36] on a request or something like that. I can't remember which one. Um, but pretty
+[10:40] straightforward. Not much going on here. Really not much code.
+[10:45] All right, let's go ahead and launch this.
+[10:50] Okay, now let's just give it just a quick
+[10:54] query. I'm going to tell it to use its work
+[10:57] counter sub agent. Have it go off and do that.
+[11:04] You're going to see it figure out that it needs to run this
+[11:08] agent exec. It's going to go ahead and put the name of the agent in a file.
+[11:12] It's going to put query in a file. Then it's going to ask me for permissions to
+[11:16] run it. And it's really important here that I say yes and don't ask again for
+[11:19] this command. That way it's not going to ask me every time it has to run a sub
+[11:25] agent. You'll notice that it's running
+[11:28] everything in serial here. Codeex does not have the ability to run things
+[11:32] asynchronously like claw does. So, this is slower. And Codeex in general, if
+[11:38] you've used it, I think you find it's slower overall than than Cloud Code. But
+[11:45] I think that's really kind of intentional. seems like Codex is really
+[11:48] kind of meant to be more of like a hands-off unattended type of a tool
+[11:53] versus clog code is meant to be more kind of iterative and so you know I
+[11:58] think that's actually okay. I found this okay for me the way that I've used
+[12:01] codeex. All right so we can see we got that result back printed to standard out
+[12:06] here and then codeex just gave us back the answer. So,
+[12:10] let's just do one more with this file writer sub agent.
+[12:18] Again, it's going to do the same thing. It's going to write that agent name into
+[12:22] a file. It's going to write the query into a file. Then, it's going
+[12:28] to call that same command. It will not ask for permissions this time.
+[12:34] Oh, and we're using the timeout 600 here because some of these agents can
+[12:38] actually take a long time to run. If you're having it do a big task that's
+[12:42] going to have it look across a whole codebase and you have a large codebase,
+[12:46] it can take up to 10 minutes. I've actually seen them take longer, up to 20
+[12:49] minutes sometimes. So, you might even want a longer timeout here. This is what
+[12:54] I set for this example. In this case, this is a pretty easy one. So, it only
+[12:59] took about 40 seconds. All right. So, it wrote the file. Just go ahead and verify
+[13:03] that. All right.
+[13:08] All right, that's all I have. You can find the code at that URL.
+[13:14] You can find betterup at betterup.com. If you have any questions for me, you
+[13:18] can use my email address or you can DM me on X. I don't post anything on X, so
+[13:24] really no reason to follow me, but go ahead if you want. And I hope this was
+[13:29] helpful for you. And again, if BetterUp sounds like an interesting place to you,
+[13:34] please hit me up. Have a great day.

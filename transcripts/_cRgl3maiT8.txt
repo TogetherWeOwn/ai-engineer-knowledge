@@ -1,0 +1,341 @@
+# title: How Inference Keeps Up with Our Insatiable Need for Tokens — Cerebras & Gimlet Labs
+# source: https://www.youtube.com/watch?v=_cRgl3maiT8
+# speaker: Cerebras & Gimlet Labs
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T03:11:07Z
+# sha256: 7b9e79a12b53823024a20be017081c0afbcc1d3cca042ce54340172dfb564960
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:01] [music]
+[00:12] >> Hello everyone. My name is Daniel. I work on AI and AI agents here at
+[00:17] Cerebras. What's your name?
+[00:19] >> I'm Michelle. I'm a co-founder at Gimlet Labs where we're building a
+[00:23] multi-silicon neo cloud to optimize inference at every layer of the stack.
+[00:28] >> And we're really excited to bring you our talk, all the things we have to do
+[00:32] to satisfy your insatiable need for tokens.
+[00:36] As you know, AI spend is going kind of bananas right now. With this year we're
+[00:41] slated to spend $765 billion on compute and in 2031 up to $1.6
+[00:47] trillion. The frontier labs are having a mad dash
+[00:52] to secure as much compute as possible to buy across hardware vendors to do both
+[00:59] training for the frontier models as well as to serve all of their users. And all
+[01:03] of their compute is going to satisfy everyone's insatiable need
+[01:08] for tokens. Google at their IO last year said that
+[01:12] they were serving 480 trillion tokens per month. And last month they said that
+[01:17] it jumped up to 3.2 quadrillion tokens per month. So all of this is happening
+[01:23] at the same time as
+[01:26] models are getting cheaper and faster. Lama 3.37 B when it was first released
+[01:31] compared to now is now 25% cheaper whilst still being 3.6 times faster.
+[01:37] So in today's talk we're going to talk
+[01:40] about two things. One, what have we done so far to optimize inference to make it
+[01:44] cheaper and faster. And what does the road map look like to juice perf and
+[01:49] throughput even further? So to do this, let's take a little bit
+[01:54] of a time jump to 2022 and learn about all the optimizations that led us to the
+[02:00] point we're at now and hopefully what the future looks like.
+[02:03] So, LLMs produce tokens one at a time in something called an auto-regressive
+[02:09] loop. So, to generate one additional token,
+[02:13] you need to read all of the weights from memory into compute. So, most of the
+[02:17] time, the computer is sitting idle. It's just waiting for memory to be able to
+[02:21] stream in all the weights necessary to do the compute itself. So, up to 90% of
+[02:26] the time, the computer is just sitting there waiting on memory to load. So, how
+[02:30] can we figure out how to optimize this so there's less idle time and you can
+[02:34] make full advantage and serve tokens faster?
+[02:37] So, what you can do is throw more compute at the problem. So, instead of
+[02:41] streaming in the whole set of weights, what if you could split up the entire
+[02:45] model into four and have each GPU take care of a fourth of the model each?
+[02:50] Then, you could reduce, in theory, the amount of time it takes to serve a
+[02:53] single token by four times. However, you have to pay a tax if you
+[02:58] want to do this. Before the attention block and then the F So, after the
+[03:02] attention block and then the FFM block, you have to do something called
+[03:06] all-reduce, where you take each of the individual calculations from each GPU
+[03:10] and you combine it all together. So, you can actually get a calculation because
+[03:15] each of the GPUs doesn't have the whole picture. It only does 1/4 of the model.
+[03:18] So, you need to do this across every layer twice, which can lead to only
+[03:22] getting 2x speed up for getting 4x the amount of compute that you add on.
+[03:27] If I were to graph this in a pretty graph,
+[03:30] um you can see that throwing more GPUs at the problem does get you faster
+[03:34] tokens, but it requires exponentially more energy to serve a single token as
+[03:39] you put in more compute at the problem because of the communication overhead we
+[03:43] just talked about. So, if we flip the Y axis here so it's throughput, you can
+[03:48] see that this resembles something like a Pareto frontier, where you can see that
+[03:52] you have to make some kind of sacrifice between throughput and speed when you're
+[03:57] an inference provider. A great example of this is Claude code
+[04:00] fast mode, where you can spend, I think, 6x the amount of tokens to serve a
+[04:05] single token compared to regular Claude for twice the speed. So, for that
+[04:09] product, they're really optimizing towards the right of the Pareto
+[04:12] frontier, where they're getting the speed, but at the cost of not being able
+[04:15] to serve as many tokens. So, during today's talk, we're going to
+[04:19] talk about what are the innovations we have done in the past and in the future
+[04:23] to be able to shift the Pareto frontier to the right.
+[04:27] So, you all already know from our previous slides that to generate each
+[04:32] token, you have to read the whole model. So, what if we could spend one pass that
+[04:36] we already paid for to serve multiple requests? So, that is
+[04:40] where the idea of batching and continuous batching comes in.
+[04:45] The idea of batching is when you take a weight read that you've already done and
+[04:50] be able to serve multiple user requests. However, the problem, though, is that
+[04:55] some of these requests are longer than others, which means that there's all of
+[04:58] these idle periods in the compute where nothing is happening. So, how can we
+[05:03] solve this problem and squeeze out more performance?
+[05:06] That's where continuous batching comes in. So, the idea here is that for every
+[05:11] single idle slot, you slot in a new user request to be served during that same
+[05:16] weight read to be able to serve as many requests as possible.
+[05:20] However, this does come with a slight downside because every single token
+[05:25] when you do inference requires you to save something into the KV cache because
+[05:30] that's how the attention block works. You need to understand how every single
+[05:33] token, like what the K and V vectors are.
+[05:37] This can add up very quickly. So, if you are running a coding agent with very
+[05:41] long context, for example, 128k context, you're going to save 42 gigabytes of KV
+[05:47] cache that is needed to serve that individual request. So, the rule of
+[05:50] thumb here for a 70 billion parameter model is that for every 3,000 tokens,
+[05:55] you need 1 GB of additional KV cache. And that's for one user request. So,
+[05:59] imagine you're doing batching and you're doing like eight different requests at
+[06:02] the same time, then your KV cache is going to explode and you will not have
+[06:06] enough memory to be able to serve all of your requests. So, what are some of the
+[06:09] innovations we have done to be able to optimize how we use memory?
+[06:13] So, that's where paged KV cache comes into play.
+[06:18] So, how traditionally KV cache worked was that you would have physical memory
+[06:22] that you would reserve to make sure that you could have enough room to be able to
+[06:26] store all of the KV information from each request into memory. However, this
+[06:31] came with a downside and a lot of inefficiency because you would just have
+[06:34] a lot of memory blocks that would be reserved but wouldn't actually be used.
+[06:39] So, the idea with a paged KV cache is we use something that's similar to like an
+[06:43] OS or a virtual machine where you provision a whole memory block that's
+[06:48] all virtual and you can store wherever there's free space KV cache for each
+[06:52] request. So, this allows you to serve three times more requests than not
+[06:56] having a paged KV cache and just doing what was
+[06:59] before. And this really reduces the amount of
+[07:02] wasted space where you are reserving memory slots without actually using
+[07:06] them. This was right after followed by an
+[07:11] innovation called prompt caching. So, the idea here is that if you have a
+[07:15] coding agent or if you have a chat app that has a very long system prompt, you
+[07:20] don't actually have to recalculate the KV cache needed every single time you
+[07:24] have a request. What you can do is you can reuse the KV cache that you
+[07:27] calculated already for the previous request for the next request. That way
+[07:31] you can just pick up where you left off. Here,
+[07:35] you can skip the very, very time-consuming prefill phase.
+[07:39] And you might be wondering, what is prefill?
+[07:42] So, during inference, you can split up what happens into two major phases,
+[07:46] prefill and decode. So, the prefill phase consists of all
+[07:51] the things that happen once the request arrives, and then
+[07:54] ends when the first tokens gets generated. And here, you can see this
+[07:58] when you type something into ChatGPT, and then it takes a couple seconds
+[08:02] before it starts returning the first token, and then it goes kind of like
+[08:05] smoothly from there. So, what's happening during the first couple of
+[08:08] seconds where it's not returning anything is that it's computing K and V
+[08:12] vectors for every single prompt token that you've inputted and produces the
+[08:15] first output token. This is very compute bound because you can optimize the hell
+[08:20] out of this. You can parallelize this extremely.
+[08:24] However, after the first token is generated, what happens is
+[08:28] uh that you decode one token at a time, reusing the KV cache you just built in
+[08:32] the prefill phase. So, this is more reliant on memory.
+[08:36] The reason I'm talking about this is because something happened lately that's
+[08:39] really messing up a lot of inference pipelines, which is super super
+[08:43] token hungry coding agents. So, let's say you have a coding agent that's using
+[08:47] 200K context or 500K context or a million context, right? What happens is
+[08:52] that it starts to clock up the pipeline. While prefill is running, no other
+[08:56] prefill or decode request can get through.
+[08:59] So, this is kind of catastrophic if you have a bunch of people that are sending
+[09:02] in coding requests and a couple people that are just trying to figure out like
+[09:06] math problems in chat mode. So, to avoid this clogging problem,
+[09:12] there is an innovation called chunked prefill that kind of goes and solves
+[09:16] this problem. And the idea is quite simple here.
+[09:20] The idea is taking a very long piece of prefill, chopping it up into smaller
+[09:24] bits, so you can interleave in different decode and prefill requests. That way,
+[09:29] there's not one thing that's taking up a bunch of time and clogging the whole
+[09:32] pipeline. So, now Michelle,
+[09:36] tell us more about what else we can optimize.
+[09:38] >> Yeah, so all of the optimizations that Daniel just talked about are run time
+[09:41] level optimizations. So, that explains we explore how we make inference more
+[09:47] efficient within a single worker. But, in order to to keep pushing that
+[09:51] frontier, we really need to start looking at system level optimizations,
+[09:54] which is how can we distribute these workloads across many different workers.
+[10:00] And so, the first thing to recognize there is that every request is
+[10:03] different. So, take for example a summarization use case. You're throwing
+[10:07] the LLM a bunch of different documents, and you just really want a single
+[10:11] question answered. And so, this workload is going to have a long prompt and short
+[10:16] answer. And so, it's a dominated by that prefill phase, and so therefore compute
+[10:20] bound. On the other hand, you might have a case
+[10:24] where it's the opposite. Let's say you want to write a long story or book, you
+[10:28] just want to pass it a few themes for it to go off of. And so, this is going to
+[10:32] have a short prompt and long answer. And this is going to be dominated by decode
+[10:36] because you have so many output tokens compared to the number of input tokens
+[10:40] coming in. And this is going to be memory bound.
+[10:43] And finally, you can have a case that's somewhere in the middle, right? It's
+[10:46] both a long prompt, long answer, and you're seeing here that both the prefill
+[10:50] and decode phases and therefore compute and memory both matter.
+[10:54] And by looking at these different examples, you can really see that
+[10:59] the resource requirements that you have for your hardware, it's pretty different
+[11:03] depending on what your workload looks like. And so, how do you prevent
+[11:06] yourself from getting, you know, bound by compute, bound by memory?
+[11:10] And so, one way to do that is called disaggregation. So, splitting up your
+[11:14] workload to different worker nodes. And so, the most common form is called
+[11:19] prefill decode disagg, where you're actually splitting and disaggregating
+[11:23] this workload by phase. And what that allows you to do is
+[11:27] essentially have two pools. So, you have your prefill pool, that's going to be
+[11:31] running the prefill part of your workload. The decode pool, that's going
+[11:34] to be running the decode part of your workload. And taking the summarization
+[11:37] use case for example, you know, you're going to want to scale up that prefill
+[11:41] pool so you're not blocked by the compute and scale down your decode pool
+[11:45] because you don't want to waste resources when you just really don't
+[11:49] have that much decode work to do. And it's nice cuz now you can scale all
+[11:53] these independently and neither part is stalling the other.
+[11:59] And we can take that one step further, right? We said before, prefill, that
+[12:02] workload itself is inherently bound by compute. Decode, that is bound by
+[12:06] memory. And just walking through that really quickly
+[12:09] again, the reason for that is as you're doing decode, you're stepping through
+[12:13] each of these tokens one by one and for every decode step, you're re-reading the
+[12:17] entire KB cache, right? That's going to be memory bound.
+[12:21] >> So yeah, um the the thing that Michelle just said about this being memory bound,
+[12:27] this can be clearly seen by what the hardware can actually do. So GPUs,
+[12:31] right? Um the the speed at which you can transfer data from memory into compute
+[12:36] is limited by something called memory bandwidth. So for an H100, this looks
+[12:40] like 3.35 terabytes per second. However, Cerebras has 7,000 times the bandwidth
+[12:46] of a H100 with 21,000 terabytes per second. This is because we have a very
+[12:51] specialized SRAM based memory architecture on our chip.
+[12:56] So this really means that Cerebras is really built for decode. So we can serve
+[13:01] tokens at 3,000 tokens per second versus an H100 serving it at 600 tokens per
+[13:05] second for decode. So we're really excited to partner with
+[13:10] AWS to productionize this. So we are going to partner with AWS Trainium so
+[13:15] they can serve prefill using their AWS Trainium chips, use their EFA service to
+[13:20] transfer the KB cache to our Cerebras CS-3 systems to finally serve the the
+[13:25] token. So this will lead us to give us 5x high-speed token capacity in the same
+[13:30] footprint. So, this is one of the things that we're doing to try to make fast
+[13:33] inference more accessible and cheaper for developers. So, we're really excited
+[13:37] to really pursue this partnership. >> And at Gimlet, we're really generalizing
+[13:41] that beyond just training them and Cerebras. What Gimlet is building is
+[13:45] essentially a multi-silicon inference cloud, which takes your workload, breaks
+[13:49] it down into finer-grain pieces, determines the resource characteristics
+[13:53] of all of those different pieces, and then figures out the best way to map it
+[13:56] to the underlying hardware, where that hardware can be really anything, right?
+[13:59] Nvidia, AMD, Trainium, Cerebras, D-Matrix, Intel Gaudi. The list goes on
+[14:04] and on. And by running those tasks on the machine that is most efficient for
+[14:09] running it, we're actually seeing pretty crazy results. So, we're seeing three to
+[14:12] 10 times faster inference compared to homogeneous systems that have the same
+[14:17] power budget. And this is diving into more than just the pre-full decode
+[14:21] disaggregation than before, and some of those techniques are, for example,
+[14:25] disaggregating based on model instead of on phase. And so, that's called
+[14:30] speculative decoding. So, just reviewing again the decode phase, typically you do
+[14:35] a forward pass for each of the decode tokens that you're getting out.
+[14:39] And that's the standard way of doing it. What speculative decode is is that you
+[14:43] essentially have a draft model. And this is just a smaller form of the full model
+[14:48] that um can generally approximate the results that you get out of it. And the
+[14:52] nice thing there is because it's smaller, it runs a lot more quickly and
+[14:55] also uses less resources. And so, in speculative decode, what you can do is,
+[15:00] in order to get, you know, the nine next tokens, you will
+[15:04] essentially run the decode on that draft model first. It's going to give you back
+[15:07] what is called candidate tokens. So, you're not 100% sure all these tokens
+[15:11] are right, but because, you know, often these have been fine-tuned or been
+[15:15] trained off of the full model, it's it's approximately right. And you want to
+[15:19] validate, okay, are these the tokens that I actually want to output? And so
+[15:22] you'll actually run the next phase on that full model that's called the verify
+[15:26] stage to validate, okay, which of these tokens are correct?
+[15:30] And essentially you can keep doing this until, you know, you've validated all
+[15:33] these tokens from the draft model. And at the end of the day you can see here
+[15:37] on the top, the standard way of running it, you needed to run that forward pass
+[15:41] on your full model nine times to get those nine tokens. On the other hand,
+[15:45] with speculative decode, you actually only needed to run it three times on
+[15:48] that full model. And if you can get that draft model to run really, really
+[15:52] quickly, then that time is minimal and you can really shorten the amount of
+[15:56] time it takes to get your tokens. And looking at some more concrete
+[16:00] results, so this is essentially that Pareto frontier that Daniel was showing
+[16:04] earlier where x-axis is the speed at which you're getting the tokens and the
+[16:08] y-axis is the throughput. And so the baseline case we're comparing to here is
+[16:12] prefill decode disagg across homogeneous GPUs. And you can see that, you know,
+[16:17] throughput is pretty good, but as soon as you're pushing on that speed, that
+[16:21] throughput drops pretty drastically. So what if you then run speculative
+[16:25] decode across those same GPUs? So now you're running that draft model and
+[16:29] you're able to see you're able to get that curve to the right. And the reason
+[16:33] for that is because you're running the decode on that full model less times.
+[16:37] But we can push that even further, right? Like going back to our theme of
+[16:41] running those workloads on the hardware that can run it best.
+[16:45] On something such as, you know, D Matrix or Cerebrus where you're able to run
+[16:49] small models very, very quickly, you see drastic performance improvements. So
+[16:53] here this is where you're seeing those numbers for that same throughput, right?
+[16:57] You're able to get 10x the interactivity compared to if you're just running it on
+[17:02] homogeneous machines. The final form of disagg we wanted to
+[17:06] talk about is called attention FFN disagg. And this one gets pretty
+[17:10] exciting when you think about serving large models. And I'm saying like 3
+[17:14] trillion parameter models where these models are so large that even just
+[17:18] running one layer, it can be pretty resource-intensive.
+[17:22] And so the concept is essentially the same thing, right? Like for that
+[17:25] particular task that you need to do, whether it's that attention layer or the
+[17:28] feedforward FFN network layer, then you are essentially trying to figure out,
+[17:33] okay, what are the resource characteristics, then what is the best
+[17:36] hardware to map it to? And so the attention layer, that's going to be more
+[17:39] memory bound. It's doing a lot of KB cache accesses. The FFN layer, that's
+[17:43] doing a lot of dense matrix multiplications. And so then it makes
+[17:46] sense, right? You're going to run the attention on the machine that has memory
+[17:49] bandwidth, the FFN layer on the machines that can run those matrix
+[17:52] multiplications as quickly as possible. And essentially what happens here is
+[17:56] even within the model, you're ping-ponging across, you know, many
+[18:00] different machines in order to to get the inference from that model and just
+[18:05] really disaggregating every single layer.
+[18:08] And one thing that we really wanted to note here is that there is no best form
+[18:12] of disagg. There is actually no best hardware. It really depends on the
+[18:16] tradeoffs that you have for, you know, depending on what your model is, your
+[18:19] workload, and what you need for latency, and what you need for throughput
+[18:23] guarantees.
+[18:26] And as we look towards the future, we see that agents are only becoming more
+[18:31] and more incorporated into our everyday life. It's incorporated into our work.
+[18:35] Everyone is using it. And it's continuing to push that need for more
+[18:39] and faster tokens. >> Yeah, it's really getting geared to the
+[18:41] right. >> I [laughter] told Daniel not to say
+[18:44] that. But the good thing about this is that
+[18:47] even though, you know, this seems like a crazy crazy target, we can actually use
+[18:51] agents to help us solve these problems and keep pushing the frontier.
+[18:56] And so one of the things that we're doing at Gimlet is actually using an
+[18:59] agent to generate optimized kernels. Especially for our use case where we
+[19:02] want to support such a wide range of different kinds of hardware, we need to
+[19:06] figure out how do you make that problem a lot more tractable. Cuz right now, how
+[19:10] people generate and how people optimize kernels is that there's a lot of people
+[19:14] sitting there hand tuning and figuring out how to optimize these kernels. And
+[19:20] the thing is that these optimizations can vary pretty drastically based on you
+[19:23] know, the model that you're trying to run, the hardware that you're running
+[19:26] on, even within generations of the hardware, and you know, the workload
+[19:30] shape itself. And so what we do at Gimlet is we built KForge, which is an
+[19:35] agent for generating these kernels. It takes in a bunch of information like
+[19:38] your hardware profiles, your workload profiles, basically anything that you
+[19:42] can use to figure out how to optimize kernels and we solve it as a brute force
+[19:47] problem, right? And so here's an example, right? We have a forward pass
+[19:50] and the kernel that um KForge optimized from it. And we're seeing pretty
+[19:55] interesting results. So last week, you know, we were running the agent for
+[19:58] probably less than the span of a week and within that time it was able to
+[20:02] speed up GPT-OSS-120B on AMD hardware by 33% end-to-end. And
+[20:07] the interesting thing to note here is that this is building on top of kernels
+[20:11] that have already been optimized.
+[20:15] And you can go and take, you know, agents to the next level and use them to
+[20:20] help us build and design custom silicon that is hyper tuned for specific models
+[20:25] or your specific workload. This can then be used to train even better and smarter
+[20:30] and faster AI, which then can also be used then to design the next generation
+[20:34] of that custom silicon. And you know, this loop keeps going on and on and it's
+[20:37] a recursive loop. Like shout out to the folks at Recursive.
+[20:42] >> And I want to end the talk by saying that we're just getting started in our
+[20:46] journey to optimize throughput and speed on inference. Because at the very top of
+[20:52] the stack, you don't think really about inference optimization when you talk
+[20:56] about like incident response, right? But when you have agents that are making our
+[21:00] systems much more reliable and increasing uptime, we're getting more
+[21:03] throughput and we can get more tokens. >> Or you can apply agents to the problem
+[21:08] of bringing up models. As soon as a model drops on the market, getting it
+[21:11] running on all the different kinds of hardware on day one.
+[21:15] >> You can even go a little bit crazier with compilers. Imagine a world where an
+[21:20] inference that can be custom-built for your workload and the model that you're
+[21:23] running. This is already being demonstrated by folks at Anthropic,
+[21:26] right? That built a compiler in 2 weeks. So, I think there's a lot of
+[21:30] optimizations that you can do when you're building just-in-time custom
+[21:33] software to support the model you want to run, on the workload you want to run,
+[21:37] on your custom hardware. >> And referring back to the previous
+[21:40] slide, using agents to continue to help us to build, you know, more custom
+[21:45] silicon and helping speed up the tape-out process.
+[21:49] >> And finally, this is the non-very technical part, but all of the things
+[21:52] that surround what takes to serve inference. All the procurement, all the
+[21:56] legal, all of the things that are in the back office. All of these things
+[22:00] combined with agentic workflows are able to be optimized. So, when we do all of
+[22:05] this, I'm really optimistic about the future and all the things we can
+[22:07] accomplish to serve tokens faster and cheaper.
+[22:11] So, next slide, please. Thank you so much for coming to our
+[22:14] talk. Uh we are working both very, very hard to give you faster and cheaper
+[22:18] tokens. And yeah, let us know if you have any questions. We'll be around
+[22:21] after the talk. >> Yeah, and go eat tokens. We're making
+[22:24] more tokens for you so you can also generate GIFs like this.
+[22:27] >> Yeah. >> [laughter]
+[22:44] [music]

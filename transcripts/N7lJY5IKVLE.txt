@@ -1,0 +1,1228 @@
+# title: [Workshop] AI Engineering 201: Inference
+# source: https://www.youtube.com/watch?v=N7lJY5IKVLE
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T14:56:58Z
+# sha256: f731a56a44ce1c9c59de5eadf995138db60ae2925454c657965a0bbe98ffe75b
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:00] [Music]
+[00:17] uh in the workshop today was everything that comes after once you've you know
+[00:23] written your thin wrapper around the open AI API to make your chat GPT
+[00:28] powered app you've acquired hundred million in Venture
+[00:32] funding at a 4 billion valuation and now you're like what what am I supposed to
+[00:37] do next um so we're g to I'm split this
+[00:43] into two parts so we can take kind of a break it's like a three-hour long
+[00:46] Workshop it's a long time uh so in the first half we're going to talk about uh
+[00:52] inference so about the what exactly this workload is that we have given over to
+[00:58] the uh the inference as a service provider what you know what's the shape
+[01:02] of it um why do we need these expensive accelerators what are the other options
+[01:08] available um and we're going to spend half of our time on that because that's
+[01:12] a place where we can actually talk you know in engineering terms about
+[01:16] constraints uh about uh service level objectives and service level agreements
+[01:22] uh the kinds of things that that lead to robust systems um and then we'll spend
+[01:26] 90 minutes on the rest of the owl uh the rest of what it takes to make a
+[01:31] successful AI powered app just because there's so uh very little to say just
+[01:35] yet about how to engineer these robustly but we'll talk about what the what the
+[01:39] emerging consensus on what to do is uh so far and what tools are out there and
+[01:44] available to start accelerating that
+[01:48] process um so yeah so for inference what uh what are we talking about when we're
+[01:54] doing inference workloads how do we decide between using open and
+[01:57] proprietary models uh to do that INF um where do those models live do they
+[02:03] live on a device do they live in a Cloud Server um uh and then we'll uh spend
+[02:09] some time talking about what takes to self-serve
+[02:13] inference um for the rest of the owl we'll talk about architectures and
+[02:17] patterns so what are the emerging kind of uh patterns for usage of of large
+[02:23] language models in AI applications and we'll talk about monitoring evaluation
+[02:28] and observability which is how we try and actually improve applications that
+[02:33] fit those patterns over
+[02:36] time um yeah any High Lev questions um my mic's off the zoom is not hooked up
+[02:44] no questions probably not still at a very
+[02:48] high level um no just stretch it great yeah maybe
+[02:53] we should all stretch um yeah so uh who am I and before we dive in like who am I
+[02:59] why you to listen to me tell you about any of these things so uh my name is
+[03:04] Charles I like to teach people about AI I've been doing it for a while now uh I
+[03:08] went to Berkeley studied neural networks back in the 2010s um taught people about
+[03:13] uh how to use them and beian networks rip um for data science um then I worked
+[03:20] uh in developer relations and education for weights and biases um a previous
+[03:24] generation mlops tool um generation times being shorter than more doubling
+[03:29] time I guess at this point um and then for the last two years I've been working
+[03:34] with full stack deep learning uh teaching not just things like the math
+[03:38] of machine learning or how to do monitoring of an ml application but how
+[03:43] to build an application that uses ml from Soup To Nuts uh from the gpus up to
+[03:48] the user
+[03:51] experience all right so now let's dive into the first half here on inference
+[03:56] and specifically what is actually going on why does it cost um so much to uh to
+[04:03] pay open AI um and so generative model inference
+[04:08] the kind of inference that's done uh by these the generative AIS is uh you see
+[04:15] when you use it as a via an API you see a kind of data to dat function where
+[04:20] both sides of that data are are human interpretable data so things like text
+[04:25] images sounds and outcome back new generated text IM sounds so for example
+[04:31] this is from the Palm eaper from Google you might show a picture of a restaurant
+[04:35] and the question if a robot wanted to be useful here what steps should it take
+[04:39] and the output of this uh uh language modeling generative API would be you
+[04:44] know clean the table pick up trash pick up chairs wipe chairs put chairs down um
+[04:49] which could then be sent to a cleaning robot and now you've got something you
+[04:52] know it's a it's a pretty useful system there so this is what you see from the
+[04:58] outside um but as you start like digging in a
+[05:01] little bit you'll start hearing about things like tokens um and and log probs
+[05:05] and temperatures and um to understand what's
+[05:10] going on and and weights and networks and to understand what's going on you
+[05:14] have to realize that this has been broken down into kind of three pieces
+[05:18] one part that goes from what humans understand like text and images and
+[05:23] sound to what neural networks understand uh and then one part that goes back uh
+[05:27] and in between the operations of a neural network that operates on arrays
+[05:32] and returns arrays so tokenizers take in text that a human can read and turn it
+[05:38] into an array of numbers a tensor um just due to the kind of
+[05:59] but really an array of numbers um those tensors get turned back
+[06:04] to things the humans care about um and in between neural networks map tensors
+[06:10] to tensors this step is the bottleneck this
+[06:14] step is the hard part there's interesting stuff going on in the
+[06:17] sampling process there's interesting stuff going on in tokenization there's
+[06:21] cursed stuff going on in tokenization um but this step is the bottleneck this is
+[06:25] where the vast majority of the engineering time is spent this is where
+[06:29] the vast majority of the compute time the memory are spent and this is the
+[06:32] interesting part and this is the part where the engineering Focus uh needs to
+[06:37] be um or this is the part that you farm out to somebody else um so diving in
+[06:44] double clicking on that uh tensor to tensor Arrow at the bottom that uh a
+[06:50] neural network is kind of a fancy term for a composition of a bunch of tensor
+[06:56] to tensor functions if you have a function that takes in an A and returns
+[06:59] an a you can just stack those one after another um and that's what gives neural
+[07:04] networks the kind of legoy flavor you can grab uh bricks from one set and
+[07:08] bricks from another set and attach them to each
+[07:11] other um so this neural network this is an ancient neural network uh the
+[07:15] Inception V3 model from Google that was state-of-the-art and computer vision for
+[07:19] a few months in the 2010s um and each of those little blocks there takes in a
+[07:25] tensor and returns a tensor uh and so starts with a tensor that looks like an
+[07:31] image so it's got a red green and blue Channel and comes out something uh that
+[07:35] 8X 8X 2048 example there that's probably somewhere in the middle of the network
+[07:40] it's not the final classification output anyway big block of numbers they get
+[07:44] passed into each other uh and then each one of those is
+[07:48] Itself parameterized by a tensor so it's not just like uh a map that you could
+[07:53] kind of like write down by hand that's like add one to every entry or something
+[07:56] like that um it's uh it's defined by like another big pile of uh of numbers
+[08:03] the weights and biases of the neural network so this is uh the weights from
+[08:08] the first layer of a computer vision Network the Alex net that kicked off
+[08:13] this uh whole deep learning Revolution um and it's these These are these are
+[08:18] little this is a visualization of a little block of red green blue uh uh
+[08:24] like tensor with three color channels in it so humans can actually look at it and
+[08:28] interpret it unlike the rest of them and see what's going on that it's got little
+[08:32] things for detecting edges and textures and color differences and
+[08:38] things and so uh we want to run a big tensor to tensor map and we are going to
+[08:46] parameterize that with a big pile of tensors and before it's time to actually
+[08:51] serve users those tensors need to be generated by the training process and
+[08:56] back uh a couple of years ago um or even as recently as 18 months ago this would
+[09:02] be the part where we would stop talk about gradient descent optimization
+[09:06] statistical learning theory and uh you know GPU acceleration and all the things
+[09:10] that are needed to turn something into to like get those numbers to get things
+[09:16] like that involving like grabbing you know hoovering up a bunch of information
+[09:21] from the internet uh without consent um and then crystallizing it into those
+[09:26] piles of numbers but nowadays you don't have to do that anymore specialized
+[09:31] Foundation modeling teams uh generate these weights and then they either put
+[09:35] them behind proprietary service or they share them with everybody else to use um
+[09:40] and so we can skip past all of that stuff and jump into the actual
+[09:44] application um uh yeah so any questions before we start talking about you know
+[09:51] where those you know where those weights come from uh or or rather what the
+[09:55] various ways to get a hold of such a set of Weights are to be able to use such a
+[09:59] set of Weights are um any questions at the level of what we're trying to do
+[10:03] with inference probably pretty clear that's
+[10:08] uh maybe a reminder from the 101 stuff all right so now let's start diving a
+[10:12] little bit
+[10:15] deeper so you want to run an AI uh your f one of the first choices that you need
+[10:21] to make as is you know pretty common with um with software is a build versus
+[10:27] buy question um you going to like are you going to make this uh you know out
+[10:33] of existing open components or are you going to uh are you going to kick it off
+[10:37] to a service so um there's in the proprietary corner there are a couple of
+[10:43] players in the open corner there are a couple of Players let's walk through
+[10:47] what those are and um what the sort of dividing lines are and why to choose one
+[10:52] or the other so there's uh a number of
+[10:56] proprietary modeling Services uh like anthropics that uh from whom we just
+[11:01] heard uh and the good thing about these proprietary models is that they are the
+[11:07] most capable models out there uh so this is from the LM CIS uh leaderboard maybe
+[11:14] the the hugging face hosted version of that leaderboard if you look at the the
+[11:19] top five models on that are all proprietary models and they're all from
+[11:23] open AI or anthropic um so there are a couple of
+[11:28] other players out there and in the future that you know they could release
+[11:32] really high quality models um but for now this is the the the state of things
+[11:38] so if you need the absolute highest level of intelligence in your
+[11:43] application uh then you want to roll with one of these um it's also often
+[11:48] common to start with some of the most highly capable models and then kind of
+[11:53] uh prove out your application there and then move to doing it uh like with a
+[11:57] less capable model that it's cheaper easier to run uh the sort of like
+[12:01] rewriting it in rust or
+[12:05] something um so the usual concern with using a proprietary service there's a
+[12:10] number of them including things like vendor lockin um but one of the one of
+[12:14] the ones that comes up immediately is like how much is it going to cost me to
+[12:18] use a proprietary service and can't I save money by doing it myself so the
+[12:23] fact that the capabilities are higher with the proprietary models is one
+[12:27] reason to say well you're not going to get exactly the same thing right now um
+[12:31] using an open model um but then the other kind of kicker here is that the
+[12:36] proprietary models are priced very affordably um so this is something
+[12:40] that's that has been the case uh this right quote here is from a blog post I
+[12:45] wrote back in like January um when the only open large model was glm 130b from
+[12:52] singua um and at that time just like trying to get the thing running uh in a
+[12:57] day I got to within an order of magnitude of the cost of open AI but you
+[13:02] know on the up on the upper end um and then more for a more recent uh and more
+[13:07] serious example the folks at honeycomb uh made a natural language SQL uh kind
+[13:13] of transformation maybe not SQL but query language uh transform
+[13:17] transformation uh AI product and like their opinion was that open AI was very
+[13:22] inexpensive to run for their task uh and so you'll find it seems that like
+[13:28] nobody's attempting to uh like extract rents from Monopoly pricing the way that
+[13:33] you can get with some proprietary Services uh where they know that you
+[13:37] have no choice but to pay them $10 million for a mat lab license every year
+[13:41] or whatever um not to pick on it sorry for a license
+[13:46] for an array programming language
+[13:51] um uh yeah so and the costs here you know a dollar for a million tokens for
+[13:57] Claude instance 10 for a million tokens for Claude 2 U relative to how much
+[14:01] we're used to paying like humans for tax you know that's that's like a pretty
+[14:06] decent deal anthropic has been slightly more expensive than open AI without like
+[14:10] a clear win on um capabilities uh but that's the current state of things they
+[14:17] do have longer context Windows which is kind of nice but um uh but yeah most
+[14:23] people for the pricing reason and the capability reason uh choose open AI at
+[14:27] this time um so the bad thing about proprietary
+[14:32] models besides like you know uh hearing Richard stalman screaming in the back of
+[14:37] your mind all the time uh is that proprietary model models cannot offer
+[14:42] you full control by Dent of their like very nature proprietary models um so
+[14:47] Alex graveley created a co-pilot part of the team that created co-pilot at GitHub
+[14:52] um was celebrating that GPT 3.5 turbo instruct a recent release from open AI
+[14:57] had brought back log probabilities so you can see what not just like what text
+[15:03] did the model generate but what probabilities the model gave each token
+[15:07] along the way and back when the back when it was just the gpt3 API and the
+[15:13] playground you could see that information and that's where a lot of
+[15:16] the like early work on sort of like intuition about prompt engineering came
+[15:19] from being able to see those numbers and there's all kinds of cool techniques
+[15:23] that you can get up to if you have those log probs um and if you can manipulate
+[15:26] those log probs uh so yeah you can read out confidence information you can use
+[15:31] it like during your development process to sort of like more gather more Rich
+[15:35] information about the system um and there's really you know you are you're
+[15:40] interacting with a probabilistic model if you can't see the model's
+[15:43] probabilities you're like fundamentally hamstrung um and so that was
+[15:49] mid-september and then like a couple of days ago they turned that off um and the
+[15:54] reason why is because if you give somebody that amount of information they
+[15:56] can start to reverse engineer your model pretty quickly um and then you are stuck
+[16:01] in the situation of IBM creating the personal computer and then a bunch of
+[16:04] people with soldering irons and oscilloscopes turn around and make
+[16:08] clones of your machine like within a year uh so proprietary models are like
+[16:14] fundamentally disincentivized from giving you that level of control despite
+[16:18] the fact that it's very critical for um for like actually effectively operating
+[16:23] the system so there needs to be that capabilities Edge um that like raw
+[16:28] capability Edge in order to make up for this
+[16:33] fact um then lastly maybe some people work in an Enterprise uh in this room
+[16:40] don't you don't have to out yourself but maybe some um and if you're operating in
+[16:46] this sort of situation you can't just ship a ping to an external API out there
+[16:51] uh into your business you people want to know about governance people want to
+[16:54] know about gdpr compliance um and the one of the nice things about open a eyes
+[17:00] offering probably true about anthropic by this point and definitely true about
+[17:05] Google a soon is there's a nice white glove Enterprise tier uh around this
+[17:11] that gives you like right underneath like you know launch an artificial
+[17:16] intelligence application and achieve your childhood sci-fi dreams is built-in
+[17:20] security and compliance um we will spend $20 billion on cyber security so that
+[17:25] you don't have to um so this like if you are in a situation where you need to
+[17:31] like you know assuage concerns about data privacy um this sort of Enterprise
+[17:37] tier um you know sock to compliance Etc is uh can be really critical for making
+[17:43] your life easier uh any questions about
+[17:46] proprietary models and such how much more expensive is it to Runing the API
+[17:53] cloud with uh with Azure yeah I want to say that Azure was cheaper at the start
+[17:59] um but maybe uh I haven't had any reason to use it um so I'm not sure just a
+[18:06] follow question like are there like any um tradeoffs in general regards to
+[18:11] Performance I it's per minute consuming VI ah so for you mean for the Enterprise
+[18:18] tier versus yeah so the the Enterprise tier also offers like an actual SLA
+[18:23] which the open AI API like doesn't um and is like geared that's that's you
+[18:28] know that's maybe another very critical feature besides security and compliance
+[18:32] like they will promise that you will get a response and not like a 500 um and
+[18:38] they have much more generous uh rate limits and things like that and I think
+[18:43] they also offer like a little bit more control over stuff so you might be able
+[18:48] to do some fine tuning that you can't do via the generic open a API oh fine
+[18:52] tuning for Azure limited just like three models okay yeah but there's 's also
+[18:58] limits on the public API for fine tuning right yeah um I personally did not find
+[19:04] it particularly useful to like fine tuning API both like hard to use and not
+[19:08] clear benefits um I think the example from gradient did show that like if you
+[19:13] want to achieve a style and you don't want to spend money on like context to
+[19:17] set up that style uh then maybe you can win with fine tunes but it's like it's
+[19:23] not really a successful way to inject new information so you aren't saving on
+[19:26] the tokens that you would retrieve um and you have to pay more to inference
+[19:31] a fine-tuned model and that just goes down to the fundamental like you're
+[19:34] asking them to do more work for you um and they can amortize that cost over
+[19:38] fewer users and so it's just always going to be more expensive um and so uh
+[19:45] yeah so that limits the utility of those fine tuning apis yeah please definitely
+[19:50] like ask questions um uh customize to what people are interested in and also
+[19:55] if I don't know about something like please do uh I
+[20:01] interrupt great Google has ver yeah yeah so uh well so vertex is a little bit
+[20:09] different from this I think um I think of vertex which I was going to talk
+[20:13] about later as sort of like a something that I can launch my own Services into
+[20:18] as opposed to like uh oh here's a private version of the Palm bison API
+[20:25] but maybe maybe is that part of vertex okay
+[20:29] great yeah um so yeah that's um so they're already available for Google AI
+[20:35] does anybody know if anthropics AWS like uh P like Enterprise offering is up
+[20:41] yet yes yes it is great yeah I like refuse to make slides about this stuff
+[20:50] more than like 48 hours in advance and I still find myself getting cut like
+[20:57] yeah
+[21:04] model so the question was uh between proprietary and open models which ones
+[21:09] are you betting on um gambling is illegal in the state of California so
+[21:12] yeah um uh we'll get we'll get there so um let's talk about the open models and
+[21:18] then we can answer or uh open up that discussion um so open models are less
+[21:23] capable but catching up um and their hack ability is very powerful
+[21:28] um so going back to that leader board that I showed if you look at the next
+[21:34] five out of 10 um four of them are llama 2 models actually so this column here to
+[21:40] be clear is the license uh so the top five are a proprietary like there's no
+[21:45] uh there is no license for those weights um for the bottom five they have uh
+[21:50] special licenses um so these are fine tunes of meta's llama model series and
+[21:59] this model Series has like kind of captured mind share in the free and open
+[22:03] source software world so a lot of the people who are like hacking
+[22:08] independently um and uh you know making public git commits um and you know
+[22:14] funded by the Linux foundation and things like that these people are
+[22:18] working in the main on uh adjustments to or improvements to the Llama model
+[22:24] series um and this is really critical because the secret to like the success
+[22:31] of Open Source software in general is the ability to do this kind of like
+[22:34] highly parallelized development where lots and lots of people are adding tiny
+[22:38] little features and like you know going out into the Last Mile and and adding
+[22:42] those tiny little things that they need um and sort of like making use of all
+[22:46] that uh work by others so in so far as you're able to do that you are able to
+[22:52] provide useful open source software that can compete with software that's made by
+[22:57] you know High remunerated teams um you know in in Northern California um so the
+[23:05] important question uh is this actually uh open source so you'll notice these
+[23:09] licenses here do not have friendly beloved names like lgpl or MIT or Apache
+[23:16] they they have a special unique name um and that's because meta's license for
+[23:22] the Llama two weights the Llama one weights were released under a research
+[23:25] only license and were only sent to certain people and then were immediately
+[23:28] like torrented and the license was violated so they gave up on that uh on
+[23:33] like fully controlling it but they did say you cannot use the uh data or output
+[23:38] to improve other large language models you can only use it to improve llama
+[23:43] models um and also release under the same license which is pretty typical
+[23:46] with open source um which uh is partly an attempt to sort of like capture this
+[23:52] like as people are doing parallel development they should only be
+[23:56] contributing to the development of this um this Branch um and then also if your
+[24:02] products monthly active users in June of 2023 was 700 million users or above um
+[24:08] you're not allowed to use it or sorry you have to pay for a special license um
+[24:13] and that uh so apologies to anybody you know who's um you know if you're running
+[24:18] an app with more than 700 million users um uh you'll have to go elsewhere I
+[24:22] guess but the um the key thing is that these are
+[24:28] violations of the like sort of agreed terms of what makes something an open
+[24:32] source license according to the open source initiative who you know has
+[24:37] some uh claim to controlling how that term is used I didn't they I don't think
+[24:42] they ever ended up getting a trademark um but they uh you know they are got the
+[24:47] community aligned around a small number of licenses that and around a key set of
+[24:51] principles that include like you can't tell you can't say who's allowed to use
+[24:55] this software for example which is included in the Llama license so there's
+[25:00] like uh a they they have opened up a multi-stakeholder process to Define open
+[25:05] source AI this is occurring in a time in which like the meaning of Open Source is
+[25:09] also being contested in sort of like software as a service so things are a
+[25:14] little things are a little tense there um but hopefully we'll come to an
+[25:19] agreement as a community on what that means um so this is a fast moving space
+[25:25] still so just because you get mind share early on if things change rapidly that
+[25:29] doesn't mean like llama's Locked In Forever um so mistol for example dropped
+[25:34] a model like two weeks ago um that at only 7 billion parameters was
+[25:39] outperforming um like larger models in the 13 to 30 billion parameter range and
+[25:44] those models were outperforming the previous models um at their size so
+[25:49] there's like except in so far as those things like continue to get updated um
+[25:54] you know they uh yeah they can be out competed um the other thing to watch out
+[26:01] for is that there are a lot of people who are very excited about like taking
+[26:04] on the Death Star of open AI or whatever and um get very excited about these open
+[26:10] models there's also some political things about the politics of how chat
+[26:14] gbt likes to respond to questions versus the politics of how people who meet
+[26:18] other people in discords like to respond to questions um and that can that sort
+[26:24] of like enthusiasm can lead to like pretty big errors so for example there's
+[26:29] a lot of excitement about these models that were take take an open Llama model
+[26:35] uh the the weights from that and then grab like 10,000 requests from the
+[26:40] openai API or scrape like r/ chat gbt or whatever and then just fine-tune like
+[26:46] now there's a data set use it to fine-tune the model and those are the
+[26:50] ones that were like up there on the arena uh on that uh like ELO ranking um
+[26:57] from the leader board that I showed before um and the there was a claim that
+[27:02] these uh had like 90% of chat gbt's quality there are only 7 billion
+[27:06] parameters like you know people were like very enthusiastic about this back
+[27:11] in April when I was talking about this a lot of people are like why are you even
+[27:14] talking about open AI anymore we like you know vun has done it and like yeah
+[27:19] uh so um this is a fake screenshot uh that's uh from a paper or
+[27:25] that I modified from from a paper about uh about this this topic of how well
+[27:30] these models work um so this is one output from a language model
+[27:35] anonymized um on answer how does actor critic improve over reinforce um so this
+[27:41] is an algorithm from reinforcement learning so one language model says uh
+[27:46] actor critic algorithms are an extension of reinforc that combine both policy
+[27:50] based and value based methods um it's got a Critic Network it's got Advantage
+[27:54] estimation it's got function approximation so it's one answer that's
+[27:58] a answer B uh actor critic algorithms are a type of reinforcement learning
+[28:03] algorithm that improves the reinforcment algorithm by combining actor policy and
+[28:07] critic value components actor critic algorithms use a single critic
+[28:11] reinforced has a separate critic for each action actor critic algorithms
+[28:15] learn the policy and actor simultaneously but reinforced learns
+[28:18] them separately um so you know those might seem fairly similar so does
+[28:23] anybody have a strong preference for uh answer a here
+[28:31] anybody have a weak preference for answer a over answer B
+[28:36] here some people raising like a like a a soft hand maybe yeah um anybody have a
+[28:43] strong preference for answer
+[28:47] B maybe one maybe two and a weak preference for answer B this one's got
+[28:53] like a they they both got these nice numbered lists you know which looks very
+[28:57] author reminds me of a medium article which is
+[29:00] likely to be true of course um uh so the uh so uh answer B comes from uh I want
+[29:09] to say this was GPT 4 yeah um answer B comes from gp4
+[29:15] and oh wait wait or a sorry answer a comes from gp4 and has the advantage of
+[29:22] being correct um answer B comes from one of the uh fine-tuned models
+[29:27] um and is like gibberish basically um and so this just you know like just
+[29:35] having humans rate the outputs of of language models in the way that a lot of
+[29:38] those uh leaderboards were constructed um did not like it didn't have any
+[29:43] grounding in the actual utility of the answers it was just a lot of people
+[29:46] going like looks good to me like nice yes merge um
+[29:52] and um without like knowing whether it was actually right or not um and so uh
+[29:58] there's a nice paper from some folks at uh Berkeley about um sort of walking
+[30:03] through like what's going on basically the models are picking up style from a
+[30:07] fine tune which is things like that delightful little split into bullet
+[30:11] points and like you know like a very authoritative and friendly educational
+[30:15] style um but not like actual knowledge not like reasoning capabilities and like
+[30:21] a lot of people in the open modeling communities like sort of missed this or
+[30:26] like willfully ignored it um some of the sharpest people were definitely up on
+[30:30] this like the guano paper for example mentions that there's uh some issues
+[30:34] with evaluation came out before this paper um but definitely a lot of people
+[30:38] missed it um so the the immediate question that
+[30:43] comes up is like between these open models and these uh proprietary models
+[30:47] who's going to win long term like who should I bet on um and in some ways I
+[30:53] think that's a bit of a misguided question um so consider operating
+[30:58] systems uh like the first operating system roughly was system 360 from IBM
+[31:04] on mainframes extremely closed um in the 80s there was a rash of operating
+[31:10] systems most of them closed the original Xerox pilot on the Xerox star uh was
+[31:15] extremely closed Doss and wind Doss was closed uh Mac OS at the time was like
+[31:20] completely closed um and there were Unix operating systems that were kind of like
+[31:25] mixed um then over time the like closed versions of Unix lost out to more like
+[31:32] friendly licensed ones and in particular to gnu Linux um and there's been a bit
+[31:36] of a trend towards open uh open operating systems kind of taking more
+[31:40] mind and market share over time like data centers have more Linux in them now
+[31:44] than they did in 2005 and then than they did in 1995 but uh from what I can tell
+[31:50] it's still like 70% plus Windows um for uh for operating web servers in Mobile
+[31:56] phones we also have have an open operating system and a closed operating
+[31:59] system and these things have been able to coexist and serve different needs for
+[32:04] different organizations throughout like the history of operating
+[32:08] systems um and the same is true of databases uh so back in the 70s and 80s
+[32:15] it was Oracle and IBM's dbt2 um which is still around I found out um like you
+[32:23] live too long in in the in San Francisco and you forget that there are people who
+[32:27] IBM db2 um in the 9s there was some like consolidation around more open
+[32:34] implementations of of SQL uh and in the 2000s to 2010s there was the no SQL
+[32:40] movement but that was still like mostly open source databases uh so there's been
+[32:46] a lot of like movement in the direction of open
+[32:48] databases um with streaming databases we have both Pro proprietary and open
+[32:52] options if you look at the top 10 uh databases as ranked by DB engines.com
+[32:57] which is you could quibble with the ranking thing but the the key point is
+[33:02] that there are like it's like half and half split between um between
+[33:07] proprietary databases and um and open source
+[33:11] databases uh and that has been like relatively stable over time with like a
+[33:16] soft maybe a soft Trend in the direction of open uh
+[33:20] databases uh so with these like very like language models Foundation models
+[33:24] are this very like lowlevel the component of a software stack more like
+[33:29] an like an operating system or a database I think than like um you know
+[33:34] than a SAS app or a or a UI uh and because of that they're likely to be
+[33:39] subject to some of these same forces that say there's some people who want to
+[33:43] works one way there's some people who want it to work in another and for some
+[33:46] of them that openness that hack ability is going to be critical for others the
+[33:50] like reliability the existence of a white glove Enterprise version is going
+[33:53] to be really critical um and those will allow these two things things to
+[33:57] coexist um and uh yeah and the CEO of hugging
+[34:04] face liked my tweet when I said that so it's probably
+[34:08] true um but I think a lot of people are like well no but like who's like who's
+[34:14] going to win like who should I bet on um and I think the closest thing to an
+[34:18] answer that I have is that if capabilities requirements saturate if
+[34:23] people no longer want the absolute smartest model out there they just want
+[34:26] a model smart enough for XYZ then open models will probably catch up and then
+[34:31] like start to dominate um the thing that keeps open models behind prary models is
+[34:35] the extreme expense of maintaining a large resource team and like you know
+[34:40] continually constructing new data centers at an increased scale um to the
+[34:45] tune of like $500 million in order to hit that next capability level before
+[34:49] everybody else but you know uh at a certain point processors got fast enough
+[34:54] that people were not like clamoring for the next upgrade as soon as possible um
+[34:59] and at that point we're starting to see like a little bit more opening up in the
+[35:02] sort of like in the chip space with like brisk v u and so like at like with in
+[35:06] any number of other technological domains you've seen that when
+[35:09] requirements start to saturate um then like open uh like open versions can
+[35:16] catch up um if they are unbounded and it's like you know uh what a good
+[35:22] example like Ram like nobody has enough RAM everybody wants more RAM I don't
+[35:27] think there are any like open like attempts to make like an open Ram
+[35:30] architecture or something um and that's because and one reason why I think is
+[35:35] capabilities requirements there are remain unbounded um and so um if that's
+[35:41] the case for uh cognition and AI models then proprietary models should be able
+[35:46] to maintain that edge in in capabilities which would sort of tilt the balance in
+[35:51] favor more people would say oh no I need this this proprietary thing um so the
+[35:56] closest to an answer that I have um yeah any questions on that front before we
+[36:02] dive into uh um where we actually run these
+[36:10] models
+[36:16] yeah yeah um so the question was what kind of language support do these models
+[36:21] have um and because it's only an API call away you can of course use python
+[36:27] or node or whatever you want uh no so the question was about like these are
+[36:32] language modeling like machines what languages do they model um and the basic
+[36:37] answer is that the more text in that language that is available on the open
+[36:41] internet the better the language models will be on on that language so they are
+[36:48] like I want to say gbd4 is smarter in maybe smarter in malayum than it is
+[36:56] in Mandarin um I forget there's like some interesting inversions of like
+[37:01] number of people who speak the language versus how how intelligent the language
+[37:04] models are um so I think a lot of them release benchmarks that say like how
+[37:09] multilingual is this language model and for Which languages
+[37:14] um there is you run into the fundamental token constraint of like you need uh you
+[37:21] need existing like you need examples of that language that you can get a hold of
+[37:26] in order to train the model in them um and there just are more English
+[37:31] tokens um but for a given capacity you can
+[37:37] probably achieve like higher quality in a specific model by looking for uh by
+[37:42] looking for a model trained in that language so there's definitely some like
+[37:46] good old nationalist European Endeavors to make like a French language model
+[37:50] that insults you if you ask it for stuff in English um which it of course picks
+[37:55] up just from Reading French um um but yeah but the but the core
+[38:00] models like they support English really well the instruction fine-tuning and the
+[38:04] RF is actually mostly applied to them in English since the annotators who uh
+[38:10] enforce that policy uh through their examples are mostly writing in English
+[38:15] um so fun fact you can get Chad gbt to and Claude probably to tell you how to
+[38:19] build a bomb if you ask in the right low resource language um uh just fun facts
+[38:25] about language model um yeah so that that does that that is a
+[38:29] problem and it does sort of like in uh it has a multiplying effect on the
+[38:35] English languages kind of like cultural hegemony um which is a bit unfortunate
+[38:39] yeah so for the languages
+[38:46] representability lower
+[38:49] oringer also are there Arbitrage opportunities in translating
+[38:55] first transl first and then yeah I'm unaware of any AC but you
+[39:03] know any benchmarking work on this my gut tells me that translating to English
+[39:08] first doing Chain of Thought and then translating back to the original
+[39:12] language would work better um you you're kind of like wondering whether the Lost
+[39:17] in Translation effect is bigger than the like boost of Chain of Thought in
+[39:22] English a lot of the like circuits and language models are very token specific
+[39:27] um and then yeah so it's like the like just one example if you ask it who Tom
+[39:33] Cruz's mother is then it answers better than if you ask it that woman's name's
+[39:38] son I don't know her her name at all um so I can't really do this example
+[39:42] effectively um jbt wins again um but the uh there so that's like an example of a
+[39:48] very of a token specific circuit it's like related to Tom Cruz uh and so you
+[39:53] can see like it's not reasoning the way that a person would or that or that you
+[39:58] would guess from like you know how how you would think about a knowledge graph
+[40:02] or something like that um and so that's where you get these unintuitive things
+[40:06] um but yeah so I saw
+[40:10] you used to may still deep learning oh yeah and I was wondering one of the
+[40:18] pieces of the whole event is okay there is these reasoning service AP now right
+[40:25] can
+[40:50] without yeah that's a great question um for individuals I think I think it's a
+[40:56] matter of your personal interest in understanding the modeling
+[41:05] like I guess the analogy I would immediately jump to is as an individual
+[41:09] developer you can get away with not knowing anything about databases like I
+[41:13] have done that I couldn't write a b tree right now I don't want to ever learn how
+[41:18] to do that like and to think about page sizes and yeah it makes me ill to think
+[41:23] about that and whereas I get excited if I wake up in the morning I can think
+[41:26] about beian inference in language models and so as an individual I think you can
+[41:31] like kind of be guided by your like what you find most exciting as a team and as
+[41:37] an organization though if you have nobody who understands databases in your
+[41:40] organization you're probably going to be in trouble um just like it ends up like
+[41:46] most applications require like pretty decent knowledge of databases and when
+[41:51] they go down or when they need to be configured even if you are using red
+[41:55] shift or or you know you're using some managed service being able to like
+[42:00] understand some stuff about them is actually critical for debugging and
+[42:03] being able to know when you need to switch manage services or like yeah or
+[42:07] how to reconfigure them so I think like the direction that we're going to go is
+[42:11] to evolve there it's a question of whether you want to be uh
+[42:15] uh a site reliability engineer focused on llm reliability or um you know a a a
+[42:23] a modeling engineer or whether you want to be like more at the like application
+[42:27] layer um yeah so just an interesting one what's
+[42:32] your personal opinion on this there's a handful of companies that have gotten
+[42:35] recent funding to build like vertical oriented commercial models Finance
+[42:40] healthare Etc yeah yeah so the question was what about
+[42:44] these models that are foundational but like less broad so it's like a
+[42:51] foundational model for law a foundational model for um for healthcare
+[42:56] yeah I
+[42:59] um my experience has been that if you bet that some capability is not going to
+[43:04] be available in a language model um or in a foundation model like you will get
+[43:10] you will lose that bet um uh so just as an example in the Deep learning boot
+[43:15] camp uh we spent a long time trying to make an optical character recognition
+[43:21] system uh and it's like you know it's the like Pinnacle of the class when you
+[43:25] can finally like deploy a web service that does optical character recognition
+[43:29] and that's like an accidental side feature of GPT 4V and it's like better
+[43:33] at it than the thing that we built um and a lot of ml teams have experienced
+[43:38] something like that um so I worry I would worry if if somebody were like
+[43:43] offering me that as a job opportunity for example I would worry that it's
+[43:47] going to get like scooped on either side by a hyper specific model that's like 10
+[43:51] times more efficient and isn't like a generic Healthcare model but is like a
+[43:55] um uh ultrasound for the heart model one I
+[44:00] worked on before um yeah or just send it to the chat GPT
+[44:06] API or to the GPT API great questions um so uh maybe
+[44:15] another reason to think that there might be like a little more Alpha in in
+[44:19] actually learning more about the models is um inference doesn't have to be
+[44:25] executed Network it doesn't have to be executed like in some Central server
+[44:30] there are lots of reasons why you might want to execute your uh uh your
+[44:36] inference on an enduser device um so we'll talk about the different types of
+[44:41] end user devices and the different constraints that they put on inference
+[44:44] and the implications um like engineering and
+[44:47] strategic and then also um talk about what the options are for doing things
+[44:51] over a network um so running stuff for end
+[44:56] users is like uh like where the sorry the end user actually executes it
+[45:01] themselves is not quite there yet but it's like uh it's getting there and
+[45:05] maybe a little bit faster than I personally expected um like I've run
+[45:08] llama 2 13B on this very laptop um without it
+[45:15] catching on fire um so there's uh there's some hope uh that there will
+[45:21] that that will continue to get better um and so this uh this is critical for
+[45:27] latency sensitive applications so like being able to actually execute the
+[45:32] inference at the same place that the user where at the same place where the
+[45:36] user is um and the reason why it goes back to this like this famous set of
+[45:40] numbers every engineer should know from uh Peter norvig and Jeff Dean at Google
+[45:46] um which is that the time it takes to send a packet just one packet so
+[45:52] probably this probably isn't even a whole HTP request I'd have to check
+[45:55] again but let's just say you send information back and forth from like
+[46:00] here in California to Europe and back it's 150 milliseconds um and there's
+[46:06] like a number of kind of madeup numbers in the ux world about like how fast you
+[46:12] need to be for something to feel interactive um so one of them going back
+[46:16] to like the 70s or 80s it's the Doty threshold which says the user and the
+[46:20] computer can interact with each other in under 400 milliseconds then the like
+[46:25] human won't feel like they're waiting on the computer and as you're programming
+[46:29] things you won't like end up blocked on human input um but you'll and you'll
+[46:34] still have plenty of time for doing stuff in inside threads and things like
+[46:37] that uh so if you like if you have to like do a network call every single time
+[46:43] you're using up like a third of your budget just on like waiting for
+[46:46] information to come back and now you're going to spend a ton of engineering
+[46:49] effort on like trying to find ways things that you can do asynchronously
+[46:53] during that like P like that Network call and like you can you can work
+[46:57] around it but it is punishing um and that's like there are even tighter like
+[47:03] reaction time things like if you have a self-driving car um you can't wait 150
+[47:07] milliseconds uh to find out that you need to break
+[47:13] um so uh yeah so and the nice thing about this uh the other benefit to it
+[47:19] beside it being necessary in some places is that if end users run the computation
+[47:24] then you don't need to pay for it um so your inferencing costs can be
+[47:31] 0 which would be which would be great um so the cost that you pay um is control
+[47:37] so you have less control over the execution environment um your ability to
+[47:42] do Telemetry and see what is going on is limited uh people don't like it when you
+[47:47] like carefully observe their activity using software on their machine but if
+[47:52] they you put the same software at a UR URL you can spy on them as much as you
+[47:57] want and they don't get mad um so you lose out on Telemetry you uh have to
+[48:02] worry about compatibility with different execution environments and you have to
+[48:06] actually support past versions unlike uh if you're running it as a
+[48:10] service um or rather if you like you know control the execution
+[48:14] environment um so the things that are unlocked by this are some of the best
+[48:19] applications here uh like some of the most exciting ones especially to me so
+[48:24] uh use on Smart use in smart phones using robots using wearables um so
+[48:28] Google just in the past couple days announced that the pixel Pro 8 um is
+[48:34] going to have uh large language models directly on device um they mostly showed
+[48:38] off stuff that looked like kind of like summarization and some like light image
+[48:41] editing so not like full on like you know like Hey Siri um why did the
+[48:47] Ottoman Empire fall like I don't know what you talk about with chat gbt um but
+[48:52] uh like it's not quite that level but it's a move in that direction and a
+[48:56] trend we can expect to kind of continue getting that inference onto the device
+[49:01] um and uh there was also a recent Hardware hack um on like using you know
+[49:08] getting this inference on mobile robotics platforms um and so there's
+[49:12] there was a ton of cool applications there like um yeah some stuff with like
+[49:16] 3D like Point Cloud rendering for for your inside your house like a Roomba you
+[49:21] can control with your voice very cool stuff um the
+[49:26] the constraints that appear here uh that you'll have to engineer around are like
+[49:32] very tight Hardware constraints so um there there's memory limits both disk
+[49:37] and like vram and RAM are like are extremely tight and like current
+[49:43] language models you can always trade more up to points where you're spending
+[49:49] like $100,000 on a machine you can trade more money for smarter models um and and
+[49:56] phones are down at like gigabytes uh low gigabytes of RAM uh like yeah um was
+[50:03] running a language model on a single board computer and that had like two
+[50:05] gigabytes of shared Ram between the CPU and GPU not a lot of space um and the
+[50:12] like real uh deep limit is power um it's uh uh or the sorry there's a limit on
+[50:20] power which is like an a100 uh which you might use for inference draws 300 watts
+[50:25] of power and something like the single board computer was using the Jetson Nano
+[50:29] that's 10 watts of power so a factor of 30 not going to make that up anytime
+[50:33] soon um and underneath both of these is the problem of heat dissipation um there
+[50:39] that's like a really like tough thing to deal with when you are in these like
+[50:43] small environments um and like prevents them from just being like Oh I'll just
+[50:48] like make a chip where you can actually move like nine pedabytes a second um
+[50:54] like across an inch and it's like uh like you just do some like back of the
+[50:58] envelope math and it's like that's going to like egress so much heat the thing's
+[51:02] going to catch on fire um so um yeah this is we're talking about some
+[51:09] hardcore engineering stuff here um all right so the like mobile
+[51:15] environments uh maybe like further out in the future to get uh large
+[51:19] capabilities onto them but um not impossible what about um what about
+[51:24] other consumer Hardware desktops um which are a place where you could have
+[51:28] video games with actual artificial intelligence in them uh operating system
+[51:32] level assistance n native apps with these like kinds of features that we're
+[51:36] starting to see in um in browser apps uh so you still run like you run into even
+[51:43] more heterogeneous hardware and that's going to give you different constraints
+[51:46] depending on the system that you're on and that is going to require like really
+[51:50] heterogeneous software to meet those constraints like you probably can't
+[51:54] assume that that everybody has an Nvidia 30 series or later GPU even though it
+[51:59] would make your life a lot easier and you probably can't assume that you can
+[52:02] use up all the RAM on that uh uh uh you know on that chip even if it would make
+[52:07] your life easier um I think the long term we might be able to expect
+[52:13] ecosystems to adjust around the requirements of these workloads a bit so
+[52:16] like kind of uh like make it uh like make cleaner interfaces for using these
+[52:22] things so you don't have to write 15 different versions um or write a make
+[52:25] file that looks like llama cpps don't look at it um uh very scary uh there's
+[52:31] kind of a sweet spot actually in what little like next generation of video
+[52:35] game consoles because you have you have total authority to just use up as much
+[52:39] of the system as you want people pay lots of money for them they often build
+[52:43] custom silicon based on what developers want so that could be if you're thinking
+[52:48] about what you want to be doing in like 5 years seven years in this field
+[52:52] consider that as a possibility lots of people would love to to have um a real
+[52:57] like human-like intelligence in the um uh in the things they're shooting in
+[53:04] their first person shooter you know like that that I think that would make a lot
+[53:07] of money yeah when it comes to building ESP for
+[53:11] mobile
+[53:16] yeah yeah so the question was for mobile Hardware like what are solutions and
+[53:22] specifically quantization so um when one of the key constraints is memory like
+[53:29] just trying to make the size of the model smaller and the size of the
+[53:32] computation smaller is helpful so the like people are pushing to try and take
+[53:38] the parameters of language models down from being two bytes to one bite to half
+[53:43] a bite to like a single bit um and I think people are kind of stalling out at
+[53:49] the like half bite level um and often to actually recognize those gains you need
+[53:56] to like write assembler and stuff it's like it can get pretty gnarly um so
+[54:04] that's often only like highly resourced teams working for a long time that they
+[54:08] can actually see those benefits um the other thing that people talk about a lot
+[54:11] uh for like making models work on smaller devices is
+[54:15] sparity um and so sparsity means like oh there's this giant weight Matrix maybe
+[54:20] most of them are close to zero and maybe we can just like get rid of those like
+[54:24] if we were going to go to one bit there's zero or one like why not there's
+[54:27] zeros and then zero is like a very easy number to work with like you the number
+[54:32] that comes out is multiply it's zero add you just keep the number so it's you
+[54:36] don't need like a full logic circuit to handle it um so there are some things
+[54:41] that make use of sparsity the problem is that the type of sparsity that neural
+[54:45] networks need is called unstructured sparsity you have just have zeros kind
+[54:49] of like scattered around your Matrix multiply and the all the like existing
+[54:55] easy to use has like you know python API uh stuff is um uh is in structured
+[55:01] sparcity and so you get gains there and it's like you might need yeah a lot like
+[55:07] yeah hand tuned Cuda kernels or yeah to like actually take use make use of
+[55:11] unstructured sparcity so that's something if there's a ton of pressure
+[55:15] we could see those developments in five years or so but um we haven't se people
+[55:19] have been thinking about that for almost for like seven years and it's like not
+[55:23] made a ton of progress but yeah helps definitely has made it easier and like
+[55:29] Google has been able to fit decent amount of language modeling capabilities
+[55:33] on a uh on a mobile device um using distillation and quantization and
+[55:39] probably more secrets that won't share
+[55:47] I
+[55:51] yeah yeah um so the if somebody tells you a number like 50b you know like
+[56:00] llama llama anthropic 52b llama 70b that's billions of parameters and then
+[56:08] the question is like how what what how big is a parameter like how many bytes
+[56:12] and the like they're trained or where they the way the way they come out of
+[56:16] the factory is two bytes per parameter so take the number that somebody gives
+[56:20] you multiply it by two and then the B is giga so like a small llama model is like
+[56:27] 14 GB 7 B * 2 14 GB so not going to fit that in phone Ram uh and that does make
+[56:36] yeah doing this a lot harder um you can do thing you can like try and do stuff
+[56:41] with paging like put stuff on the disc bring it bring it into RAM then like
+[56:45] execute with it um but that like slows things down a ton um so in general
+[56:52] yeah hm so people used to train in float 32 and
+[56:58] release models in float 32 maybe I thought the Llama models were released
+[57:02] in float 16 it's float 16 usually yeah a lot of like a lot of people train in
+[57:07] this new like Google brain float uh thing and then they they're doing that
+[57:12] because they want to be able to use float 16 and so have two bytes per
+[57:15] parameter but like definitely the so the like the default before that was four
+[57:20] bytes per per parameter and before that when people were doing scientific Compu
+[57:25] with graphics with graphics cards like um people at the National Labs the
+[57:30] default was like four byes for parameter like um or sorry 8 bytes 64 bits um
+[57:36] because they really needed that like high precision and high range um and
+[57:40] yeah but now the trend has been to push them lower and many model releases are
+[57:45] now like already two bytes 16 bits yeah um and now gei geov is like
+[57:54] immediately converting them down to four bits uh and three bits um which is like
+[57:59] wild like what does that even mean um like a non- power of tube it's scary
+[58:05] unsettling um okay so uh with there's another execution
+[58:12] Target that gets you a lot of the benefits of desktops which is like you
+[58:18] have a b machine to run on and it's not yours so you don't have to pay for it um
+[58:23] but then you get a more genius execution environment which is the browser um so
+[58:27] this is not like a web app where they like talk to a model running in a
+[58:31] service but like there is a model inside of the browser that runs inside the
+[58:35] browser like runtime uh and that like the homog homogenization environments
+[58:41] would be very huge um right now this is kind of like awaiting some technical
+[58:45] improvements in the world of browser so there is a Target in web assembly that
+[58:51] you could compile your programs down to um and in principle run them uh the
+[58:56] support for uh gpus is very gross um there's uh a working draft from the www
+[59:04] Consortium for web GPU which would make it cleaner and easier to use um so that
+[59:09] would help the like ecosyst like stack and ecosystem around this for other
+[59:13] kinds of web applications is developing will like maybe lead developments and
+[59:18] using this for uh delivering inference um you have a new constraint distinct
+[59:24] from the other ones which is you now at least as it stands right now you would
+[59:29] need to deliver weights over the network and so now it's like you're you're you
+[59:33] have kind of the model size constraints that you might associate with mobile
+[59:37] Hardware um but only during the like first load um so um there are probably
+[59:44] clever ways to get around that like progressively delivering them um or uh
+[59:49] like browser uh companies sort of agreeing to incorporate some Foundation
+[59:54] models into the actual browser runtime itself um so like inside of uh like a uh
+[1:00:02] like v9 uh an update to V8 with a foundation model already built into the
+[1:00:07] runtime that would make your life a lot easier um so this like would uh yeah
+[1:00:15] browser assistance maybe sort of like General uh like executing apps inside of
+[1:00:19] a browser that feel more like native apps um that's the potential
+[1:00:22] applications here but um still a little um at the
+[1:00:29] edge that was a pun I guess at the edge um okay so because oh yeah question
+[1:00:38] how many gabes is a small and large Model A small and a large model so when
+[1:00:44] I hear small large language model first I
+[1:00:49] cringe internally and then I accept GPS system ATM machine
+[1:00:55] whatever um so a small large language model in my mind is something that has
+[1:01:01] like kind of limited ability to like speak and
+[1:01:05] interact with and that's what you see at like the like 13 billion to 30 billion
+[1:01:11] parameter range like the medium size is like the 70 billion parameter range
+[1:01:16] which is like the largest open models and then like a true large language
+[1:01:20] model the ones that like make people scared about losing their jobs are
+[1:01:23] generally like mixtures of 70 to 100 billion parameter models or maybe they
+[1:01:28] are themselves 200 billion 280 billion parameter models yeah so then for all of
+[1:01:34] those take that and multiply it by we'll call it two um to get the number of
+[1:01:38] gigabytes so like half a terabyte for the um for like a you know
+[1:01:43] Palm well a whole terabyte for Palm 540b um which is one of the larger ones
+[1:01:49] ever trained I guess the cont like they areed inows mhm
+[1:01:58] have um yeah it's been a long while since I downloaded a browser to my
+[1:02:03] computer but I want to say that the package that you download to install
+[1:02:07] browser is in the like couple of gigabytes range right no I think it's
+[1:02:10] like hundreds of Megs
+[1:02:16] really uh yeah oh uh yeah wait so you download an installer and then you have
+[1:02:22] to download anyway yeah so if if people want in to install stuff that's only a
+[1:02:26] few hundred megabytes then that's a nonstarter um I guess I expect a Linux
+[1:02:32] Dro image to be in the like couple of gigabytes like if I'm playing around
+[1:02:36] with containers so that's um uh that's like another Anchor Point um and also I
+[1:02:42] for those things we're probably talking like 2 four eight years before that kind
+[1:02:46] of like standardization effort agreement like happens and we can hope that
+[1:02:51] internet speeds will increase in that time to match the increasing needs uh of
+[1:02:58] the internet um but yeah that's it's a pretty tight constraint and like
+[1:03:02] probably looks a lot more like mobile stuff for a very long
+[1:03:06] time um
+[1:03:14] yeah no I think like right now I've been kind of assuming that you're doing stuff
+[1:03:19] relatively efficiently and to be honest like pytorch is like pretty good at this
+[1:03:23] already like um the fact that the application layer
+[1:03:27] is written in Python isn't the problem um but yeah good
+[1:03:36] question
+[1:03:42] yeah yeah um I think we'll come to that in uh once like wanted to talk about um
+[1:03:49] after we talk about running AI over Network talk about the actual inference
+[1:03:52] workloads um so we definitely get to talking about that I don't think I'm not
+[1:03:56] going to have a price number to give to you um but you have to take whatever
+[1:04:00] tokens per second you can get and then like however much you're spending on
+[1:04:04] gpus um and then convert that into a dollars per token um and that's going to
+[1:04:12] give you something you can compare to the like model providers um and until
+[1:04:16] you put some decent optimization into it you aren't going to match
+[1:04:19] them um you did ask about CPU inference that that is rapidly evolving I think
+[1:04:26] there are cases where you can kind of like compete in price there but um yeah
+[1:04:30] we'll cover that more later it seems like let's put a pin in those two things
+[1:04:35] and we'll come back to them after we talk about the like really the thing
+[1:04:38] that almost everybody's going to do like immediately after they leave is going to
+[1:04:42] be run AI somewhere in a data center um but those are important questions long
+[1:04:47] term okay so uh like uh the running stuff on end user devices has a lot of
+[1:04:55] reasons why it's not so great right now so what what what do you get when you
+[1:04:59] run AI in in a AI workloads in a data center um the biggest win is Simplicity
+[1:05:04] uh the biggest pain point is latency as we've already discussed um so Simplicity
+[1:05:09] like you just you control the whole environment it makes your life a lot
+[1:05:11] easier yeah he said latency the biggest is that really a thing for llm compared
+[1:05:17] to like Vision model because like any way the tokens that you can infer per
+[1:05:21] second are quite a bit slower than of
+[1:05:27] theat yeah so I would say that you can let's see so the question is whether
+[1:05:33] latency is actually a problem so um if you need to do like back and forth like
+[1:05:39] you need to get something back from the open API then possibly like call it
+[1:05:44] again with some added context or like run some if statements and then send it
+[1:05:49] back now you're looking at like multiple Network calls and you could avoid all of
+[1:05:53] that overhead if you were running things locally so that's an example of the case
+[1:05:57] where people would run into a latency problem locally you're get way lower
+[1:06:03] tokens per second anyway so you're completely dominated by the time it
+[1:06:08] takes to generate so tokens per second is a throughput number not a latency
+[1:06:12] number right so it doesn't matter if your tokens per second is half if your
+[1:06:17] tokens per second is half that of what open AI is getting but you only need to
+[1:06:21] generate 30 tokens right that then it like the the latency number is going to
+[1:06:28] be the larger one even though your like throughput is lower like this is
+[1:06:32] definitely something that people have run like run into when you have like
+[1:06:36] highly interactive things like they're definitely so to be clear there are tons
+[1:06:40] of applications in which you don't feel this pain um and like chat gbt for
+[1:06:46] example is at this point like the latency of the response from the machine
+[1:06:50] is not really the problem um so yeah it's not guarant guaranteed to be a pain
+[1:06:54] point I would say as well um
+[1:07:02] yeah um
+[1:07:06] so yeah and I I guess I'm also kind of maybe imagining situations that are
+[1:07:10] closer to the computer vision case in which you need cognition well in the
+[1:07:13] computer vision case you need rapid responses because it's like in the motor
+[1:07:17] Loop of a system for example and if we want to use language models as the
+[1:07:21] cognitive component of a of a moving system then they would need latencies
+[1:07:24] like that um like in the tens of milliseconds or something yeah um and uh
+[1:07:31] you are never going to be able to achieve that over a
+[1:07:35] network but yeah great question um all right so inference as a service
+[1:07:39] providers this it makes it super easy to get started it's what you know when
+[1:07:43] you're using open AI they are inferenced as a service provider um so all the
+[1:07:47] proprietary models basically live here there's not some like way that they
+[1:07:51] would ship you the model and you could run it and it's proprietary license um
+[1:07:55] that doesn't exist yet um open models are also available so like if you want
+[1:08:00] if you want to bet on the the like open ecosystem uh you can use a service like
+[1:08:05] replicate um that will like they'll run uh open models for you it's uh generally
+[1:08:12] like easy get started it's not that much more expensive than running it yourself
+[1:08:16] in a lot of cases um but you have limited control of the model um for
+[1:08:20] proprietary models we already talked about how you would have less control
+[1:08:24] kind of inherently um for even for people who are providing open models and
+[1:08:29] so don't have IP they want to protect in order for them to like serve it cheaply
+[1:08:33] to you they need to have like and to have like an economic win that they can
+[1:08:37] like pass on to you um and like keep a little bit for themselves they need to
+[1:08:41] do something like amortise costs across many users of models many more than than
+[1:08:46] you have and that requires some amount of homogeneity of usage um and it's like
+[1:08:51] right now it's proven to be like pretty hard to give people control while also
+[1:08:54] giving them homogeneity usage um for something like AWS they came up with
+[1:08:59] really smart ways to cach pieces of containers so that the fact that
+[1:09:04] everybody's using kind of the same software allows them to amortize while
+[1:09:07] also giving customization um but people have not figured out a similar trick for
+[1:09:13] um for language models or image generation models yet um so you don't
+[1:09:20] have as much control as you would have yourself um so so new constraints arise
+[1:09:25] so there are things like API rate limits um and now this is sort of like a cost
+[1:09:30] management game you look at this as like um rather than like paying up front uh
+[1:09:35] for compute that you have and then you think about maximizing the use of that
+[1:09:41] compute you think the other direction you try to minimize your use of compute
+[1:09:44] while fitting the rest of your constraints so it's a very different
+[1:09:47] feeling if you know you ever switch between having your own compute and
+[1:09:51] switching to Cloud it's the same idea
+[1:09:57] um yeah uh so right I so you could do that
+[1:10:03] inference yourself so rather than having somebody else do it for you um and this
+[1:10:09] works pretty well and is getting easier every day so cloud like this is like
+[1:10:14] running stuff on a public Cloud um is like one of the most popular choices for
+[1:10:19] how to run ml workloads um and for like SAS in general um there's some
+[1:10:24] specialist Cloud providers in this space um like Lambda Labs that can be like
+[1:10:29] very competitive they're like often cheaper than the um than the like Big
+[1:10:34] Three um and it's a nice balance of control with like complexity and have
+[1:10:39] like which things you actually care about having to deal with versus not um
+[1:10:43] it can get expensive over time it's definitely like you know more expensive
+[1:10:47] than um uh like over a long period of time than if you bought the stuff
+[1:10:52] yourself uh gbus times feel like second class citizens and especially a lot of
+[1:10:56] the like big public clouds um uh Google Cloud's a bit of a distinction there and
+[1:11:02] that you can just add gpus to any instance it's kind of nice but in other
+[1:11:07] other uh public clouds that's not really the case uh and again this is like uh a
+[1:11:12] cost management problem and um the one of the popular ways to solve the cloud
+[1:11:19] cost is to just agree to a large deal upfront and now you're starting to get
+[1:11:23] some of the IL liquidity associated with actually build buying Hardware um and
+[1:11:27] you start to get some of the like vendor lock in um that you would also associate
+[1:11:32] with that um so the you have the opportunity to kind of like trade those
+[1:11:36] things off but um they are your constraints to work with um did want to
+[1:11:41] call out that there are some serverless approaches which gives you some of the
+[1:11:46] like usage ba like really tightly usage based pricing associated with inference
+[1:11:50] as a service providers um but also the like control associated with like
+[1:11:57] you know have renting servers in the cloud and by this by serverless I mean
+[1:12:01] anything with like scale to zero semantics and pricing um uh that doesn't
+[1:12:07] involve you having to like literally manage servers so like thinking about
+[1:12:10] the operating system uh for example um and that offers High availability um
+[1:12:15] this is a like a relatively new category in software in general and especially in
+[1:12:19] machine learning there's a couple of players here um modal uh Labs is one
+[1:12:24] that I like quite a bit because it doesn't just do the ml stuff though it
+[1:12:28] is very good at it um replicate which also does inference as a service will do
+[1:12:32] this uh hugging face spaces recently Chang their end points to scale to zero
+[1:12:36] um and there's also yeah banana dodev and and others um the good thing is that
+[1:12:43] it's like easier to get started especially if you're not like a cloud
+[1:12:46] Ops person um and very inexpensive at low traffic like you only have to pay
+[1:12:51] when you have traffic and if you're like like running a small if you're running a
+[1:12:56] demo that only needs to be up when you're showing it to um investors or if
+[1:13:00] you are working on a tiny feature at a large organization then you might have
+[1:13:05] very low traffic patterns oh my it's uh it's Fleet week I
+[1:13:10] think so that might be the Blue Angels um yeah
+[1:13:15] um scale to zero means that you um when there are no requests you are not when
+[1:13:27] your requests go to zero the amount of resources that you are using and being
+[1:13:30] charged for also goes to zero yes um so yeah for a while hugging face
+[1:13:39] uh and Spaces end points they changed there's inference end points and yeah
+[1:13:44] they for a while it was like it could scale down to one and it would Auto
+[1:13:47] scale so there's like having a Cloud Server with auto scaling built in and
+[1:13:51] then there's that thing but then it also scales to zero and you don't have to
+[1:13:55] think about server management and that that like is the combination that it's
+[1:13:59] the original like aw definition of serverless that has kind of Fallen not
+[1:14:04] everyone goes by the old ways um yeah so inexpensive at low traffic when nobody's
+[1:14:11] calling your API um you don't pay for anything if you like come up with a
+[1:14:14] feature it doesn't work then doesn't matter um bad news is that you kind of
+[1:14:20] generally lose like tight control over aut scaling behavior that you could have
+[1:14:25] if you were like you know if you have a you know kubernetes team to work with
+[1:14:30] they can very tightly set it up so that the auto scaling is delivers exactly the
+[1:14:36] throughput and latencies p99s that you promised um and you kind of give all
+[1:14:42] over some of that control to these serverless fighters who are themselves
+[1:14:46] probably running kubernetes but for a lot of people um and then the real the
+[1:14:51] thing that has kind of prevented this from being as successful as maybe Serv
+[1:14:55] architectures in many other places is latency um so when your it shows up as
+[1:15:04] uh kind of P99 latency so the 99th percentile of requests that hit a point
+[1:15:10] when you need to do auto scaling um the you need to get the weights of the model
+[1:15:16] you're using into uh not just off of dis and into RAM but then from there into
+[1:15:23] the ram of the accelerator and that takes uh like that can take a very long
+[1:15:30] amount of time and so you're looking at like 30C 1 minute 3 minute cold boots in
+[1:15:36] some cases cuz you are moving a half a terabyte of data around um and so that's
+[1:15:42] a place where people could maybe come up with these like clever ways to to cash
+[1:15:46] and share um but yeah it's the memory constraint that you hit in other domains
+[1:15:52] showing up like in Disguise as latency um and uh yeah so the like you
+[1:16:00] still are probably going to be thinking of this in terms of like cost management
+[1:16:03] and and cost reduction as opposed to like resource maximization um
+[1:16:12] yeah
+[1:16:22] yeah yeah so uh the point was about
+[1:16:26] cloudflare workers so I did see that cloud I didn't include them on the slide
+[1:16:30] but cloudfare actually recently released these like GPU workers which is their
+[1:16:34] entry into this and I haven't had time to play with it so I don't know that
+[1:16:36] much about it um I think if I need to go from not consuming any of your
+[1:16:46] resources to having a terabyte of my own personal bytes like in the vram of a GPU
+[1:16:53] you I find it hard to believe that they don't have a latency problem there like
+[1:16:57] so that but so I'd be Cur I'm curious what the what you know about the
+[1:17:00] solution yeah yeah yeah yeah yeah that's interesting i' yeah I'd
+[1:17:06] love to hear about that that's been my experience with the other serverless GPU
+[1:17:10] providers so I'd love to hear more about the cloudflare workers and um yeah if
+[1:17:15] that goes away then serverless becomes a much more competitive way of delivering
+[1:17:19] inference so yeah um so uh I maintain a page for full stack deep
+[1:17:25] learning that has information about uh like cloud gpus and server providers
+[1:17:30] pricing and um uh and what compute they provide um so you can check that out
+[1:17:35] from the slides later if you're interested um all right and then last uh
+[1:17:42] let's talk um like actually what if you actually physically owned the computers
+[1:17:49] that the inference ran on like uh you can do that uh and rather than having to
+[1:17:56] like actually you know construct a building which which maybe the largest
+[1:18:01] uh Enterprises could go uh go about uh using a collocation facility isn't so
+[1:18:06] bad um and there's more reason to do this than for other kinds of workloads
+[1:18:12] and in particular there's actually room to beat a lot of the major public clouds
+[1:18:16] which is why there's competitive clouds like Alternatives in this space uh a lot
+[1:18:21] of data centers that have been like around or which that were designed
+[1:18:26] before 2021 or so are configured for like dis and network heavy workloads
+[1:18:30] rather than power heavy workloads so even if you can uh get a hold of like uh
+[1:18:37] 30,000 a100 you can't just necessarily put them in the same Us East data center
+[1:18:42] that used to run uh that was designed for like uh running databases um it's so
+[1:18:50] it's Capital intensive but ends up being cheaper in the long run you have total
+[1:18:53] control if you if you need it which is awesome um but it's very hard very rare
+[1:18:58] skill set um because it like kind of crosses this like the ml stuff and the
+[1:19:04] the the hardware stuff um and all these people can go and work for open AI for
+[1:19:08] like a million and a half a year so uh uh good luck holding on to them um uh
+[1:19:15] and the biggest constraint that shows up is il liquidity so you're going to make
+[1:19:19] a big bet on what this looks like for example that inference is not going to
+[1:19:22] move on to CPU or not going to move onto custom silicon that behaves very
+[1:19:26] differently from graphics cards um there's a great talk from mates AAL of
+[1:19:31] Lambda Labs about this that goes into kind of detail I think it's it's only
+[1:19:35] like a year old if I if I remember this talk right um and of course he makes it
+[1:19:40] sound very hard because he wants you to use their Cloud um or to pay them to
+[1:19:45] like help you build uh your collocation uh um uh you help you actually build it
+[1:19:53] um but it is a detailed explanation of everything involved and uh you know
+[1:19:57] there's not very many of those out there um all right we're at half time uh
+[1:20:04] so I plan to take a break when I finished part one which goes the rest of
+[1:20:08] Self Serve inference which we'll I'll says another 15 minutes so let's do that
+[1:20:13] and we'll leave uh an hour for part two after a little
+[1:20:18] break um all right so let's
+[1:20:23] uh we actually haven't talked in great detail about uh like you know why why
+[1:20:29] are we using gpus in the first place like what what is actually going on here
+[1:20:33] when we run this uh this like tensor to tensor map with neural networks um like
+[1:20:40] what what what actually does that workload turn into we have two tasks we
+[1:20:44] need to load numbers from memory and then we need to do math on those numbers
+[1:20:49] those are our our like two basic tasks um and that is the reason why we have
+[1:20:55] why we end up using Graphics processing units um because memory is slow and math
+[1:21:02] is fast and in most in the in the Transformer architecture in particular
+[1:21:08] but in many like sort of most neural network architectures you might write
+[1:21:12] down um you only need a given number from the weights like one time per input
+[1:21:21] so that means you need to do a memory read like uh of this of like a couple of
+[1:21:27] byes for a particular parameter to use it in a single floating Point operation
+[1:21:32] and the memory read is going to be very slow and the floating Point operation is
+[1:21:35] going to be basically instant um so in order to do this economically you need
+[1:21:40] to do a lot of math for each read for memory uh you need to like load uh you
+[1:21:45] know load the weight um out and in particular we're talking here about like
+[1:21:50] getting out of the vram and into the place where the you know into the like
+[1:21:56] um the what is it called well yeah it's basically like an L1 cache like closer
+[1:22:01] to the actual comp uh uh computation um and so you want to do that and then like
+[1:22:07] use it multiple times you know and uh that means you want to run on multiple
+[1:22:13] inputs at once and that is memory intensive single uh instruction multiple
+[1:22:20] data parallel linear algebra the same thing you need for graphics workloads so
+[1:22:25] the uh like graphics cards have turned out to be like pretty good at solving
+[1:22:29] this problem um and the the numbers there in
+[1:22:36] the corner are um uh show like demonstrate this uh like general fact of
+[1:22:43] like memory is slow logic or math is fast the you can do 312 Tera flops per
+[1:22:50] second uh in for two byte numbers uh two by floating Point numbers in a tensor
+[1:22:55] core in an a00 um and you only get one and a half terabytes a second of memory
+[1:23:03] bandwidth um and when you're using like you know optimized existing Cuda kernels
+[1:23:09] these two things are like Multiplex so like you load a weight you start doing
+[1:23:14] math on it and then the next weight gets loaded like you know uh concurrently um
+[1:23:19] but you do still have this like mismatch in the band wids that means that you
+[1:23:23] want to be able to like amortise a memory load across as many computations
+[1:23:28] as possible and like in principle this could be flipped around and we would
+[1:23:32] have like very you know things would look very different um uh so you can get
+[1:23:38] like very very large throughput gains by advertising memory reads where basically
+[1:23:43] if you are operating on a very small number of tokens uh then you'll see that
+[1:23:48] as you add like if you're running this this workload yourself as you add more
+[1:23:52] tokens you would think like you should expect like a a slight increase in the
+[1:23:56] amount of time that it takes and you'll see like basically a flat curve for a
+[1:24:00] very long time um and then once you hit the point where the um yeah so if you
+[1:24:13] look batch size at which you'll see that flip so for an a100 it's about 200 uh uh
+[1:24:20] elements in the batch um and and you'll see for an h100 you'll see that that
+[1:24:25] ratio these numbers both go up but the ratio becomes more extreme um so you uh
+[1:24:32] there's a great blog post from Carol Chen on like inference arithmetic that
+[1:24:36] both goes through in Greater detail and then like matches that onto some like
+[1:24:41] actual experimental results and it's able to like track where did each you
+[1:24:44] know micr basically of uh of inference time come from um so the like he take
+[1:24:51] away from this is that if you want to get large throughput in like an
+[1:24:57] inference system that you're running yourself you're going to need batching
+[1:25:00] you're going to need to like collect up multiple inputs uh from multiple users
+[1:25:04] and operate on them at the same time uh so this is uh it's challenging to
+[1:25:10] achieve the same thing in an end user device um you are like if you're only
+[1:25:15] working for one person then they might not make 10 requests uh you know quickly
+[1:25:20] enough for you to fill up a batch um and that actually might kind of tilt things
+[1:25:24] in the direction of uh of CPUs or of uh you know uh different uh different
+[1:25:31] architecture with different um you know memory bandwidth versus tensor core uh
+[1:25:36] versus uh math bandwidth um uh
+[1:25:42] tradeoff um the one of the useful things that came out of this I guess this is a
+[1:25:47] restatement of kind of what I just said when you have a like low load API um you
+[1:25:53] will end up with smaller batch sizes because maybe you have you have to
+[1:25:56] deliver with a certain latency so you can't just wait forever um and so you
+[1:26:00] will make different decisions about compute memory trade-offs for example
+[1:26:05] like caching past computations of uh keys and values is very common when
+[1:26:10] you're doing batch inference but it's actually not necessarily the right
+[1:26:13] choice when you are already memory bound trading off memory for compute um isn't
+[1:26:19] a good idea um if you're like at for larger batch sizes um you if you're
+[1:26:25] doing something that's an API where like serving requests directly then you would
+[1:26:29] want to like roughly balance being uh flop bound and memory bound so that you
+[1:26:35] can get quick latency of responses even though your throughput is less than it
+[1:26:39] would be otherwise um whereas if you're doing like a batch job like an overnight
+[1:26:44] type job um or that is like typical of data science or or Big Data workloads
+[1:26:50] then you would just go for the largest B that you can and that's what people do
+[1:26:53] during training they go for the absolute largest batch that they can because
+[1:26:56] there's no latency requirement uh there's only
+[1:27:06] throughput uh yeah yeah so tpus end up I I like looked around and they I I've
+[1:27:11] never personally used them for anything serious so I wasn't able to like
+[1:27:14] directly map on like pull out the equivalent of a tensor core um like flop
+[1:27:20] bandwidth and the and and Ram to L1 latency um but the results and
+[1:27:27] benchmarks that I've seen is that they're like 30% better um like they
+[1:27:32] they have a they do have a slightly different choice of tradeoff um and they
+[1:27:36] end and it's better for neural network workloads than graphics workloads and
+[1:27:41] that gets what from what I have seen like 30% Improvement but not like a 10
+[1:27:46] to 50x Improvement which is what you would really like to see if you're
+[1:27:50] making as drastic of a decision as like going over to a completely different
+[1:27:55] accelerator with a completely different software stack um yeah I guess yeah I
+[1:28:01] had I got into a discussion with uh one of the people on the TPU team about like
+[1:28:06] the hardware Lottery and he his he was like the GPU is already like is just an
+[1:28:11] excellent machine like it does this workload really really well um and I
+[1:28:15] think that is worn out in the numbers yeah from what I heard the main
+[1:28:19] advantage of dpus is uh operational efficiency and power
+[1:28:24] efficiency not like of performance yeah so um for the folks listening online
+[1:28:31] repeating the point uh the one of the benefits of tpus is power I totally buy
+[1:28:36] that um yeah uh I think yeah the numbers that tend to get reported in things like
+[1:28:41] Google's Pathways paper and palm papers or open and like what is known about
+[1:28:45] open AI it's like it's all about like flop utilization and and total flops and
+[1:28:50] stuff like that and not things like power that do matter um I'd say like
+[1:28:55] people have not gone rushing to try and get a hold of them which feels uh uh
+[1:29:00] like a strong signal um similar with like other types of custom silicon like
+[1:29:05] cis's um uh chip uh but you know who knows I think this is getting back to a
+[1:29:12] question that got asked earlier um I believe the like having custom chips
+[1:29:17] works really well when workloads stay very fixed in like kind of precise
+[1:29:21] detail not just this like oh we need to load for memory and then we need to do
+[1:29:25] but like no we need to do this shaped thing like with this many like that
+[1:29:29] works super well and you can see that in blockchain mining where there's like for
+[1:29:35] a for many chains for a long time as6 were the like only profitable way to
+[1:29:40] mine um or like the most profitable way way to mine and that's the workload is
+[1:29:44] like unchangeable except by like distributed consensus um and that allows
+[1:29:50] you to like very tightly Target a specific workload whereas like neural
+[1:29:54] network architectures actually kind of change reasonably often and they like
+[1:29:58] you know even the difference the difference between a 7 billion parameter
+[1:30:02] model a 13 billion parameter model 170 billion parameter model that's like a
+[1:30:06] bigger difference than you would see between workloads for um like the same
+[1:30:11] blockchain over time um and so that's that like difference in Tech like that
+[1:30:17] technical difference is I think a big reason why we haven't seen uh much
+[1:30:21] uptake of Custom
+[1:30:27] Custom yeah I think that like they are one of the um they're one of the
+[1:30:32] providers for um like they're one of the startups working on this they come up
+[1:30:36] most frequently um uh I don't it's still like uh fairly experimental I think like
+[1:30:44] it's not it's not the um it's not like generally available
+[1:30:49] in a public cloud or something so um yeah I don't have much to say about
+[1:30:55] it I guess yeah I think main thing you can see there
+[1:30:59] is the memory that they have is 40 GB compar that with the neon which is 80
+[1:31:07] and for most
+[1:31:18] of yeah yeah so cabus has done some large model training was definitely like
+[1:31:22] possible um they um the the they have this very fast memory bandwidth I think
+[1:31:29] is like maybe the the big one 20 pedabytes memory bandwidth now like the
+[1:31:34] the point that was raised about the bottleneck being the memory capacity is
+[1:31:38] very is uh is well taken um you can Network multiple multiple chips together
+[1:31:44] and then you have more storage but um yeah and so like Bal better balancing of
+[1:31:49] of memory bandwidth and math math bandwidth would maybe get you more e
+[1:31:54] like more efficacy at lower batch sizes um but you can't exactly put that chip
+[1:31:59] in a phone um so that yeah um but definitely uh like people are really
+[1:32:07] converging on Transformer architectures so that could mean that this um custom
+[1:32:11] silicon works better um in 5 years um yeah I think I yeah the way that you
+[1:32:18] like the way that you solve this problem is if you have multiple G gpus these the
+[1:32:23] like memory per second and flops per second like scale at the same amount
+[1:32:27] right you have now you have two gpus loading you have two gpus doing
+[1:32:30] operations they both scale linearly if you're really clever you can like
+[1:32:34] actually get that linear scaling in practice um the GPU memory goes up as
+[1:32:38] well um and so you can serve larger batches and eventually hit this ratio is
+[1:32:44] staying the same so you can eventually hit that point um and that's what and
+[1:32:47] then like once you hit the point where you're actually uh you know bound um you
+[1:32:53] can just like crank it you know just crank it up uh just get really big uh uh
+[1:32:59] really big batches speed up uh speed of the computation and that is what people
+[1:33:03] do during are are like used to do used to doing during training um and so
+[1:33:08] you'll very commonly see people talking about this way of making inference
+[1:33:11] efficient um so if you are running a um like a web service this is going to give
+[1:33:16] you your sort of like uh pod size roughly like um like a pod in kubernetes
+[1:33:22] it's like a bunch of services that end up on a single physical machine so this
+[1:33:26] is your like unit uh um uh is determined by like how many gpus do you need to hit
+[1:33:33] the like backat size um for efficiency implied by the like uh this flops memory
+[1:33:40] per second and you're checking to make sure this is also true for your
+[1:33:43] architecture um yeah um all that's like kind of
+[1:33:47] theoretical stuff or or sort of like trying to be relatively first principal
+[1:33:52] uh when you when it comes time to actually check whether you're doing
+[1:33:55] things correctly make sure to use like a profile or a tracer and actually like
+[1:33:59] look at these things um even like people who are pretty good at this will like
+[1:34:03] Miss stuff that shows up on a on a tracer um like the VM uh implementation
+[1:34:10] was launching a Cuda kernel for like every individual element of a batch and
+[1:34:15] like a a tiny change made it switch to like one Cuda
+[1:34:20] kernel launch and that save them like uh uh increase their throughput by 30
+[1:34:26] 33% um and it's something that shows up as like a like way more Cuda kernel
+[1:34:31] launches which would show up as like I guess yeah if I had the interactive
+[1:34:36] version of this it would show up as this like huge thing of red lines um and also
+[1:34:40] just the like General utilization shows up as these big uh like patches of gray
+[1:34:45] here which shows you where you're like not actually using your GPU at all um
+[1:34:50] and uh I found like looking directly at these um at these traces not just at
+[1:34:55] statistical profiles helps like catch those uh those kinds of um easy to fix
+[1:35:01] 8020 kind of bugs um you can also profile and Trace memory uh and that's
+[1:35:07] going to be like given that memory is this key constraint that's likely to be
+[1:35:11] at least as useful um and these two are examples from P torch um these uh this
+[1:35:19] the compute trace and the um the memory Trace both from pytorch you might not be
+[1:35:25] using pytorch um so you might have to fall back on generic like GPU profiling
+[1:35:30] or CPU profiling or memory profiling and tracing tools um if you're using like a
+[1:35:36] custom inference solution um yeah speaking of which
+[1:35:41] there's a bunch of specialized llm inference libraries out there there's a
+[1:35:44] nice blog post from Ham Hussein about using these and this is specifically for
+[1:35:49] like batch size one um and so the the VM is people are like
+[1:35:56] pretty that seems to be getting like the most Community excitement and Community
+[1:36:00] contribution um but hum will suggest some reasons why you might be into mlc
+[1:36:05] and C translate 2 instead um for doing your uh llama
+[1:36:10] inference um so actually so all that was about like just thinking in terms of
+[1:36:16] like an individual workload um setting up an entire inference service
+[1:36:22] um which is now something that maybe like somebody in the company sets up an
+[1:36:26] inference service or a inference platform and then uh people can you know
+[1:36:31] submit workloads to it that can be fairly challenging um containerization
+[1:36:36] for GPU accelerated workloads is less painful now than it used to be um like
+[1:36:41] Nvidia Docker actually works in a way that it did not um like early on um but
+[1:36:49] uh containerization is like fun fundamentally uh you know more dubious
+[1:36:53] for these uh these workloads than a lot of other ones so one is that the like
+[1:37:00] application layer of the container is probably where the weights are going to
+[1:37:04] live like it doesn't live in the operating system yet um it's not built
+[1:37:08] into the docker engine so it's like that's up there and that's like maybe
+[1:37:12] half a terabyte in in in bad situations um so now your container images are
+[1:37:18] really large and that's um that can be pretty UNP
+[1:37:22] um you could try and do the things that people do with databases and like move
+[1:37:25] it into remote storage but um yeah then the container is not as like unitary um
+[1:37:32] and then the like the worst problem maybe is that the Cuda driver changes
+[1:37:39] the choices that you need to make kind of at the like application Level of like
+[1:37:42] we were just talking about actually going one level down but like which GPU
+[1:37:47] is going to run on changes the point at which you switch from being memory bound
+[1:37:50] to flops bound because that has a different uh like memory bandwidth to
+[1:37:55] math bandwidth ratio um so things at the level of the Nvidia of the GPU are
+[1:38:00] entangled with things at the application layer um like choices of like batching
+[1:38:06] strategy um so that's and a similar thing can be said for the Cuda driver I
+[1:38:10] was like naive about containers and I was like why is the like Cuda driver
+[1:38:16] showing up as 12.0 which is what I have installed in my host operating system
+[1:38:21] when I specifically downloaded the Cuda 11.2 container and it's like containers
+[1:38:27] can only only virtualize so much um and so that also changes like which kernels
+[1:38:33] are available by default um uh I guess well kernels would be a layer above so
+[1:38:40] there are features of Cuda of Cuda drivers that change the like you know
+[1:38:44] how hugging face Transformers or pytorch will work um and so that will and that
+[1:38:48] will also change decisions they're made at the application later so when you're
+[1:38:51] in these like super like this is clearly a performance limited regime that we're
+[1:38:56] talking about here like the inference is like extremely expensive um and we're
+[1:39:00] like trying to maximize performance really aggressively and that like starts
+[1:39:05] to reveal the limitations of virtualization and containerization um
+[1:39:09] so that doesn't mean it's impossible it just means it's hard um and yeah I don't
+[1:39:14] know if you've ever worked with like you know trying to set up a heterogeneous
+[1:39:18] compute kubernetes cluster where there's like some have gpus and some have arm
+[1:39:24] and some have uh like x86 you like this dealing with this requires a a better um
+[1:39:32] Ops engineer than if you can ignore that um speaking of which this like
+[1:39:38] application surveying can be and is in fact done with the like industry
+[1:39:42] standard for container orchestration in kubernetes um I would note that now the
+[1:39:46] like Nvidia stuff is showing up here again and like all the problem like the
+[1:39:51] entangling thing and now kubernetes is in between them so now there's like a
+[1:39:55] lot of opportunity for cross talk a lot of opportunity for Tears um and uh so
+[1:40:02] this is a hard mode version of that problem which is not notorious for being
+[1:40:07] easy um so you might choose and need to do it uh by hand there's a comment on
+[1:40:13] r/m Ops that was like oh yeah we look you know I was looking around to see
+[1:40:17] what the opinions are on these tools and uh opinion I saw in a couple places was
+[1:40:24] like if you care about like you've chosen to do serving of inference
+[1:40:29] yourself and not do like just API calls then um maybe you should make mlops a
+[1:40:36] core competency of your company and you're going to want to do something
+[1:40:39] more like building it out of the like kubernetes Affiliated econ system of
+[1:40:45] Open Source tools or other open- source things um like Cube Ray to do um to run
+[1:40:52] Ray on kubernetes for serving or Selden core to run that on again on kubernetes
+[1:40:59] as your container orchestration layer um but given how like painful that is
+[1:41:06] and the fact that there are so many people who are trying to run a
+[1:41:09] relatively similar workload um you might consider um like either of two kind of
+[1:41:14] tiers of managed Services either the like white glove endtoend kind of cloud
+[1:41:19] provider approach the old one Amazon stag maker um more recently vertex AI
+[1:41:24] from Google I'm sure there's an Azure version that I'm forgetting um there are
+[1:41:28] also from some startups a sort of more toolbox approach a less end to end
+[1:41:33] approach in part because it's not like integrated all the way at the layer of
+[1:41:37] the like actual Hardware like the cloud providers are um so uh Bento Cloud uh
+[1:41:42] Seldin and any scale any scale um being a managed version of Ray Seldon offers a
+[1:41:49] managed version of Seldon core Bento Cloud managed version of Bento ml um so
+[1:41:55] uh depending on where you want to maybe you have a really great sweet deal with
+[1:42:00] gcp and so vertex is the right choice um but yeah I think from I have had limited
+[1:42:07] experience with these things I've tried to keep my life uh simple and happy um
+[1:42:11] but if you're uh if you end up in this space I've I've seen some nice things
+[1:42:16] and played around with race serve um and any scale um Rays the tool that a lot of
+[1:42:23] people use for cluster management for training so a lot of the teams that
+[1:42:27] train the foundation models use Ray um and so there's kind of like a natural
+[1:42:31] competency for them uh both in the open source library and any scale as a as a
+[1:42:37] um layer around that so maybe it'd be a good choice for um for inference as
+[1:42:44] well all right um so rather than take questions I think I'm gonna do a five
+[1:42:51] minute break in which you can ask me questions up here while we all get a
+[1:42:54] little stretch maybe a little air um and we'll come back for the rest of the owl
+[1:42:59] in 5
+[1:43:03] [Music]
+[1:43:14] minutes

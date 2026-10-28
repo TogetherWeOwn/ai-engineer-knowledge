@@ -1,0 +1,280 @@
+# title: Hacking the Inference Pareto Frontier - Kyle Kranen, NVIDIA
+# source: https://www.youtube.com/watch?v=Y2qc0UhDSnc
+# speaker: Kyle Kranen, NVIDIA
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T10:55:07Z
+# sha256: 80b97b3f7217659540bb092563df6fde21eb0506c731598354fe5db9831c4180
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:03] [Music]
+[00:14] Hey there everyone. I'm Kyle Cranon and today I'll be talking about how to break
+[00:18] the inference bra frontier in your advantage. Um really the thing that
+[00:23] enables the success is that a good model and a good system that takes into
+[00:27] account the actual constraints for what you need from your deployment is
+[00:31] actually key to the success of both your deployment and the application that is
+[00:35] backed by it. Um so who am I and why am I talking about this? Uh as I said my
+[00:42] name is Kyle Crane. Uh previously I work at or currently I work at NVIDIA. Uh
+[00:47] previously at NVIDIA, I was uh leading and GMing the largest inference
+[00:51] deployment at NVIDIA with a multiple tens of millions of dollar quarterly
+[00:56] cloud bill. Uh and now I'm an architect and lead for a project that we just
+[01:00] released in open source called NVIDIA Dynamo that aims to do things like
+[01:05] enable data center scale inference to manipulate your deployment and
+[01:09] manipulate the paro frontier in order to achieve better SLAs's or achieve lower
+[01:13] costs for your existing SLAs's. with techniques like disagregation or more
+[01:18] techniques that I'll talk about later in the talk. Dynamo is uh the Dynamo meetup
+[01:23] is linked right here. You can learn more about Dynamo there if you want to look
+[01:26] it up and I'll also have that uh at the end of the talk as well. Um so the three
+[01:31] things that we or I like to think about when I'm thinking about whether or not
+[01:35] something can actually be deployed and used is really simple. It's quality.
+[01:40] whether or not your application and the system around your model is capable of,
+[01:44] you know, completing tasks with some level of accuracy or quality. Latency,
+[01:49] whether or not the task can be completed in a fast enough envelope for, you know,
+[01:53] either the user to be happy or to meet safety guarantees like for robotics, uh,
+[01:58] and cost. Can the LM complete the task cheaply enough per request in order for
+[02:03] you to meet whatever, you know, margin requirements you have for your
+[02:06] application? Um
+[02:09] and one of the ways that we generally compare these three things is through a
+[02:13] para frontier. Now uh the frontier I'm showing here is two dimensional. Uh it's
+[02:18] actually really hard to plot things in 3D on a 2D slide. So I'm going to just
+[02:21] show two dimensions. Really what this looks like is you have this like edge
+[02:25] that oh is it working? uh we have this edge that sort of represents the best or
+[02:33] to the top and rightmost points that we achieve for uh you know a specific set
+[02:38] of attributes. So in this case we have the TPS per GPU which is effectively a
+[02:43] cost metric. How many requests can you handle per GPU per second and the user
+[02:47] TPS which is a responsiveness metric right? So this is the the latency versus
+[02:51] the cost and for different applications really you want to enable your prao
+[02:57] front enable or you actually really only want one point on the prao frontier it's
+[03:01] right what is your operating latency what is the operating quality you need
+[03:04] and how can you minimize cost for that now this really actually depends on the
+[03:09] application you're talking about so one of the most important things you're
+[03:12] doing when you're thinking about breaking the creative frontier is you're
+[03:16] thinking about your application so for example if we're talking about personal
+[03:19] cancer cures, which is a topic that's talked about a lot in the context of
+[03:23] generative AI. Uh, in that situation, uh, latency and cost are pretty much no
+[03:28] object, right? You could spend millions of dollars on proving out a single cure
+[03:32] and if it works, the return on investment is so high that it doesn't
+[03:36] really matter. Um, to take a different example, tab completion like those that
+[03:40] you see in popular IDs like cursor all are very very dependent upon snappiness.
+[03:47] The user expects that when they press tab, they will see a recommendation for
+[03:51] the next line or the next set of you know tokens very very quickly. And then
+[03:56] to take another code example with respect to async code commits things
+[04:00] like uh you know uh cursors um what's it called? agent mode and um you know other
+[04:09] applications where the the chatbot or applications working next to the user
+[04:14] there's not as much a consideration for latency but there is a concern for both
+[04:18] quality and cost. Uh and this sort of breaks down how or this sort of depends
+[04:24] upon what the user expects from the application. Does it do do they expect
+[04:28] it to be fast? Do they expect it to be slow? Are they involved in the loop with
+[04:32] this application? Now there are a series of you know
+[04:37] techniques that are pretty commonly known about that all you know support
+[04:41] the manipulation of the sprintier. For example, quantization speeds up your
+[04:44] latency and it also decreases your cost because you can produce higher batch
+[04:48] sizes. Retrieve augmented generation generally slows down your application,
+[04:52] makes it higher latency, increases the cost but also increases the quality. And
+[04:57] reasoning for example similar, you know, you produce more tokens to think. And
+[05:01] changing the model config allows you to do any of these things. If you change
+[05:04] how the model is represented in a parallel manner, uh you can
+[05:08] significantly change the characteristics of uh speed, cost, and theoretically
+[05:12] equality. If you're talking about non-haled context parallelism, um the
+[05:17] thing that I want to impart upon you before we jump into like a lot more of
+[05:20] these advanced techniques is that these techniques can be compounded. So for
+[05:23] example, if you have an initial application and has some required
+[05:26] performance, you can actually stack for example retrieve augmented generation in
+[05:31] order to increase the quality but make the latency worse and you can also stack
+[05:36] on top of that quantization of the model in order to speed up your latency. The
+[05:41] point I'm, you know, trying to trying to make here is that you really have this
+[05:45] toolbox of a sets of large sets of tools that you can use together. And the tools
+[05:50] themselves are not independent and can be combined in very sometimes
+[05:54] non-obvious ways in order to actually break your predo frontier or squeeze it
+[05:59] in different directions in order to support your application. Um so there
+[06:04] are three things outside of those techniques that I I I tend I tend to
+[06:08] think drive uh you know the how you can modify the parto frontier
+[06:15] going forward. Those three are scale, structure and dynamism.
+[06:20] Um so one of the things that is you know really relevant in the realm of scale is
+[06:26] disagregation. So for those that aren't aware, uh KV caching is a technique by
+[06:31] which you take the K K val key and value vectors that are associated with each
+[06:36] token and you cache them. Uh so that when you're doing auto reggressive
+[06:40] generation, you don't have to generate the entire set of key and value vectors
+[06:43] for the entire sequence up to this point. You can just generate new ones
+[06:47] and put them back into the KV cache. Uh what this actually means is that we
+[06:52] effectively have two phases of generation. one in which you're
+[06:55] generating the prefill or filling up your KV cache and one in which you're
+[07:01] actually generating new KV cache as well as new tokens and producing output. Now
+[07:06] um disagregation as a technique basically allows you to have these you
+[07:11] know two phases which were typically used on the same set of GPUs uh onto
+[07:16] multiple different workers and sets of GPUs and this provides a couple key
+[07:20] benefits that we'll go into right now. Um the three really big benefits here
+[07:26] are that you will you can really now take two uh sort of phases that have
+[07:31] very very different needs. Uh prefill is very computebound and decode depending
+[07:34] on the application and model can be very memory bound and it allows you to do a
+[07:40] granular load matching between those two phases. And what this means is uh you
+[07:44] know compute saturates relatively early uh to use deepse as an example compute
+[07:48] saturates relatively early and you may use uh relatively few uh GPUs for your
+[07:54] prefill instances and have them handle a lower batch size but handle a much
+[07:58] larger batch size with many more GPUs for your decode instances. And this
+[08:03] split and this heterogeneity between the two actually allows you to produce far
+[08:08] more performance. Um the other thing is that you know one
+[08:14] of the one of the problems is that if you have inflight batching you have many
+[08:17] tokens coming in at the same time that are in different phases of generation
+[08:20] right if you have a request that's doing prefill and a request that's doing
+[08:23] decode on the same machine you get scheduling conflicts and theuler
+[08:26] basically has to decide whether or not it handles new tokens uh there are some
+[08:30] techniques to handle this like inflight batching and chunk piggybacking uh or
+[08:34] sorry chunk chunk piggybacking but um generally there is a cost to doing that
+[08:38] mutual scheduling so splitting this makes the scheduling simpler. Now,
+[08:42] there's an asterisk to this, which is that uh sorry, really quickly and I I'll
+[08:46] go over the performance numbers. I'm going to use llama 7B as an example.
+[08:49] Right. Right here we have on our left axis or the our y axis we have the
+[08:53] tokens per second per GPU. On our x-axis, we have the tokens per second
+[08:56] per user. Right up and to the right is better. Um, if we choose one operating
+[09:01] point at latency, disagregating on the same number of GPUs, 16 total H100s, we
+[09:06] can achieve up to two times uh the tokens per second per GPU at a fixed
+[09:11] latency, which means that you're now paying two times less for your
+[09:14] application. Um, there are some constraints though.
+[09:18] Uh, the use case really does dictate performance for for disagregation. Uh,
+[09:23] for example, low input length use cases have little to no speed up because uh
+[09:28] you don't h actually have as much of the scheduling problem. They're very
+[09:32] pre-filled light. You're basically just doing decode the entire time. Um, and
+[09:36] then per the graph disagregation and I'll go back to the graph. actually
+[09:40] disagregation is is is useful in usually in the middle of the graph. In very high
+[09:44] high latency high throughput scenarios which would be the left and top of the
+[09:48] graph and low latency low throughput scenarios the bottom right uh aggregated
+[09:53] tends to reconfer recon converge with disagregated and produce a little bit
+[09:58] more performance in those cases. Uh that being said for a lot of user you know
+[10:03] interactive applications disagregation makes the most sense because users tend
+[10:08] to read that between or care about things in the realm of 20 to 200 tokens
+[10:14] per second. Um the other thing that's kind of a caveat
+[10:18] about this is that configuration is really important. Um since you're
+[10:22] separating these two phases into pre-fill and generation, the balance
+[10:26] between the number of workers for prefill and decoding dictates the
+[10:30] performance. So for example, if you have too many decode workers, you're pre
+[10:33] you're you're basically going to have uh decode workers that are starving for
+[10:36] work. And if you prefill workers, uh they're going to be generating work for
+[10:40] the decode workers and the decode workers are going to be being pushed
+[10:43] down by, you know, just an increasing amount of load and increasing Q depth.
+[10:48] Um, and the other thing is that mo modifying this is kind of expensive and
+[10:53] hard because the balance between prefill and decode depends on the par the
+[10:57] parallel configs of each. So it's like this really wide configuration space.
+[11:01] One other thing that we talk about with respect to scale is routing. So we
+[11:05] talked about how this KV is important. Um, one of the things that we have to do
+[11:09] for pre uh pre-filled decode disagregation is that we need to
+[11:13] actually transfer the KV between machines. And uh in some sense there's
+[11:18] actually an affinity for some mean machines to do some work since the KV
+[11:21] cache of previous requests is actually stored on those GPUs or offloaded onto
+[11:26] uh system memory host or external storage uh during the course of of
+[11:32] inference. So um I actually labeled this wrong. Uh this is not the smart router.
+[11:37] Um uh this in in in a naive case you would route pretty much exclusively
+[11:43] randomly, right? um or or towards uh you know any anything right so in this case
+[11:51] we're biasing towards we're not biasing towards anything we're sampling randomly
+[11:55] alternatively you know if we're talking about this uh routing to worker three in
+[11:58] this case it could also be that you're optimizing for purely your KV match um
+[12:03] if you're doing a this is actually inverted if you're doing a a KV based
+[12:08] router um uh you uh may end up biasing towards machines that have too high KV
+[12:14] reload and therefore we're not going to be able to handle the request and you
+[12:16] end up with queuing. Uh in a smart case, you actually want to minimize the uh
+[12:22] sort of this cost function that includes both the amount of prefix match that you
+[12:25] can get from uh or maximize the prefix match that you can get from uh the work
+[12:31] that's already been done on that node and the amount of load that already
+[12:35] exists on that node. Um, and as you scale out, as you get get more and more
+[12:40] GPUs um, in a in a in a deployment, you actually end up with more and more
+[12:45] represented KV space that's local to those machines. And because of that,
+[12:50] having a larger and larger deployment means that you get an asmtoically
+[12:53] increasing uh, KV cache hit rate, which means that you're doing less and less
+[12:59] prefill work over time. So routing, you know, here to give it a
+[13:03] report card increases your speed and cost and doesn't really have an effect
+[13:06] upon quality because it's it's doing the same work that it would normally do. Um,
+[13:11] now we talk about structure. Structure is really important because we have a
+[13:15] lot of these workloads that you guys have probably seen at the AI engineers
+[13:18] world fair like agents for example. Um, agents impart a structure on the
+[13:23] workload in that they have moderately predictable usage patterns between
+[13:27] concurrent requests. So an example here is inference time scaling. This is a
+[13:31] cool graph I'll go over really quickly. For example, we have three models here.
+[13:34] In green we have an 8B model. In yellow we have a 49B model. And in red we have
+[13:39] a 235B model. We find that with inference time scaling that is to
+[13:43] re-query the model and to you know prompt it to reconsider its results or
+[13:47] reason more about its results, we can produce better and better results. And
+[13:51] you actually see this really interesting trend where uh with about three or four
+[13:56] times of requering, we can see that the 8B model is basically on par with
+[14:01] respect to quality as the 49B model. And the 49B is almost on par with respect to
+[14:06] quality as the 235B model. Um and we note here that like the cost of quering
+[14:14] that AP model you know uh even quering it multiple times is actually lower than
+[14:20] quering the uh the larger model right and in this sense you know we we b we
+[14:28] basically see that inference time scaling can be considered sort of as you
+[14:32] know increasing quality at the cost of speed and at the cost of uh cost right
+[14:37] because you're you're requerering But alternatively, if you keep quality
+[14:41] fixed, um you can basically get lower latency and lower cost by using a
+[14:49] smaller model and requering it multiple times. And the structure that we infer
+[14:54] or from doing that requiring allows us to do better scheduling. So in this
+[14:58] graph we have a series of curves that represent basically uh the runtime of a
+[15:04] of a given reasoning example uh from the natural plan data set and the uh
+[15:09] basically the the um concurrency. So this is like a graph of like how many
+[15:13] you can how many in concurrent instances you can run at once and uh we sample
+[15:18] across all this this concurrency. We see that implementing disagregation gives us
+[15:22] a small benefit uh mostly because this data set is very ISL uh short ISL long
+[15:27] OSL um you don't get a whole ton of benefit from disagregation in this case
+[15:32] basically making uh you know removing a round trip by making the requeries come
+[15:37] from the router instead of coming from the user or the client on the outside
+[15:41] allows you to really decrease these round trips with respect to latency and
+[15:45] then on top of that making the router aware and making the LMuler aware that
+[15:49] you are doing you know repeat work you're requiring it actually gives you
+[15:54] an increased benefit that is the red line to the green line that is to say
+[15:59] amongst of a wide variety of models if we assume that the quality is fixed we
+[16:04] can actually use inference time scaling and some smart techniques in order to
+[16:07] significantly decrease latency and increase throughput while maintaining
+[16:11] the same quality one last thing and I'm going to go
+[16:14] through this really quick because I'm getting low on time is manipulating K K
+[16:18] and V values Right? We've sort of talked about how before there's this work that
+[16:22] we do in prefill that we don't want to lose. We we do routing to ensure that we
+[16:27] uh don't lose this KV and you know if we have like a workflow where we know the
+[16:34] runtimes of things. So for example, if we do a, you know, a
+[16:40] tool call, for example, and we know this tool call takes a moderately
+[16:44] deterministic amount of time, we basically end up with this this KV
+[16:47] eviction, right? If we have a tool call that takes 30 seconds, the KV is going
+[16:50] to be swept out from HPM and you're not going to be able to use it in the future
+[16:54] because it's no longer being cached. But if we know that it's going to be used
+[16:58] again, why not just offload it, right? Basically inference time scaling gives
+[17:04] you structure to manipulate your KV. Tool calling gives you structure to
+[17:07] manipulate your KV. So instead of doing another prefill uh the second time you
+[17:13] might for example do prefill once do uh you know the LM call the decode once uh
+[17:20] move it to host memory and then you know at the time at which you expect the tool
+[17:23] to complete you move it right back into me into GPU memory so that's ready for
+[17:27] the next LM call that will include this added context from the tool. So KV
+[17:31] manipulation you know again increases your speed and decreases your cost while
+[17:36] also you know improving your quality or not improving quality keeping quality
+[17:40] constant. Um the last thing that we have to talk about here is dynamism. Um
+[17:45] worker specialization is really important. As I said, since you have uh
+[17:49] different charact characteristics of disagregation at different infant
+[17:52] sequence links and output sequence links, you actually want to have a mix
+[17:56] of aggregated and disagregated workers based on where you are in the OSL ISL
+[18:00] histogram. So at, you know, lower input sequence links and higher output
+[18:05] sequence links, you might want to do aggregated with a higher tensor
+[18:07] parallelism. In the middle of the range, you may want to use in the middle of the
+[18:10] input sequence range, you may may want to use disagregated. And in the you know
+[18:15] long context uh you know regime you may want to use disagregated with context
+[18:21] parallelism. Now uh again this differs model to model uh and this is just an
+[18:25] exemplary graph but um generally if you specialize workers you can also increase
+[18:32] uh increase your speed decrease your cost while keeping quality the same
+[18:35] because again you're not actually touching the execution what the model is
+[18:38] executing you're not touching the math it's doing. Um, one last thing about
+[18:43] dynamism is load balance is quite important. As I mentioned earlier, doing
+[18:48] looking at the amount of P and D workers is really important to determine whether
+[18:53] or not your disagregated deployment is going to be successful. So for example,
+[18:56] if you have a histogram that you initially create your configuration
+[18:59] based off of, for example, if you have app A and app B that have like these two
+[19:03] input sequence length and output sequence links, you may end up with this
+[19:07] scenario where a change in user distribution causes significant issues
+[19:12] with your deployment. You're de in this case by when you increase your input
+[19:17] sequence length and output sequence length by a little bit more your input
+[19:20] sequence length, you might create more demand for prefill workers than you do
+[19:24] for decode workers. So your balance will change over time and this has been
+[19:28] empirically proven by a wide variety of people that publish data. Um and you
+[19:34] actually have to do autoscaling across these two you know types of instances in
+[19:39] real time to account for changes in user usage distribution of your platform. Um
+[19:45] so in this case dynamic load balancing uh increases your speed and keeps your
+[19:50] cost low but mostly it's it's really just essential to ensuring that disagre
+[19:55] disagre disagregation actually works to maximum potential. Um okay last things.
+[20:01] Uh here is the uh Dynamo repo. It's right here. Um it's github.com.
+[20:07] Um we also have a Dynamo meetup that is being hosted tomorrow Thursday from 5 to
+[20:11] 8:00 p.m. here in San Francisco. uh please come. We're going to be talking a
+[20:15] lot more about how we actually implement these things at the event.
+[20:22] [Music]

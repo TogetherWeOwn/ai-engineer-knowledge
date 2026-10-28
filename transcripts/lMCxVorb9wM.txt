@@ -1,0 +1,186 @@
+# title: You Didn't Ship a Bug. You Just Wrote It for a Human. - Ravi Madabhushi, Scalekit
+# source: https://www.youtube.com/watch?v=lMCxVorb9wM
+# speaker: Ravi Madabhushi, Scalekit
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T07:26:13Z
+# sha256: 1ff7e521530212bd733f939bb09541640defeeffdd2c6caa9f1b1d2993bc43fa
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:00] Hi, thank you so much for tuning in. I'm Ravi, I'm one of the co-founders of
+[00:03] Scale Grid. Today, I'm going to talk about how you
+[00:07] need to think architecturally from the ground up about
+[00:10] building your applications APIs, your MCP servers for agents,
+[00:15] and how the human-focused architecture doesn't scale well for agents.
+[00:20] So, a while back, we were looking at our performance and latency numbers, and one
+[00:23] thing that kind of jumped out at us was how our latency was spiking every 15
+[00:30] minutes in a rhythmic manner. Nothing harmful, but just a curious
+[00:35] thing for us to analyze. What we noticed was very interesting. So, in our
+[00:40] identity and authentication infrastructure platform, we have this
+[00:42] little timestamp that we mark for every user to say, "Hey, when was the user
+[00:46] last seen?" or "When was the user last active or last acted in our system?" so
+[00:52] that we can predictively say, "Hey, this user is an active user. This user is not
+[00:56] so active." But, one thing that we realized was this system was primarily
+[01:00] built for humans, but when agents started hitting our APIs in
+[01:05] the last 12 months or so, we realized that this
+[01:10] last seen update is happening 60 times faster than what it would, and
+[01:15] that is creating unnecessary pressure in our DB write system. So,
+[01:20] of course, it's a harmless thing. We were able to fix it very easily. We
+[01:24] would just batch the update at a second level and not at every single time we
+[01:28] had to update it. That kind of took us down a rabbit hole.
+[01:32] So, the assumption that broke was how often would our system have to update
+[01:36] this timestamp on every row, and that's okay. It's just about speed, it's about
+[01:40] latency, etc. But, what I was worried about is, "Hey,
+[01:43] what if some of our assumptions that we made about authentication, authorization
+[01:48] need to be rewired and rethought completely
+[01:51] when it comes to agents because we would have designed earlier for humans as
+[01:55] actors in mind?" Now, just to give you a context, I
+[01:59] worked on identity and authentication operations for the last 10 years
+[02:02] building an identity platform at Freshworks,
+[02:05] which is being used by millions of daily users, hundreds and thousands of
+[02:08] customers all over the world. But, this is predominantly human users, right? Or
+[02:13] at best, APIs. But, the way I think about it is APIs are also accessed by
+[02:18] machines that are written by humans. That's not too bad, right? But, what I
+[02:25] realized is the fundamental picture has changed drastically in the last three,
+[02:30] four years or so. We have a unique ringside view to see
+[02:35] how developers nowadays are building agents and how they're giving context to
+[02:39] these agents with data from third-party applications like Salesforce or or
+[02:44] Databricks or HubSpot or Notion. What we have realized is
+[02:49] most of the agents our customers are building have
+[02:53] way too permissions and scopes than the agent's responsibility or the agent's
+[02:59] job is. Again, it's not because the developers who are building the agents
+[03:04] are careless, but somehow
+[03:07] this became a default pattern of giving [snorts] the agents what they need
+[03:11] access to, and the existing primitives that we have don't let us give extremely
+[03:16] fine-grained permissions to the agents. Now, I'll tell you how we ended up here,
+[03:21] right? We predominantly have two slots, and neither of the slots was built for
+[03:26] agents in mind. There's a human who's acting the application, either a web
+[03:30] application or a mobile application, or their own little script that they wrote,
+[03:33] and they give it their API key so that their program can access data from the
+[03:38] application. This is all the fundamental principle here is
+[03:44] it's the same user who is authenticating, and it's the same user
+[03:47] who's acting, right? And the second slot is the traditional service account
+[03:52] scenario or end-to-end account scenario where
+[03:54] you create a service account, you give it certain permissions, and then say
+[03:57] this machine has its own identity. That's where the likes of SPIFFE and and
+[04:01] OAuth and all of that came into picture, but you would give them certain
+[04:05] credentials and say, "Hey, now this machine has access to whatever data that
+[04:10] it needs at any single point of time." And this is the existing pattern, right?
+[04:15] So, the fundamental philosophy that we've always maintained is whoever is
+[04:18] authenticating is the one that is acting. Every action the program or the
+[04:23] human takes is based on fixed set of permissions that actor was granted at
+[04:29] some time. If you take traditional authentication mechanisms for humans,
+[04:33] including password, you just say, "Hey, if an identity has the same password
+[04:37] that it was set at the time of registration, if they come back and if
+[04:41] they present the same password again, then you say, "Okay, this is how I
+[04:44] validate the identity. This is how I authenticate the human." And every
+[04:48] action subsequently is tied to that human identity. Again, the same is the
+[04:52] case with API key or the same is the case with web session tokens or even the
+[04:56] same case for service account. You define the permissions at the time of
+[05:01] registration, and then every single time it acts based on the registration time
+[05:06] permissions and scopes. Now, this is okay all this while because
+[05:12] for decades the service account and OAuth principle even
+[05:16] is working fine even though there are their own problems, but it's still
+[05:21] working fine because these machines are using a program
+[05:28] in a deterministic way by the way the human developer wrote that program.
+[05:33] So, there is absolute guarantees about what the
+[05:36] program could or what the program won't do, but it is still intentional based on
+[05:42] what the human wrote, right? In this particular case, again, if it is using
+[05:47] API keys, then that actor and the principal is the same, then there is
+[05:51] some sort of a delegated permission for the program to act based on what consent
+[05:55] the user has granted. But, the second one is the most important part, which is
+[05:59] it's a deterministic program, and it always stays in its own lane. It can
+[06:04] never do what it was not programmed to do. And you could inspect the code to
+[06:10] say, "Okay, is the program doing what it's supposed to do?" Even if you apply
+[06:14] for a Google developer account, and then ask for client ID, and
+[06:16] you need to access these scopes, you have to go through a security review.
+[06:19] So, what they're doing is they're looking at your code base to see, "Are
+[06:21] you doing enough checks? The appropriate practices in place?" So, these programs
+[06:26] are deterministic. These programs behave the exact same way a developer
+[06:29] programmed them to work. But, agents fundamentally break this
+[06:34] assumption. Right? First of all, in the case of
+[06:37] agents, the principal is not the same as an actor. You need to give delegated
+[06:41] access, so that the agent can act on behalf of the user. Agent can access the
+[06:46] user's Gmail. Agent can access the user's Salesforce data, and whatever the
+[06:50] case may be. But,
+[06:52] again, unfortunately, not a lot of systems, even today, support OAuth. So,
+[06:57] here again, there is no on behalf of principal that is working. So, you don't
+[07:01] even know if there is a program that is acting on behalf of the user, or the
+[07:06] user acting by themselves. Right? That's a fundamental problem. The second
+[07:10] problem is even more dangerous, which is right now, the program is not written by
+[07:15] human. There is no determinism baked in to say what the agent will do or won't
+[07:21] do. Right? Just because an agent does certain things today, you can't be 100%
+[07:25] certain that the agent can't do the same or the exact same thing tomorrow, day
+[07:30] after, or even if it's the next immediate run.
+[07:33] Right? Because of this non-deterministic nature of agent,
+[07:39] we usually pick one of the two lanes, right? You give a specific identity to
+[07:43] the agent, which is what we call as client ID in the context of OAuth, and
+[07:47] then say, you act on behalf of this particular user, or we go back to the
+[07:52] agent acts as the user, which is even worse.
+[07:57] The fundamental reason why I'm harping on the same thing is because
+[08:02] when an agent is acting on behalf of user one versus user two or user three,
+[08:07] the agent needs specific permissions based on the user's context. Now, the
+[08:13] OAuth solved this perfectly fine by saying, hey, the user will grant
+[08:19] specific scopes or permissions to the agent. So, when the agent is acting on
+[08:24] behalf of the user, it can't do everything, but
+[08:28] the agent will only do certain things. Now, in the kind of the world that we're
+[08:32] living in, most of the MCP servers that we've worked with
+[08:35] don't actually limit the tool context access to the agent based on which user
+[08:42] authorized the agent. They typically surface all the tools that
+[08:47] the user has access to, or all the tools that the application can even support,
+[08:52] and then let the agent determine what they are can or cannot do. And now the
+[08:58] agent ends up picking the wrong tool, doing wrong things. Maybe there is some
+[09:01] runtime check in the application that prevents some of these things, but the
+[09:04] agent is still seeing the same surface regardless
+[09:08] whom it is acting for. Now, two things that we need to solve for. One is the
+[09:13] actor, in this case, an agent, has to be bound
+[09:16] to the principal at all times. And the agent should have its own identity.
+[09:21] Agent should have extremely fine-grained credentials, not the OAuth scopes that
+[09:25] we are seeing today. If you inspect the scopes for some of these applications,
+[09:29] like even very popular applications like Gmail, it'll say, can this client send
+[09:34] emails on your behalf? There's no extremely fine-grained scoping to say
+[09:38] can this agent act at this hour? Can this agent read emails only from these
+[09:44] senders? Can this agent send emails to only this recipients? The reason why
+[09:49] that is important is because again, we spoke about this earlier in the context
+[09:53] of non-deterministic agent workflows, it's extremely important that the agent
+[09:59] should have permissions for limited amount of time that they're operating in
+[10:03] number one. Every agent has a goal, every agent has a job. So, you should be
+[10:07] able to deterministically say that this agent should have access only to those
+[10:12] tools or only to those jobs it has access to. So, gone are the days when
+[10:17] the broad scoped auth scopes that we defined is okay because in that case
+[10:22] developer was writing a deterministic application and you can review the code
+[10:27] to make sure that he's not doing anything sinister. But in the case of
+[10:30] agents is extremely non-deterministic, it is probabilistic. Agents are bound to
+[10:35] do things whatever they can get a hold of. So, in the context of when you're
+[10:40] giving access to the agents, you should be in a position to give
+[10:44] extremely fine-grained scopes. It should be at an attribute level scoping, it
+[10:48] should be context level scoping, it should be principal level scoping. So,
+[10:52] all of that is extremely important. Again, I think everyone agrees that
+[10:55] agents should be least privileged by default and they should be
+[11:00] able to ask for just-in-time authorization if they want elevated
+[11:04] scopes. Now, the reason why we're talking about this is because it's not
+[11:07] some futuristic thing. It is happening today. We have seen enough incidents
+[11:10] where agents end up doing rogue things. They end up deleting production
+[11:14] databases and stuff like that. So, how do you put deterministic guardrails in
+[11:19] place is an important problem to be solved
+[11:22] right now. Again, one of our customers, ref.tools, they don't even have humans
+[11:26] as actors. Their predominant product is about how to give context to coding
+[11:31] agents so that they can do their job effectively. So, they built the entire
+[11:35] OAuth scoping. How do you do things the right way and things like that. So, the
+[11:38] reason why I give this example is not to say that this is a warning shot, but
+[11:42] this is a problem of today and not for tomorrow. Before I go, you have to have
+[11:46] absolute visibility into what your agent can do, every action that's taken in
+[11:51] your system, who took it, on behalf of whom, and who authorized it, when was
+[11:56] the authorization given, what authorization was given, how long is it
+[12:02] given for. If you don't have visibility into all
+[12:05] these actions at every single time, and if you can't deterministically control
+[12:10] what your agent can or cannot do, then you're just praying that agent doesn't
+[12:14] end up doing what it's not supposed to do. And praying is not a strategy, as we
+[12:18] all know. One last thing to take away. If you architected so far with humans
+[12:23] and APIs in mind, you need to start rethinking about how
+[12:28] you need to give deterministic guardrails and deterministic
+[12:31] authorization controls to the agent. And
+[12:35] OAuth is a good place to start, but you need something beyond OAuth to make sure
+[12:39] that the agents have extremely fine-grained access controls, and agents
+[12:42] are always acting by themselves on behalf of certain users.
+[12:46] Thank you so much for your time.

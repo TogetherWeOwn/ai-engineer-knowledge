@@ -1,0 +1,232 @@
+# title: Infra that fixes itself, thanks to coding agents — Mahmoud Abdelwahab, Railway
+# source: https://www.youtube.com/watch?v=Q5IVm_CxN2w
+# speaker: Mahmoud Abdelwahab, Railway
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T10:35:10Z
+# sha256: c418f336a58c1a190e10ba91496ab354003b640298bc56b9256faf957ba5b62a
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:00] your app's infrastructure should fix itself. Let me show you. So, right now
+[00:03] I'm on the Rayway dashboard and I have a bunch of services that are deployed and
+[00:07] all of these services have one thing in common. They all have bugs and problems.
+[00:11] So, for example, this service has a memory leak. If I click on it, go to
+[00:16] metrics, we can just see memoryization keeps growing high and very quickly.
+[00:22] This is just a sign of a memory leak and pretty sure the service would eventually
+[00:26] crash. If I look over at the amount of requests, we have a high number of 500s.
+[00:32] So, the server is failing to respond. We have a high request error rate of 94%.
+[00:39] And we also have an extremely high response time of like multiple seconds
+[00:44] uh for like the service to respond, which is not ideal. Like if this was a
+[00:48] service running in production, everything would be on fire. You'd be
+[00:51] getting paged and you just try to bring back the service up back quickly. But
+[00:57] the thing is not all problems are this obvious. For example, this service all
+[01:03] it does just queries a postcrist database. And if we go to metrics, we'll
+[01:07] just see that well CPU utilization seems fine. Memory usage is also fine. Sure,
+[01:13] it's a bit spiky, but okay, whatever. We have some fails, but okay, nothing too
+[01:20] alarming. request error rate is somewhat high. So that also should make us kind
+[01:26] of like want to investigate, but the response time is extremely high. The
+[01:31] thing is this is because the service makes queries that are super slow. And
+[01:36] the thing is if you're an end user that's trying to use this experience,
+[01:40] you would just suffer. You would need like 30 seconds for like a page to load,
+[01:44] which would be a nightmare. So the thing is when you deploy your app to
+[01:49] production maybe some you know bugs or issues make their way to production
+[01:54] things happen and kind of like the typical way of dealing with these things
+[01:58] is maybe you set up a bunch of thresholds and when these thresholds are
+[02:03] met for let's say CPU or memoryization maybe uh you want to have a threshold
+[02:10] for the request error rate it shouldn't exceed a certain amount well what will
+[02:15] happen is You're going to get alerted and you'll be aware that there is an
+[02:18] issue, but you still have to do the investigation yourself. You have to dig
+[02:22] through logs, metrics, and traces to try to paint a picture in your head and try
+[02:27] to piece things together so that you can ship a fix. Now, what I'm proposing is
+[02:33] you should have a coding agent that monitors the state of your project and
+[02:38] your application's infrastructure. And if any issue is detected, so you know
+[02:43] any of the thresholds we define are met, we should just have a fix shipped,
+[02:48] right? So like instead of, you know, getting the alert and investigating, you
+[02:53] just review a pull request and you're like, uh, looks good to me. You ship it
+[02:58] and then everything is good and crisis averted. So today I'm going to show you
+[03:02] what I have in terms of demo that kind of paints a picture of how this could be
+[03:09] achieved. So at a high level I want to have a series of workflows that will
+[03:13] kick in that will help me go from issue detected in on railway my deployment
+[03:18] provider to a pull request being open in my GitHub repo. And this is what I have
+[03:24] in mind. Uh the first workflow that I want to have is a workflow that runs on
+[03:28] a schedule. So let's say it runs every 10 minutes, 15 minutes, 30 minutes. And
+[03:32] what this workflow will do is one, it should fetch the application's
+[03:37] architecture. We should have an understanding of what services are
+[03:41] deployed, which you know like frontends, backends, crons, cues are live in my
+[03:46] project. And I then want to fetch each services resource metrics, so CPU and
+[03:52] memory utilization. And I also want to fetch each services HTTP metrics. I want
+[03:57] to see the request error rate, the number of failed requests for, you know,
+[04:02] 500 400 errors. And once that's done, I will want to then see which services
+[04:10] have exceeded which thresholds. And then I just want to return a list of the
+[04:14] affected services. So this would be essentially the goal. Now you might be
+[04:19] wondering, well, why not make this an alertbased system? So maybe we configure
+[04:24] something like web hooks for alerts and then that would kick off uh essentially
+[04:28] this workflow instead. I would argue that it's probably better to be able to
+[04:33] analyze a slice of time rather than just having a threshold being met because it
+[04:39] can get pretty noisy. Like imagine you have a spiky workload uh and you know
+[04:44] you reach the 80% resource utilization for like your CPU but things are still
+[04:50] fine and that's not like in my mind this is enough to be investigate but it might
+[04:57] not like it might mean that there just aren't issues when we try to look at
+[05:02] like the bigger picture and all the details.
+[05:06] Now once we have this list of impact that is impact services we essentially
+[05:11] want to pull in even more context for them. So like at a high level we want to
+[05:15] see project health all the services is everything operating as expected. Oh we
+[05:20] have this thing that we're suspicious about. Let's actually pull all of you
+[05:24] know additional context for the service because imagine again you have like high
+[05:28] resource utilization. Maybe you're just successful. You have high usage. Uh but
+[05:32] then when you pull the logs it's like oh everything seems fine. there aren't any
+[05:36] errors. Well, you're good. And you can imagine that we can even pull even more
+[05:41] context. Like imagine maybe we scan the code in the repo and based on that we
+[05:46] infer the upstream providers that the repo relies on and then we can
+[05:51] automatically check the status pages of these services. Imagine like a payment
+[05:54] processor goes down. Well, that's kind of how you can know and then the coding
+[06:00] agent will be able to maybe tell you like, hey, you should just like wait out
+[06:04] this issue. And once we have all this information,
+[06:07] we can just write a detail plan. So like we can look at, oh, we have a high
+[06:12] number of 500 requests. We see that we have very high resource utilization for
+[06:19] memory. and we see that we have you know um just errors specifying that a
+[06:26] specific endpoint is failing. Well, this is enough information that we can write
+[06:31] a detailed plan of hey this is my application's architecture. These are
+[06:35] the affected services. We just then give this plan to an agent and then the agent
+[06:40] will just follow the process of hey let me clone this repo. I'll just create a
+[06:44] to-do list based on the plan you gave me. I'll implement all the fixes and
+[06:48] I'll just create a pull request. And this is kind of how we go from issue
+[06:52] detected to an open pull request. So let's actually see this in practice. So
+[06:57] because we have the idea of workflows, what I want to do is actually use what
+[07:02] is known as durable execution. So the idea of durable workflows has been
+[07:06] around for a while and it's really one of my favorite abstractions because it
+[07:11] can help you simplify complex logic while making it more reliable. So for
+[07:16] example here we have this workflow. So this actually is ingest but there are
+[07:21] lots of solutions out there that pretty much do the same thing and we have this
+[07:25] function that you know called process video upload. It listens on an event of
+[07:30] video uploaded and we essentially want to do three things. We first want to
+[07:35] generate a transcript and we do this by making an API call to a third party API.
+[07:40] Once we get that transcript, we want to generate a summary by also making a
+[07:45] request to an LLM provider. And once we have the transcript and the summary, we
+[07:48] want to store them in the database. The thing is all of these steps, they are
+[07:55] not 100% guaranteed to work. Uh they are prone to failure. And what's neat about
+[08:00] this pattern is by default, these steps will be automatically retried. You don't
+[08:05] even have to think about it. But if you let's say want to modify this behavior,
+[08:09] maybe you want the retry to happen uh like on a certain schedule like you know
+[08:14] exponential back off uh maybe you want to define another thing that should
+[08:20] happen in the case of failure you'll be able to do it. But what's neat is each
+[08:25] step when it succeeds uh the result is cached. So if for example we are able to
+[08:31] transcribe the video correctly, we summarize the transcript correctly, but
+[08:34] we failed to write to the database. If we were to retry this workflow, we just
+[08:39] continue where we left off. Uh we don't we won't really repeat any work, which
+[08:43] is one awesome because it's faster, but also it's more cost effective. So at a
+[08:47] high level, this is the thing that I'll be relying on in my code because I'll be
+[08:51] making API calls to the railway API to be able to fetch the project
+[08:55] architecture, all the resource metrics um as well as you know the HTTP metrics
+[09:00] and whatnot. So yeah, uh this is kind of like the first thing that um we need to
+[09:07] talk about. The second thing is the coding agent. And for the coding agent,
+[09:12] I'll be using Open Code. Open code is an AI agent that's built for the terminal.
+[09:16] You can think of it as an alternative to something like cloud code, but the main
+[09:20] difference is open code is fully open source and you can choose any LLM
+[09:25] provider or uh you know model that you like, which is pretty nice. Uh you have
+[09:30] this nice terminal UI, but honestly what's so cool about the project is how
+[09:35] it's architected. So if you go to their docs, they actually have a server
+[09:40] implementation. you can have a a a headless server that runs that exposes
+[09:47] an API for you to essentially interact with an agent. So the way it works is
+[09:52] when you run the command open code, which is what starts up the agent in
+[09:56] your terminal, it doesn't just run a single app. It actually starts a
+[09:59] terminal UI and a server. And because the terminal UI here is the client, we
+[10:05] can essentially bring our own client and talk to the server, which is awesome. uh
+[10:09] because now we can run open code on a server in this case would be on railway
+[10:15] and we can just have this server have all the tools that the agent would need.
+[10:20] So we'd install all of the necessary you know tools we can configure git and then
+[10:25] the agent will be able to open pull requests and you know go through the
+[10:30] file system and do everything. Let me show you what how easy it is to
+[10:34] essentially have this deployed on right away. So if you go to the code uh here
+[10:38] right now this is my project it's called railway autofix I know great name uh I
+[10:43] have essentially two directories one is for my API the other one is for open
+[10:48] code and open code really we just have a single server running using bun and all
+[10:54] we're doing is we're just calling a function uh that is called create open
+[11:00] code server so if I actually stop this here you can see it runs on port 4000 9
+[11:06] 496 and this is pretty much all we need and I have a docker file and in this
+[11:13] docker file we're essentially defining that environment. So, we're installing a
+[11:17] bunch of tools. You can see we're installing curl, jq, bash, all the other
+[11:20] tools, even git. Uh, we're installing the GitHub CLI, which is what will allow
+[11:25] us to open pull requests against a given repo. We're then installing open code in
+[11:30] the environment. We're configuring git and at the end, we're just exposing the
+[11:35] port and we're just authenticating the GitHub CLI, which is pretty neat. Uh, by
+[11:39] the way, the code will be linked somewhere down below. But that's really
+[11:43] it for open code. And when it comes to the actual API, let me actually run it.
+[11:49] So now the this is the open code server that's running. And if I go here, I have
+[11:55] my actual API running on localhost 3000. And I have a UI that is provided by
+[12:01] ingest, which is very useful for debugging. So if I go here and I go to
+[12:07] functions, essentially each function here is a workflow and it has a bunch of
+[12:12] steps. So let's actually try to run it to see what happens. Um now in
+[12:17] production when this is live this monitor project health workflow should
+[12:22] run on a schedule and if an issue is detected we will call the pool service
+[12:26] context and then pull service context will call the workflow for generating a
+[12:33] fix. So if we actually just kick things off this is how the flow of things will
+[12:38] happen. So if I actually have now I have this function run. We called moderate
+[12:42] project health. Then we called pull service context and now we're actually
+[12:45] calling generate fix because we detected an issue and we're just setting um like
+[12:51] the railway specific variables as environment variables. And all of these
+[12:55] are actually available uh on railway. They're just set automatically which is
+[12:59] pretty neat. So if I actually go to monitor project health you'll see we
+[13:03] have a bunch of steps. Uh the first one is getting the project architecture and
+[13:08] this step right here this is we can actually see its output. So we can see
+[13:12] all of the databases that I have in my project. I just have one. Uh we can see
+[13:17] also a list of all the services as well as their configuration. We can see which
+[13:23] like where's the repo for them and we just now have a highle overview of our
+[13:30] applications infrastructure. Uh we also see that we have any kind of like
+[13:33] volumes that are there which is cool. And then we have a series of steps that
+[13:38] are actually running in parallel. So like you know things are efficient. So
+[13:42] we're getting the database resources. We can see on average well what's the max
+[13:46] CPU? Uh and it's like 0.9 CPU. Okay. Same thing for memory. And we actually
+[13:52] have a summary. And this summary essentially is us formatting these
+[13:56] results so that we can then pass it to the coding agent. So you can see CPU
+[13:59] usage average 0.93 vcpu and you know this is the max and memory
+[14:05] usage as well. Now this is actually high uh and we'll be able to kind of
+[14:11] understand that because it's like oh memory usage here is 31.96 GB out of a
+[14:17] max which is 32 gigs. Uh and then we just pull even more um like resources.
+[14:22] So like because we have multiple services we will call each step for it.
+[14:27] Right? So like we will pull the HTTP metrics for each of the three services
+[14:31] that we have deployed for example. But also for this one for the HTTP metrics
+[14:35] we can see the error rate percentage for 400s for 500s. We see like the latency
+[14:42] um and we just have like a status count. So we can also have a summary and then
+[14:46] we can say hey these this is the rate of um like request error rates. This these
+[14:52] are the latencies and this way when we actually at the end of like this
+[14:58] workflow so I go to runs go here again towards the end we will actually give
+[15:05] this uh pull service context function just all of this information in a nicely
+[15:11] formatted way. So if I actually go now to this function run, we will see here
+[15:16] that we're fetching the HTTP logs, the build logs, the deployment logs for like
+[15:21] all the services that are affected. And we can see here like this is the
+[15:25] function payload. Uh so this is the stuff that we passed from the other
+[15:29] function. And we can see we just have all this info. We also have an
+[15:34] architecture summary. So this actually we can expand this. Uh the architecture
+[15:38] summary is just a nicely formatted uh text saying like this is the project
+[15:42] architecture. We have three services we are running in the production
+[15:47] environment. We have one database. We have all these volumes and we just have
+[15:51] all of this information. It's just harder to read cuz like in one line but
+[15:55] for the um coding agent we'll just give it to it as like markdown. So now that
+[16:02] we have that go to runs again. Now that we have that, we are just going to make
+[16:07] a call to another workflow which is generate fix. And for this one, what it
+[16:12] does is one, it will analyze with AI. So this is the actual output in terms of
+[16:18] like the input. It's a bit large to render here. Uh but we analyze it with
+[16:23] AI. So like you can imagine we give a large language model saying like hey
+[16:28] this is my project architecture. This is the data. This is how things are
+[16:32] performing. And then we take all of this information and now we actually come up
+[16:38] with a plan. So you can see here debugging steps. We want to see
+[16:42] reproduce locally with the same load. Maybe we want to run it. We want to see
+[16:46] what will happen if we see that the agent is like oh I ran into an error.
+[16:50] Then it's going to fix it. And then we have like recommendations. So like this
+[16:55] is the plan that we'll then just pass to our coding agent. And then we have a
+[16:59] step to create a session. So on the coding agent you can imagine each
+[17:04] session being its own chat. So this will run like imagine you have multiple repos
+[17:09] each repo will have its own session. The coding agent will work and then at the
+[17:14] end it should you know if as expected it should open a pull request. So yeah
+[17:20] that's pretty much it. This is how it works. Now if everything works as
+[17:24] expected we should see a pull request on the project. And here we go. We have a
+[17:30] pull request that is open with all of our changes. If we go to the
+[17:34] conversation, we actually be able to see that we have a summary of all the
+[17:37] changes, uh, an analysis summary, the root causes, what was fixed. So, we
+[17:43] should be able to just review this. If everything looks good, we merge and
+[17:47] we're good to go. And that's it. I hope you enjoyed this talk as much as I
+[17:51] enjoyed making it. If you have any questions, feel free to reach out to me
+[17:54] on X or Twitter. This is where I mostly hang out. Also, the repo for this
+[17:59] project will be available somewhere down below. So, make sure to check it out.
+[18:03] And with that, thank you so much for watching and I'll see you in the next

@@ -1,0 +1,420 @@
+# title: Designing Voice Agents for Real Conversations - Chintan Agrawal & Daniel Wirjo, AWS
+# source: https://www.youtube.com/watch?v=hMlLw1LeIK8
+# speaker: Chintan Agrawal & Daniel Wirjo, AWS
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T07:23:37Z
+# sha256: 3c21b5d37a73c64dd93f3cc3217438e8d0267308d2d47cfa9c95fc139131c38d
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:03] Hey everyone. I'm Chintan and I have my colleague Daniel with me.
+[00:07] We are solutions architect on the AWS APJ startup team.
+[00:11] So today we are going to talk about something we've been working on for a
+[00:14] while. Which is turn taking in voice agents.
+[00:18] What I mean by that is how does the system actually know that you have
+[00:21] finished speaking and it's time for the agent to respond?
+[00:25] These are all audio engineering problems. They are not LLM problems
+[00:29] because you can have the perfect model, perfect
+[00:32] track but the experience still might feel
+[00:35] broken if the turn taking is off. So we are going to walk you through the
+[00:39] concepts and three different approaches to solving this.
+[00:43] And Daniel is going to you know make it more concrete by running all the three
+[00:48] demo for you.
+[00:56] So to kick things off uh we'll start with the 200 millisecond
+[01:00] constraint which is basically the physics of why voice is hard.
+[01:06] Then we look into the pipeline architecture, what are the components,
+[01:09] where turn taking actually lives. We'll then look at three level of
+[01:13] solving this problem. Going from simple silence detection all
+[01:18] the way up to running your own turn detection model.
+[01:21] And then we'll also talk about the latency, the budget and production
+[01:25] issues that we've seen.
+[01:30] So but before any of that, I just want to show you the problem statement more
+[01:34] clearly because you have the same user. You have the same sentence on the both
+[01:39] side but the user outcome is very different because
+[01:45] on the left when the user says I want to fly
+[01:49] and midway they try to correct themselves, the agent just does not
+[01:53] notice. Because it keeps going on for almost 2
+[01:56] seconds while the person is sitting there trying to get a word in.
+[02:00] On the right side, the same exact interaction is happening, but the agent
+[02:04] is able to capture the interruption in under 200 milliseconds.
+[02:09] And immediately backs off so the user can now speak.
+[02:13] Both the scenarios, the LLM was identical. It was the same model. It was
+[02:16] the same prompt, but the difference in the user experience is so different. And
+[02:21] the difference is purely because of the audio pipeline.
+[02:25] And how fast does it notices like someone else is talking and it knows
+[02:30] when to shut up. Like that's the problem we're trying to solve today.
+[02:37] So, we'll cover this 200 millisecond constraint because 200 milliseconds is
+[02:42] how fast humans switch turns with each other in a conversation.
+[02:47] And the implications are pretty brutal because at 800 milliseconds, things
+[02:51] start to feel off. While at 1.5 seconds, your user just hang up on you because
+[02:58] you have like your HR chat agents might get 5 seconds to respond and nobody will
+[03:03] care. But with the voice agents, you don't get
+[03:07] that luxury. We've seen recently like Salesforce was
+[03:10] able to pivot the pipeline and they published their results in March 26th.
+[03:15] But even there, best measured response time was 755 milliseconds. So, that's
+[03:19] like almost 4x slower than how humans naturally take turns when
+[03:23] talking. So, the question here becomes how do we
+[03:28] close this gap and where we cannot close it like at least how do we get the turn
+[03:32] taking right? So, the user experience does not feel as
+[03:36] bad as the raw numbers might suggest here.
+[03:40] So, if you're working with a budget of 755 milliseconds and every millisecond
+[03:45] count, you also need to understand what's
+[03:47] actually in the pipeline. Like where does the time go and where does this
+[03:51] turn taking fit? So, the pipeline itself you probably
+[03:56] might know the main components, the STT, the LLM, the TTS.
+[04:01] You have the audio in, text out, text in, audio out.
+[04:04] But the piece that's often missing like from people
+[04:08] while people are thinking about this is this voice activity detection.
+[04:13] Commonly called as VAD. It's a tiny component that sits right at
+[04:17] the front and it is the one that controls turn taking.
+[04:21] Its job is to basically detect whether the user has stopped talking or not.
+[04:26] And the two other thing that you set alongside main pipeline are also very
+[04:30] critical for turn taking. So, you have the smart turn detection
+[04:34] which watches the VAD signal. Plus the audio features and then it has
+[04:39] to make that decision that whether should it respond now
+[04:43] or should it wait because the user might still be talking.
+[04:47] And the interruption handler is triggered when someone barges in.
+[04:51] So, what it'll do is it'll propagate a flush of downstream like the TTS would
+[04:55] stop and the LLM generation need to be canceled so that the pipeline is ready
+[05:00] for the new input within about, you know, 50 ms.
+[05:05] So, if you remember I was talking about like how there are different levels to,
+[05:10] you know, building this turn taking in voice agents.
+[05:15] So, we'll start with a level one. Level one is your Silero VAD. So, this
+[05:19] is a simple component which you fully own and like a lot of production system
+[05:24] even today we see are running agents just by using this.
+[05:30] So, coming to Silero VAD, it's a small 300,000
+[05:35] parameter model. It takes in like a short term Fourier
+[05:39] transform. It has a and it takes raw audio and it'll convert
+[05:43] it into a spectral features. It has four convolutional layers
+[05:48] to pick up the pattern and an LSTM that gives it memory so across the frame
+[05:53] so it's just not looking at one chunk in isolation.
+[05:57] And then it has a sigmoid that gives a probability of speech and it's like a
+[06:01] very small 2 megabyte model. And the one parameter that minimum
+[06:07] silence millisecond is basically the entire user experience of level one.
+[06:12] If you keep it very low, the agent is going to be snapping like it will cut
+[06:15] people off while they're still, you know, thinking.
+[06:19] But if you keep it very high, the agent might become super patient and it will
+[06:23] never interrupt but you might get to uh get like a dead air where people will
+[06:28] wonder if the agent is still connected or not.
+[06:32] So there's like no universally right answer. It depends on the domain. If
+[06:37] you're working on it from a perspective of a sales agent, you probably want it
+[06:40] to be like 200 milliseconds. If you're in a domain where you need
+[06:46] some to give some time to your user to respond, it could be like 1
+[06:51] uh thousand to 1,200 milliseconds. It depends entirely on what you're
+[06:55] building. So VAD works well like that's why a lot
+[07:00] of people are using it and it's generally good at what it does that is
+[07:04] to return fast response to the basic question of whether there's someone
+[07:08] talking right now. But uh there are things like it was
+[07:12] never designed to handle because there'll be situations where just
+[07:16] knowing that is there a silence will not be enough because
+[07:20] you also need to answer these questions of how long to wait like uh the silence
+[07:24] duration. If someone is pausing for 300
+[07:27] milliseconds or 400 milliseconds, VAD is seeing the same exact thing.
+[07:33] It has no idea like whether the person is catching up their breath or whether
+[07:38] they've completely finished their thought.
+[07:41] So like they cannot distinguish that. And the second scenario is like, what if
+[07:46] they, you know, the user talks over the agent, like, it barges in.
+[07:52] It does not know how to handle it. And the same silence can have a different
+[07:57] intent. And it can be like completely different
+[08:01] things. It could be like a completed sentence, it would be an incomplete
+[08:04] thought, it could be like a thinking pause.
+[08:07] Or maybe it could be something as basic as like a backchannel acknowledgement.
+[08:12] Uh the situation of the silence is same, but the intent again was very different
+[08:18] in all the scenarios, but VAD considers all four equally, and it
+[08:23] literally cannot tell them apart. So, those are the limitation of level
+[08:29] one. And with the level two, basically what you get is that you let the STT
+[08:34] service tell you like when the turn is over.
+[08:39] So, Cartesiant does turn detection right inside their STT websocket. So, when
+[08:46] they stream your audio in, the server would handle both the
+[08:50] transcription and the turn detection together, and it will emit event when it
+[08:54] thinks like the turn is done. Similarly, Deepgram does the same thing
+[08:59] with their what they call as their I think at the endpointing.
+[09:03] And their P50 latency for Cartesiant is about 300, and it's about 250 for
+[09:08] Deepgram Nova 3. Both of these are also working really
+[09:12] well. Like, we see a lot of customers use that.
+[09:16] Because they are using like full audio signals plus some linguistic context to
+[09:20] make these decisions. So, which is like much more information than your VAD will
+[09:25] ever have. However, the trade-off is with the
+[09:28] transparency. Because when it is working, it works great. But when it
+[09:33] misfires, or when it cuts someone off at the wrong moment, then you
+[09:37] like have no way to figure out because there's no law that will say
+[09:41] uh it was done because of this reason, because of the what was what it saw.
+[09:47] And that decision was made inside someone else's server, and you just got
+[09:51] to live with that, basically.
+[09:55] So, that brings us to level three. So, in level three, you keeps a little VAD
+[09:59] running locally for basic signal that is there a speech.
+[10:05] And you add Smart Turn on top of it, which is a small model that runs during
+[10:09] silence. So, Smart Turn V3.2 is the latest model,
+[10:15] like, and uh let me share some numbers with you. And
+[10:20] it has about 58.9% recall and 68.4 percent precision.
+[10:26] So, what this means is that about six out of 10 time when someone finishes a
+[10:30] sentence, Smart Turn will be able to catch it quickly. But the other four
+[10:34] times, it might not be confident enough, but that's also fine because
+[10:39] you still have your VAD timer, which is running underneath as a safety net.
+[10:44] If the Smart Turn doesn't fire, your stop second will kick in, like, at the
+[10:49] configured latency anyway. So, it could be like 300 ms.
+[10:54] So, in that scenario, you are never stuck waiting. You just, like, get the
+[10:57] fast respond when the model is confident. And you get a slightly slower
+[11:01] but a safer respond when it's not. The other number on this list is from,
+[11:07] like, a Meta's published paper earlier this year, um around March.
+[11:12] There, they had reported a higher recall at 87.7%,
+[11:16] but they haven't released the code, so you really cannot deploy it.
+[11:22] Smart Turn is BSD-2 licensed, and it's a 8-MB
+[11:26] small model. You can pip install it today as well. So, yeah, like, that
+[11:30] works out better for a lot of our customers. We decide when to start
+[11:34] talking. But like, what about the other
+[11:36] direction? What happens when the user interrupts and
+[11:40] while you are already, you know, the agent is talking?
+[11:44] So, on the left side, you can see what happens mechanically. Like, user opens
+[11:48] you mouth, the windy will pick it up in 32 milliseconds and then then like 15
+[11:53] milliseconds, the entire pipeline is flushed.
+[11:57] TTS stops, LLM cancels, everything is clean. Like, the user never hears the
+[12:01] agent. You know, that part is taken care by Pipe Cat.
+[12:06] But, the important thing is like, should it have stopped there on because think
+[12:11] about a normal conversation when someone says, "Yeah." Like, if they send an
+[12:16] acknowledgement while you're speaking, you don't stop, right?
+[12:20] You know, they're just agreeing, but if you they say like, "Okay, wait, no.
+[12:24] Like, that was wrong." You have to stop immediately.
+[12:27] Same thing here. Like, the red is the it's a correction.
+[12:31] Stop on everything. They amber could be just some sort of a filler background
+[12:35] noise. But, you want to go ahead and keep going, maybe in a bit quieter.
+[12:41] Blue means like a signal for cough for a background noise. So, you can just
+[12:45] ignore it and finish your sentence. So, at level three because you own this
+[12:50] classification, you can start distinguishing between a real
+[12:54] interruption and someone just, you know, going
+[12:58] um. So, today most of these systems stop
+[13:02] every time, but this is a piece that's improving. Like, we are seeing a lot of
+[13:07] incremental improvement in this.
+[13:17] So, by now that you've seen all three levels and if you look at these three
+[13:20] Python files, pipeline is almost identical in all of them.
+[13:25] The only thing that differs is how you answer all of these questions. When is
+[13:28] the user done talking? In file one, you pass in Celero VAD
+[13:33] analyzer and that says the user had been silent for 300 milliseconds, so you can
+[13:39] assume they're done. In file two, you swap it with the
+[13:43] Cadence turns STT service class and now the service is going to tell you when
+[13:48] the turn is over. And in file three, you keep your Celero
+[13:53] VAD analyzer, but you also add like a local smart turn analyzer version three,
+[13:58] which is sort of a small model that runs during your silence and it's going to
+[14:03] look at the prosody
+[14:07] and it's going to look at prosody and intonation to decide whether that pause
+[14:12] meant I'm done or I'm still thinking. So, you have the code-wise the same
+[14:18] pipeline, but the configuration changes, which you know, leads to completely
+[14:22] different behavior.
+[14:26] So, to summarize your three levels, where our level one was Celero VAD, so
+[14:31] you basically own the silence detection completely.
+[14:34] Level two, you let the STT provider handle it for you. And in most cases, it
+[14:40] it will speak smarter, but then you cannot see what happened inside it.
+[14:46] Level three is your VAD plus smart turn, so where we basically own everything,
+[14:51] like you have full portability. And now coming to the latency piece,
+[14:57] because we've been throwing around these numbers, 755 milliseconds, 1.3 seconds,
+[15:03] but let me show you where all the time actually goes in.
+[15:08] So, this is a breakdown from Quintela, who was a co-founder of Daily.co and is
+[15:13] the person who created Pipe Band. And these are some of the numbers based on
+[15:17] their production measurement. So, you have the numbers for making an
+[15:21] which is about 40 ms. Then you have network and jitter buffer of 52.
+[15:27] So, these are physics. Like you can't really change them much. Then you have
+[15:31] your transcription plus end pointing. That's about 300 ms. Again, that's your
+[15:37] STT doing its thing. LLM time to first byte, and this is
+[15:44] generally the dominant bottleneck because in a typical API setup, you're
+[15:48] looking at 500 to 650 ms depending on what model you're calling and from which
+[15:54] cloud provider, which region. And then you have your network out and
+[16:00] playback TTS. That's it's going to take about 120
+[16:04] to 90 85 ms. So, you're totally looking at roughly
+[16:09] 1,100 to 1,300 ms in a standard setup calling cloud APIs.
+[16:15] Now, the Quindos team had demonstrated about 500
+[16:19] ms total voice-to-voice by co-locating all models in the same GPU cluster.
+[16:25] Because they were able to eliminate the network hops within the service.
+[16:30] And it's sort of an achievable floor because if you're willing to invest in
+[16:34] infrastructure, but for most of the developers today calling APIs, you're
+[16:38] somewhere in the range of 800 to 1,300 ms.
+[16:43] And the key insight to note here is that the STT, LLM,
+[16:47] together eat about 2/3 of the is latency budget.
+[16:52] So, these are the really the only two levers that we have to move this latency
+[16:58] metric needle in a meaningful manner.
+[17:03] So, coming to like which LLMs are actually fast enough for this?
+[17:08] We benchmark current models specifically for voice, and the target we kept it as
+[17:13] under 700 ms time to first token. Because anything slower will push our
+[17:19] total response past where the user is going to start noticing.
+[17:23] So, for now, like recording in June 2026,
+[17:28] what we've observed Nemotron-3 Ultra gives us a 529 P50
+[17:34] latency. GPT-4.1 at about 536.
+[17:39] But also, like what matters more in voice uh
+[17:43] than P95.
+[17:56] So, which LLMs are actually fast enough for this?
+[17:59] We benchmark current models, specially uh for voice, and
+[18:16] So, coming to the So, coming to the LLMs models, which are actually fast enough
+[18:21] for the We benchmark current models well for
+[18:24] voice. Uh so, these benchmarks are from June 26, and the target that we kept was
+[18:30] under 700 ms for time to first open, because anything
+[18:34] slower would push our total response time past
+[18:38] the limit, like where users is going to start noticing.
+[18:43] So, for now, the Nemotron-3 Ultra at 529 P50,
+[18:49] we observed GPT-4.1 at 536, again P50. But what matters more in voice than
+[18:58] maybe anywhere else is that the P95 tail. Because GPT-4.1
+[19:05] was great at P50, but it spikes to 1.7 at P95.
+[19:11] And it was even worse for Claude 3 that it hit over 4 seconds and because in a
+[19:15] conversation you cannot average this out because one slow response and your
+[19:21] entire flow is gone. And there's one more dimension that
+[19:25] people often miss, which is the multi-turn trip because after 15 or 20
+[19:30] turn, sometime model starts ignoring parts of the system prompt.
+[19:35] They might get to verbose, they go off spirit.
+[19:39] Because in that's fatal, you can't just dump a wall
+[19:43] of text on someone if the instruction following degrades across turn.
+[19:49] Then you have to do some sort of a context pruning or session resets.
+[19:55] So a few production issues that we've seen
+[20:00] that false interruptions significantly
+[20:03] increase your escalation rate. Because when agents cut people off
+[20:08] incorrectly, then users are more likely to request for a human in the loop uh
+[20:14] support.
+[20:17] And a 755 ms that's still I think the best measured voice-to-voice for a
+[20:22] cascaded pipeline like the ones which we propose.
+[20:26] We're nowhere near the human speed of interaction, which means the return
+[20:32] taking also needs to do a lot of heavy lifting to make the experience feel
+[20:35] better than the raw numbers it would suggest.
+[20:39] And at 58.9% recall on smart turn,
+[20:43] that's actually the best deployable turn detection you can get today and because
+[20:49] although it still leaves like four out of 10 turns
+[20:53] to be filled by a uh VAD timer,
+[20:56] but this space is going to improve a lot over the next year
+[21:01] few years and uh we'll have better model.
+[21:05] And on infrastructure running all of this in production is also hard because
+[21:10] five systems that all scale differently and can also fail differently.
+[21:16] You can explore Picovoice Cloud for managed hosting where your focus is on
+[21:21] agent logic or the AWS guidance reference architecture for enterprise
+[21:26] deployments with all the enterprise guardrails.
+[21:30] So yeah, like uh Uh that's it from me. Everything uh
+[21:36] we've discussed or mentioned is linked on the screen that I pulled benchmark.
+[21:40] Okay, over to you, Dan.
+[21:46] >> Thanks, Jinson. Hi, everyone. Uh my name is Daniel Weijia. I'm also a solutions
+[21:50] architect with the AWS startups team. So I think um Jinson walked you through
+[21:56] a great overview of some of the key challenges when building voice agents.
+[21:59] So what I'm going to do in this session is just to
+[22:02] walk you through a hands-on demo um just to make the concepts a bit more
+[22:07] concrete. Um hopefully um you can kind of
+[22:11] um incorporate some of the learnings into your own voice agent pipelines as
+[22:15] well. So what we'll be going through is just this
+[22:18] Picovoice Cat 10 detection demo, which is just a simple repository that we've
+[22:23] created. Um we'll talk through three examples. So one with um silence
+[22:29] detection, another with um built-in 10 detection in the
+[22:34] speech-to-text model. And then finally,
+[22:37] um we'll go through the open smart 10 model as well. So this is really useful
+[22:42] when you either want full control of your um
+[22:46] voice pipeline just for from a compliance perspective or if you want to
+[22:51] also fine-tune and customize your own 10 detection model based your own based on
+[22:57] your own data. So yeah, let's get started. So let's just go through the
+[23:02] source code of the first example. As you can see here, um using Silero is
+[23:08] pretty easy in Pipe Cat. All you have to do is import the relevant libraries,
+[23:14] and you can configure the parameters as well. Um I haven't actually
+[23:19] uh configured any of the parameters, so these are just the default, but you can
+[23:23] change the parameters like the confidence to trigger, the silence
+[23:28] duration before the turn ends, and the minimum audio volume as well. And in
+[23:34] terms of the voice voice pipeline, it's pretty standard. So, we've used um an
+[23:39] STT model, the LLM, and also a TTS model here. We've just defined it as the
+[23:45] Cartesia model for STT. Same with the Sonic model for TTS, and as you can see,
+[23:50] we've used the voice that sounds like a a British lady.
+[23:54] And for the LLM in the voice agent's brain, we've just used the Anthropic
+[23:59] Claude like cool model. So, we'll see um
+[24:02] what that looks like, and I'll spin up this example right now. So,
+[24:09] So, if you haven't used Pipe Cat before, one of the nice things is that it can
+[24:13] spin up a local prototyping environment. Really
+[24:17] useful for playing around with your voice agent pipeline. So, let me just
+[24:22] see if this now works. Okay. So, as you can
+[24:25] see, it will come up with a um local uh development environment.
+[24:32] So, what I might do is just connect to the voice agent, but before I do that, I
+[24:37] might just mute just in case um
+[24:40] I'm interrupting the voice agent. It should
+[24:43] come up with like an opening greeting, and then I'll test it with some uh
+[24:49] interactions to see how the turn detection is working.
+[25:01] >> Hey there, I'm your travel assistant and I'm excited to help you plan an amazing
+[25:05] trip. So, where are you thinking of going? Anywhere in the world you've got
+[25:08] your eye on? >> As you can see, the assistant's
+[25:12] gone ahead to do the opening greeting and on the right here in the terminal,
+[25:17] I've just got um some real-time logs just so we can
+[25:21] see what's happening. So, what I might do now is just I'm going to pretend that
+[25:26] I'm uh thinking about my travel destination and see how the voice agent
+[25:30] behaves. So, I'm thinking of going to um
+[25:41] >> I'm all ears. Where are you thinking of heading?
+[25:44] >> As you can see, I haven't really finished my
+[25:47] uh sentence yet, but the voice agent is already responding. So, you can see how
+[25:54] this works in the debug logs and as you can see, there's an end of turn complete
+[25:59] here and the reason for that is due to the
+[26:03] stop seconds parameter, which is um set to um
+[26:08] 300 milliseconds, it looks like here. So, that's why it's gone ahead and ended
+[26:14] the turn. Um what I might do is I might just exit
+[26:18] this local server and try the second example.
+[26:24] So, let's just clear that and I'll refresh that. Okay, so I'm going to try
+[26:29] the second example here.
+[26:32] And in this example, we'll use a um speech-to-text model which has turn
+[26:39] detection. So, we'll see how the voice agent behaves.
+[26:43] Okay.
+[26:46] I'm going to try uh the same example, so let me just mute myself here.
+[26:56] >> Hey there. I'm your travel assistant and I'm excited to help you plan an amazing
+[27:00] trip. So, where are you thinking of heading? Are you dreaming of a beach
+[27:04] getaway, a city adventure, mountains, or maybe somewhere completely different?
+[27:11] >> All right, let's see how the model behaves this time.
+[27:16] Hi, I'm thinking of going to
+[27:21] um
+[27:28] As you can see, the model is pretty smart. It now can detect the turn, so
+[27:33] let's see if we can find out what's going on
+[27:36] in the debug logs. So, um let's see if it emits uh some of
+[27:41] those turn taking events here.
+[27:56] So, as you can see, um the Katisha Inc. model does emit some
+[28:00] turn events here.
+[28:10] And as you can see, it hasn't really completed the turn. It hasn't sort of
+[28:15] um responded back with any response.
+[28:19] But, maybe I can unmute myself and then resume and get to the destination. So,
+[28:27] Sydney?
+[28:31] >> Oh, Sydney is fantastic. You're going to have such a great time there. Are you
+[28:35] thinking about when you'd like to go? And how long are you planning to stay?
+[28:38] That'll help me figure out the best flights and hotels for you.
+[28:42] >> So, as you can see, once the model detects that it's a full complete
+[28:46] sentence, is able to then respond. Now, in practice, you would also incorporate
+[28:51] um some silence detection there because as
+[28:54] you can see, I was quite silent. Um I was muted for a while and you'd probably
+[28:59] want the voice agent to respond in practice.
+[29:02] Um having like voice uh activity detection or silence detection is also
+[29:07] useful for um interrupting the voice models um um
+[29:12] or what you call barge in as well. So, definitely this is just a a quick demo,
+[29:16] but in practice, you would probably combine both the turn detection model
+[29:20] and the silence detection. Um just for the final demo, I might
+[29:25] quickly show the smart turn model as well and see what that looks like. Um it
+[29:30] will behave very similar to to this. It's just that um
+[29:35] the model will be running on your uh either your local machine or um on a GPU
+[29:41] uh environment as well if you want to deploy that into your into the cloud.
+[29:47] So, let me just maybe clear this just to avoid confusion.
+[29:54] And then I'll use um I'll refresh this as well.
+[29:57] And I'll start now the smart turn example.
+[30:01] I'll refresh this to see if we can Okay, there you go.
+[30:05] It's starting it. And I'm just going to do the same example. So, I'll mute
+[30:08] myself again.
+[30:18] >> Hey there. I'm your travel assistant and I'm excited to help you plan an amazing
+[30:22] trip. So, where are you thinking about going? Are you dreaming of a beach
+[30:26] getaway, exploring a new city, or maybe something else entirely?
+[30:32] >> I'm thinking of going to um
+[30:38] >> I'm all ears. Where are you thinking of going?
+[30:41] >> Now, let's take a look at the um both the silence detection, which is
+[30:47] incorporated into this example, and also the turn detection model. Hopefully,
+[30:51] there are some um debug logs that we can see.
+[30:55] As you can see, um it's not detecting that I've completed
+[30:58] the turn. The end of turn state is incomplete, but it did complete it um
+[31:03] due to the silence that I've um I've
+[31:08] um incurred there. Um so, that there was
+[31:11] some silence, and therefore it sort of kept going with the
+[31:15] with the um next turn. What I might do is see if I can do a
+[31:21] complete sentence and see if, you know, um it can be detected through the local
+[31:26] smart turn model.
+[31:30] I'm actually thinking of um going to Sydney.
+[31:36] >> Oh, Sydney's fantastic. I'd love to help you plan that trip. So, tell me, what
+[31:41] time of year are you thinking about going, and how long are you planning to
+[31:44] stay? Also, are you traveling solo, with a partner, or with family?
+[31:50] >> Okay, fantastic. So, the voice agent was able to respond as soon as I
+[31:55] uh completed the sentence, but let's see if that was actually intentional, or was
+[32:00] that um something that um you know, can be
+[32:04] detected through the smart turn model. So, let's have a look here to see if we
+[32:08] can find the smart turn um debug logs.
+[32:21] As you can see, this line here, I'm sorry about the
+[32:24] legibility of the highlight, but effectively this here says that um the
+[32:29] end of turn state in is complete, and the smart turn model is actually
+[32:33] classifying that there is a high probability that that um the sentence is
+[32:39] complete and therefore it's okay to go to the next turn. So that's
+[32:45] in a nutshell how turn detection works. Hope that was helpful.

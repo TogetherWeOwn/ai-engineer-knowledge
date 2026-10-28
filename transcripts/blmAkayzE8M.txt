@@ -1,0 +1,271 @@
+# title: How to Secure Agents using OAuth — Jared Hanson (Keycard, Passport.js)
+# source: https://www.youtube.com/watch?v=blmAkayzE8M
+# speaker: Jared Hanson (Keycard, Passport.js)
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T10:59:47Z
+# sha256: f52f2267c2a4ed17ddbb1226e0dd78038e3dd06a7edfa3d6f4fa72328922f01c
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:00] [Music]
+[00:15] Thanks a lot everyone. Thanks for coming out. Uh we're going to talk about a
+[00:18] topic that I consider one of the most uh important topics uh for what we're doing
+[00:22] with AI and agents, which is how to secure agents using OOTH. Um I'm Jared
+[00:27] Hansen. I'm the co-founder of a new company called Keycard where we're
+[00:30] building identity and access management platform for AI and agents. I'm also the
+[00:36] creator of Passport.js for any of the node uh developers in the audience very
+[00:40] popular o framework and previously I was at Ozero where I built a lot of their
+[00:44] core identity infrastructure and then and then at octa
+[00:48] uh let's get into it. So I think we're all super excited about what's happening
+[00:52] with LLMs and AI powered applications. uh you know we can bring these things
+[00:56] into our daily lives and they automate a lot of the tasks for us and and simply
+[01:00] put agents that are more connected are more useful. Uh so let's connect these
+[01:05] agents to more systems. But but hold on a second because today we face an
+[01:09] impossible choice. Uh we can give agents broad-based access and accept security
+[01:13] risks or we can limit their capabilities and sacrifice business value. Uh, and
+[01:19] this is exemplified pretty well in how we set up uh, MCP servers today, which
+[01:23] is we go get API keys that are typically longived and broadly scoped. We paste
+[01:28] them into some configuration files and environment variables and and let our
+[01:32] agents run with them. Now, if we continue this pattern for hundreds or
+[01:35] thousands of agents, we've got a pretty big security problem on our hand. Uh,
+[01:39] luckily, we we know how to fix this. We know how to transition away from static
+[01:43] secrets uh, to dynamic access using OOTH. Now, show of hands, how many
+[01:48] people are familiar with OOTH in the crowd? I'll say quite quite a bit. So,
+[01:53] I'll I'll burn through this quickly. Uh, but just uh as a quick introduction, um
+[01:58] I'm not going to lie to anyone like OOTH is a relatively complicated protocol,
+[02:02] especially when you consider all the extensions. But the princip principles
+[02:06] behind it are fairly straightforward and easy easy to understand. Uh what it is
+[02:10] is a protocol for applications which we call clients in OOTH to request access
+[02:15] to APIs which we call resource servers and and these requests are mediated by
+[02:20] what's known as an authorization server. If you've ever used anything like
+[02:24] Calendarly and connected it to your Google calendar API, you've experienced
+[02:29] OOTH in the real world. Uh what's happening there is Calendarly sends a
+[02:33] request over to Google saying, "Hey, I'd like access to this person's Google
+[02:37] calendar." uh Google C- Google's authorization server then you know
+[02:41] ensures that you're logged in prompts you for consent uh that you want this
+[02:45] access to occur and if you agree to it uh Google sends what's known as an
+[02:49] access token over to Calendarly and then Kalanley can take that access token and
+[02:54] go about accessing your calendar. Uh there's a few other interesting bits
+[02:57] going on here like refresh tokens which basically allows these access tokens to
+[03:01] be shortlived and rotated pretty quickly while still maintaining the the
+[03:05] authorized connection. Uh and in OOTH we call these types of flows that involve
+[03:10] user delegation uh authorization code flows and they typically happen via
+[03:14] browser based interfaces that that you've seen when you've used these types
+[03:18] of applications. Now one thing that gets kind of confusing for people is that
+[03:23] OOTH is oftent times used to implement things like signin with Google or signin
+[03:28] with uh Facebook. Uh and this is confusing because we refer to OOTH as an
+[03:32] authorization protocol or a delegated authorization protocol specifically. So
+[03:36] what's what's going on here when we use it for signin? Well, this is really just
+[03:40] a special case where the API gets replaced with a user info API that just
+[03:44] returns claims about the user who logged in. So their ID, their name, their email
+[03:48] address, etc. And we kind of use authorization to back our way into
+[03:53] authentication. Um, and this became like such a common pattern that people used
+[03:57] with OOTH that it got formally standardized as open ID connect which is
+[04:01] just an identity layer on top of OOTH uh that standardizes the response format of
+[04:06] that user info API. Uh, it also does a couple things that are kind of confusing
+[04:10] like introduce more terminology which identity people are prone to do. Uh, we
+[04:14] call the authorization server now an identity pro identity provider in in the
+[04:18] scope of open ID connect and applications are known as relying
+[04:21] parties. Don't get hung up on the terminology. It's it's all the same
+[04:24] thing. Uh one other thing that open ID connect
+[04:28] does is it introduces an ID token. This is simply a JSON web token which is a
+[04:33] cryptographically signed statement about who the user is. Uh this overlaps a lot
+[04:37] with the user info API. You can think of it as sort of an optimization that the
+[04:41] application can verify itself without making API requests. It also serves some
+[04:46] functions in like ongoing session management between applications and
+[04:50] authorization servers, but that's kind of beyond the scope of introductory
+[04:53] material here. Uh in the real world, these things get deployed together.
+[04:58] We'll typically run authorization and authentication flows uh in line uh so
+[05:03] that you know we know who the user is who logged in as well as get access to
+[05:07] things like their Google calendar. Uh one thing to call out that is
+[05:12] important here is that there's three roles in Oath. Uh the client uh and the
+[05:16] resource server I think are all relatively straightforward. We
+[05:19] understand that from client server architectures. The client requests act
+[05:23] uh resources and the resource server responds with the data. Uh what gets
+[05:27] different is that we introduce this authorization server in the middle that
+[05:30] mediates this access. Uh and it mediates it by issuing tokens. uh issues tokens
+[05:35] back to the client which holds them and then presents them to a resource server
+[05:39] and the resource server's job is to verify those tokens. Now what's what's
+[05:44] the benefit of this sort of model? Uh the main benefit uh flows to the APIs.
+[05:49] They don't have to care about anything to do with authentication anymore. So
+[05:52] verifying user password or doing step-up authentication, running the consent
+[05:56] flows, they hand all that job off to the authorization server and it gets kind of
+[06:00] abstracted away by the token uh that the API can verify what has happened. Um
+[06:06] there's also some benefits that we can like centralize policy uh and then
+[06:10] deploy ecosystems of apps and APIs all kind of protected by a central location
+[06:14] and and build out the the ecosystems that we all know today.
+[06:18] Uh how do we apply this to MCP and agents in in particular? Well, it it
+[06:23] should be pretty simple. Uh now our applications get replaced by a chatbot
+[06:29] or agent like claude. Uh that we want to connect to MCP servers. Uh we the MCP
+[06:35] clients and the MCP servers should get authorized via OOTH by you know the
+[06:39] controlling authorization server in the middle. This should be pretty simple,
+[06:43] right? Well, nothing with OOTH is ever so simple. So let's take a look at the
+[06:48] state of authorization in MCP. Uh we're going to look at at where it started,
+[06:52] where it is now, and and then where it's going in the future.
+[06:57] So the first version of MCP, uh it's a pretty young protocol. It's like seven
+[07:01] months old to the day, I think. Uh the first version I like to call the NOOTH
+[07:05] version. It didn't have any authorization in it at all, uh which
+[07:09] they admitted in the spec. It was really a way to get something out there
+[07:12] primarily for uh local MCP servers. uh there was some notion of remote MCP
+[07:17] servers uh but again no authorization but this kind of spurred discussion
+[07:21] people saw the promise of MCP and and started discussing how to add
+[07:25] authorization to it. Uh now we have the latest draft of the specification uh
+[07:31] which was published in late March. I like to refer to this as OOTH the first
+[07:36] attempt and for anyone who has ever done OOTH implementations the first attempt
+[07:40] is always pretty poor. Uh, and that is the case with this version of the
+[07:44] specification of MCP. Uh, I don't actually recommend anyone read the
+[07:49] authorization part of the MCP specification as it is today because
+[07:52] you'll walk away with a pretty misinformed view of what OOTH is. But as
+[07:56] a quick recap, what it does, it says, okay, MCP clients got to implement the
+[08:00] client side of of OOTH. That all makes sense. And then it also says MCTP
+[08:06] servers. You need to implement all all of OOTH 2 including authentication,
+[08:10] token issuance, etc. Now, OOTH has three roles. Where's where's the third role
+[08:16] here? What happened to the OOTH server? Well, it got collapsed into the MCP
+[08:19] server, which which is a bit odd. Uh and people started noticing this. So, 5 days
+[08:25] after the specification was released, uh a blog post went viral. Uh this one from
+[08:30] Christian Posta saying the MCP authorization spec is a mess for the
+[08:34] enterprise. Uh and he states you know the problem here is that it treats the
+[08:38] MCP server as both a resource server and authorization server. Uh Aaron Perky who
+[08:43] does a lot of great OOTH standards work uh followed this up with another blog
+[08:47] post that went viral titled let's fix OOTH and MCP where he noted that you
+[08:52] know a bunch of the confusion that was happening was because the diagram show
+[08:56] that the MCP server itself is handling authorization.
+[09:01] Now then this kind of culminated in a in a PR to the specification where uh
+[09:06] people proposed let's let's fix this problem. Let's just shift uh the MCP
+[09:10] server to be an OOTH OOTH resource server and everything will be good. This
+[09:14] is a super interesting PR to read. There's like 400 some comments on it.
+[09:18] It's not even the only PR there. Uh but just kind of a example of how people
+[09:23] just picked up on this problem and ran with it. Now, I'm not usually one to say
+[09:28] I told you so, but all the way back in January of this year, I commented on the
+[09:33] uh as a review for the specification. I was like, "Hey, I recommend we model MCP
+[09:39] servers as as resource servers from an OOTH perspective." I'm not quite sure
+[09:43] where where that got lost. It it didn't get picked up, but in any case, uh we
+[09:47] fixed this problem. And one of the reasons I'm here is to tell us all more
+[09:50] about OOTH things that we need to pay attention to in order to avoid this
+[09:54] problem in the future. Uh so, okay, the next attempt in draft
+[09:58] all this feedback has been incorporated and the MCP spec is kind of like fixing
+[10:03] its issues. Um, and the draft version of the specification models o all of OOTH
+[10:08] pretty cleanly and pretty nicely. Uh, the OOTH authorization server is a
+[10:12] totally separate entity. And this is really beneficial for all of you
+[10:16] building MCP servers because your job gets a whole lot easier. All you have to
+[10:20] do is verify the tokens that come in over HTTP and hand off all the other
+[10:25] responsibility to the OA server. So, we're back to a pretty good place uh
+[10:31] with respect to OOTH and MCP and in particular how we authorize connections
+[10:35] between MCP clients and MCP servers. So, let's talk about the future. If if
+[10:42] this is all we do with OOTH, we're not even scratching the surface of what we
+[10:45] need in order to fully secure AI and AI interactions. So, what else are we going
+[10:50] to need? Uh we're going to burn through this here pretty quick. The first is
+[10:54] agentto agent uh communication. So what we've seen with OAS so far as it's
+[11:00] applied to MCP like I said that's referred to as the authorization code
+[11:03] flow and it's particularly relevant for when we want to do end user delegation.
+[11:07] Uh but there's a whole bunch of other flows in OOTH uh that are relevant in
+[11:11] particular client credentials and this applies when we want agents to
+[11:14] communicate with other agents or other MCP servers on their own behalf not on
+[11:19] behalf of a user. So this is one thing to pay pay attention to. The next, this
+[11:24] kind of begs the question, agent identity. Uh, what should we do about
+[11:28] this? Well, if anyone's ever done OOTH development, you you're probably
+[11:32] familiar with this type of flow is you want to build an application. Uh, you
+[11:35] want to integrate with an API. You go to some developer portal, create a new
+[11:39] application, get a client ID and secret, and then somehow configure your uh
+[11:43] application with that those credentials. Uh, this is a bunch of friction. This
+[11:48] obviously won't apply well to uh MCP which is trying to be a standard pro
+[11:52] protocol and you want to bring tools and agents together that that may not be
+[11:55] aware of each other. Uh you can't do this if you presuppose some sort of
+[11:58] registration process. So what does MCP do? Uh well it picks up what is known as
+[12:06] dynamic client registration. Uh what this does is allows applications and
+[12:10] agents to request credentials at runtime rather than like ahead of time in manual
+[12:15] registration. Uh so an agent says hey like this is who I am give me a client
+[12:20] ID and secret the server does it and the agent goes about the rest of its ooth
+[12:23] flow. Now this specification has been around for about 10 years and in
+[12:28] practice has seen like no meaningful adoption and one of the implications
+[12:33] behind this is it like makes all agents anonymous because the registration
+[12:38] request itself is uncredentialed. This makes it hard to build trust in agents.
+[12:43] It's probably not super viable in my opinion.
+[12:46] So what should we be looking at instead? Well, there's many cases where we just
+[12:51] want to use public clients that we don't really care about verifying their
+[12:54] identity. In this case, there's an emerging specification called push
+[12:58] client registration uh which introduces this kind of like well-known string to
+[13:02] identify a like public client. Uh we can just use this well-known string and we
+[13:06] skip the whole registration song and dance and then the need to store the
+[13:09] resulting state. Uh this is but a lot more simpler. It also has the capability
+[13:14] to carry uh certain client metadata in the request if if that's necessary. So
+[13:19] this is something we should look in for cases where public clients apply.
+[13:23] Uh but what about clients that we actually want to authenticate and verify
+[13:27] their identity? Well, my proposal here is that we should start looking at uh
+[13:32] using URLs in PKI for identity. Um, this lets us reuse the existing identifiers
+[13:38] that people already associate with the apps they're using and and can repurpose
+[13:42] them into the agent world. This looks like in practice we'd have a URL such as
+[13:47] uh, you know, agent.com to be used as a client identity in OOTH flows and then
+[13:51] through the magic of uh, cryp cryptography and key sets, we can
+[13:55] authenticate these agents by having them sign uh, jot assertions or HTTP message
+[14:00] signatures that we can then verify with with the corresponding public keys.
+[14:07] All right, this dub dovetales into agent add astation. Uh, we've connected our
+[14:12] agents to the resources that we're using, but then that agent turns around
+[14:15] and sends all that information up to an LLM. This seems like something we should
+[14:18] probably have some awareness of and control over. Uh, so in kind of
+[14:21] protected environments, we can sort of get by like treating the LLM as just
+[14:26] another API, which often it is. uh and this is a technique we could apply but
+[14:30] it has limited uh capabilities when we look at like edge deployed agents such
+[14:35] as on the desktop or mobile devices where we don't really control their
+[14:39] software environment. So there's a bunch of interesting work going on in the IET
+[14:42] app now with respect to like remote addestation and supply chain uh security
+[14:47] where we can start to ad attest to the state of the device and the software
+[14:50] running on it and know what LLM our data is going to wind up in and then
+[14:55] incorporate that into OOTH authorization flows.
+[14:59] Next up transactional authorization what we've done to date in OOTH uh is uh
+[15:05] introduce scopes. This is a whole lot better than passwords which OOTH kind of
+[15:09] replaced back in the day uh in the sense that now we can do more fine grain
+[15:13] permissions such as like read versus write access. Um but in practice these
+[15:18] end up being a little bit too coar grained for a lot of use cases and
+[15:21] oftentimes a little bit longer lived than than we might like. Uh in in agent
+[15:27] interactions we're going to have to be increasingly transactional. So imagine
+[15:30] use cases where you want agents to do financial trans transactions or
+[15:34] commercial transactions. We're going to want to authorize things on a
+[15:38] transaction basis potentially with uh specific amounts or or financial
+[15:42] budgets. So we're going to have to look at moving to more dynamic access in this
+[15:47] respect. There's a proposal that's actually like a specification at this
+[15:50] point called rich authorization requests which is which is worth looking into um
+[15:55] and something that we can take inspiration from or either adopt
+[15:58] directly for these these use cases. Next up we have chain of custody. This
+[16:04] is uh particularly interesting to me. Uh what we talk about with MCP really
+[16:08] covers the first leg of this. On the on the lefth hand side we have authorized
+[16:12] connections between agents and MCP servers. But what happens on the right
+[16:16] side is completely unspecified in terms of like the security pro profile. So how
+[16:21] do we protect an MCP server that calls another API within the same domain? In
+[16:26] particular, there's a technique called OOTH token exchange that I recommend
+[16:30] everyone look into. Uh special case of this is MCP servers to third party APIs.
+[16:38] In this case, uh we should look into identity chaining across domains. uh and
+[16:43] its corresponding specification the identity assertion grant which lets us
+[16:46] do cross domain authorization in the back end. Somewhat outside the scope of
+[16:50] OOTH is other internal infrastructure that people should be aware of as they
+[16:54] look to deploy these agents. And then the culmination of this is really
+[16:58] agentto agent flows where uh I don't know how much of this is happening in
+[17:01] practice today but people see the promise of it. Imagine big graphs of
+[17:05] agents talking to other agents on other servers. We're going to need endto-end
+[17:08] visibility as the authorization flows along these graphs.
+[17:13] Finally, async interaction. Uh I think one of the key things to look at here is
+[17:17] like OOTH typically assumes a user is sitting in front of a browser and
+[17:20] relatively static, but as we kick off flows, users might walk away and agents
+[17:25] do work in the background. They're going to need a way to reach out to the user
+[17:28] and say, "Hey, I need a bit more access than I've been permissioned." How do we
+[17:31] think about bringing more like real-time interactions via channels like SMS or
+[17:35] push notifications rather than just browser based flows?
+[17:39] And then a hot topic today, uh there's a bunch of interesting work going on in
+[17:43] the voice voice track at at the conference. Uh as AI starts to interact
+[17:48] with us via voice and video or completely in the background, how do we
+[17:52] think about security in those respects? This is really the frontier of of
+[17:55] security and inter interaction. But there's a lot of prior art in various
+[17:59] real-time communities around SIP, XMPP, XMPPP, WebRTC that uh I think is very
+[18:05] interesting for us to all look at. So there's a lot here. Let's let's go
+[18:11] build this stuff. It's all important for us uh to to achieve a safe and secure AI
+[18:17] future. Uh this is what we're building at Keycard. Uh we're building an
+[18:20] identity access management platform that lets you connect your co-pilots, custom
+[18:24] agents, and thirdarty agents to all your apps, services, and infrastructure all
+[18:28] using standards compliant protocols, ADA, MCP, and OOTH.
+[18:33] If building this stuff is interesting to you, we are hiring hiring. So get in
+[18:36] touch with me. And if you're if it's not interesting to you, but you know you
+[18:39] want to secure your agents, get in touch with us, too. We're looking for partners
+[18:43] that are building uh so that we can work with you to secure secure your agents.
+[18:47] Uh the website site is keycard.ai and I will be around the rest of the
+[18:51] conference. Thanks.
+[18:57] [Music]

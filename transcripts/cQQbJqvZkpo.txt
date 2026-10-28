@@ -1,0 +1,200 @@
+# title: Vertical Mobility: Inference from MVP to Trillion-Parameter Workloads — Sitanshu Gupta, CoreWeave
+# source: https://www.youtube.com/watch?v=cQQbJqvZkpo
+# speaker: Sitanshu Gupta, CoreWeave
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T04:59:38Z
+# sha256: ff1b0974a82aefb2549c9f19aad2ca5396463b7d99af38af1b96727206094940
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:13] Good afternoon everybody. Um I'm Satan Shu from Kov going to be
+[00:18] talking about vertical uh mobility. It's a quite a fancy topic uh the title that
+[00:24] we came up with but basically going to be talking about the inference platform
+[00:28] that we have at Corv that we are building to serve small to big models
+[00:32] and various different types of workloads.
+[00:34] Uh a quick intro about me. Um I joined core just about four months back. Uh
+[00:40] leading all of inference over there and um before this I was managing everything
+[00:45] at AWS Anapuna labs for uh training and before that inference and training at
+[00:50] SANOVA. So quite a bit of experience in uh in this particular space.
+[00:55] Um what I will the way I'll be taking you through is explaining to you the
+[00:59] consumption models that we have and from that how we have derived what the
+[01:03] platform should look like so that we do not need to keep changing the platform
+[01:07] and we keep making enhancements in the platform that we have for serving
+[01:10] inference and how and why the why performance plays such an important role
+[01:14] over there. Uh I think a little bit of this might be common with the previous
+[01:19] topic that was discussed over here. [snorts]
+[01:21] Um consumption models. So we have uh at large two biggest consumption models.
+[01:28] One is a serverless which is where the customers can come in, consumers can
+[01:32] come in uh do not need to worry about managing the hardware themselves. Do not
+[01:36] need to worry about managing the clusters orchestration anything at all.
+[01:40] There's API, there's UI, you come in, you pay per token uh and you get your
+[01:45] model served. Um biggest thing over here is that uh the type of models uh that we
+[01:51] serve in the catalog that is the breadth of models that the customer will be able
+[01:56] to go through. Uh I'll talk about dedicated and then I'll come back to
+[02:01] serverless because there is one thing unique on the serverless side. Dedicated
+[02:04] inference service that we provide is more for customers who want to know
+[02:08] exactly what hardware they are going to be using and running on. Uh but the
+[02:13] model deployment also depends on them. So they use our service, they use our
+[02:17] orchestration layers. Uh but the model deployment depends on them. Model
+[02:22] performance also depends on them as long as we provide in the platform the
+[02:26] capability and the knobs to serve those features. Coming back to serverless, uh
+[02:31] one of the interesting pieces over here is um typically serverless models are
+[02:36] very are noisy neighbor problems where uh if let's say everyone is banging on
+[02:40] the exact same model then you might be timing out quite a bit depending on how
+[02:44] much capacity I have behind it. So another feature that we have on the
+[02:48] serverless side is what we calling provisioned throughput. So as a
+[02:52] customer, if you know your traffic profile and if you can let us know about
+[02:57] that, we can carve it out specifically for you behind the scenes. You still do
+[03:01] not need to worry about what hardware it is exactly running on as long as your
+[03:05] throughput, your SLAs's are maintained. So that is another one on the serverless
+[03:10] side and that is still charged by by the token but you know that you're not
+[03:15] running into the noise enabled problem over there.
+[03:20] Um let me take a quick stab at few different types of workloads workload
+[03:24] shapes that uh we have um that we are seeing and the ratio between these is
+[03:30] like continuously changing though agentic is like really high up there.
+[03:34] Uh, agentic and chat kind of very similar. Super high on the input
+[03:38] sequence lengths, very low on the output sequence lengths typically. But the
+[03:42] biggest difference between agentic and chat being the fact that the multi-turns
+[03:46] in agentic are super low latency versus in chats because when you get the
+[03:51] response as a user, you have to read the answer and then you respond to it. So
+[03:55] there are there are differences over there and that big difference ultimately
+[04:00] converts into something uh related to the KV cache management uh but these are
+[04:06] these two are both real time and another real-time workload is your voice and
+[04:10] videos uh which are study streaming and super latency sensitive on the agent
+[04:15] agent and chat side um largely the requirements are from throughput point
+[04:20] of view not so much from latency but real-time voice and videos are
+[04:24] absolutely totally latency sensitive. Coming to batch, batch is where the
+[04:30] SLAs's are like super loose. They run into like way like seconds and minutes.
+[04:35] Sometimes for some customers actually even in hours. They're like I'll just
+[04:38] throw give me 10 to 12 hours of workload capability and uh I'll throw whatever I
+[04:44] can process it whenever you can. uh these batch workloads um the way they
+[04:50] come into the picture over here in um deciding uh sorry being the requirement
+[04:56] for some of the design choices that we make in the stack. Imagine these uh four
+[05:01] different types of workload shapes um in the time dimension you have to play the
+[05:04] game of tetris on how you can fit it in to utilize the underlying infrastructure
+[05:08] the most.
+[05:12] I'll give a high level on how our stack is shaped right now. Um, and I'll walk
+[05:18] you through a bit of a request flow over here. So for both serverless and
+[05:23] dedicated, if you look at the right hand side of the screen, you'll see that on
+[05:26] the platform side we you'll go to the control plane to uh to have your uh
+[05:31] authorizations, your rate limitings and your usage being tracked etc. so that we
+[05:37] can be built accordingly and uh observability so that we can make sure
+[05:42] that we are not violating the SLAs's that have been signed right uh
+[05:47] underlying on the platform I've shown at a super high level that we have these
+[05:52] different um inference engines VLMs SG langs and tensorl but there are quite
+[05:56] there's quite a few quite a bit of detail over here that I'll touch upon
+[06:02] uh and underlying that what I'm trying to show over here in green is um various
+[06:07] different pieces of hardware. So it's not that um so the platform needs to be
+[06:13] capable enough of share of having the workload getting distributed across
+[06:17] various different generations of these GPUs [snorts] uh specifically Nvidia
+[06:21] GPUs that we use right so let's take up a let's take a few examples uh over here
+[06:27] um let's say the request originates from the client side through apps or
+[06:32] notebooks any of those or through the agents right it hits the gateway once it
+[06:37] hits the gateway then uh like I mentioned on the control plane goes
+[06:41] through authentication etc etc etc but then um comes either the serverless or
+[06:46] dedicated so in the case of serverless it'll be paper token so that the token
+[06:51] usage would be monitored over here not the exact tokens but just the token
+[06:54] usage because we maintain ZDR zero data retention policies uh it is multi
+[07:00] depending on the multi-tenency or the provisioned uh if it is provisioned then
+[07:04] we know underlying for the router it needs to go in and target the uh the
+[07:10] explicit deployments for the provision throughput uh customers. For the
+[07:14] multi-end customers, there are separate deployments.
+[07:17] Router over here specifically uh the the router is very important since um the
+[07:24] router is responsible for making KV cache aware routing choices. Why is it
+[07:29] important? Because like I mentioned when we were discussing the workload uh
+[07:33] profiles uh the agentic use cases are typically
+[07:37] super heavy on the input sequence lengths and bulk of the input sequence
+[07:41] length about 80 to 90% depending on which company it is depending on the
+[07:45] customers 80 to 90% of it is the same for various different requests. So there
+[07:51] is no point in going in and recomputing the prefill or redoing the prefill for
+[07:57] that prefill is supercomputebound very expensive that's why as much as you can
+[08:03] hit the cache more you can save which is why if you look at the token pricing
+[08:08] anywhere uh there's a specific price for input tokens and there's a way cheaper
+[08:13] price for the cash input tokens so caching becomes like really important
+[08:18] over here underlying uh The underlying how you want to split the hardware is
+[08:24] totally dependent on the choice in the platform and we provide the capability
+[08:28] to do either either do a pre-filled decode disagregation if the use case
+[08:32] desires it or do not do it because prefilled decode disagregation is not uh
+[08:38] cheap for every type of use case. Uh let's take another request flow over
+[08:44] here. Let's see if uh when it was a dedicated customer then what will
+[08:48] happen? uh dedicated customer again will go through the gateways that have been
+[08:52] set up for them with proper isolations. Um billing is not based on tokens.
+[08:58] Billing is based on usage of per GPU per hour. Uh it's a private gateway so that
+[09:05] uh there is noisy enable problem. No one else can get in. uh same router logic
+[09:10] over here so that if there are uh cache heavy if there are requests which are
+[09:15] very similar then it's it hits the cache most and depending on the deployment
+[09:20] that the customer makes in their on their dedicated GPUs
+[09:24] uh they can decide if they want to do prefill decode disagregation or not they
+[09:28] can decide which which engine to use VLM or S lang or tenslm and given the bulk
+[09:34] of capacity that the customer has reserved they can decide if they want to
+[09:38] have just one deployment uh with the ability to scale through the whole
+[09:42] cluster or they want to have multiple different models, multiple different
+[09:45] deployments. Um one thing that I do want to mention
+[09:50] about the router over here um is the fact that heterogeneous capacity across
+[09:56] different zones and regions is supported. It is a little it's quite a
+[10:02] bit of a hard problem to load balance across that. So the priority order that
+[10:07] we typically take is uh first KV cache locality and then the least loaded
+[10:12] fallback. Um
+[10:16] that's that um another request flow that I want to go over here which um might be
+[10:21] a little hard to see from the diagram is I want to take the batch workflow. For
+[10:26] the batch workflow what we would actually do is the underlying capacity
+[10:30] that the customer has let's say the same dedicated inference customer uh during
+[10:36] US daytime they're running their real-time workloads and from evening to
+[10:39] night they want to run batch workloads the same capacity after time can be
+[10:44] scheduled to run the batch workloads. So we provide the capability in the API to
+[10:49] tell when to scale up and when to scale down and as per schedule if we can if
+[10:54] they tell us that we have to scale down we will scale down and open it up for
+[10:59] batch processing through the night.
+[11:05] I think I've spoken quite a bit about uh optimizations on the KV cache side but I
+[11:10] do want to repeat a little bit because this is one of the most interesting
+[11:13] pieces. Um it if we can hit on the cache more you can you will avoid the cost of
+[11:20] prefill which is the most expensive piece over here. Um
+[11:26] reusing the cache across multiple different turns in your agentic
+[11:29] workloads between turns also there is lot of um similar prefill uh that comes
+[11:35] in in the input sequence length. Um, think about the chat workloads which is
+[11:40] where offloading AV cache also becomes extremely important because with cache
+[11:44] with with the chat workloads we have a lot of latency between different between
+[11:49] multiple turns that we as users put in but uh if we completely evict whatever
+[11:55] we had in our particular conversation then the next time we ask a question in
+[11:59] that same chat it's going to take a little bit longer. Uh so instead of
+[12:03] actually completely evicting and redoing the prefill again what the the
+[12:08] techniques being used are uh maybe using u we we are using our own but externally
+[12:14] we know about LM cache and moon cakes. Um what we do is we will offload the KV
+[12:19] cache to a high bandwidth storage so that we can store a lot of these
+[12:24] prefills uh such that whenever the accompanying
+[12:28] request comes for that particular conversation it can be loaded in right
+[12:31] away into the HPM.
+[12:36] Um on the performance liver I would I just want to mention a few performance
+[12:41] livers. We've discussed the PD disagulative
+[12:45] decoding are others and how to carefully choose the parallelization degrees and
+[12:52] the strategies that is actually very important. Uh two of the biggest livers
+[12:56] that we've been working with are quantization to NVFP4 and spec.
+[13:01] uh we do provide capability where if the customer has their data set and they
+[13:05] want us to train in speculators for their data sets for better acceptance
+[13:09] lens which will ultimately make the output throughput significantly higher.
+[13:14] Uh we do have that as well. So but that happens async. We uh we get the data
+[13:20] async we train the speculators async and then we deploy the speculators into the
+[13:25] customer deployments uh if that's what they wanted. uh you see three
+[13:29] screenshots over here. I have posted them from uh the last one month one
+[13:34] month's worth of work that uh some of us in my team have done. You can see we
+[13:39] came quickly on top of the leaderboard on Kimmy 2.6 2.7 and um those are those
+[13:44] are from artificial analysis and going back to the session before this can we
+[13:49] trust that that's why for GLM I have the results from open router. So artificial
+[13:54] analysis when they run benchmarks they're running very specific workloads
+[13:58] open router is actual user traffic uh and you can see uh on the open router
+[14:03] side weights and biases so the branding is different but weights and bias is
+[14:07] basically k we bought weights and biases about a year back uh you can see the
+[14:13] speed over here that we have from our deployment is pretty close to what
+[14:17] fireworks is providing us fireworks fast right but underlying techniques that we
+[14:21] are using is what I want to emphasize the most over here uh for for
+[14:25] performance optimization that becomes critical because ultimately what you
+[14:28] want to serve to the customer what we want to serve to the customer is uh
+[14:31] price performance benefit
+[14:36] quick recap um single platform is what I've been trying to emphasize is what
+[14:42] I've tried to show uh two different consumption models serverless and
+[14:46] dedicated for customers and within serverless I describe two different
+[14:50] consumption models as well pay as you go and provision vision throughput if you
+[14:53] care about that and ultimately compounding the gains uh through
+[14:57] performance optimizations uh in the stack.
+[15:02] That's all. Thank you folks.
+[15:18] >> [music]

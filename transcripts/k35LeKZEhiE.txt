@@ -1,0 +1,257 @@
+# title: Learning on the Job: The Future of Post-Training — Raymond Feng, Applied Compute
+# source: https://www.youtube.com/watch?v=k35LeKZEhiE
+# speaker: Raymond Feng, Applied Compute
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T06:36:21Z
+# sha256: f331b333551d3a23b366258fe9f8813e0ae07806378684437beb7eb3cf934422
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:12] Yeah, thank you, Jack. Um, really grateful for the opportunity to speak
+[00:15] here. Today, I'm going to be sharing
+[00:18] some of our frontier work on post training and how we envision a future
+[00:22] where agents can learn new skills on the job.
+[00:27] So, over the last year or so, we've seen agents develop really strong reasoning
+[00:32] skills. And they've learned to use, uh, agentic
+[00:36] harnesses to solve longer and longer horizon tasks, which involve many turns
+[00:41] and tool calls on complicated environment states.
+[00:46] We're seeing an increasing, uh, demand for
+[00:50] agents that can just be deployed in a plug-and-play way into
+[00:55] how enterprises use the agents, um, so, for instance, if they already have
+[01:00] some method of calling the agent to do a task, to do a
+[01:05] task, they would want to be able to train a
+[01:08] custom model to do that task instead. And
+[01:12] that requires new ways of looking at post training that allow you to, um,
+[01:18] adapt to any harness, including ones that you don't necessarily have access
+[01:22] to the source code of.
+[01:25] So, I wanted to talk about a few different levels of post training, where
+[01:30] each one builds on top of the last. One way that we kind of think of this,
+[01:36] uh, is a framework comparing it to how humans do learning, where
+[01:41] you learn simple tasks first, and you can sort of compound your understanding
+[01:45] to more and more complicated tasks. So,
+[01:49] over the last year, we've sort of, I would say, mastered or gotten a lot of
+[01:54] reps with these simple single-turn Q&A tasks and um some longer horizon
+[02:00] synthetic environment tasks. But, what we're increasingly seeing is
+[02:04] we want to be able to adapt to custom harnesses and
+[02:09] be able to train directly on those instead. And we
+[02:13] kind of think of those kind of like internships where
+[02:16] you want to the model to do a specific task, but you don't necessarily know how
+[02:21] exactly the task will play out because you don't own the harness.
+[02:26] And then finally, I would want to share some visions we have for the future
+[02:30] of the custom model training space, where we think that there will be these
+[02:35] kind of agentic citizens, which you can just deploy once, and they'll be able to
+[02:40] adapt to many different types of out of distribution tasks and learn from their
+[02:44] interactions.
+[02:47] So first, I just want to talk about the training setup for these simple Q&A
+[02:52] tasks.
+[02:54] We have something that looks like this, where you have an orchestrator, and the
+[02:59] orchestrator is in charge of driving the rollouts.
+[03:02] The orchestrator holds a task back, which you can think of for now is just a
+[03:05] simple prompt and answer. So, something like a math question and a corresponding
+[03:10] numerical answer. Um the orchestrator will send this
+[03:14] prompt to a model and then get an answer back.
+[03:17] Then it will send the answer to a grader and have it be graded. So, once all of
+[03:21] this is done, we want to improve our model based on that interaction or maybe
+[03:26] like a batch of interactions. And the way we do that is through a training
+[03:30] engine, which takes in the graded chats and
+[03:33] produces a weight update. That weight update is then synced to
+[03:38] some inference engines. And once those inference engines are updated, then we
+[03:42] can start this entire process over again, where the orchestrator will have
+[03:46] like new problems to um
+[03:49] send to the model completion endpoint, and then you'll be able to get more
+[03:53] chats, grade them, and train again. The key thing to note here is that the
+[03:59] only thing you need for improving your model is the graded chats in some
+[04:03] format, and once you have those, the training engine can compute weight
+[04:07] updates to improve your model. Uh what's important here is that the
+[04:12] chats are in a very specific format because we're sort of constraining
+[04:17] everything to be inside of our training stack. So, in this simple setup for Q&A,
+[04:21] you don't have anything living outside of the training stack. You You basically
+[04:25] have the code of how to run the rollout and how everything is formatted, so it's
+[04:30] like in a very controlled environment. However,
+[04:36] this is kind of limited because we can only kind of do single-turn tasks
+[04:40] in this way. If we want to do longer and long-horizon tasks, and we want to build
+[04:44] like higher-order skills into our models,
+[04:48] we need to also increase the complexity of our environment. So,
+[04:52] with synthetic environments, we have a very similar setup, but we offload a lot
+[04:56] of the environment state um outside of the training stack. So, you still have
+[05:00] the same orchestrator um from before, but
+[05:05] um the task back is maybe a little bit more
+[05:09] complicated, and the environment state is uh living outside of the training
+[05:13] stack. So, the task back might now include things like tool cost specs or
+[05:19] like maybe an initial state for your environment, like a file system.
+[05:23] And the orchestrator is now in charge of running many turns in a in series, where
+[05:28] maybe first they ask the model for how it wants to respond, and then if the
+[05:33] model wants to call some tools, it'll then call the sandbox to actually like
+[05:37] modify the environment state or read the environment state, and then return those
+[05:41] results back to the model. After all that is said and done, you get
+[05:45] a full task trace out of this, um, and that task trace is then sent to a grader
+[05:50] for grading. And very similar to what we had before,
+[05:54] you'll be able to take the graded chats, you'll be able to then use them to do a
+[05:59] weight update. The main thing to highlight here is that
+[06:02] this orchestrator and sandbox setup is replayable, which is
+[06:06] basically just saying that for any specific prompt, you can always like
+[06:10] roll back to the initial state and like rerun it. Um, you can do that in
+[06:14] parallel or you can do that in series. But, the reason that's important is
+[06:18] because the
+[06:20] main sort of method that we use for reinforcement learning today is GRPO,
+[06:26] and that involves comparing many rollouts for the same prompt, and then
+[06:31] comparing like relatively which one is better than the other. And the training
+[06:36] engine will then up like make an edit to the model to upweight the trajectories
+[06:41] that were more successful, and then downweight the ones that were less
+[06:44] successful.
+[06:48] So, some challenges that we face in this setup is that the environment is
+[06:52] something that you want to basically, uh, use to replicate reality, so that
+[06:58] after you're done training, like the improvements that you've seen actually
+[07:01] translate to when you deploy these models into production. And
+[07:06] the main sort of problem is like has kind of two names, which are
+[07:12] both the same problem, environment fidelity and reward hacking.
+[07:15] Essentially, the agent is exposed to an environment and sort of any, uh,
+[07:21] any quirks of your environment will end up being something that your agent may
+[07:25] like learn a model of. So, we have some examples that we've seen where in a
+[07:30] trading run in the past, we had some like networking issues causing our
+[07:34] environment to have tool calls that failed maybe around 10% of the time.
+[07:40] If that is the case, then we actually saw that the model would
+[07:44] then start outputting shorter and shorter responses. Now, this was really
+[07:47] surprising to us because in our reward function, we actually didn't have any
+[07:51] length penalty. So, like we we couldn't really tell why this
+[07:56] was happening, but really what's going on here is if you think about maybe the
+[08:00] model is like a human like walking along a sidewalk and like the tool call
+[08:04] failures are like potholes in the sidewalk,
+[08:07] like it makes a lot of sense that because there's so many potholes, the
+[08:10] model doesn't want to run for that long uh because it might fall in a pothole
+[08:14] and then get a zero reward for the rollout.
+[08:16] Um and then conversely, um it's also possible that your model
+[08:21] just learns to like output more and more gibberish over time depending on like
+[08:25] what your environment looks like. So, in a different case, we had a training
+[08:29] run where we um have sandbox timeouts uh just so that they don't run forever, and
+[08:35] we usually like filter out the rollouts that timed out from being trained on.
+[08:39] One thing we saw was that if your tool calls take a long time, then if the
+[08:44] model feels like the problem is really hard, it will actually just be
+[08:48] incentivized to like abuse the tool calls and just like call a lot of them
+[08:52] in quick succession and try to time out the sandbox so it avoids getting a
+[08:55] reward of zero. It just gets the rollout dropped.
+[09:00] So, as we scale to like more and more complicated tasks, the
+[09:05] the task of like replicating these environments becomes increasingly
+[09:09] difficult because it's very, very difficult to like
+[09:12] perfectly simulate reality and sort of any mistake that you make, even if it's
+[09:17] not intentional, will end up inducing these like subtle undesirable behaviors
+[09:21] in your model. So, that brings us to our next topic of
+[09:25] bring your own harness, where we're basically asking like if the agent
+[09:29] learns the exact environment distribution,
+[09:32] why don't we just use that for our training? Like just directly the real
+[09:36] environment, you will no longer need to uh replicate anything. You can just like
+[09:41] use exactly how it's going to be used in production.
+[09:45] This solves a lot of problems and sounds really good.
+[09:49] The architecture looks something like this where
+[09:51] we now have almost everything outside of our training stack. The only thing we
+[09:55] have left is the model completion endpoint and some way to
+[09:59] uh record the requests and responses that go in and out of the model.
+[10:03] Everything else kind of lives outside of the training stack and can be run in
+[10:07] whatever fashion uh that like an existing enterprise or like customer
+[10:13] might be using. So, these would be like existing enterprise harnesses and
+[10:19] essentially the reason this is nice is because we
+[10:23] can meet customers where they're at. Like, if they're already using the model
+[10:26] in a certain way, we can just take our like training methodology and just like
+[10:31] plug it right in and then we can help them improve the model for like
+[10:35] exactly the way that they're using it. So, all the orchestration loops and
+[10:39] logic will now live outside of the training stack.
+[10:43] Now, this sounds really good, but um This sounds really good, but the
+[10:49] challenge here is in
+[10:54] The challenge here is in the like data where
+[11:00] I as you're deploying this into uh production and you have less and less
+[11:05] control over how the rollouts uh play out, you also have like less signal to
+[11:11] learn from because the data is not in like a familiar
+[11:16] format. And this topic is touched on in a
+[11:20] related work by Nvidia. Uh this is like a paper from around a month ago where
+[11:24] they introduce uh Polar, which is essentially
+[11:28] a way to think about transitioning from a harness where you are kind of in
+[11:32] charge of micro managing every aspect of the rollouts, kind of like what we were
+[11:37] previously talking about. And transitioning to
+[11:41] some method of just uh listening in on a black box harness, and you would no
+[11:45] longer know exactly what the logic in here is.
+[11:51] So, some challenges is that some challenges we face in this setting
+[11:56] are non-re-playability and offline or off-policy data. I think both of these
+[12:01] are describing the same issue, which is just
+[12:03] that because we've moved so much of the logic outside of our training stock, we
+[12:07] just don't have any way of like enforcing invariants or like data
+[12:13] structures that we like. We have to be more flexible about the way we do
+[12:17] training, and because of that, it just becomes harder to train your model and
+[12:21] it may create an update. So, an example would be for GRPO, which is like the
+[12:25] traditional method, you would want to have many rollouts in parallel for your
+[12:29] task, and that may not be possible anymore. If you think about um
+[12:35] suppose like a customer chat customer support chat, and
+[12:39] you have a record of how one of your chats went, there's not really a way
+[12:44] that you could then go back and think, "Oh, if I like said or if I responded in
+[12:48] this other way, like would the user have been happier?"
+[12:51] Like there's no way to then get the user's response again.
+[12:56] But, we're optimistic because like we think that humans can do this kind of
+[13:00] learning, and so it should be possible to like formulate some kind of method
+[13:04] that would work for models as well. Like, if a human was in a customer
+[13:08] support chat, they could understand somehow that like based on the
+[13:13] customer's reaction, like what they said was wrong or what they said was good,
+[13:16] and then be able to like internalize improvements uh for for the future.
+[13:22] So, I want to talk about some of the frontier research directions we have um
+[13:26] towards like solving this problem. There's kind of three main topics, which
+[13:30] are self-distillation, automated data pipelines, and qualitative feedback
+[13:34] ingestion. Self-distillation is a pretty new technique, which is still
+[13:39] um, I would say relatively like narrowly
+[13:43] scoped. So, we've seen successes in inducing like specific new behaviors
+[13:47] with models, but it's it's still an open uh, research question
+[13:52] of like how general can we push it? Automated data pipelines is an idea
+[13:58] which maybe if you take like a big batch of traces,
+[14:02] um, you would be able to like automatically like flag undesirable
+[14:06] behaviors or failure modes, and then be able to like put together a like nice
+[14:11] batch of training data, um, automatically, and then send that to the
+[14:15] model and help it improve. Currently, this is like pretty manual or
+[14:20] like human in the loop, where like we go through traces ourselves, and we're like
+[14:24] looking for looking for these failure modes manually, and then like describing
+[14:30] how we can improve the model, and then um, looking curating those data sets
+[14:34] ourselves. And then finally, I I think an interesting direction is
+[14:37] qualitative feedback ingestion. So, as you move to these like production
+[14:41] settings, sometimes you don't have access to like a clear-cut binary grade
+[14:45] or like a numerical grade. Um, often times, what you receive back is
+[14:50] like, "Hey, for this chat, the customer had this like piece of feedback." Um,
+[14:55] if we can find a way to update our models based on that information, uh,
+[15:00] that would also be prove extremely helpful. Um, and in
+[15:04] fact, like self-distillation is one way in which we're exploring how we can do
+[15:08] that, but it's like a pretty um, it's still a pretty open question.
+[15:16] And then finally, I wanted to share a little bit about a vision for what the
+[15:19] future of post-editing might look like if we sort of extrapolate out and take
+[15:24] this sort of progression to its end. I think eventually we might reach a
+[15:31] setting where instead of just limiting ourselves to thinking about a specific
+[15:34] task that we can improve the model on, we can actually just
+[15:39] think of the model as this one deployment that can interact in many,
+[15:43] many different settings. And like the task that you think about might just be
+[15:46] the task of improving yourself on everything.
+[15:51] Um and this model may be used for all sorts of different tasks, maybe across
+[15:55] different users as well.
+[15:58] And be able to sort of do some kind of reflection or introspection on like
+[16:03] okay, for this sort of type of interaction,
+[16:07] here's how I like self-evaluate and think that I'm doing. And then for this
+[16:11] other type of interaction, um here's how I think I'm doing. And
+[16:15] then being able to automatically take these interactions
+[16:20] and compute weight updates from them and improve.
+[16:27] And so, yeah, going back to the point that the agent learns every nook and
+[16:31] cranny in your environment, um the exact environmental distribution, what if like
+[16:36] the environment was just like every interaction that the agent ever has? And
+[16:39] then in addition, we had some way that the model could evaluate itself.
+[16:44] Um
+[16:47] basically one one like question that we've Or sorry, one
+[16:52] challenge that we've seen is like if you're only focusing on like what
+[16:57] improving on one task at a time or like flagging one failure mode at a time,
+[17:00] you're kind of playing a game of Whac-A-Mole where
+[17:03] as soon as a new thing pops up, you need to scramble and like create new data or
+[17:07] new environments and improve the model that way.
+[17:11] With this kind of like self-improving
+[17:14] system that understands interactions from like understands every interaction
+[17:20] from the environment you would like kind of get around this problem and you
+[17:23] wouldn't need to worry about it anymore.
+[17:28] So I want to leave people on this quote from a paper on a year ago
+[17:34] which I find extremely relevant now which is that AI is at the cusp of a new
+[17:39] period in which experience will become the dominant medium of improvement and
+[17:43] ultimately dwarf the scale of human data used in today's systems.
+[17:51] And yeah. If you all have any questions I'm happy
+[17:55] to take them after and uh Yeah, you can also email me at that
+[17:59] address. Thank you.
+[18:02] >> [applause]
+[18:17] [music]

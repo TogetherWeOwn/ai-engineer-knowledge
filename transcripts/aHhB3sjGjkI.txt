@@ -1,0 +1,382 @@
+# title: Agents Building Agents - Alfonso Graziano, Nearform
+# source: https://www.youtube.com/watch?v=aHhB3sjGjkI
+# speaker: Alfonso Graziano, Nearform
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T08:17:32Z
+# sha256: 01f28c76842bb0b69a3be50493e9e827b54aba0671f7156b053c2b74c3eebdf0
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:00] Hi everyone. Today we will talk about agents, building agents. So, how we are
+[00:06] leveraging coding assistance and spec driven development to build reliable and
+[00:11] secure agents. First of all, just a couple of notes about myself. I'm
+[00:15] Alfonso. I'm a tech lead at NearForm. We are a services company.
+[00:21] I am currently working on some of our AI agentic projects. I'm supporting
+[00:25] multiple teams adopting AI native engineering and I'm also a O'Reilly
+[00:31] author of the book Learning AI Native Software Engineering.
+[00:35] So, we are seeing in the in the industry
+[00:38] that right now everyone wants AI agents for workflow automation, search, you
+[00:45] know, every use case that you might have in mind.
+[00:49] But, AI agents come with a sometimes a very high cost.
+[00:54] They have hallucinations. They have an entire new set of problems. Of course,
+[00:58] they are non-deterministic. So, today we will see how we are building and
+[01:04] improving iteratively AI agents. And of course, as you may guess,
+[01:10] how can we do that, right? AI is very powerful and very good at building any
+[01:15] type of software. And given that AI agents is just one
+[01:20] type of software, as you may guess, we are using AI to build AI.
+[01:25] Um As I was mentioning, there are a lot of
+[01:30] problems, a lot of different problem classes with building AI agents. Uh
+[01:35] non-determinism is one of those, latency, cost, hallucinations,
+[01:41] a lot of stuff really. Uh but today we will see how to solve
+[01:45] them at least partially by leveraging agents and the repeatable process that
+[01:51] we developed over time on our projects. Just as a very very quick refresher, um
+[01:58] we can say that an AI agent is basically just
+[02:03] an LLM, which is like the brain of the agent. Then the LLM is connected to a
+[02:09] bunch of tools. It has access to a bunch of context and basically lives into an
+[02:14] agentic loop. So, that's the that's the gist of it. Of course, there is way more
+[02:20] into AI agents. There is everything around observability. How do how do we
+[02:25] ensure that, you know, it's doing what's what's necessary? So, everything around
+[02:31] evals that we will discuss in a minute. But like
+[02:34] just from the first principles, we can say that an agent is an LLM inside a an
+[02:42] agentic loop, which is connected to tools and can retrieve context. That's
+[02:46] it. Now, there are a couple of classes of
+[02:50] problems that we will analyze today. So, the first one is bad performances on the
+[02:56] evals, and we will see what the evals are in a minute. And the second one is
+[03:01] bad performances on live data, which sometimes is similar to what we
+[03:06] have on the evals, but you know, live data coming from real
+[03:10] users with, you know, real expectations from the system can be a lot wider and
+[03:17] sometimes a lot messier as well. So, let's analyze the first the first
+[03:23] failure mode. So, we have bad performances on evals.
+[03:28] Before we analyze this failure mode, I just want to
+[03:31] introduce you to go to the context of a golden data set. Basically, a golden
+[03:36] data set is a file or a set of files that we develop together with the
+[03:42] subject matter experts when we are building our AI agents. And basically,
+[03:47] this file defines what is the input that the system should retrieve
+[03:52] um, and should get sorry, and what is the expected output that we should get.
+[03:57] Now, in the naive case, the expected output, as we can see here on the right,
+[04:02] can just be like impossible, or like a number, or a text, so it can be a lot of
+[04:09] things. In real-world scenarios, the expected
+[04:12] output can be, for example, I do expect the system to call this tool,
+[04:17] or call this tool with this parameter, or
+[04:20] call this tool in this chain, right? Because maybe I want to
+[04:25] do a retrieval and then do an update, you know, so
+[04:30] how we define the output is very different in every in every
+[04:34] agent. And the idea is that we want a way, basically, to ensure that our agent
+[04:41] is working correctly. So, that's why we're building the golden dataset. You
+[04:45] can see the golden dataset as a test suite, but in a non-deterministic
+[04:49] scenario. So, when we build the golden dataset, we also have to build a scorer,
+[04:54] or a set of scorers, that can basically, go through the golden dataset together
+[05:01] with the LLM, and then can give us, basically, a
+[05:04] number in the end, which is saying, "What is the current accuracy of the of
+[05:09] the system?" So, that, you know, we have a baseline, we can look for regressions,
+[05:13] and we can further improve the system over time.
+[05:17] Now, let's let's assume that we have a very simple hello world agent. In this
+[05:22] case, I'm using Mastra. It's a very very simple agent, as we can see. I've called
+[05:27] it mad agent, but in reality, in the golden dataset, we have
+[05:31] multiple types of questions, right? But, let's assume that this is our very
+[05:35] simple agent, right? So, it doesn't aim, it has just couple of instructions,
+[05:39] has has a model, of course. As you can see, it doesn't have any tools yet.
+[05:45] So, it's like the the bare minimum. Um we also built a naive evaluator. So,
+[05:52] if you remember from the golden data set, we only have inputs and outputs.
+[05:57] And what this very naive evaluator is doing is checking whether the um LLM
+[06:04] output contains the ground truth output that we are expecting.
+[06:09] Of course, once we run the eval suite here, the results are very poor. So, as
+[06:14] we can see, um we have a pass rate of 18%, right? Uh just because a
+[06:21] a lot of questions are simple enough, like additions, multiplications, right?
+[06:26] Are simple enough so that the actual um LLM has this knowledge in its training
+[06:33] data, and it doesn't need access to any external context or like any particular
+[06:39] tool to answer these questions. So, 18% of the questions can be answered by the
+[06:44] weights of the LLM, the rest can't. So, we need a way to actually improve this
+[06:50] pass rate.
+[06:53] Some failure modes that we can expect are well, first of all, the agent is
+[06:58] missing the right tools, right? So, let's assume that I expect from my agent
+[07:02] to be able to surf the web, fetch web pages. If I'm not giving those specific
+[07:07] tools to my agent, of course, every eval that is expecting that, it's going to
+[07:12] fail miserably. So, first of all, we are maybe just missing some tools, or uh we
+[07:19] don't have the right system prompt. Because the system prompt basically
+[07:23] contains all the instructions, uh all the behaviors that we should expect, and
+[07:27] that we shouldn't expect from our agent. So, in a lot of cases, um a lot of the
+[07:33] optimizations will be just to tweak the system prompt and update it so that um
+[07:39] you know, our agent has all the information it needs to work on
+[07:43] our domain. And then, um of course, context
+[07:47] retrieval, which is maybe our agent doesn't know where to look for
+[07:51] information. Of course, usually context retrieval is implemented as tools,
+[07:57] right? Um maybe it's, I don't know, an accurate
+[08:01] search in our system. Maybe it's a fetch on the web, you know, all these kind of
+[08:05] things. So, we need to give enough um let's say tools uh to our agent so that
+[08:13] it can retrieve all the context it needs, of course, in a secure way.
+[08:18] Now, the question is can an AI agent improve another AI agent
+[08:23] autonomously or semi-autonomously? And um
+[08:28] Karpathy, Andrej Karpathy, which is one of the most well-known AI scientist on
+[08:33] the planet at the moment, implemented something which is called
+[08:37] auto research. Basically, auto research is a uh loop
+[08:42] which um updates the code, updates the hyper parameters, updates the the actual
+[08:48] Python code of machine learning algorithms.
+[08:52] And it actually shows that a coding agent
+[08:56] tweaking the code of machine learning um of a deep learning algorithm
+[09:02] can actually improve the results, right? So, that's the um
+[09:07] that's that's the loss that we can see. And basically, every uh dot here in this
+[09:12] chart is an example is a task that the system is doing um by changing
+[09:19] some of the parameters. And we can see that the baseline has a specific
+[09:24] accuracy. And while we go um while we go with the number of experiments, accuracy
+[09:30] is improving. And therefore, of course, the loss um
+[09:34] the the loss is decreasing. Now, the question is, can we do the same
+[09:38] with AI agents and not just like machine learning models?
+[09:43] The answer is yes. So, I built something which is called AutoAgent,
+[09:47] which is basically the same idea, but applied to
+[09:53] um actually like AI agents, right? So,
+[09:56] basically this is a loop which is able to
+[09:59] run the evals and then um update the code of the system, try new
+[10:05] system prompts, create new tools, doing everything autonomously, and then check
+[10:10] again whether things improved or not. And it actually works quite well. So,
+[10:16] here we have a few iterations, and this is the AI agent This is the naive AI
+[10:22] agent stat agent that we have seen earlier.
+[10:25] And in that agent, as you can see here on the bottom left, um
+[10:30] we have the baseline accuracy, which was 18%, and we managed to reach up to 83%
+[10:38] um in like something around 10 uh 10 iterations. Now, of course,
+[10:44] that's a um that that's a very naive case, right?
+[10:49] Because we started with something which didn't have any tools and nothing else.
+[10:53] So, it's relatively easy for the system to improve this agent. But, uh we also
+[10:59] improved um some evals by 10% on a production agent that was already
+[11:06] humanly optimized. So, actually the the machine uh the
+[11:12] the agents the the coding agent found new ways that humans didn't find um to
+[11:18] improve the agent, and we got plus 10% on some of our internal benchmarks.
+[11:24] Now, how does it works? Actually, I I gave already like a few insights of how
+[11:30] this works, but let's see it in details. So, basically, the core idea is that we
+[11:36] have a coding agent, in this case Claude Code, but it can work with multiple
+[11:41] coding agents. It builds the agent, so it writes the
+[11:44] code of our target agent, and then the target agent is giving feedback to our
+[11:51] Claude Code or whatever coding tool we're using
+[11:55] as evals, right? So, it's giving some information as okay, here I got some
+[12:02] regressions or these evals are not passing.
+[12:06] Also, Claude Code can read the traces, the thinking traces, or like the full
+[12:10] trace of the target agent to see whether something broke or something is not
+[12:16] working as expected, so it can do like self-improvement.
+[12:21] Of course, there is the human in the loop,
+[12:24] and the human in the loop is usually in structuring the initial agent and giving
+[12:29] as much context as we can to our coding agent about what it can do with other
+[12:35] relevant files, what it cannot do, like just to give an example, updating the
+[12:40] golden data sets or the scorers just to let the evals pass is not a good
+[12:45] idea, so we want to enforce we want to tell the
+[12:49] we want to tell the AI agent to not do that, right? So, as humans, we can
+[12:55] we can steer a little bit our our coding agent so that it can optimize the target
+[13:00] agent. Now, there are a few steps, right? The
+[13:04] first step is to create an optimization job. Of course, it's very easy,
+[13:09] everything is a markdown, we all love markdown now, so we have we can define
+[13:14] the objective, we can define target repository, the metrics,
+[13:18] and literally everything, right? So, in this file, we can give as much context
+[13:22] as we want to our coding agent so that it can
+[13:26] actually run and improve the target agent.
+[13:31] And then the second step is to run the loop. So basically, we run the evals
+[13:34] once, so we we we generate our baseline data. So we understand what's working,
+[13:40] what's not working, you know, the system will generate a first report. And then
+[13:45] we run the loop, the optimization loop. So we can see that in the first case,
+[13:49] we get a regression, so basically the system works by
+[13:53] creating an hypothesis. So it's tackling one class of problems at a time.
+[13:58] It's updating the the agent and it's running the evals again.
+[14:02] And then it's saying whether we got a regression, an improvement, or something
+[14:07] else happened and so the agent can decide
+[14:11] whether to roll back the change or move on. So in this case, in the first
+[14:16] iteration, we got a regression, so we want to roll back. Um then we see a 5%
+[14:22] improvement, which is great. So in this case, we are getting
+[14:26] we're creating a new hypothesis, we get a 0% improvement, unfortunately, but of
+[14:31] course the agent is keeping track of all the
+[14:33] hypothesis and so in this case can go and create a
+[14:38] new one and we can see a 12% hypothesis and and so on and so forth, right? Of
+[14:43] course, we define the number of iterations that we want to run.
+[14:47] Um of course, the way we create the baseline data is, you know, we just run
+[14:54] the evals once and we generate basically a document and this is super helpful
+[14:58] because it gives the coding agent the information about the current status of
+[15:03] the system. Then this generates a baseline report which contains, you
+[15:07] know, all these informations. It contains what are the cases, it
+[15:12] contains summary, what's working, what's not working.
+[15:16] So basically, our coding agent it's going to have a
+[15:19] clear picture of what's happening right now. And so, it will try to understand,
+[15:24] okay, how do I improve this system from this moment?
+[15:29] And so, from now on, we can start with the first iteration. So, every iteration
+[15:33] starts with a new branch. We create an hypothesis.
+[15:37] Um the system changes the agent to implement that hypothesis.
+[15:42] We run the evals. We run our eval suite. And we generate a reports.md file, which
+[15:48] contains everything that happened after we run the evals.
+[15:52] We update the memory file, uh which is like a global memory file across all the
+[15:57] runs. And if the metrics improved, then we
+[16:00] continue from this branch. Um if the metrics didn't improve or we
+[16:04] have a strong regression or something bad happened, uh then we roll back to
+[16:08] the previous branch. Of course, um
+[16:12] the generated hypotheses are based on what the agent reads when it starts the
+[16:17] investigation, which is the memory file, uh the reports file, so it has access to
+[16:21] pretty much everything. And that's what happens when we run
+[16:26] multiple iterations, right? So, let's assume that in the first case, I create
+[16:29] a branch, I create an hypothesis, uh I run the evals, everything goes well, so
+[16:35] I get an improvement, so I am fixing one failure mode. Um therefore, I continue
+[16:40] from that branch. I create a new one so that I can keep track of every change.
+[16:45] Um I create the new that new branch. I try new hypothesis.
+[16:50] This time, it didn't really improve, so maybe I get
+[16:53] a regression, maybe things didn't improve really. Uh so, what I do is
+[16:59] I roll back to the previous branch, so the first branch where we had a real
+[17:03] improvement in the system. And then from here, I create a new
+[17:06] branch, and I try a new hypothesis, and so on and so forth.
+[17:11] At the end, what we're building is a full change log of all the changes we
+[17:17] have done, um
+[17:19] every improvement in improvement or regression as we can see here on the
+[17:24] right. We are seeing all the hypothesis that we
+[17:27] are doing and of course, if we want we can also see all the hypothesis
+[17:33] because every hypothesis is building a report. So, let's assume that something
+[17:38] didn't really go well in terms of evals. Maybe the evals
+[17:42] didn't improve after an hypothesis, but maybe that hypothesis was promising,
+[17:47] right? Maybe the agent was onto something, but it just didn't implement
+[17:51] the system the change in a correct way, right? What
+[17:56] we can do is as humans, we can just go back into the hypothesis,
+[18:00] read, understand what the agent was trying to do, and then maybe steer it in
+[18:04] the right direction next time. Of course,
+[18:09] this is the real task on a on a real agent that we did have.
+[18:15] And as we can see here, the baseline accuracy was 67%
+[18:21] um
+[18:24] but then in something around 10 iterations, we managed to reach 86%
+[18:30] in our evals without actually cheating because it found edge cases, it improved
+[18:35] the system prompt, it improved the tool descriptions to catch more edge cases,
+[18:41] and it also fixed some tools logic. So, that's a real agent that is now running
+[18:47] in production and actually this system found ways to
+[18:51] improve it more and more. Now, the second class of problems that
+[18:56] we are going to tackle today is not the evals data, but bad performances on live
+[19:04] data. By live data, we mean data that we collected by our real users, beta
+[19:09] testers, subject matter experts, you know, all the people that are actively
+[19:14] testing and using the system and they're giving us a feedback. Just
+[19:19] as an example, you can see here on the right, was this response helpful? And
+[19:23] you got yes or no, and then you get a note. And basically, we leverage this
+[19:28] data to uh further optimize our agents. Now, how do we do that? Uh this is the
+[19:36] full flow that we will see in details. So, first of all, of course, we will
+[19:40] need our users to actually use the system. Uh then, we collect all the
+[19:46] traces, right? So, we collect all the informations from our users.
+[19:50] Our users can either give us a feedback that we've just seen, so thumbs up,
+[19:55] thumbs down with the with the comment, or
+[19:59] uh our subject matter experts can annotate the trace. So, basically, they
+[20:03] can go on the platform that we are using, they can look at the trace, look
+[20:07] at the input, look at the output, uh look at basically like all the tools
+[20:11] that have been called, uh look at the agent behavior,
+[20:15] and then annotate the trace by giving us a feedback about how the agent performed
+[20:20] and how it should have performed. Once we collect
+[20:25] a a a relatively good number of traces, once we have um enough information, we
+[20:31] basically run an agent workflow that we built.
+[20:34] So, basically, we analyze all the traces with both the negative and positive
+[20:40] feedback, but we are more interested about the negative feedback here. So, we
+[20:44] analyze all these traces. We do clustering of the failure modes, right?
+[20:48] So, based on all the feedback that we collected, we try to understand, okay,
+[20:53] given all this five feedback, what are like the five, six, seven failure modes
+[20:58] that we have here? And then, we analyze these um
+[21:04] we analyze these clusters of failure modes with our subject matter experts.
+[21:09] So, we say, "Okay, based on those 10 traces, we can note
+[21:13] that the agent in this specific case performed poorly because of reason X,
+[21:18] for example." We validate all this with our subject
+[21:22] matter experts. And then we do have a fix proposal,
+[21:26] which gets generated and implemented by our coding agent.
+[21:30] Then we implement this and then we ship it to production to see
+[21:34] whether it actually improved on real data. And of course, we use the traces
+[21:39] that we do have as regressions. So, we test our fix against our traces first of
+[21:45] all. But let's see that in detail.
+[21:49] So, first of all, the user tests the system. So, in this
+[21:52] case, we have a very simple example, "How can I optimize a React component?"
+[21:58] Here we have the answer. Here we have, you know, the information about the
+[22:01] component, whatever, right? So, that's the first step.
+[22:06] Second step is we are going to collect all the tracing
+[22:11] information. So, we are collecting everything from user interaction,
+[22:16] the tool usage, the how much time the AI took to respond, you know, how many
+[22:21] tokens we burned, everything. The second step then is
+[22:27] the user, once we collected the user behavior, we do expect the user to give
+[22:33] us some feedback. As I was mentioning, thumbs up, thumbs
+[22:37] down, and then a a comment saying what went
+[22:41] well, what didn't, and what's the expected behavior of the
+[22:45] system. And then of course, the other option
+[22:48] that we were discussing is that the actual subject matter experts can
+[22:52] annotate the trace. So, in case you don't have a feedback from the real
+[22:56] user, I can ask the subject matter experts to take a look at at trace,
+[23:00] invest their time, and give us feedback as they were users. The third step is
+[23:06] now to collect all the traces with feedback and download them locally in a
+[23:11] JSON or whatever format you're using. As you can see here in this case, we have
+[23:15] 114 traces, and we're using those traces to then do the cluster analysis. How do
+[23:22] we run the analysis? Well, this is actually a skill that we built.
+[23:26] Basically, the skill it's going to instruct the coding agent properly to go
+[23:31] in the go in the JSON file, look at all the traces, uh run some clustering, um
+[23:38] then we do an adversarial review of that. So, basically, um once we have all
+[23:43] the clusters, we do also a little bit of root cause analysis because, of course,
+[23:48] our coding agent has access to the actual code of the AI agent, so it can
+[23:53] do some root cause analysis. It can try to understand what happened, uh
+[23:56] especially because it has also access to the details of every trace. So, it can
+[24:01] go within the trace, understand why the agent answered that way,
+[24:05] you know, trace it down to the root cause. Um
+[24:08] and then what's going to do is going to um propose possible improvements. And
+[24:14] what we get at the end of this process is a full markdown report, which is very
+[24:19] helpful for us. Uh it's going to give us like the positive feedback, the negative
+[24:23] feedback, the negative rate, you know, we are just trying to collect as many
+[24:28] data as possible. And so, we get this very complete um
+[24:33] executive summary and this very complete report, which tells us
+[24:38] what are like all the clusters which are not working as the user was expected.
+[24:43] So, in this case, uh we have that we have a small markdown formatting
+[24:48] failure, which is saying URLs are not hyperlinked, and there are some
+[24:52] formatting inconsistencies. So, it's linking some of the traces with
+[24:57] the trace ID. Uh it's mentioning the user feedback.
+[25:01] It's showing like some root possible root causes and it's telling us, "Okay,
+[25:07] how do we fix it?" Right? Once we have this full report, our work is not done
+[25:12] yet because this report will contain all the possible failure clusters reported
+[25:17] by users, but now what we have to do is to triage everything and validate with
+[25:22] subject matter experts. Once we are doing Once we do the triage and the
+[25:28] validation, then we prioritize and we understand what we want to fix now, fix
+[25:33] later, don't fix. Um and so, either we fix it with the
+[25:39] agent, so we give to the agent, you know, all the context, we give it the
+[25:43] failure mode, we give it the traces, and we ask our agent to fix it.
+[25:49] Or we discard it because sometimes it can be the the failure cluster can be a
+[25:54] false positive or can be an intended behavior or maybe
+[25:58] the user gave us um a feedback which is not really useful
+[26:02] for us at this moment. So, you know, there is a little bit of human judgment
+[26:06] here. As I was mentioning earlier, all the
+[26:09] failure modes that we are founding during this investigation step, they
+[26:13] will become part of the golden dataset that we mentioned earlier and the eval
+[26:17] suite is updated to spot those regressions. So, in case these failure
+[26:22] modes for whatever reason is introduced uh
+[26:25] later on in the code, we will spot it very fast because now it lives into our
+[26:30] golden dataset and our scorers. In terms of how often the report gets
+[26:35] generated, it really depends on your use case. Uh we found out that one per
+[26:39] sprint is good enough, but really depends on how much data you have,
+[26:43] right? So, if you have 100 traces, it's you might want to generate that at 100
+[26:50] traces, but if you have like 10,000 traces with feedback, might be too much,
+[26:55] so you might want to, you know, generate multiple reports. So, it's really on
+[26:59] your use case. We found out that once per sprint is actually reasonable.
+[27:03] Uh in multiple use cases, what we found is
+[27:06] that a coding agent, when instructed, uh has been able to fix an entire suite
+[27:13] of issues like the one that we have seen earlier, uh with just one prompt. So,
+[27:18] once we give enough context and once we give the coding agent the ability to uh
+[27:24] test its changes against some regression tests, uh then everything becomes way,
+[27:30] way easier for the for the coding agent. And then, uh in some complex cases, uh
+[27:35] we have paired this approach with AutoAgent, uh and so we basically
+[27:40] pointed out AutoAgent to some of the failure clusters, um and we let
+[27:46] AutoAgent build some draft PRs for us. Now, of course, both AutoAgent and this
+[27:54] pipeline to improve um agents based on live data, they're
+[27:59] possible thanks to Harness Engineering. So, basically, the core idea is that we
+[28:04] are leveraging a set of things so that our coding agent has a powerful enough
+[28:10] harness so that it can change the codes, validate its own changes, which is like
+[28:16] super important, uh and then propose new changes if the updates that it did
+[28:22] didn't lead to the to the outcome that we were looking for,
+[28:27] right? So, just very, very quickly, Harness Engineering is the idea of
+[28:31] building the environment around our coding agent so that they can work
+[28:35] reliably. Uh so, we are giving all the constraints, all all the tasks, the
+[28:40] feedback loop, we are giving the governance to our um coding agents. And
+[28:45] we are doing that with a few things, right? Which we've already mentioned.
+[28:48] The first one is spectrum environment. So, for example, when we are trying to
+[28:52] fix some um failure modes, every failure mode becomes a spec. Um we are creating
+[28:59] a spec for the expected behavior of the agent, and then we are implementing
+[29:03] that. Then we have quality gates uh like
+[29:07] linting uh our unit tests. We have our our evals.
+[29:11] Um we have LLM uh code review, so a bunch
+[29:15] of stuff. Uh everything related to context engineering, so giving the right
+[29:19] context to our agent. And then, of course, observability. Um because we
+[29:24] need to know what's happening, right? Um if we don't know what's happening when
+[29:29] we ship in production, we are basically blind, right? So, we want to ensure that
+[29:34] we know what's happening so that our coding agent can fix any bugs or
+[29:39] anything once once it's found. So, um I hope that this has been
+[29:44] interesting or helpful. I hope you're going to implement some of those
+[29:48] techniques in your agents. And in case you have any questions about this talk,
+[29:53] uh please feel free to reach out on LinkedIn. I would love to have a chat
+[29:56] with other people which are building agents. I know how hard it is. I know
+[30:01] how interesting it is. So, in case you have like anything that you would like
+[30:05] to talk, uh I would love to get a message on LinkedIn. So, I hope you
+[30:09] enjoyed this talk, and wish you a great day. Cheers.

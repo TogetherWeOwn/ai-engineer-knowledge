@@ -1,0 +1,209 @@
+# title: GPU Died. Training Didn't: Self-Healing Training at Scale — Crusoe
+# source: https://www.youtube.com/watch?v=bRGyYaE0lxI
+# speaker: Crusoe
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T04:25:12Z
+# sha256: 3583b4464a202fc7778798903689b748db069ceba5378dbcd0024fc39a5bbc60
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:01] [music]
+[00:12] All right. Hello everyone. Uh, my name is Connor. I'm a developer advocate at
+[00:16] Crusoe and I'm joined by my colleagues Nikil and Young. And we're going to be
+[00:20] talking today about the infrastructure we've built at Crusoe and how it handles
+[00:25] critical hardware errors. And so our customers when they're running extremely
+[00:29] largecale training workloads across thousands of GPUs, GPU failures are
+[00:34] inevitable. And so at scale, manual remediation is completely unsustainable.
+[00:40] And so what we'll cover today is how by using both Slurm and Kubernetes, we can
+[00:45] provide a robust platform with automated remediation that maintains ease of use
+[00:50] for both machine learning engineers running jobs and the platform teams
+[00:54] managing the underlying clusters. So to provide a little bit more context
+[01:00] on what Cruso cloud is for those of you who haven't heard of us um we provide
+[01:05] infrastructure as a service consisting of compute storage networking and the
+[01:09] latest gen GPUs from Nvidia and AMD but the focus of this talk will be on the
+[01:15] tooling that we've built on top of that to orchestrate these large fleets of
+[01:20] GPUs including our managed Kubernetes service called CMK and our manage slurm
+[01:28] service which is built on top of CMK and built off of Slinky which is SCADMD's
+[01:32] official open source project for running slurm on top of Kubernetes and this
+[01:37] allows us to get the high performance job scheduling of slurm with the
+[01:42] infrastructure resilience features and observability of Kubernetes
+[01:47] including one of the systems we've developed called autoclusters which is
+[01:50] our system for automatically detecting and replacing failed GPU nodes when a
+[01:56] GPU failure has been detected. And so to explain how and why we landed on this
+[02:01] architecture, it's helpful to understand where traditional slurm both excels and
+[02:07] falls short, which Young will get into now.
+[02:13] >> Thanks, Connor. Um, traditionally, I mean, looking at it from the tra
+[02:17] traditional perspective, >> sorry, can can you hear me now? Okay,
+[02:23] cool. I I'll just do it like this. But basically, traditionally, slurm was
+[02:27] built slurm was built by the researchers for
+[02:31] the researchers, universities, labs over 20 years ago. Uh built for high
+[02:36] performance computing uh which as we've observed with our customers and others
+[02:40] that are using slurm today translates very well to modern AI specifically
+[02:45] around training workloads. this idea that when you're running a multi-node
+[02:50] training job, you need this idea of tight collective communication across
+[02:56] the ranks that that you're using. Uh including, you know, specific network
+[03:01] built for training workloads today. Um concepts like gang scheduling, topology
+[03:08] awareness, uh prologue and epilog for cluster validations. These are all the
+[03:13] features that are readily available with slurm today that helps researchers run
+[03:19] their jobs. Uh essentially running their jobs with tools that are already
+[03:22] familiar to them. Scripts, especi
+[03:29] cluster today. Now, where we feel like this is a bit of
+[03:34] a shortcoming or short falls a little bit short around the modern training is
+[03:39] the things that you see on the screen right now. Um AI training workloads
+[03:44] today are very dynamic and it doesn't just include training. Uh there's a lot
+[03:48] of other aspects that your AI labs and other companies are running as part of
+[03:53] your your AI workloads including training post-training eval inferences
+[03:58] some of which may or may not even land on your slurm cluster today. But because
+[04:02] of of what we've observed as as a GPU capacity constraints and other things
+[04:08] kind of limits you to how you need to be able to be more dynamic around the
+[04:12] resources that you have. Uh slurm traditionally is pretty static and it's
+[04:16] partitioning and other other uh functionalities.
+[04:20] The other thing I want to mention is this idea of health checks and
+[04:25] maintaining your nodes. Uh you know you can make sure your nodes are healthy or
+[04:29] not healthy. GPUs do fail, how do you manage that? Uh, SlurpM obviously has
+[04:34] features around it to be able to, you know, reue the jobs, uh, detect bad
+[04:40] nodes, uh, using things like prologue and other open source tools that are now
+[04:44] available to be able to do this. It just adds an operational burden, uh, that
+[04:49] we've seen from customers today. you know, this idea that you have to
+[04:55] detect if nodes are bad, you have to drain the nodes when they're bad, you
+[04:58] have to kind of work around that. That could either be manual or you need some
+[05:02] sort of an automation or scripting to be able to do all of this. And the last
+[05:06] thing is observability. Um, you know, jobs can fail. Jobs could also come with
+[05:11] degraded performances for any number of reasons. I mean, GPU failure is just one
+[05:16] of them. there's other things like network flaps and other things within
+[05:19] your your switches that may be causing degraded or failed performance. Uh slurm
+[05:25] knows when a job fails. It doesn't necessarily be able to tell you
+[05:28] everything about why it failed. And that's where the observability comes
+[05:32] into key uh key play. So all of this kind of encompasses the reason why we we
+[05:37] built this product that Nikil is going to go over and sort of describe some of
+[05:41] the specifics around manage slur.
+[05:49] Um all right uh thanks young. So yeah, I'm
+[05:54] going to be talking about our Cruso manage slurm product and uh like like
+[06:00] we've mentioned before um there's a lot of benefits uh that slurm can bring to
+[06:06] the uh training teams and uh researchers that are building the next best models
+[06:12] but there are some issues with you know setting up slurm managing it keeping it
+[06:18] reliable uh and on the other hand you have kubernetes which is the OS of the
+[06:22] cloud It's widespread use and familiarity. It's a very mature
+[06:27] ecosystem with lots of tools, extensions, and plugins for whatever you
+[06:32] need to add, whether it be observability, networking, security.
+[06:37] It helps uh maintain services with there, you know, built-in safe healing,
+[06:41] uh load balancing and autoscaling that keeps everything running smoothly. And
+[06:45] so we often see that uh customers will uh come with us starting with say
+[06:51] inference running on Kubernetes and then they want to expand to training uh or
+[06:56] vice versa. And so maybe a Kubernetes familiar team struggles with deploying
+[07:01] and managing a slurm cluster. Um or uh the incoming slurm native training team
+[07:08] is unfamiliar with the existing Kubernetes frameworks uh and adds you
+[07:12] know additional friction that just slows down your team and with you know how
+[07:17] fast everyone's trying to get to uh the next best model and next best product.
+[07:23] um teams get set up with the tools they're familiar with and you end up
+[07:26] with two separate infrastructure stacks which has its own host of extra
+[07:30] operational burdens uh and extra costs. So we decided to build out our Cruso
+[07:36] managed slurm uh on top of Kubernetes. So we have our Cruso slurm operator uh
+[07:43] which coordinates with our Cruso managed Kubernetes platform and the broader
+[07:47] Cruso cloud. So including storage, networking etc. And uh cso manages uh
+[07:54] slurm users, slurm partitions, configurations and storage. So you don't
+[07:58] have to do it peacemeal. You just you know one one command you create your
+[08:02] slurm cluster and there it is existing in your kubernetes cluster. So the
+[08:06] benefit is for the slurm users um it's just another slurm cluster. They just
+[08:11] need uh an IP address they can SSH with their uh user and now to them it's a
+[08:17] slurm cluster with all the bells and whistles that they need. They don't even
+[08:20] need to know that Kubernetes is running underneath. For your platform team and
+[08:24] your uh infrastructure team, uh the benefit is slurm is now just another
+[08:28] service that plugs into your existing infrastructure. You don't need to set up
+[08:31] an entirely new infrastructure stack, new observability tools, new you know on
+[08:36] call teams, new runbooks, nothing like that. It's all built into the same
+[08:40] thing. It runs alongside all your other services
+[08:44] and um resources in slurps. any jobs make use of the uh built-in topology
+[08:50] aware scheduling um and the platform team just sees it as another service
+[08:56] um and now since all your GPUs and hardware are in one cluster they can
+[09:00] move around seamlessly uh it enables uh more interesting uh tooling and dynamic
+[09:06] availability like when you need to burst your uh inference service when you're
+[09:12] reaching uh high uh users high number of users you can take away some some of
+[09:16] your or even reallocate some of your hardware from your training cluster to
+[09:20] your inference service or vice versa. You know, when your user uh load goes
+[09:25] down, you have all these GPUs sitting idle. That's the perfect time to up your
+[09:30] training job or do a a larger hero run across more GPUs. Um this is something
+[09:35] that's only possible when you have everything in a single uh infrastructure
+[09:39] stack like uh cru managed slurm. Um an additional benefit is uh now crucial
+[09:46] managetorm can make use of our autoclusters product which is our auto
+[09:49] remediation for additional hardware errors. So Connor is uh going to walk
+[09:54] through that and show a demo of uh of how that works.
+[10:03] So this is an overview of what exactly happens when autoclusters detects a
+[10:09] critical hardware error. in this case an XID79 error where one of the GPUs is
+[10:13] completely unusable. And so the first thing that happens is that the user is
+[10:18] notified although there's no action required from them. Then the slurm
+[10:23] operator sets that that specific node to down and cancels any running jobs.
+[10:28] There's then a uh the process re receives a sig term signal before being
+[10:33] terminated and you have up to two minutes to handle that sig term to
+[10:37] either save your checkpoints or flush your logs before that node is eventually
+[10:41] replaced. The cancel job is automatically reued and then
+[10:46] autoclusters start. So first it verifies that no pods on the node have a label
+[10:53] that disables automatic replacement. Assuming that node can be replaced, the
+[10:58] Kubernetes node is then cordoned and drained. And then the unhealthy node is
+[11:04] removed from the node pool and replaced with a new healthy node from spare
+[11:09] capacity. And then a record of the alert and the remediation is logged for the
+[11:14] user's reference. Uh but there's still no action required from them. And then
+[11:17] once that healthy node comes back online, then the slurm job starts. Your
+[11:23] application code runs to load your model and load your checkpoint and resume
+[11:27] training. And so here's what that looks like um
+[11:35] in a demo. And so here on the left, I'm just using sbatch to launch a PyTorch
+[11:41] training script. On the right is the Cruso cloud console where I have a GPU
+[11:46] node pool of two A100 nodes. And I'm going to launch this as normal.
+[11:53] Um, and then what I'm going to do is run a
+[11:57] script in to tell our backend internal monitoring system that there's been an
+[12:01] XID79 error on one of the GPUs. And this will trigger autoclusters. And so we can
+[12:07] see immediately the GPU utilization drops. And so we know that that that GPU
+[12:13] has gone offline and autocluster's node replacement starts immediately. And the
+[12:18] full process from detecting a critical hardware error to getting a healthy node
+[12:24] back into the node pool takes roughly five minutes with autoclusters.
+[12:29] The rest of the time is mainly application level code. And so in this
+[12:33] example, it's a little under 15 minutes um from end to end. And here I'm just
+[12:39] showing some of the alerts that uh the user receives when there's a critical
+[12:43] hardware error like this. So as you'll see um there's no action
+[12:49] required from the user. The slurm job will restart. It'll load the checkpoint
+[12:53] and continue training where it left off. And we can see the GPU utilization
+[12:58] returns back to normal. And the total downtime is less than 15 minutes. And
+[13:03] this is um much better than having an engineer have to log on in the middle of
+[13:08] the night and spend hours debugging something. All of this is handled
+[13:12] automatically on our platform.
+[13:18] Now, historically, creating this type of environment has been challenging to
+[13:23] merge both Slurm and Kubernetes. And so we're really excited to announce what we
+[13:27] call one-click slurm where everything that we've talked about in this
+[13:31] presentation, this entire environment can be provisioned with with just a
+[13:35] single command. And so this one command includes
+[13:39] provisioning the underlying Kubernetes cluster, the slurm controller, login
+[13:43] nodes and storage. And then adding a GPU node pool is only one command beyond
+[13:50] that. And so this means that engineers can simply SSH in and start running jobs
+[13:55] immediately and autoclusters is enabled by default.
+[14:02] So wrapping up what we covered um starting with the limitations of
+[14:06] traditional slurm it gives you the high performance job scheduling but not the
+[14:10] automated the automated healing that modern AI infrastructure requires. And
+[14:14] so by building slurm on top of Kubernetes, we can enable these advanced
+[14:19] advanced features without having either team change uh their workflows. Then we
+[14:25] covered the full node remediation flow from an error being detected to the
+[14:30] slurm job resuming and the checkpoint and the training resuming.
+[14:34] And so the key takeaways here first is that traditionally slurm and the
+[14:39] infrastructure that it runs on are two separate systems.
+[14:43] But together with Kubernetes, both systems stay in sync and so a
+[14:49] failed GPU node can get cord in automatically and that signal will
+[14:54] propagate directly to the slurm operator.
+[14:58] Also, like I mentioned earlier, neither the platform teams nor the machine
+[15:03] learning teams have to change their workloads. Researchers can still use the
+[15:08] same commands to launch slurm. And although Kubernetes is running
+[15:12] underneath, researchers never have to SSH into a pod or worry about
+[15:16] containers, but the Kubernetes team still get access to the same level of
+[15:21] telemetry and observability that they're used to.
+[15:27] And then lastly, like Nicole mentioned, the GPU nodes are Kubernetes nodes
+[15:32] first. And that means that slurm is just a workload running on top. And when a
+[15:38] slurm job finishes, those GPU nodes don't have to sit idle waiting for
+[15:42] another job. You can schedule inference pods on those immediately through
+[15:46] Kubernetes because from the platform's perspective, they're still just nodes in
+[15:52] a pool.
+[15:55] And so the core idea here is that failures are inevitable. Um and so in
+[16:02] today's AI landscape, the architecture of infrastructure
+[16:06] should be designed in a way so that when there is a critical error, all the right
+[16:10] actions are handled autonomously and engineers can focus on building their
+[16:14] application and not worrying about their infrastructure.
+[16:20] So hopefully this was an informative talk. Um, if you have any questions,
+[16:24] feel free to um, connect with us at booth ug12 or on social at crusadev. And
+[16:31] uh, thank you for listening and feel free to ask any questions. Thanks.

@@ -1,0 +1,582 @@
+# title: Bypassing the Multimodal Tax: Hybrid RAG, SQL RRF & UI Telemetry - Abed Matini, Ogilvy
+# source: https://www.youtube.com/watch?v=Akm1sqvWG4A
+# speaker: Abed Matini, Ogilvy
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T08:12:50Z
+# sha256: 562f2b5fc1c85f0a4d647cce840172f802191327f72d172b4414fb830c58cd54
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:01] Hello everyone. I'm Abid Matini.
+[00:05] I'm senior backend developer at OGOV. Thanks to AI Engineer World Fair 2026
+[00:14] for giving me a time slot for online track.
+[00:17] And I'm going to walk you through bypassing the multimodal text today.
+[00:24] How we can have a have a framework free hybrid rag.
+[00:28] Withdraw SQL RF and live telemetry. As you can see, I have got my live demo in
+[00:37] the right side of the screen. So, [snorts]
+[00:40] any slide that I pass and if there is anything related
+[00:45] related to my presentation, I can show you. I have few
+[00:50] tabs also ready here for you to show and walk you through
+[00:56] uh the slides and the demos.
+[01:04] Okay, let's begin. So,
+[01:11] we have two problems for every document we have two problems that
+[01:15] we try to solve today. One is when we start to chat with any
+[01:21] LLM and if we have to upload a document, we usually going to just drag and drop a
+[01:27] PDF or a Word doc or an image and ask the chatbot to get ready for the
+[01:32] questions that going to come up after we upload those documents. The
+[01:36] issue with that is as soon as we upload these documents, we
+[01:41] going to basically
+[01:44] lose some of our tokens that we supposed to have only for
+[01:49] uh processing these documents without even
+[01:53] asking a question. So, we already uh spend some tokens there without even
+[01:59] asking any questions. That would be the first issue. And then,
+[02:04] if we're building a chatbot and it's uh we want to
+[02:08] have vector database there, we want to have keyword search and semantic search
+[02:12] there, and we want to just add more tools. This is going to be too many
+[02:16] tools uh uh combined all together. So, in the
+[02:20] production uh in the production basically chatbot, we're going to have
+[02:25] uh too many tools, and it's going to be
+[02:28] complicated for us to manage uh
+[02:32] our production chatbot properly. So, today I'm going to uh
+[02:39] walk you through in uh three main uh sections. One is
+[02:46] how we can uh upload our documents and get our
+[02:49] documents and make it ready bef- uh for our chatbot before uh users
+[02:55] going to chat. So, on the on the right side, I have I do have
+[03:00] a FAQ assistant chatbot
+[03:04] that's running locally now for me. And
+[03:08] um I'm going to show you the dashboard, the
+[03:11] dashboard that I've created for it, and how we can chat, and uh how we get the
+[03:14] results. So, this is going to be a uh supposedly FAQ um
+[03:22] assistant for a sample employee handbook. So, imagine that you have HR
+[03:28] company, and this HR has uploaded the the the the handbook for uh
+[03:34] for uh for the employees to ask their question, any question they have about
+[03:39] leave, about uh uh
+[03:43] like uh different kinds of leaves, and sickness,
+[03:47] or uh parent like uh parental leave, or any other questions related to
+[03:54] our, uh uh, possibly an HR would have as a common
+[03:58] question that they get every day. So,
+[04:01] um, that would be one sample that we're going to use to upload.
+[04:06] So, all documents can get can get in the different formats or we can upload in
+[04:11] different formats of PDF, uh, like PowerPoint documents and Word
+[04:16] documents or even image. So, we're going to talk about that.
+[04:20] We're going to talk about how we have to chunk these because we're talking about
+[04:24] drag here. We need to know how we can chunk this information
+[04:29] uh, properly based on our the documents. So, we're going to talk about
+[04:34] uh, different type of chunking here as well.
+[04:37] We can, uh, we show you in the admin how we can choose different
+[04:42] uh,
+[04:45] different strategies to uh, to chunk the documents. Then we're going to see how
+[04:50] the search is going to work, how the embedding is going to work, how did our
+[04:53] database is going to be, how the search going to be based on the keyword search
+[04:58] or the semantic search. And we're going to see about the how our
+[05:03] F in the Python going to work. And then we're going to talk about the
+[05:07] observability, how we going to check the safety, how we going to observe, uh, all
+[05:11] the process with LangFuse and how, uh, we can the prevent, uh,
+[05:19] prompt injection pattern or, um, any risky question that might come to
+[05:26] LLM. I'm planning this talk for about under an hour and this,
+[05:31] uh, the whole thing, the plan is the entire code base can be easily will be
+[05:36] running on the GitHub code code space which you can just pull from the repo
+[05:41] and one command run and it's going to be ready to test
+[05:46] on GitHub code spaces.
+[05:51] Um so, the stack we're using here are Python, FastAPI
+[05:57] for the back end, React for the front end, uh PostgreSQL for our database.
+[06:03] Uh Docker for just easily being able to have the containers and we can just re-
+[06:10] re- produce it anywhere and rerun it anywhere, for example, in code spaces or
+[06:15] code spaces or any other uh environment we want.
+[06:19] Then, we have Ollama and local language models and local language models and
+[06:24] embedding models that running only locally that can be run on any uh server
+[06:30] as well. It doesn't need a GPU. The CPU is going to be good enough for it. So,
+[06:35] uh any staging server, any code space uh
+[06:40] uh going going to be fine for it. And LangFuse for uh tracking what's
+[06:45] going on and how we can see the chat and the latency
+[06:49] uh so, we can improve our chats
+[06:55] better. Um
+[06:59] This is the end-to-end blueprint of uh what we're going to talk about. So,
+[07:04] we're going to have a document few documents as a source of truth for our
+[07:11] chatbot. So, we're going to upload some documents.
+[07:15] So, what we can do with Python is we're using Doc Link
+[07:19] to convert those uh raw documents uh to markdown files.
+[07:25] And then, we're going to chunk those markdown files to uh in our into our uh
+[07:30] PostgreSQL. And then, we can also do some um scan as
+[07:34] well here. So, uh that would happen as well. Then, we would have some queries
+[07:39] from the user. So, the employee is asking questions, HR-related questions,
+[07:43] and it's going to be retrieved from the database. Is the the the result relevant
+[07:48] results with the top rank would be passed through the LLM.
+[07:52] And LLM would uh return the in the in our chatbots that we have here.
+[07:58] Uh in the format of chat, so we can see and get our questions answered here, and
+[08:04] we can observe in the length views what's going on in our system.
+[08:11] So, um
+[08:14] optimizing data ingest. So, we have two different ways of optimizing. So, if we
+[08:19] first uh going to just throw it into the We have a document,
+[08:25] and if we just uploading it on our um
+[08:30] uh cloud chatbot anywhere, the issue we just uh having of the one
+[08:35] issue we have is we're spending tokens before we doing anything. Another issue
+[08:40] is you don't know how that document looks li- looks like there and that
+[08:44] chunking uh how it's being chunked and how uh
+[08:48] basically that LLM is seeing it. So, that would be a risk quality. If if
+[08:52] there is a table that we don't know how it's being read there, so we kind of
+[08:56] don't see. We're trying to uh have more clarity about how the
+[09:01] how the document's being stored in our database and how it's being retrieved.
+[09:06] So, another way would be a structure first, so we use the local CPU.
+[09:12] If you're running it here, we we can uh upload a document or doc link would
+[09:17] convert it to uh markdown file, and we would know the better chunk uh how the
+[09:23] chunking is going to work. I'm going to show you a few examples.
+[09:26] And uh of course, it's going to be a cheaper prompt. If after that you want
+[09:30] to talk to a lo- um an online cloud any- but if you want to
+[09:35] If you want to have it locally, then it would be actually no cost
+[09:39] for you. Uh, so the DocLink pipeline would be
+[09:44] uh, we would be running it
+[09:48] It's like a local locally running it on our server. The The The Python is going
+[09:53] to get that document. It's going to export it to the markdown and save that
+[09:58] markdown file. Then the get this going to chunk it based on different strategy
+[10:04] and uh, we're using embedding models to embed it to our database and
+[10:11] insert that on to our vector database.
+[10:16] Uh, so if we save while local because
+[10:21] uh, imagine if if one or two pages the cost is next to nothing, but if you have
+[10:25] 200 pages uh, then the cost going to be too much.
+[10:29] And if you have a big
+[10:32] company with lots of employees and they want to just us keep asking the same
+[10:36] questions or uh,
+[10:40] if they want to upload documents then it's going to be uh,
+[10:43] going to be a big cost. So, um,
+[10:48] there are four ways of chunking a document. Let me first before I show you
+[10:53] the four ways, let me uh, show you the admin page that what I'm
+[10:57] talking about. So, imagine here you have We are We're having our FAQ admin page.
+[11:05] So, uh,
+[11:07] imagine you have Let me delete few of the documents that
+[11:13] I have chunked before here. So, uh, you want to upload a new FAQ
+[11:20] uh, file for your HR
+[11:24] as for for your HR policy. I want to show uh,
+[11:27] give your chatbot uh, data updated with our AI system. So,
+[11:33] imagine you have um
+[11:39] you have some question answers here. Uh before I do that, let me show you here
+[11:44] what I mean. So, [snorts] um
+[11:48] this is the heading FAQ, yeah. So, um
+[11:53] one way that you can feed our chatbot with information is if we actually
+[11:57] create a question answer uh file. So, that would be easier to
+[12:02] digest for our uh system to understand what's going on.
+[12:07] So, part of that is uh imagine we're having a this the entire FAQ file.
+[12:13] So, the entire uh
+[12:17] basically handbook. If we want to chunk this uh handbook and just upload it,
+[12:22] imagine uh we're uploading the entire PDF. This is going to be the way our PDF
+[12:28] is going to look like after chunking. So,
+[12:32] it started by acknowledgement, then they see a few chunk that doesn't have any
+[12:36] meaning. And then something starts here. There
+[12:40] are some chunks that doesn't have any meaning.
+[12:44] Uh for example, here signature date, that's basically kind of useless. So,
+[12:49] this going to slow down and reduce the accuracy of
+[12:53] our chat. It's going to increase hallucination. So, um
+[12:59] instead of uploading uh straight uh 28 pages,
+[13:05] we can if we can divide our documents to different chunks and just to different
+[13:11] files, relevant files, and clean up that data a bit as much as we can, uh and
+[13:16] then upload it, then we will have a better result. So, uh
+[13:21] one way of uh
+[13:24] uploading in the FAQ case is to actually have your your turning your data to
+[13:29] question and answers. So, uh
+[13:33] So, talking about working hours, talking about different situations here, so you
+[13:38] can have it based on questions and answers. Then this way you know when you
+[13:43] reference your documents, you're having the
+[13:46] uh correct reference, and it won't be any
+[13:50] confusing. And there are
+[13:53] uh different way to uh upload your documents. One way is you have the
+[13:59] question and answer, and then you would like to upload it. This is my FAQ PDF
+[14:04] file. Uh same PDF file, and I'd like to upload
+[14:08] it based on uh
+[14:11] heading-based chunking strategy. That means well, while I'm explaining
+[14:15] the the parsing where Docling is happening in
+[14:19] the background. So, that means each uh
+[14:24] chunking would be based on the heading that Docling would find.
+[14:29] And the answer that comes based on that. So, each heading and answer is going to
+[14:34] heading as a question and answer is going to become a chunk. So, we know our
+[14:39] chunking is clean, and it's easy to uh reference.
+[14:46] So, when this chunking finishes in a seconds, we would see, okay, this is the
+[14:51] first FAQ, it could chunk successfully to uh
+[14:56] based on the headings. So, it recognized the heading question,
+[15:02] uh and then the relevant answer. So, each
+[15:06] chunk has its own uh question and answer here. So, if we
+[15:11] say uh
+[15:17] if we say, for example, uh >> Um
+[15:25] as our questions here
+[15:29] Uh do we
+[15:32] do we have or something like this. So, we should
+[15:37] expect a kind of answer with the reference that's coming to that chunk.
+[15:42] So, we talking about heading chance going to understand the documents based
+[15:47] on uh headings that you have. That's how
+[15:50] it's going to chunk each document heading by heading. So, as you can see
+[15:55] here, um our question was about how much This was
+[16:01] the question we prepared, and this was the answer we prepared. Uh sample
+[16:05] Coca-Cola 90% of the individual employee premium and 75%
+[16:12] dependent premium. What we see here as a reference, we getting that answer, and
+[16:18] not only that, you getting the correct answer, you also getting the
+[16:23] Uh you see that it's been this answer has been generated based on this
+[16:28] document, based on this chunk. So, it's easy to reference. It's easy, you know,
+[16:33] where the issue is if there is anything that's not working, you know why. Then
+[16:37] you can go track it why this right chunk hasn't been retrieved. So, in this way
+[16:43] you have more
+[16:45] uh more uh clear path towards how you can debug it. Because I was uh in our
+[16:51] system, I was asking for um return top two chunks, it would uh
+[16:59] suggesting me I'll talk about all these models here. Um it would bring top two
+[17:04] response. So, then it was also checking that sample employee handbook that big
+[17:12] file here, sample employee handbook. As you can see here, that's a big chunk.
+[17:18] And if actually it's a good example because if you compare these two, uh
+[17:23] because we just drag uh uploaded the entire chunk here, you can
+[17:27] see although it's returned some information, but it's not that accurate
+[17:34] and you don't know. Of course, it went through that file and found something,
+[17:38] but uh
+[17:40] you don't know how accurate that information could be and you can't
+[17:43] follow because the chunk is is just uh uh
+[17:48] untrackable that easily. So, one way of chunking is chunking based on
+[17:55] the headings. Second way of chunking is based on the
+[17:59] paragraph. So, technically when you upload your documents, you would say
+[18:05] uh just chunk each paragraph you catch,
+[18:09] have it as a separate chunk. Doesn't matter there is a heading or not heading
+[18:13] or anything. So, uh if I want to go back to the
+[18:18] to our to our documents and say, let me first
+[18:22] choose I want to do a paragraph chunking. I want to say, okay, uh for
+[18:27] paragraph um
+[18:31] Let me find the paragraph general policy for
+[18:35] paragraph. I want to upload that. Um
+[18:40] So, for general policy, it's uploading here as you would see the whole file is
+[18:47] just been paragraph by paragraph being chunked. So, there is no heading, there
+[18:52] is no no separate information. And if you look at the uh
+[18:59] if you look at that information as well, if I can find it here quickly,
+[19:05] um general
+[19:13] general paragraph uh policy paragraph as you can see the information is just
+[19:17] paragraph by paragraph. So, you kind of cleaned up your data again,
+[19:21] but you're dividing it based on the different system. So, instead of heading
+[19:27] you're talking about paragraphs. That's another way of uh
+[19:33] basically feeding your rag for your information. Another way would be a
+[19:37] fixed 512 of character. You can say, "Okay, one of the best practices for rag
+[19:43] is you just divide based on 512 character,
+[19:48] and you have 64% overlap between the chunks, so you won't lose the track."
+[19:54] So, if your data is just too is not organized, if there's just random
+[20:00] data that you have and you can't clean that up, that's another way
+[20:06] you can upload your document. So, that would be instead of this,
+[20:11] you can choose another file, and you can say basically there's another
+[20:18] paragraph for global travel
+[20:22] uh
+[20:25] file here. So, that's kind of when it's kind of overlap here when it's going to
+[20:29] see here that the about this chunking strategy, you would see okay this
+[20:33] started for chunking and then it ended in the 512,
+[20:38] and then it's again
+[20:42] uh using that uh I think it was 64 uh I was 64 overlap, yeah. So, it's using
+[20:50] the 64 overlap here again. So,
+[20:55] you would see it's basically uh
+[21:00] chopped it from here. And
+[21:04] so, from here to here is 512, and from here to here is
+[21:09] 32 then another 32 from here to here. So, this is a 32 32 64 in total.
+[21:19] So, that's how it's relating each chunks together. It's happening same for here.
+[21:24] As you can see it's happening same for here. It's the way that
+[21:31] But you see the issue with that is it's coming here to assist the next system.
+[21:35] So, it's breaking. It's not the best but in some cases it works for you.
+[21:40] Another way that we can do is
+[21:45] sentence base. So, it can be based on first counting
+[21:48] based on the number of sentences and it chop it there. There are different use
+[21:52] case for each ones. So, another interesting one is imagine that you
+[21:59] There's some maintenance coming. You're receiving some email and you just want
+[22:03] to quickly upload
+[22:08] the
+[22:11] document in your chat without
+[22:17] without cuz you do you don't have the it's just a screenshot and you can't do
+[22:20] anything. Imagine you just receiving an email and says, "Okay, there is a
+[22:25] maintenance plan for this day from this hour and you just wants to upload this
+[22:32] in your chat for the for the user. So,
+[22:37] if me as a employee ask, "Okay, what is is there any maintenance plan for this
+[22:40] weekend?" Then I would know immediately. So, another way that we can
+[22:46] easily upload that screenshot as well.
+[22:53] Let me find easily upload that.
+[23:02] Oh, sorry. That wasn't our screenshots. So, the screenshots
+[23:07] uh you can upload then we're using another um
+[23:13] uh model that just turns that uh image to text and text to .md and then
+[23:21] we're using this uh
+[23:26] uh basically uh what's the name? Uh the sentence model for the emails that can
+[23:32] convert uh
+[23:35] that image to a text and then it can feed. So, we can see we're using the
+[23:39] chunking strategy a sentence group is turned that image to text and it's
+[23:46] already uh good for the
+[23:50] uh for our chatbot. So, we can uh we can
+[23:54] index it into our knowledge base now. So, then it's going to be a next one
+[23:58] that's been uploaded here screenshot. We can see how it's been chunked because
+[24:03] this is just the email. It doesn't have heading. It doesn't necessarily have all
+[24:06] the paragraph chunk properly. So, and if it's a shortage of time it's a small
+[24:11] message temporary change. You don't need to sit and clean up a data for here. You
+[24:16] just want to drag and drop updated for a weekend and everybody knows okay uh this
+[24:21] weekend we're having a maintenance plan. So, uh when they will come here and ask
+[24:29] is there any maintenance plan for this weekend?
+[24:35] Then technically we should get the result of
+[24:39] okay, this is the maintenance plan that's been happening and the reference
+[24:43] documents. So, uh the maintenance uh this is the exact
+[24:48] maintenance uh window that we got and actually the reference you can see
+[24:53] that's the screenshot that uh we uploaded just now. So, if we
+[25:00] do if we had I done the screen
+[25:04] the file name better, there would have been even a more relevant and somebody
+[25:09] says, "Okay, according to this information that I got from here, we
+[25:12] have a maintenance plan tomorrow from 6:00 p.m. onwards till
+[25:18] midnight." So, and I can easily archive and delete any of these and then it
+[25:25] won't be visible as well. So, these are basically different ways that you can
+[25:29] chunk. That's one of the that's basically the one of the most
+[25:34] important part of the whole system because most of the LLMs would just
+[25:39] work. The but the way you want to feed that data and you want to clean that
+[25:43] data and not
+[25:46] not having just drag and drop the entire handbook
+[25:50] here and have a messy data, that would help you a lot to have a more
+[25:55] successful in this case FAQ chatbot. Uh
+[26:01] Yeah, so these different strategies would help you as well.
+[26:05] And um Yeah, let's
+[26:08] move on to the next slide. Um
+[26:17] So, we're using we're using Postgres and um
+[26:24] we are also having a few agents that they are just Python codes. They are not
+[26:31] really any We're not calling another LLM as an agent to do something for us. The
+[26:36] real one reason for that is the speed cuz I'm running this locally. I'm having
+[26:41] running this on Ollama. I don't have I don't need to three four
+[26:46] agents to loop three times four times because then I'll have to wait I have to
+[26:50] wait 20 30 seconds for it and user would lose the interest. You just want one
+[26:56] natural language to run. The rest if something can be done by
+[27:01] a Python function, let's a Python function then run it for you. Then you
+[27:06] have also the full control over the function. Won't be any hallucination
+[27:09] because you need to you're going to write your test suite so to just cover
+[27:13] most of the situations. So that would help you. The agents uh
+[27:20] I just want to show you something here in the settings
+[27:24] what can it be. So I can I can uh off and have it agents off and on as
+[27:32] well. So I can say if somebody wants the current date
+[27:37] then this function is it can be called and retrieve. You don't need the LLM to
+[27:41] bring you back the current date. You don't need the LLM to calculate for you
+[27:45] something cuz also another plan for expanding this
+[27:49] expanding this chatbot is having it for customer service for that's going to
+[27:55] talk about the products and the prices and calculations. So that's another
+[27:59] thing product info or even having another deeper search
+[28:03] on the agent mode. But the point with that is then
+[28:07] cuz it's going to be another search then you would lose that referencing on that.
+[28:11] That would be important. So while I'm here, I'll show you what do I
+[28:17] have as a LLM actually I'm using here. I'm
+[28:22] using the smallest Qwen 2.5. So it's 0.5 billion is
+[28:29] parameters instruct model and it's I think it's 400
+[28:34] megabytes only. So it's that small and I'm using this model also for
+[28:43] for the agent mode if I want to run so I would run and two more
+[28:46] I would run another one and I have to run the agent mode is going to make it
+[28:51] slightly slower. Um and then
+[28:55] Um yeah, let's go back to the slides here.
+[28:59] Um
+[29:02] So
+[29:05] Yeah, this uh way of working you have a full visibility on your poison function.
+[29:09] That's what's going on. So, you only pass the in needed needed information
+[29:14] clear information to LLM and receive a clear information. So, it would reduce
+[29:19] the chance of hallucination dramatically.
+[29:22] Um also showing you here about
+[29:28] uh vectors and things on the in the database. So,
+[29:33] um So, when we're going to chunk, we're
+[29:35] going to chunk the information. This is based on the
+[29:39] ID and the section um and the what kind of vector embedding
+[29:43] are we doing? And then um we have our chunk, we have we can see
+[29:50] our basically how it's going to find the nearest
+[29:54] neighbor here and um Also, the keyword match at the same time
+[30:00] because if if you uh having a customer service product chatbot, you don't have
+[30:07] no need the nearest information. You need the exact information. If it comes
+[30:12] to the number as well, if it's come to the product as well, you need exact uh
+[30:17] if it's a medical chatbot, you need the exact medication. You need don't need
+[30:20] something similar or close to it. So, we need to have both both basically
+[30:27] uh keyword search and
+[30:30] um and the semantic search together. So, we'll have a hybrid search that giving
+[30:35] you a better result. And we're talking about the number
+[30:40] number that we're going to have.
+[30:42] I have it in the system limited to two because in this case you don't need more
+[30:47] than that. But, if you want to retrieve some
+[30:50] information, if it's a product, you might have you don't want to just uh
+[30:55] bring top two products that's being there for the user because you might
+[30:58] have the same brand like a 20 product or 50 product of the same brand. If you
+[31:04] don't let the window your window to pull those information, those products are
+[31:08] never going to be sold and never going to be shown in the chatbot. So, it's
+[31:11] important how many you can fetch. Uh
+[31:16] and then there the more about the retrieval that when we're
+[31:21] using the BM25 to get the exact keywords. So, the
+[31:26] previous slide was about to get the most closest with the cosine distance that we
+[31:31] have uh because when we upload the
+[31:35] information with the in our vector in our in our vector database,
+[31:40] the information with the similar meanings are going to sit next to each
+[31:44] other. And then when we user search for
+[31:48] something and ask for something, then uh
+[31:53] our information and our
+[31:56] our search is going to convert that uh question that query
+[32:02] uh in that database and go find a similar closest information to that
+[32:07] question and will return it. So, that's the reason we can't just one. We need to
+[32:12] return more than those so we have multiple answers and more closer
+[32:15] answers. But, here in the
+[32:18] smart retrieval, we need the exact answer. So, we would need to we would
+[32:23] need to filter it based on the language, for example, we need to based on the ID
+[32:28] or exact product name, SKUs, or uh
+[32:33] brand name or something. So, that would be the
+[32:37] the keyword uh retrieval
+[32:41] uh for us. And then how we do the ranking
+[32:48] based on which is very important because when we
+[32:51] have the both vector and the BM25, we want to mix these and still bring the
+[32:56] top uh
+[33:00] top two or top five relevant answers that we need
+[33:04] uh for us. So, more accurate if we if we
+[33:07] bring too many if we bring top 20 here and
+[33:11] uh bring shows top 20 answers is going to
+[33:15] be quite confusing for the user. So, you just want to have make sure you bringing
+[33:19] the right amount based on your use case based based on your use case.
+[33:27] So, if you're having products, you would bring more. You retrieve more.
+[33:30] If it's something medical, you retrieve less.
+[33:34] Uh you don't want
+[33:37] to information to be all over the place. You want to accurate more accurate
+[33:41] information because you would have more liability obviously on that.
+[33:45] Um another point here is
+[33:51] um
+[33:56] So, this is uh this is more about
+[34:02] reranker. So, when we have our reranker here, uh
+[34:06] that would also um
+[34:11] bring the information bring that uh
+[34:17] And so, after that score uh how many of those information that
+[34:22] shows by default. So, I'm only showing two there.
+[34:25] Um so, I've I've briefly talked about the agent mode vs. direct rag. The
+[34:32] direct rag is is just uh following the
+[34:37] it's a fixed pipeline. It's not going to go calling anything. You know, the the
+[34:42] path is quite clear.
+[34:44] You have embed embedded query, you have a hybrid retriever.
+[34:50] And you just bring up the answer. It's good if compliance is quite
+[34:55] important for you. But agent mode, you have a few extra
+[35:01] tools that going to be called. So, a search is a compare product. These can
+[35:06] bring more information back. It's less in your control.
+[35:10] So, uh
+[35:13] Oh, that's quite important and it takes longer because you have another agent
+[35:17] that going to work. So, basically it's getting this information and then you
+[35:20] have agent mode based on your request is going to call.
+[35:24] Um So, that would that would take slightly
+[35:27] longer slightly longer. Um
+[35:32] About that about the telemetry and application guidelines.
+[35:37] So, um
+[35:40] can use LangChain Fuse for we integrated LangChain Fuse
+[35:45] uh in our functions. So, we can uh see what kind of answers uh we have.
+[35:52] It's quite easy to everything is local. It's no outside calling or anything. So,
+[35:57] it's easy to track the information that was chatting with the widget anonymous.
+[36:02] I wasn't logged in. It's a FAQ FAQ chat. That's FAQ agent is name of the
+[36:08] the whole projects that I'm running there. So, each conversation
+[36:13] has a ID. Uh
+[36:16] you can track if there was any maintenance for this
+[36:20] weekend and you can track the answer for it. You can see what model I've been
+[36:25] using. You can see that I've returned the top two answers and the cuz it was
+[36:32] top two is referenced twice on that image.
+[36:35] Um page at most was off. Uh it was a chance.
+[36:41] Two chunk of information was returned and it took this long milliseconds and
+[36:48] uh yeah. That's basically the information we
+[36:51] have. If you have external models, you can
+[36:55] even estimate the cost that you're spending. That's another thing you can
+[37:00] uh you can use that for.
+[37:03] And uh if you have different sessions, different users, you can track the
+[37:07] logins. So, um that's give you a good insight of how
+[37:12] users are treating you uh
+[37:15] with your chat. So, um
+[37:20] Yeah. So, as I said about the user sessions and IDs, um
+[37:27] and then you would have the guardrails um as well. So, something because of you
+[37:33] using functions for it, we can uh have a better control over it. So, if
+[37:38] I ask is chatbot, how do I uh
+[37:42] treat flu? I have created a section uh to say
+[37:48] without going to chatbot, the point of lots of these guardrails is that the
+[37:52] issue should stop before we um
+[37:58] the prompt injection or anything that we have uh
+[38:02] or a question that is we're not supposed to respond. We shouldn't even send it to
+[38:07] the LLM to generate anything. So, before
+[38:11] even in the code, I can have So, we have created a section here uh to say if
+[38:17] there is a medical escalation, bring this medical message back.
+[38:22] Uh and you can see how the system prompt is
+[38:24] quite small because I'm basically prompting everything in the code, so
+[38:29] uh, although the system prompt looks quite
+[38:32] small and just few sentences, uh, I'm actually prompting way more in
+[38:37] the uh, code.
+[38:41] Instead of prompt, we use I'm using the code to say what do's and don'ts. And
+[38:45] uh, another example is the medical escalation and you can add more based on
+[38:49] your uh,
+[38:52] concerns you would have for your product. So, um,
+[38:56] yeah. So, this is the example for that. Um,
+[38:59] can be uh, can needs to be expanded with different keywords, with different kind
+[39:03] of sentences. Should be cured and see how many times somebody could pass this
+[39:06] or not. But technically, that would be example of how we should block uh, I
+[39:11] have our guard there should block any query that's not related.
+[39:16] Um, can do the same with the injection and so on.
+[39:21] Um,
+[39:23] what else do we have here? We talked about the length fuse and uh, we just
+[39:28] need to create a generate a key and you have it in your
+[39:34] uh, system. I would
+[39:36] I would work is just uh, a little bit about the observability
+[39:40] that I've talked about. Um,
+[39:43] and then um,
+[39:48] then the injection as well. So, the tools for prompt injection again, it
+[39:51] shouldn't go to the LLM and be stopped there. It should be stopped before
+[39:56] before uh, it's being sent there.
+[40:01] And yeah, we're using intent rejects and
+[40:06] term dictionaries and LLM classifier to stop any of these issues. And of course,
+[40:11] we can expand it more. But the good thing about that, because it's just a
+[40:14] code, it doesn't it It need the long prompt. It doesn't need anything
+[40:18] uh Uh outcome would be obvious. You know
+[40:21] what you uh blocking and what you're not blocking. So, it's not like uh
+[40:25] uh LM that sometimes likes to listen to you as you're
+[40:29] uh as the instruction and sometimes just
+[40:31] escape and does its own thing. So, part of that integrating all of these in your
+[40:36] Python before sending it is that you can have rigid test and to say, "Okay, this
+[40:42] is what I'm blocking and this is why." And it passes all the tests. So, you can
+[40:47] be more assured uh about that.
+[40:52] Um So, yeah. It's just a small slide about
+[40:57] uh We can just create your the and I'm
+[41:01] having it as a um I'm having it here as a as a
+[41:07] ba- uh as a widget. It could be also done here um instead of um
+[41:13] in a bigger chat as well. So, another thing is you have to in your
+[41:19] chat as a part of the rules, you should say also if somebody doesn't understand
+[41:23] the terms that they're using. So, if not, the person wouldn't allow me to
+[41:26] start the chat and not and uh
+[41:32] Also, I gave the the widget capability if I want. So, user, you can reset the
+[41:38] consent as well. It's just for my demo purposes. So, and then the the widget
+[41:44] would show here. Uh if I say no, this wouldn't work. If I
+[41:48] reset the consent, uh if I say yes, then it will start.
+[41:53] Uh
+[41:55] So, yeah. So, that's also about the widgets. And is cuz I'm using React, it
+[42:00] can be used anything else um um any other
+[42:04] uh framework as well. I just use it for simplicity.
+[42:08] Um here saying about Okay, the models I used. So, I've used two models.
+[42:15] Uh I pulled the quant 2.5.
+[42:19] Um Actually, first I've had the 7 billion,
+[42:22] but it's um took longer. So, for a smaller server,
+[42:27] I've changed it to uh Let me show you the admin here.
+[42:33] I've changed it to uh
+[42:39] uh 0.5. Otherwise, I have different options. So, I was trying with different
+[42:44] models. If you have a bigger model, it's just going to take longer. And it's
+[42:48] might be too wordy. Interesting finding from my side was you don't need the
+[42:53] biggest model. You if you can vet your data before sending it to your LLM, a
+[43:00] smaller smallest model can sort you out and get a good uh
+[43:05] uh answer for you. And uh it would give you less hallucination. It would uh
+[43:12] it's safer because it's not going to make up information. If it doesn't have
+[43:15] information, it's simply it's going to say no, I don't have that information.
+[43:19] So, that's another way of guard railing um
+[43:22] to not uh to not have that issue of your LLM randomly generating something.
+[43:28] Um I have BGM
+[43:32] embedding models. So, when I upload anything here that uh upload anything
+[43:37] here that embedding models basically that embedding models do the embedding
+[43:41] for me. Uh
+[43:43] so, technically you need two models only.
+[43:47] Smallest chat model and uh one one of the smallest
+[43:53] uh
+[43:57] uh one of the smallest model for uh embedding.
+[44:02] And then, if you have it on Docker, one click, everything's It's to be
+[44:06] running. You need your uh
+[44:09] Python requirements to be installed and then you have your React working on the
+[44:14] front end. And then that's all you need. Uh
+[44:20] one more thing that I should be adding here. I haven't the Langfuse also
+[44:26] uh should be added here. That's going to be running in a different port. That's
+[44:30] missing from here. So, the key takeaway for um
+[44:35] this is the structure markdown first. So, we use Docling for uh
+[44:40] to do the heavy job. And then we use the Postgres vector database to just store
+[44:46] everything. Uh didn't use any specific framework. Uh
+[44:51] we just used uh
+[44:53] Llama for our chats. And no other uh paid framework anywhere
+[44:58] else. We used Lang Langfuse for our telemetry. That was also free to use.
+[45:05] And this can be uh escalated to different products as well.
+[45:09] It can be document catalog or from any database.
+[45:14] Um Thank you very much uh for your time. I
+[45:18] would like to get connected with you and uh if you have any questions, if you
+[45:24] have uh
+[45:26] any kind of concern or something that you figure that would be uh better to
+[45:31] integrate, please share your idea with me either in the comments or message me
+[45:35] on LinkedIn. Um
+[45:37] Yeah. Thank you so much.
+[45:40] Uh thank you AI Engineer for the opportunity.
+[45:43] And uh I'll see you next time. Cheers.

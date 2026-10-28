@@ -1,0 +1,317 @@
+# title: Why Software Factories Fail
+# source: https://www.youtube.com/watch?v=Ib5GBkD555M
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T07:03:38Z
+# sha256: 14fe58771c215506a34f85df88a5b55afb9b6d42d07df042148ea0e109854810
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:01] [music]
+[00:25] >> What's up everybody? How we doing?
+[00:29] Guys, give it up for all the great speakers today so far.
+[00:33] Um >> [applause]
+[00:36] >> All right, this is Harness Engineering is not enough and why software factories
+[00:40] fail. And we're going to click, maybe.
+[00:44] Oop.
+[00:47] Oh, that's way too many slides. Hold on, guys.
+[00:50] Okay. Um
+[00:52] So, we're all racing to put AI coding into production.
+[00:55] And uh there's been lots been said about loop engineering.
+[00:59] And uh we should probably write more loops.
+[01:01] And uh yeah, I don't know. I guess we're
+[01:03] doing loops now.
+[01:06] Uh StrongDM built a lights-out software factory where nobody even reads the
+[01:09] code. And the prevailing narrative is we should just spend more
+[01:14] tokens. You are the bottleneck.
+[01:17] The models are good enough. Code is free. Just ship more stuff.
+[01:22] But at the same time, we are starting to see the cracks. Our friend Mario at AI
+[01:27] Engineer Europe begged us to slow down because companies that should not be
+[01:31] having outages because of coding agents are having outages due to coding agent
+[01:35] mishaps. Um codebases are falling apart faster
+[01:39] than they ever have before. And our friends at Faros AI actually even did a
+[01:43] report since we all picked up all these AI coding tools in January, maybe
+[01:47] February. Um pull request code review quality is way down. We're having more
+[01:52] comments, longer comments, and tons of PRs being merged without any review at
+[01:56] all. Incidents are way up, bugs per developer
+[01:59] are way up, and uh many people will tell you that
+[02:02] you're holding it wrong. That's the only reason.
+[02:05] You're not. Well, maybe you are, but that's not the
+[02:10] point. Um I've spoken a lot about how to hold it better when it comes to working
+[02:14] with AI. Uh probably a million views on YouTube at this point across a bunch of
+[02:18] different talks. Um and the basic thing is like as engineers, we've been told
+[02:22] that if token maxing isn't working, then it's a skill issue. You just need to
+[02:27] spend more tokens. Uh let go of reading the code. That with enough harness
+[02:32] engineering, if we maybe sprinkle some magic words, adversarial review on
+[02:37] enough of our uh PR bots, that we can get the best of both worlds.
+[02:42] 10 to 100x faster, high quality, and nobody has to do that
+[02:46] thing we all hate called code review. Uh I'm here to convince you today that
+[02:50] this is in fact not a skill issue. That no amount of harness engineering or
+[02:55] loops maxing can solve what is fundamentally a model training issue.
+[03:00] That's why we say the harness is not enough. Um and to understand this, we
+[03:04] kind of have to grapple and dig into how coding models are trained. I'm going to
+[03:08] talk about what I think the shortcomings are with some of the current benchmarks
+[03:11] and what better ones might look like. And we'll talk about how to move faster
+[03:15] safely in the meantime. Um it's going to sound like a rant, uh
+[03:19] but there is hope here. Uh I'm going to talk about our journey and a bunch of
+[03:21] the landmines we've hit uh building in this world. A bunch of exciting new
+[03:24] techniques that we've been working with uh a lot of our users and customers to
+[03:27] develop. And I think how we all as a community get to the next chapter of
+[03:32] agentic engineering after whatever this thing that we're in.
+[03:36] Um so we use a lot of words here. I'm going to zoom out a little bit. I want
+[03:38] to give you kind of like a brief history of the software factory. Um and it's
+[03:42] actually I don't I I I just learned this last week. It was the term software
+[03:45] factory was defined at a NATO conference in 1968.
+[03:49] Uh we're going to start around 2022, like right before AI started coming
+[03:52] around. Um and basically in a typical 2022 software factory,
+[03:57] you will have some people building stuff. You'll have engineers, you'll
+[04:00] have PMs, maybe you have some sort of leadership team that is driving the
+[04:03] vision here. And they all decide that stuff needs to get done. And so you put
+[04:07] it in a tracker, a linear, a Jira, a beads, some sort of state machine that
+[04:11] tracks what needs to be done. And then someone goes and grabs
+[04:14] something off of there, and they build the thing. And there may be some
+[04:17] automated testing in that process, maybe some manual manual testing in that
+[04:20] process. At a certain point, we make this pull request thing. Says, "Okay,
+[04:24] cool. We got to run a bunch of checks, automated stuff. A human's going to
+[04:27] review the change and review the code. And perhaps we might even have uh a
+[04:31] human pull it down and test it somehow." And if anything goes wrong here, we loop
+[04:35] back to someone builds the thing. Uh and eventually we're ready for prod.
+[04:39] And so we ship it to production. And once it's in prod, it makes contact with
+[04:43] our users. And users do uh a thing that we all
+[04:47] love. Uh users love to complain. I I love our users. Uh but yeah, they're
+[04:52] going to ask for things, they're going to find bugs, they're going to file
+[04:54] feature requests. Uh and that goes back to your team. You
+[04:58] might also add monitoring. And so uh you know, what do we want more than anything
+[05:02] else? We want to wake up engineers at 3:00 in the morning when something
+[05:05] breaks. So they can get dragged out of bed to try to go fix it. Uh and we go on
+[05:09] and on in this loop. Uh and we ship a bunch of code.
+[05:13] Um and one thing that we noticed here is that uh teams figured this out decades
+[05:17] ago is that this someone builds the thing step
+[05:21] is usually going to take hours or days in most cases. And the review part will
+[05:25] also take hours or days for large things. And so teams started doing these
+[05:29] upfront planning, architectural proposals, sprint planning, and they
+[05:32] would collaborate this on on these things as a team uh with the
+[05:36] hopes that we might decrease the percent chance that something would need to be
+[05:39] reworked. That we would be able to reduce the time spent in reviewing every
+[05:43] line of code because we aligned on everything ahead of time.
+[05:47] This brings us to the agentic software factory.
+[05:50] Uh every company and their mother is talking about how they built a coding
+[05:55] agent factory that ships 75% of their code now.
+[05:58] Uh literally everybody. Uh and so if we look at the software
+[06:02] factory from 2022, uh we just replace someone builds the
+[06:05] thing with an agent builds the thing. And we have an orchestration and a
+[06:08] harness and a sandbox and a model and computer use and I'm not going to get
+[06:11] into like the details of that. You can watch 100 talks about that this week,
+[06:14] I'm sure. Um but now the building part takes minutes or hours, but this human
+[06:18] part still takes hours or days if you're going to review the code and you're
+[06:21] going to test the changes. And so we bring in agentic code review.
+[06:24] We bring in agentic regression testing, uh and it makes this part faster, but
+[06:29] it's probably still the bottleneck. But we can do more loops here. Why not?
+[06:33] Let's do some more loops. So we can route all incidents straight into the
+[06:36] factory. Why does someone need to get woken up uh and try to fix it when they
+[06:39] could just wake up to a pull request and uh maybe that fixes the issue for you.
+[06:43] You can take all the user feedback and just stick it straight into the factory
+[06:47] so that people ask for stuff and it gets built.
+[06:49] And now your only job is how much things can you stuff into the queue of stuff to
+[06:54] do and how fast can you review and test the changes? Which brings us of course
+[06:58] to, I'm sure you know, the lights off software factory where basically Dentsu
+[07:02] Bureau coined this is we no longer read the code. We say, "You know what? This
+[07:06] is going great. That code review thing? No, thanks. We're just not going to do
+[07:10] that anymore." Uh and we invest into all these other
+[07:13] parts of the system. Your your testing, your monitoring, your rollout,
+[07:16] everything else. We just write more code and build those systems better.
+[07:19] And now our job really is just how much how much stuff can we ask the agent to
+[07:23] build? I am going to posit that this does not
+[07:27] work. Uh and this is why software factories fail. Um as as an aside, what
+[07:32] I'm going to say has nothing to do with vibe coding. So Addy had this uh great
+[07:36] post. I'm going to just going to literally take his quote verbatim. A
+[07:38] developer vibe coding a side project a dozen people will ever run,
+[07:43] and a team keeping a 10-year-old enterprise system alive for another
+[07:46] quarter share almost no constraints worth naming. And most of what you hear
+[07:50] on the internet is one of these groups of people telling the other group of
+[07:53] people how to live their lives. So, if you love vibe coding, please go
+[07:59] on. Um at Human Layer, what we care about is how do we help people solve
+[08:02] hard problems in complex codebases. Um we use the word brownfield a lot, which
+[08:07] historically has meant like some 10-year-old Java thing. I actually think
+[08:11] agents really start to struggle after maybe 3 to 6 months, especially with the
+[08:14] pace at which we can ship now. Um you can ask me how I know this, and I
+[08:18] will tell you that it is because in July 2025, we tried this. We went full lights
+[08:22] off, and uh if you have tried this seriously for a number of months, you
+[08:27] probably found at least one issue that the agent couldn't solve.
+[08:31] Even with your most advanced prompting, you do research, you do reproductions,
+[08:35] you just you have to go and dig into that codebase that you stopped reading 3
+[08:39] months ago to try to figure out what's broken. And in the meantime, your site
+[08:43] was down, your users were pissed, and you were If
+[08:46] you were like me, you were probably miserable reading all this slop code
+[08:49] that you let slip into your system. And what I want to get to is basically
+[08:54] models have a shortcoming. Um they can't maintain and improve codebase quality
+[08:58] over time, not without a a decent amount of human steering.
+[09:01] Um and when I say maintainability, I'm basically talking about issues like it
+[09:04] becomes really, really hard to make a change in one part of the codebase
+[09:08] without breaking other parts of the codebase. This is Martin Fowler's
+[09:11] shotgun surgery, textbook code smell. Um I'm not going to say much more about
+[09:14] maintainability. There's a bunch of books that you can go read about it. In
+[09:17] fact, John Osterhout is actually here speaking this week, so you can go ask
+[09:19] him in person about the philosophy of software design if you want to.
+[09:23] Um but it brings us to this question of like why can't models do software
+[09:26] maintainability? Um and you may also be saying, but Dex,
+[09:30] you know, surely the models have gotten much better since then.
+[09:33] Um they've gotten better in some ways, but they're still about the same in
+[09:36] others. Um if you want to solve one-off problems or vibe code a new marketing
+[09:40] side, yes, they got way better since 2025 and 2024. But as far as improving
+[09:45] code base quality, I think uh they have not gotten much better. Now, I cannot
+[09:50] prove this because there are no good benchmarks for a model's ability to
+[09:54] maintain code base quality, and I'll get into like where we're going with that.
+[09:57] Um, but if you've worked with coding agents
+[09:59] for a while, a lot of people are posting about this. It's just like you probably
+[10:02] have this vibe that they they generally make things worse over time and make the
+[10:06] code base harder to work in. And to figure out why this happens, I
+[10:09] want to zoom out to the first great coding agent.
+[10:13] Why did Claude Code go from nothing to 4 billion and I think now they're at 9
+[10:18] billion in revenue in under a year? Cuz they were great CLI agents before
+[10:23] Claude Code. You had Aider, you had Code Buff. There was a bunch of tools in this
+[10:26] category. They had all the same tools, read, write, edit, grep, bash. Um, so
+[10:30] what was the difference? The difference was was that the this was the first time
+[10:35] that a model lab trained a model against the harness that they were going to
+[10:38] distribute it to users in. Um, and it got really, really good at
+[10:42] this is just some of the tools, but it got really, really good at calling these
+[10:45] sorts of tools in an agentic loop. In fact, the OpenAI team did a talk in
+[10:49] November about basically if you are a uh harness builder and you don't own
+[10:56] the model weights and you can't RL the model in your harness, you will always
+[11:00] be at a disadvantage compared to somebody who owns both the model and the
+[11:03] harness. Um, and I'm going to decide a couple
+[11:06] slides from my buddy Calvin French Owen, who was a MTS on Codex during the
+[11:10] initial launch. Um, but LLMs are just next token predictors. Uh, this is a
+[11:14] slide from over a year ago where basically as you're doing your agentic
+[11:16] loop, context window goes in, next step comes out.
+[11:20] And uh we're going to try to do this. I haven't actually timed this, but we're
+[11:22] going to see if we can do coding agent reinforcement learning in 60 seconds.
+[11:26] So, what we're going to do if we want to train a model to get better at tool
+[11:28] calling, better at solving software problems, we're going to generate a
+[11:31] bunch of We're going to give it a problem and we're going to generate a
+[11:33] bunch of traces. Try to solve the problem a bunch of different times.
+[11:36] We're going to score them all on correctness and did the test pass and
+[11:38] all this stuff. Uh and then we're going to reinforce.
+[11:41] We're going to make the bad behavior less likely and we're going to update
+[11:44] the weights to make the good behavior more likely.
+[11:47] Um this one of the classic ones here is SweetBench multilingual. Uh they're
+[11:50] about 15-minute tasks. They're from open-source repos like Redis, JQ, and
+[11:54] Django and all this stuff. And they have binary one or zero rewards on did you
+[11:58] fix the problem you were trying to fix? And did you do it without breaking
+[12:01] anything else? Um and we look at actually a real
+[12:04] problem from one of these benchmarks. This is Fastlane, which is a Ruby
+[12:06] project. Um basically, there was some issue where we weren't checking for nil
+[12:10] and we have a stack trace blow up because you have a null pointer
+[12:12] exception. And in this um in this benchmark, you
+[12:15] have a base commit that we're going to check out before the issue was solved by
+[12:19] a human in the past. We're going to give it a test patch that says here's what
+[12:23] the behavior should be afterwards. We have a golden patch. Both these are
+[12:26] hidden from the model. Uh and so we have the agent go try to
+[12:29] solve the problem. We store its patch. We undo all the changes it made to any
+[12:33] test files cuz I'm sure you've seen models comment out tests just to get
+[12:37] things working. And then um we're going to apply our
+[12:40] golden test patch. Uh and then we're going to run the test. Old test and did
+[12:43] the new test pass? And if they both pass, then uh then we get the reward.
+[12:47] Otherwise, we don't. Um and so models are trying to get the
+[12:50] test to pass. There's no way in this system that we can penalize it for poor
+[12:54] program design or for eroding the maintainability of our systems. That's
+[12:57] why we get things like this. Try catches around things that probably don't need a
+[13:01] try catch. Or things like this. I think Bybop gave
+[13:04] us this example earlier of casting things to other things just so the model
+[13:07] can just just it just wants to get the test to pass.
+[13:11] Um and so if you can't verify the uh maintainability of the code, it gets way
+[13:15] harder to train on this stuff. Um so you remember this picture?
+[13:18] Verifying code quality and maintainability is orders of magnitude
+[13:21] harder than the code runs and the test pass. Because the cost function of bad
+[13:25] architecture is measured in months and years. If you have a coding episode and
+[13:30] then you only find out months later that like somebody vibed this a little bit
+[13:34] too hard, it's really hard to propagate that reward signal back across the gap.
+[13:39] And now the frontier is getting better, slowly. And since I know someone's going
+[13:42] to be in the YouTube comments about this, yes, I know benchmarks and
+[13:45] verifiers are different and they actually have to be separate data sets,
+[13:48] but they're shaped the same and the the structure of these benchmarks is
+[13:51] directionally correct. So we're going to look at these as like what is the future
+[13:54] of evaluating code maintainability. Um there's a really cool one called Sweep
+[13:57] Marathon from Abundant AI where they do like 400-hour tasks of like clone all of
+[14:01] Microsoft Excel, every single feature. Uh and they have some sophisticated
+[14:05] reward channel stuff. Uh Deep Sweep from Data Curve is also like large tasks on
+[14:10] OSS repos that are not actually in the training set cuz they were never
+[14:14] actually built in the real world. Uh and then you have Frontier Code from
+[14:17] Cognition, um which is multi-PR tasks. They do interesting things like hey, if
+[14:21] the model writes tests that don't fail on the pre-patch code, then it gets
+[14:24] penalized. And then we have a judge model that says, "Okay, uh did this
+[14:28] follow all of our code quality rules?" Um so we're getting better, but I think
+[14:31] models judging quality can only go so far uh cuz if the new model if the model
+[14:35] knew what good code looks like, it would probably write it in the first place.
+[14:40] Uh and review agents and throwing more tokens at the problem, it can raise the
+[14:44] floor, um but we're still constrained by what
+[14:46] we can teach during RL. Um and so I will I will posit that for
+[14:50] now we're stuck reading the code, uh but we can still move pretty fast. And of
+[14:54] course there's a world where this is solved uh in the future, and if you want
+[14:57] to just keep yolowing prompts until you get to GPT-7 and you don't have to think
+[15:00] about this, by all means, please. Uh but bitter lesson be damned, we've got some
+[15:04] problems to solve. So let's engineer our way out of this.
+[15:07] Um so turning the lights back on, we're going to put the code review back. Uh
+[15:11] we're going to embrace this approach of like how do we plan up front to reduce
+[15:15] the chance that we have a long or difficult review process. We're going to
+[15:19] find leverage. We're going to use AI to help with this. Um the first thing we're
+[15:22] going to do is we're going to do some sort of product review, understanding
+[15:25] what problem we're solving, what's the desired behavior, maybe looking at
+[15:28] mock-ups. Here's a product review I was working on yesterday with a mock-up of a
+[15:31] new feature. Once we have our product review, we're going to By the way, we
+[15:35] don't small stuff still just go straight to the agent.
+[15:38] But once we have the product review, we're going to also do architecture,
+[15:40] system architecture. A lot of people have been doing this for a while,
+[15:42] component contracts, data models, constraints.
+[15:46] This is an example of a doc that we build to understand how these systems
+[15:49] are going to fit together and what's like the high-level picture of it.
+[15:52] From there, we do something that I think is really under-emphasized in agentic
+[15:57] coding these days, which is program design. I think people assume that once
+[16:00] you get the architecture right, the model can just cook. But we
+[16:04] we often look into the types and the method signatures, the program layout
+[16:08] and the call stacks. So here's some examples. I don't think you'll be able
+[16:10] to read this one, but this is like the level of abstraction we're at. It's how
+[16:13] we're actually going to lay this stuff out and how these systems are going to
+[16:16] interact. Dylan Mulroy from Cloudflare talks a lot about how he's using these
+[16:20] call graphs as part of his planning process. I think this is exactly right.
+[16:25] And then once we've done the product program design, we can do this thing
+[16:27] called vertical slices, which is the order of implementation,
+[16:31] multi-repo coordination, how we're going to build this across our entire system,
+[16:34] and how are we going to check it along the way. I've talked a little bit about
+[16:37] how models have horizontal plans. I won't go too deep into it. If you want
+[16:40] to learn more about this, you can go watch our talk from AI Engineer Miami.
+[16:45] Couple shots of a doc like this going through the tests and the steps in
+[16:48] between each phase. The main idea here is 30 minutes over
+[16:52] here in pre-planning and alignment can save you hours in review. And so it's
+[16:57] actually feasible to still read every line of code.
+[17:01] We'll skip this part. Basically, the the summary here is like you don't have too
+[17:06] many PRs. If you're drowning in PRs, you actually have too many bad PRs.
+[17:12] Because a good PR is a joy to to review. It's it's you're just reading through it
+[17:16] like, "Yep, this is great. This is what we discussed. This is what we talked
+[17:18] about." Um but even if a PR needs 20% rework, which is generous for a lot of
+[17:23] AI AI vibe coded slop, um
+[17:27] it's an It's an emotional and intellectual burden on both the reviewer
+[17:30] and the submitter. Um and so if you use model assistant
+[17:34] planning and alignment, your alignment is shorter cuz you used AI to get all
+[17:37] the information at once. Your code review is faster because you aligned up
+[17:41] front, and your coding is faster cuz AI did it. And so you're now you're
+[17:44] actually really moving faster, but you're still reading everything and
+[17:47] you're still owning the code. So, closing advice, um
+[17:51] is easy to hear all this and be a little bummed out. Uh I really like the world
+[17:56] where we just YOLO everything, and we can just like not have to ever read code
+[17:59] ever again. But uh we're engineers, and these are
+[18:03] just constraints, and models are good at certain things, and they're not good at
+[18:05] other things. And so go figure out how to solve problems given a set of
+[18:09] constraints. Uh use loops, they're great. Go solve
+[18:12] hard problems. Seek leverage. Um if you want to help with this, um we're
+[18:17] building Human Layer. Human Layer is an AI IDE and collaboration platform. It's
+[18:21] building blocks for your software factory, um and soon to be better vi-
+[18:25] verifiers for software quality. Um we've got sort of a Figma for cloud code and
+[18:29] Codex-style collaborative workspace. It walks you through the workflows for
+[18:34] doing this sort of work. And uh we are talking to design partners. We are
+[18:39] hiring founding engineers here in San Francisco.
+[18:41] And uh these slides are live. You can go get them right now. You can try Human
+[18:45] Layer at humanlayer.com. Uh it's free for small teams. Go solve
+[18:49] hard problems in complex codebases. Thank you all for your energy.
+[18:54] >> [applause]
+[19:12] [music]
+[19:16] >> Hey.

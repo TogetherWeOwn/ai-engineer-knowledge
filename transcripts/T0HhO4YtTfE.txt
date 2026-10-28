@@ -1,0 +1,383 @@
+# title: AI System Design: From Idea to Production - Apoorva Joshi, MongoDB
+# source: https://www.youtube.com/watch?v=T0HhO4YtTfE
+# speaker: Apoorva Joshi, MongoDB
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T08:13:21Z
+# sha256: 15f04d6d30d337ce829f9611924a2b7f88e89df170189854fda8656269b3de89
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:02] Hi everyone. I'm Apurva and I'm a data scientist turned developer advocate
+[00:06] currently at MongoDB. I spent the first of my career building
+[00:11] machine learning applications for various cybersecurity use cases and I
+[00:15] now use that applied machine learning knowledge to help AI builders
+[00:19] successfully build AI applications with MongoDB and Voyage AI.
+[00:25] In this talk you'll learn how to think through building AI systems end-to-end
+[00:29] from idea to production. We'll take a real-world use case and walk through all
+[00:34] the steps of designing it and hopefully in the end you'll walk away with a
+[00:38] repeatable framework that you can apply to
+[00:41] any AI system you design.
+[00:46] Now, you might be thinking in the age of AI do we even need to think about what
+[00:51] we build? Just wipe code it and ship it, right? But that's actually where I want
+[00:56] to start. Now, here's the problem with that.
+[01:01] Wipe coding works great when you're building for fun, the stakes are low,
+[01:05] and you can easily eyeball whether the output of what you're building is right.
+[01:09] But the moment you're building something real, something other people depend on,
+[01:14] something with real consequences, just ship it is actually kind of dangerous.
+[01:19] Uh and it's not just me saying it, folks from Anthropic and OpenAI who are so
+[01:23] bullish on AI coding are saying the same thing. These are actually quotes from
+[01:27] their talks over the past few months. Specs are the new code. The art is in
+[01:33] defining the product requirements, the system design, and evaluate
+[01:37] criteria so you can be confident that your AI coding buddies are building the
+[01:41] right thing. And the rest of the talk is just about that. How do we do this well?
+[01:49] It's useful to think about it as a framework. Four phases. You start with
+[01:53] product requirements. What are you actually building,
+[01:57] for whom, and what are the constraints? Then system design, the data, the
+[02:02] architecture, the patterns that actually help you meet these requirements.
+[02:07] Then comes evaluation and monitoring. How do you know
+[02:11] what's being built actually works before and also after you ship?
+[02:15] And finally, how do you optimize for cost,
+[02:19] not just for accuracy, but also for cost, latency, and reliability before
+[02:24] you ship and or as you find gaps in production.
+[02:30] Instead of talking abstractly through a framework, I thought why not apply it to
+[02:35] a real-world use case so you can see how exactly each decision flows from
+[02:40] one stage of the framework to the next. So let's take the example of a health
+[02:45] insurance claims review system.
+[02:49] So adjudicating health insurance claims has historically been an extremely
+[02:53] manual process where human medical reviewers have to
+[02:58] cross-reference clinical guidelines, insurance coverage policies, patient
+[03:03] history, and stuff to decide whether or not
+[03:06] a medical treatment, procedure, or medication is covered by a patient's
+[03:10] health insurance policy. Now, if you live somewhere that has free health
+[03:15] care, even there there's things that are
+[03:17] covered and things that are not by your health care system. So you're still
+[03:21] subject to some version of this process. Now, our goal with building this system
+[03:29] is to see if we can improve or simplify the experience for medical reviewers
+[03:34] with the help of AI.
+[03:38] So let's see what the product requirements stage of the framework for
+[03:42] this application might look like.
+[03:45] So first thing to do is quantify the business problem. The business problem
+[03:50] should focus on something specific, uh clearly state who the users of the
+[03:55] application are, uh the current state of things, and quantify the users' pain
+[04:01] point. It should not prescribe what the system is going to be, whether it's
+[04:05] going to be an agent, a multi-agent system, something else.
+[04:08] Uh that will come later.
+[04:14] So, here's what the business problem for our claims review system could look
+[04:17] like. Medical reviewers at MDB Health spend an average of 2 days processing
+[04:23] claim review requests, which is four times the industry standard for
+[04:26] non-urgent cases, and 12 times the industry standard for urgent ones.
+[04:31] Delays at this scale postpone patient care, uh particularly for time-sensitive
+[04:36] treatment. So, as you can see, this business problem is user-specific. It
+[04:41] says this is meant for medical reviewers.
+[04:44] Uh it states the current state, which is like this manual process that leads to
+[04:49] them spending 2 days processing uh claim reviews.
+[04:54] It's measurable because it states some baselines.
+[04:57] Uh it's solution-agnostic. It doesn't really tell you uh what the system
+[05:01] should look like, uh and it's very focused on a specific
+[05:06] problem.
+[05:10] Next, you want to gather any business constraints for the application. So, any
+[05:15] regulatory uh compliance requirements, any constraints on data leaving your
+[05:21] organization, procurement constraints, meaning are certain vendors uh not
+[05:25] approved for use within the organization. Uh all of these would be
+[05:29] good to know before you even start designing the system.
+[05:33] So, for our application, say these are some of the business constraints.
+[05:36] Patient data has to stay within the approved cloud environment. Um only
+[05:41] models available on the approved cloud can be used. Um
+[05:46] there's some use cases where human review is required. So, any complex use
+[05:51] cases require a senior physician's review. Um
+[05:55] what else? Any denial decisions must be uh reviewed
+[05:59] by a human reviewer. So, there's cases which you can't fully automate with AI.
+[06:04] So, yeah, all of these are useful design inputs. So, you want to have these
+[06:08] sooner rather than later.
+[06:14] Also good to know of any performance requirements. Uh do we need
+[06:18] sub-millisecond responses or do we have some leeway there? Uh how much can we
+[06:23] spend per month on LLM inference? Any uptime SLAs to be aware of?
+[06:31] Next, if you're building an AI product, identifying the role of AI uh in your
+[06:35] product is helpful. And I like to think about the role of AI
+[06:39] along three dimensions. First, is AI critical to your product or
+[06:43] complementary? In this case, complementary since um
+[06:47] claims are already happening without claim reviews already happening without
+[06:51] AI, but they are just slower. Next, will this be a reactive or
+[06:56] proactive system? Meaning, is it triggered by a user or an event or does
+[07:01] it proactively do things? In this case, it's going to be a reactive system since
+[07:07] uh it's triggered by a claims application actually being submitted.
+[07:12] And finally, what's the level of autonomy uh for AI in the application?
+[07:17] So, in our case, the business constraints prescribe human review in
+[07:20] certain cases. So, our system can be semi-autonomous at max.
+[07:28] And finally, as part of defining what you're solving for, you also want to
+[07:31] come up with one to two uh success metrics aligned with the business
+[07:36] problem so you can capture what success looks like.
+[07:39] A good success metric is specific, measurable, achievable, relevant, and
+[07:45] time-bound. And here's an example of a success metric for our claims review
+[07:49] application. So, it says it says reduce the average processing time for urgent
+[07:54] claim review requests from 2 days to 1 hour
+[07:57] within 90 days of launch. So, it's super specific. It's measurable because it's
+[08:03] saying uh the processing time needs to be 1 hour.
+[08:09] Uh it seems achievable because um there'll be AI in the loop, so hopefully
+[08:14] any information gathering uh getting an initial recommended recommendation will
+[08:19] be faster. Uh it's very relevant and rooted in the
+[08:22] business problem from before, and it's time-bound because it gives you uh a
+[08:27] window for when we need to start seeing success.
+[08:35] Okay, so at this point we figured out uh the what. Let's look at the how.
+[08:41] The first thing you want to think about here is your data strategy. What does uh
+[08:46] what data does your application need? Do you even have access to it? Where does
+[08:51] it reside? Uh is it ready for consumption in its raw form, and so on?
+[08:58] So, for our claims review application, these are the data sources that we might
+[09:02] need, where they reside, and what their raw access formats might look like. So,
+[09:07] we need uh clinical guidelines probably, uh which describe what care is
+[09:11] appropriate for a given condition. Uh MDB Health's coverage policies that
+[09:17] state what MDB Health will and will not pay for.
+[09:22] And finally, the patient's claims history to know any uh past conditions,
+[09:27] uh procedures that were performed, when they were performed, and so on.
+[09:33] Let's assume that the clinical guidelines and coverage policies are
+[09:37] stored as PDFs in something like Confluence
+[09:40] and claims are stored in MongoDB as and when they are processed.
+[09:46] The next thing to think about is data update frequency. How often do the data
+[09:51] sources update? Now, if you're doing any sort of data processing on these raw
+[09:55] data sources and you typically are, these pipelines are going to have to run
+[10:00] at the right cadence to keep up. Otherwise, our system is going to work
+[10:04] off of stale information and that's not good, especially in such a high-stakes
+[10:08] use case.
+[10:11] So, let's work this out for our claims review system.
+[10:15] Clinical guide These probably update annually.
+[10:19] Uh internal coverage policies may be
+[10:22] quarterly and the patient's claim history needs to be updated whenever a
+[10:26] new claim is processed. And in our success metrics, if you recall,
+[10:31] uh we've said we want to aim for a 1-hour time frame for adjudicating
+[10:34] urgent claims, so these will probably get updated hourly.
+[10:42] Next, can the data be consumed directly by our application or does it need any
+[10:46] processing? For clinical guidelines, which are
+[10:49] typically long documents, you probably want to chunk them,
+[10:53] embed the chunks, and also extract metadata such as procedure names,
+[10:57] publication dates to make it suitable for retrieval using something like
+[11:01] vector search or hybrid search. Same goes for coverage policies, but for
+[11:07] patient claims history, which is already well-formatted and stored in MongoDB, we
+[11:11] might just need to remove personally identifiable information before passing
+[11:16] it to an LLM.
+[11:20] Next, we want to think about what retrieval techniques would be best
+[11:24] suited for each of the data sources. And you kind of already start thinking about
+[11:28] this in the data processing step, but let's quickly formalize this. Now,
+[11:32] clinical guidelines and coverage policies
+[11:35] are well suited for vector search, but they can contain medical terminologies,
+[11:40] such as diagnosis codes, procedure codes, that might not be picked up by
+[11:44] vector search. So, um
+[11:48] but these will be picked up by metadata filters or something like keyword
+[11:51] search. So, for these, you'd either want to use vector search with metadata
+[11:56] pre-filtering or hybrid search.
+[12:01] For getting the patient's claims history, you can do an exact match on
+[12:04] the patient name or ID, whatever the patient identifier is in the system.
+[12:12] Next, you want to think about what the system architecture looks like.
+[12:16] Now, it can be tempting to jump straight to building an agent. There's so much
+[12:20] hype around them, or let a coding agent decide what the
+[12:24] system architecture should look like, but you risk ending up with an
+[12:28] over-engineered system by doing this. So, what you instead want to do is start
+[12:33] with the simplest design, evaluate it,
+[12:37] find gaps during the evaluation, and iterate from there.
+[12:42] To decide what the system should look like, let's first map out how an
+[12:46] insurance claim would flow through the system, because this will help us
+[12:50] inform the architecture. So, first, the claim request and any
+[12:55] clinical notes from the physician are received by our system.
+[12:59] Then the system needs to retrieve any clinical guidelines and coverage
+[13:04] policies that are relevant to the current claim,
+[13:08] and also retrieve the patient's claims history.
+[13:12] Then all of this information, along with the claim itself, and any system prompts
+[13:18] on how the LLM should generate go about generating the recommendations, all of
+[13:23] these are passed to the LLM, Um, and it uses those to generate uh, a
+[13:28] recommendation of whether the claim is claim should be approved or rejected.
+[13:34] Now, if it's a complex case, our uh, system or the LLM at this point should
+[13:40] uh, send its initial recommendation um, to a senior physician. And if the LLM's
+[13:46] recommendation is to deny the claim, then it should also be escalated to a
+[13:51] human medical reviewer.
+[13:54] And finally, the final decision should be logged to MongoDB, which is where we
+[13:58] are storing our claim documents uh, along with a reasoning for why the claim
+[14:03] was approved or rejected.
+[14:10] Now, let's talk about some of the most common AI design patterns that we see
+[14:14] uh, in AI systems today and see which of those might apply to our system. So, the
+[14:19] first one is rag, uh, short for retrieval augmented generation. You all
+[14:24] probably know it at this point. Um, basically, in these systems, you simply
+[14:28] augment and LLM's pre-trained knowledge with external knowledge sources. So,
+[14:33] information from external knowledge sources.
+[14:38] Then, there's AI agents where you give uh, a single LLM or multiple LLMs in the
+[14:44] case of multi-agent systems full autonomy to complete tasks end-to-end
+[14:48] with the help of a set of tools.
+[14:52] And then, there's agentic systems, which cover uh, a broad spectrum of
+[14:57] semi-autonomous AI systems.
+[15:01] A common architectural pattern for uh, these types of systems are control
+[15:06] flows, where LLMs perform certain tasks within the workflow, but the sequence of
+[15:10] steps in the workflow itself is predetermined by design or by code.
+[15:18] Then, there's LLM as a router, where LLMs have limited autonomy in that their
+[15:23] job is simply to categorize incoming requests and route
+[15:27] them to different downstream workflows.
+[15:32] Then you have human in the loop where an LLM or agent can take certain actions,
+[15:36] but it needs human intervention somewhere in the process.
+[15:42] And finally, there's fine-tuning. So, if you're observing that the LLM's failures
+[15:47] are behavioral rather than data or orchestration issues,
+[15:51] or if you need superior performance on a domain-specific task, then fine-tuning
+[15:57] is a good technique to explore.
+[16:02] I don't have the time to go too deep into these here, but if you'd like to
+[16:05] learn more about these design patterns, I'm going to leave this resource here
+[16:09] for you to check out later.
+[16:18] So, we've thought through what the workflow of this system should look
+[16:20] like. We've spoken about a few different AI design patterns.
+[16:25] Now, let's apply those and decide what design patterns um
+[16:29] we'd need to implement for our system. So, since we need to retrieve clinical
+[16:34] guidelines, coverage policies, and stuff to inform the decision, this is This
+[16:40] definitely looks like a rag component. So, we need some form of rag.
+[16:44] The workflow is pre-structured in that the LLM first provides its
+[16:48] recommendation on whether or not a claim should be approved or rejected, and in
+[16:53] very specific and well-defined cases, it needs to escalate claims to human
+[16:58] reviewers. So, this sounds like a controlled workflow.
+[17:02] You could also argue that this looks a little bit like LLM as a router,
+[17:06] especially if you use an additional LLM call to decide what a
+[17:09] complex case looks like, unless this is already well-defined. So, yeah, this
+[17:14] could be an LLM as a router, but uh for now let's just go with control
+[17:18] flow.
+[17:21] And finally, there's also an element of human in the loop, right? Since human
+[17:25] reviewers are very much a part of the workflow.
+[17:30] And finally, in the design phase, you also want to think about the end user
+[17:34] experience and how you'll collect feedback from your users to improve the
+[17:38] system. Here are some questions to ask yourself
+[17:41] in this stage to help think through uh what the UX and feedback mechanism
+[17:45] should look like. So, first, what does the system take as
+[17:50] input? In our case, it's going to be a claim request form of some kind.
+[17:56] Then, what does the system produce as output? So, in our case, it's going to
+[17:59] be uh an approval or denial verdict along
+[18:03] with an explanation for why uh a claim was approved or rejected.
+[18:09] Where does the system live? Does it have a standalone app? Is it embedded in an
+[18:14] existing website? Is it a Slack bot? Uh and so on.
+[18:18] Uh so, for our application, it's very likely going
+[18:22] to be embedded within MDB Health's main website, let's say.
+[18:27] Uh what triggers the system? So, in our case, very clearly, a claim submission.
+[18:33] What's the human's role? So, in our case, they are going to review the
+[18:36] system's assessment and make the final decision in some cases.
+[18:41] Um how does the system explain itself? In our case,
+[18:45] um it explains itself by providing citations, so quoting
+[18:49] uh the clinical guidelines and coverage policies that uh informed the system's
+[18:54] assessment. And finally, how does it give feedback?
+[19:00] So, remember, for our system, um the consumers are medical reviewers.
+[19:05] Um so, they can provide feedback by overriding the verdict of the LLM and
+[19:11] also log a reason for why Uh they can also we can maybe also have
+[19:16] them flag any irrelevant citations. So, if their LM is hallucinating
+[19:21] um clinical guidelines and policies or
+[19:25] yeah, quoting the wrong ones for a particular claim, then we can have them
+[19:30] flag those as well.
+[19:37] All right. So, at this point we've decided what the architecture of our
+[19:40] system should look like, but we also need to decide what our
+[19:44] stack should look like. Once again, it might be tempting to have
+[19:49] a coding agent recommend what tools to use, but they might not necessarily
+[19:53] apply to your system or you might not be able to use them based on the
+[19:57] constraints that we identified during the product requirement stage. So, we
+[20:01] had constraints around models
+[20:05] need to be supported by our cloud provider and things like that.
+[20:12] I'm not going to get into this too much since our constraints are well,
+[20:16] hypothetical, but I just want to mention that this is
+[20:19] the next step and the different tooling decisions to be made such as what model
+[20:24] to use. There's a bunch of data processing tools
+[20:28] out there that have some nice out of the box data processing capabilities.
+[20:33] If retrieval is part of your system, then and you're using things like vector
+[20:38] search, then you might need to decide what embedding models to use, what
+[20:41] vector database to use. Um then there's orchestration frameworks and so on. So,
+[20:48] I'm just going to leave this here for reference later on.
+[20:56] Next, let's talk about evaluation and monitoring. How do you know that what
+[21:00] you've built works before and also after you ship? So, evaluation is before,
+[21:05] monitoring is after you ship, and you need both of them.
+[21:12] But before we get into evaluation metrics, let's talk about guardrails
+[21:15] because these weren't really really a thing pre-LLMs.
+[21:20] The reason they've become a topic of conversation is because unlike
+[21:23] traditional software, LLM-based systems are going to are probabilistic systems
+[21:28] and can produce outputs that are unexpected, incorrect, or even harmful.
+[21:33] And guardrails are an attempt to mitigate these risks and ensure that
+[21:36] your system behaves within acceptable boundaries. And what those boundaries
+[21:41] are are something you need to define. So for inputs to your system, the goal
+[21:46] is usually to detect invalid, irrelevant, or harmful inputs.
+[21:50] Uh so for our claims review system, an input like write me a poem is irrelevant
+[21:56] and our system should reject this claim. Similarly, for outputs, our goal is to
+[22:02] detect invalid, incorrect, or hallucinated, uh or harmful outputs.
+[22:08] So for our claims application, we'll consider uh a response to be invalid if
+[22:13] the system doesn't provide citations for uh what informed an approval or denial.
+[22:20] Now guardrail compliance is not the only thing you want to measure. You want to
+[22:23] measure the quality of the responses, uh
+[22:27] create and measure domain-specific accuracy metrics, and also general
+[22:31] system health. So for input guardrail compliance, uh
+[22:37] for our system, we can calculate a claim rejection rate. How often is our uh
+[22:42] system rejecting claims because they don't obey uh our input guardrails. Now
+[22:47] if it's rejecting too many times, then that's a call for investigation, but if
+[22:51] you didn't measure this in the first place, then you won't have anything to
+[22:54] investigate, so uh there we go. That's why you need
+[22:57] metrics. For output guardrail compliance, we can have something like a
+[23:01] missing citation rate, how many times is the LLM producing responses without
+[23:05] citations. For response quality, we can measure faithfulness, which is whether
+[23:10] or not the claims approval or rejection is actually rooted in the retrieved uh
+[23:16] information like clinical guidelines and policies.
+[23:24] Then you want to define at least one domain or application-specific metric.
+[23:29] So, in our case, something like claim processing time might be a good one
+[23:32] because that's really uh our North Star.
+[23:36] And system-level metrics are usually uh around overall system health. So,
+[23:41] uh what's your system's average token cost, token usage, uh average number of
+[23:47] turns in a conversation. Uh so, here just to
+[23:52] not have another latency metric, uh I put down something like cost for
+[23:56] recommendation.
+[24:00] So, once you evaluated your system and ship your product in front of users,
+[24:05] then comes monitoring the system for regressions in real time.
+[24:08] Now, in production, you still want to track the metrics that you used for uh
+[24:13] offline evaluation, so the metrics that we
+[24:15] talked about, but you might also be able to track additional metrics that can act
+[24:20] as uh implicit indicators of your product's success or like how uh uh
+[24:26] how happy users are with your product and overall system health.
+[24:31] For example, for the claims review app, you can track how often a human reviewer
+[24:35] overrides the AI verdict. Uh now, you want this rate to be low uh because that
+[24:40] means the system is not doing its job. So, if you ever start seeing is seeing
+[24:45] it increasing about above a certain threshold, then you need to go and
+[24:49] investigate. Or you can also track something like how
+[24:52] long does it take for a human to review the AI recommendation. If it takes too
+[24:57] long, which means um this could mean that the responses are
+[25:01] very verbose, confusing. So, yeah, these would be uh some good indicators to
+[25:06] track uh once you ship your product to production.
+[25:12] Now, once you have a working prototype that you've evaluated, accuracy looks
+[25:16] good, it's time to move to production, right?
+[25:19] Well, what about cost, latency, and
+[25:23] reliability? Uh these constraints become absolutely non-negotiable as you're
+[25:27] moving your product to production. So, you might need to do a few more
+[25:31] iterations, evaluations, and testing uh between accuracy looks good and moving
+[25:37] to production. So, let's talk about some optimization
+[25:42] techniques for each of these. So, optimizing for accuracy. In
+[25:46] LLM-based applications, it really comes down to optimizing the information that
+[25:52] uh ends up in the LLM's context window. And here are some techniques for you to
+[25:56] refer to later, but let's quickly talk about which of these uh might apply to
+[26:01] our claims review application. So, prompt engineering, of course. Uh
+[26:05] reranking is another good one because uh retrieval is a big component of it. So,
+[26:11] uh a reranker will make sure that the information being retrieved um is
+[26:17] surfacing information in the right order of relevance, which is important when
+[26:20] working with LLMs. Uh we are also persisting patient
+[26:24] history uh to MongoDB, so our application already has some form of
+[26:28] memory, but you could also think about other types of information that might be
+[26:33] uh useful to persist across sessions. Here are some techniques for cost and
+[26:38] latency optimization. For our use case, semantic caching could
+[26:43] be useful to expedite decisions based on uh similar claims from the past. Uh
+[26:49] batch processing, perhaps, to process claims in batches instead of one at a
+[26:53] time. And finally, optimizing for reliability.
+[26:58] Most of these would be useful for our use case since they're mainly solving
+[27:01] for API failures, but I want to specifically call out structured
+[27:05] outputs, which would be a good one to make sure
+[27:08] that our system is always producing a structured output which contains not
+[27:13] just the decision, but also the citations.
+[27:17] This brings me to the end of my talk, but I wanted to leave you with a few
+[27:21] takeaways.
+[27:24] Think deeply about your product's requirements before having AI generate
+[27:28] any code. The product spec is the hard part now,
+[27:32] it's not the code anymore.
+[27:40] Your latency budget, your cost ceiling, any regulatory requirements, all of
+[27:44] these shape every architectural decision downstream. So,
+[27:49] good to identify business and performance constraints before starting
+[27:53] to design your application.
+[27:57] Design the simplest system that meets your needs. Evaluate it and then iterate
+[28:02] from there. The most common mistake I see is over-engineering the solution
+[28:06] before knowing what's actually failing or not even evaluating what's actually
+[28:12] failing. And that brings me to evaluation.
+[28:16] Build evaluation in from the start. You can't improve what you can't measure.
+[28:23] Link to our GenAI cookbook that has a ton of examples of
+[28:28] different retrieval technique, agentic design patterns, and
+[28:32] some of the evaluation and optimization techniques that I was talking about.
+[28:40] And yeah, thank you so much for taking the time to listen to my talk. I'll see
+[28:44] you at the conference.
+[28:47] >> conference.

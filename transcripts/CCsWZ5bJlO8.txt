@@ -1,0 +1,297 @@
+# title: The Unofficial Guide to Apple’s Private Cloud Compute - Jmo, CONFSEC
+# source: https://www.youtube.com/watch?v=CCsWZ5bJlO8
+# speaker: Jmo, CONFSEC
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T10:59:16Z
+# sha256: 0e97e3c9c7f2b81abdac5ea983f7b230927abe328b9c150bba7f98d13d54e62c
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:00] [Music]
+[00:10] [Music]
+[00:14] So, we're going to talk about Apple's private cloud compute. This is an
+[00:17] unofficial guide. Uh, I don't work at Apple. We'll talk about it um in a sec.
+[00:22] But, so um this is my background. My PhD in bio uh in data science, biomedical
+[00:28] informatics. I've sold two companies. one in AI and uh data, one in cyber
+[00:31] security and infrastructure. I'm not South Park Commons. I'm building a
+[00:34] company called Confident Security, which we'll get to at the end. Um but again,
+[00:38] disclaimer, put this I'm not an Apple employee. I'm not speaking on their
+[00:41] behalf. Everything I've ganed is from public sources. And hopefully what we'll
+[00:45] learn today is some tools that we can use ourselves. There's really six key
+[00:48] components or and some approaches to ensure privacy. And privacy and security
+[00:52] are very related, not perfectly overlapping, but related. So, um, before
+[00:57] I get there, I know that we're in the security track, but I want to motivate
+[01:00] why you might care about privacy. Not everyone believes that you should have
+[01:04] privacy. Uh, so let me just give some give some examples. This year, Deep Seek
+[01:10] leaked 100 a million sensitive records of chat logs. And you might say to
+[01:15] yourself like, well, that's DeepSeek. Everyone knew that was going to happen.
+[01:18] Um, but uh before before I show you the next piece, I want to pull the audience.
+[01:23] How many here care about privacy? All right. How many of us use chat GPT?
+[01:31] All right. How many consider ChatGpt to be private? Okay, good. Um, how many use
+[01:37] the ChatGpt private mode? Uh, and then how many use the API but
+[01:42] with zero data retention? Kind of like the default state. Okay, great. Well, as
+[01:47] of yesterday, uh, Open AAI has to retain everything uh, anyway, whether or not
+[01:52] you flagged it as private or not. uh and I don't want to get into the comments of
+[01:56] why they have to do that, but the point is is that uh they have the capability
+[02:01] of retaining your private chats that you can flag on the UI as not private other
+[02:05] things. And uh obviously being forced to do that is not great, but this is why we
+[02:10] should all care about privacy. So Apple doesn't want to have these
+[02:16] headlines uh because they're one of their major value props is privacy. So
+[02:20] let's talk a little bit about the problems that Apple solved and then how
+[02:23] we might use it. So fundamentally AI requires more compute than a phone. Uh
+[02:28] but every obviously they want to bundle AI into their phones. Privacy is a major
+[02:32] selling point. Anytime you give up private data to something remote, you're
+[02:36] inherently reducing your privacy, right? Anytime I give you my data, it's not as
+[02:40] private as it was the second before. So the question that Apple is trying to
+[02:44] answer in their PCC system which is now available on all of our iPhones and used
+[02:48] for inference is how do you get remote compute while remaining private and the
+[02:52] simple way to do that would be to buy all of the iPhones H100s pair them in
+[02:56] the cloud you get your own H100 boom but obviously AI is even more expensive so
+[03:01] uh that's not going to work so they actually need some approach which is how
+[03:05] do you get remote compute while remaining private and cheap uh otherwise
+[03:09] it doesn't work so I'm going to kind of frame a problem this way. You've got an
+[03:13] iPhone. You've got an untrusted remote server. You can't see inside of it. It's
+[03:17] a black box. Once you give them your data, you have no idea what happens
+[03:20] inside. And what Apple does is tries to make it not a black box so that the
+[03:24] iPhone has some control of what happens to the data inside Apple's remote
+[03:29] servers. Uh and hopefully that this trusted
+[03:32] remote service is also hard to hack. So, for the remainder of the talk and uh
+[03:37] we're not going to be able to get into all of it in 16 minutes, uh but we're
+[03:41] going to talk about Apple's PCC requirements that they set up and I'll
+[03:45] review a conceptual architecture about how they meet those requirements. Then
+[03:48] we'll go into two specific components of the six because I don't have time to go
+[03:52] through all six and you'll be bored by that point. Uh and then talk about some
+[03:56] some pros and cons of Apple's things and how we might use some of those
+[03:59] components ourselves. So there are five key requirements to
+[04:05] Apple's private cloud compute that they're trying to meet when they design
+[04:08] the system. The first one is stateless computation. This is essentially the
+[04:11] guarantee that when Apple receives your data, it's only used to satisfy the
+[04:15] request and cannot be used. It's impossible to use it for anything else.
+[04:18] You can't log it, anything like that. Um, the second thing is enforceable
+[04:23] guarantees. That these notion that the code, everything's enforced with code,
+[04:27] not by some sort of policy. Not I shouldn't SSH to the instance, but I can
+[04:31] SSH to the instances. No, there's no SSH on the instance. You can't SSH to it.
+[04:35] Um, you don't want to save things. Well, don't have a disk, right? So, these are
+[04:39] what they call enforceable guarantees, not just policies. The third principle
+[04:43] or requirement is non-targetability. That means that if you wanted to hack my
+[04:48] data on PCC, you'd have to target everyone and sift through all of it
+[04:52] rather than having some easy way to find just me.
+[04:57] No privilege runtime access. I just briefly touched on it earlier, but
+[05:02] essentially there's no way to bypass these restrictions in production.
+[05:06] Um, and then the final one and the most important one is verifiable
+[05:09] transparency. Verifiable transparency essentially says we can prove that all
+[05:13] of the above items are true. Great. So let's talk about again this is a
+[05:21] little more bigger representation of the black box. um in a classic you know kind
+[05:27] of remote system you have some sort of off service and then we have an AI
+[05:30] engine and in this AI engine you have some S sur who can access it and some
+[05:34] disk that you can write to it but again the iPhone doesn't know uh what it's
+[05:38] sending its data to but this is fundamentally so let's see how we can
+[05:41] change this to uh get to some of these at a conceptual level so the first thing
+[05:46] that Apple does is it adds an anonymizer and uh this anonymizer is the first part
+[05:55] of two parts of non-targetability. But ideally, right, Apple can't tell who the
+[06:00] data is coming from. So, it would be harder for an attacker to come and like
+[06:04] fish out my particular set of data. Um, if but if you're a student and looking
+[06:10] at this, there's still O behind the anonymizer and so the iPhone provides
+[06:13] some sort of O credentials and those O credentials are obviously tied to the
+[06:16] user. So, the second thing that Apple does is separates O. Um, and
+[06:20] conceptually you think of this as if you're going to the arcade uh and you
+[06:23] want to go spend your money on an arcade machines. You first put your money into
+[06:26] the coin machine. You get some coins out. These coins are anonymous. Now you
+[06:31] can go to the machine and no one knows uh what machines you spent your money
+[06:34] on. That's essentially what happens here. It's called blind signatures.
+[06:37] We're not going to have time to get into it today, but that's what happens. So
+[06:40] now the iPhone is making an anonymous request going through an anonymizer
+[06:45] that's taking everyone's it's kind of like tour. It's like laundering
+[06:48] everyone's data. Uh so that if someone were to access the system internally,
+[06:54] they wouldn't know who it's coming from. So that gets us non-targetability.
+[06:58] The second thing that Apple does is it changes the set of requests that are
+[07:02] happening. The first thing it does is before it sends its data, it says what
+[07:05] are you running? Uh and if the AI engine replies with I'm running this and only
+[07:10] this, the iPhone might say okay, I trust that. uh and if that remains true then
+[07:15] you can run this this AI on the data that I'm submitting. Um this is where
+[07:20] how they achieve verifiable transparency. There's a little more
+[07:23] subtlety to that which we are going to get into. Um but it's essentially the
+[07:26] iPhone says I trust the code that you're running. You can only decrypt my data if
+[07:29] you're still running that code. So the iPhone can verify what they're doing.
+[07:33] The next thing no privilege runtime access. That was easy. Just get rid of
+[07:36] SSHD. Make it no way of accessing those machines. Uh enforceable guarantees. get
+[07:42] rid of the disk. We talked about that. And then stateless computation again
+[07:46] with no disk, no access. There's nothing to do with the data other than respond
+[07:50] to the iPhone. Um, and since the iPhone verified the code that was running on
+[07:55] this machine, it knows it's not being logged anywhere before it gives them the
+[07:58] data. Okay, so they achieve those five guarantees that I talked about here
+[08:05] using six technical components. And again, we're going to go into two of
+[08:09] them. Um, but I'll describe them all very briefly. Oblivious HTTP is a spec
+[08:15] developed by Cloudflare and Apple and others that allows you to essentially
+[08:19] make anonymous requests using a third party to uh use the launder your
+[08:25] requests through this third party. So all of the request that goes to Apple's
+[08:28] private cloud compute first goes through Cloudflare. So when Apple receives it,
+[08:31] it only knows that it came from Cloudflare, not from an individual
+[08:34] user's IP address. The second thing that they use is blind signatures. Blind
+[08:39] signatures is that arcade analogy that I gave you, but it essentially is a way to
+[08:43] O separately and then verify that you're bearing true authentication, but you
+[08:48] can't link it to your identity. And again, we don't have time to go into
+[08:51] that, but if you want to look it up, it's a formal spec as well. There's lots
+[08:54] of packages and open source libraries that let you to use that.
+[08:58] Third component is the secure enclave. Um, this is an equivalent we have in in
+[09:04] our world that if we're not programming on Apple is TPMs, if you've heard of
+[09:07] that, but they're essentially a place, a separate piece of hardware where the
+[09:11] private keys are kept and that makes a guarantee that those keys can never be
+[09:16] removed from the hardware. That's really important um because you don't want the
+[09:21] keys to be given away that does all of these all of the interactions that this
+[09:25] is doing is with keys that they prove who they are. if they could move it and
+[09:29] have some third party hold it, then it wouldn't be trusted, right? You could
+[09:32] essentially fake everyone out that you are an official AI engine, but actually
+[09:36] you're somewhere else. So, the secure enclave helps with that. Again, won't be
+[09:39] getting into those. We're going to get into these two. Uh, the last one is
+[09:42] secure boot and hardened operating system. This is like a standard
+[09:46] technique. Um, but it's essentially they run a very limited version of iOS. Um,
+[09:51] that makes it very difficult to hack or modify. Um everything has to be signed
+[09:55] just like every if you've done an iOS now app now you have to do signatures
+[09:58] but theirs is like even crazier. Um okay so the ones we're going to talk about
+[10:03] are remote attestation that was this flow I talked about here um great and
+[10:09] then uh the other one is the transparency log the transparency log is
+[10:13] a record of all the software that Apple's deploying on their private nodes
+[10:17] so that you can go and verify what's on the record is actually what's being sent
+[10:21] to you during the attestation. Okay, so let's talk about remote attestation very
+[10:26] briefly. Uh, and I'm going to talk about it
+[10:29] abstractly, not with iPhones. So, you have some client and the client says,
+[10:33] "What are you running?" Uh, and the server replies with two things, a set of
+[10:37] signed claims and then a public key. And the signed claims essentially say, "I'm
+[10:43] on genuine hardware. Uh, I'm running a genuine GPU. Uh, I am running this set
+[10:48] of software. I use this bootloadader. I use this version of Linux. And then the
+[10:54] client gets to look at those claims and decide whether it trusts that version.
+[10:59] Uh right, it might be like, oh, I only trust this version of the Linux kernel
+[11:02] and above. Um or I only trust that it's been signed by Apple. Uh and if so, it
+[11:08] can use this public key that comes across to encrypt data that is later
+[11:13] sent to the server. uh and this is really important which is
+[11:19] this public key and these claims are tied together. So during later
+[11:22] interactions with the server the client will encrypt using the public key and
+[11:26] the signed claims and the server will only be able to decrypt if it is still
+[11:30] matching those signed claims. There's a whole bunch of cryptography that makes
+[11:34] this possible and a bunch of certificate chains and a bunch of like trust and
+[11:38] vendors but that's the fundamental idea and this is what is letting you change
+[11:42] that black box to something that's a little more translucent, right? You're
+[11:45] not just throwing it over the wall. You can kind of see what's going on inside.
+[11:50] Okay. The second thing is the transparency log. Transparency log is
+[11:54] actually very simple conceptually. It's just a database with records for each
+[11:59] software release and or each component in a software release signed by a
+[12:03] particular person. Um so for example in this record Bob added this binary or
+[12:10] piece of like compiled source code. Uh, and this is the hash of that binary on
+[12:14] November 1st of 24. And then, uh, that's it. It's just a declaration that this
+[12:20] binary was signed by Bob. Uh, why does that matter? Why would you care about
+[12:25] this? Well, first of all, um, reviewers can go through and offline look at these
+[12:31] binaries that are made publicly available and verify their behavior.
+[12:36] And so then when you get a remote attestation and the remote attestation
+[12:39] says this hash of this binary is there you can be like oh yeah I've already
+[12:42] checked this binary I believe that it's doing the right thing. Um the second
+[12:47] thing so that's what I said the second point which is you can check that remote
+[12:50] attestations match what's in the log. And then finally if you see an
+[12:54] attestation that's not on the log you know the whole system's been compromised
+[12:58] because if if it's not on the log definitely someone is like doing some
+[13:01] sort of shenanigans right they might have like hijacked your connection or
+[13:05] whatever. Um, and it's just because like a limited set of people can write to
+[13:09] this log and there's no way to modify the log, right? It's append only. It
+[13:12] uses like a Merkel tree so that you can't change the contents. Um, great.
+[13:19] So that is the transparency log. Um, so let me tell you how this all comes
+[13:23] together, right? So remote attestation is this flow again. uh the iPhone first
+[13:30] through the anonymizer requests a remote attestation package uh and then says
+[13:35] well if I believe that remote attestation package I trust the contents
+[13:38] that is running on the server I can then send my data and I phrase this as try to
+[13:43] decrypt the data and run the AI again if the attestation changed
+[13:48] the AI engine would not be able to decrypt the data right so that's the
+[13:51] most important part right it says I'm running this thing trust me and it says
+[13:54] I trust you okay great encrypt it and I can only decrypt it as long as it's
+[13:58] still running the exact thing I said I trusted.
+[14:01] And the second item we talked about is the transparency log which is check if
+[14:05] the attested claims match the transparency log. And this transparency
+[14:09] log we talked about so on here Apple is writing a lot a lot of software onto the
+[14:13] log and then essentially saying uh trust what's on the log. You can verify it
+[14:18] offline and then when the attestation claims come in just double check that
+[14:22] they do indeed match. Um okay. And then I I don't have time to
+[14:27] get into all of these. Um but uh here are some of the other items that we
+[14:32] talked about. The blind signatures, the oblivious HTTP is the anonymizer.
+[14:38] Blind signatures are the way to do the O. Um and then of course uh over here we
+[14:44] have the secure enclave. I kind of put that outside of the AI engine. They're
+[14:48] they're separate pieces of hardware. And then the hardening is just this little
+[14:52] lock, but you know, we don't have time to get into it. Um,
+[14:56] and uh, that's kind of at a very conceptual level, like you could
+[15:00] essentially do a PhD on each of these. Um, how Apple's PCC works. So, what are
+[15:06] the gaps? What are the downsides? Well, first you have to put all of your trust
+[15:10] in Apple still, right? On the bright side, like Apple runs their whole supply
+[15:14] chain. They verify the nodes when they get them at their data center. they
+[15:19] actually resign them what's called what's called data center
+[15:23] identity keys or something like that DCIKs. Um but there's no guarantee that
+[15:28] Apple doesn't share the searchs with anyone uh or insecurely generate them or
+[15:31] set the private key to one everywhere. Now I I think they are trying to do
+[15:36] their best effort but you you still have to trust you've shifted the trust now
+[15:40] into like Apple's behavior rather than the hardware. Um but anyhow, and then
+[15:45] they're only available on Apple devices for consumer use uh on official apps.
+[15:50] Maybe at some point they'll make PCC available to everyone else uh but not
+[15:53] yet. So what trade-offs does Apple PCC make?
+[15:59] Um they're limited by latencies to Apple data centers. So um they do have local
+[16:04] models first that they try and use. Um but if those local models aren't
+[16:07] adequate, they'll send them to data centers. uh as we start to do like
+[16:12] real-time voice and other things uh this is a little more latency uh like adds a
+[16:17] lot more latency to the system. Um the compute costs are higher. There's doing
+[16:21] a lot more encryption. There's like I didn't I mean you're not seeing it but
+[16:24] there's like six layers of encryption before it even gets to that node that
+[16:27] actually that actually makes it happen. So you're spending a little bit more
+[16:29] compute there. Like I told you no custom models, no fine-tuning. The client
+[16:34] libraries are very complicated. um the client having to orchestrate all of
+[16:39] these requests, this transparency log, this O, that's way more complicated than
+[16:43] a simple HTTP request, which kind of sucks. Um, and what if your iPhone goes
+[16:50] down after it's authenticated and then it loses all the authentication keys?
+[16:54] Like you've essentially like lost all of your state, right? So, it's a lot more
+[16:57] stateful. Um,
+[17:01] operationally complex. You can't SSH in the machines and then there's no
+[17:03] logging. So, that's difficult. uh not everyone would sign up for that. Um you
+[17:09] can't do any usage tracking. If you could do usage tracking, then you'd be
+[17:12] identified, right? And so Apple can't like parcel out, you know, you get 2,000
+[17:17] tokens. They do do some fraud and abuse tracking at a very gross level. But um
+[17:22] if you wanted to use this and maybe pass on your costs, a similar architecture,
+[17:26] and pass on your costs to the customer, you wouldn't be able to know which
+[17:29] customer was doing what, right? Um and then not open to thirdparty developers.
+[17:34] Okay. What can I learn from this? I gave you the list of six that Apple uses and
+[17:40] here's what's available in our world. If you're not developing on Apple silicon
+[17:43] and Apple hardware, you still have oblivious HTTP and blind signatures.
+[17:47] There are libraries to do that. So, we don't have secure enclaves, but we have
+[17:50] TPMs. Uh, almost all Intel and AMD hardware now has TPMs. And then in the
+[17:56] cloud environment, they have virtual TPMs uh that provide the same behavior
+[18:00] as a TPM. And again, that that's where you put a bunch of your private keys
+[18:03] that are tied to that public key that I talked about. These are available for
+[18:07] us. Secure boot and hardened operating system. Um,
+[18:12] remote attestation is kind of available. It's kind of tied to the TPM. There
+[18:17] aren't great standards yet. Um, but there is a little bit of work there.
+[18:21] Transparency log. There are two open ones. One's called SIG SUM. The other
+[18:25] one's called SIG Store if you've heard of them. if not um
+[18:29] and then confidential VMs are just becoming available on cloud providers
+[18:34] with GPUs. So confidential computing has been around for a while. Uh but now you
+[18:39] also have to have confidential H100s and only H100s support and H200 support
+[18:44] confidentiality. What that means is that their memor is encrypted. So if you were
+[18:47] to physically go up to the H100 and like try to look at its RAM, you wouldn't be
+[18:52] able to see what's going on there or figure out what's going on there. And
+[18:55] then finally, what we have that Apple doesn't have is we have open source and
+[18:58] we have reproducible builds. We have the ability to link the source code to the
+[19:01] binaries. Uh, and so we can have security research look at the source
+[19:05] code as well as, you know, blackbox test the binaries and develop confidence in
+[19:10] what the server might be running. All right, what's next? Okay, so Apple has
+[19:16] set the standard for private AI and the market is definitely following um in
+[19:21] that was in June of 2024. wasn't actually released until October of 2024.
+[19:25] Azure Open AAI or sorry, Azure AI, not Azure OpenAI, is doing private
+[19:29] inferencing starting as September. They're still in private preview. And
+[19:33] then about a month ago, Meta of all companies, I guess I'm recorded. Meta of
+[19:37] all these great companies uh also added uh private processing, which if you read
+[19:43] their blog post, it's like they copy and pasted this. Maybe they used Llama to
+[19:46] rewrite it um into their language, but it's essentially identical, which is
+[19:49] great for all of us thinking about privacy. Um, and sure I'm sure uh
+[19:53] WhatsApp also doesn't want those like press releases like I showed earlier.
+[19:58] Um, so I'll just close by saying we're building the same thing. Uh, but for
+[20:01] everyone else, if you're not on Apple or you're not in WhatsApp, we have it. Uh,
+[20:05] it's called confident security. Um, and if you'd like to talk more, let me know.
+[20:10] By the way, this is an anti-AII shirt. Uh, which means that if you take
+[20:14] pictures of me, it will confuse all the facial recognition stuff. We have
+[20:18] others. If you have some cool questions and want to talk afterward, if it deems
+[20:22] it worthy, I will give you an anti-AII shirt. We also have some other privacy
+[20:26] based swag in the back, so come hit me up. Thanks everyone.
+[20:34] [Music]

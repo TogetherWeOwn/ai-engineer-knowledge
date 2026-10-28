@@ -1,0 +1,342 @@
+# title: Building GTM AI Agents: Lessons from Deploying to 6,000 Users — Sait Izmit, Snowflake
+# source: https://www.youtube.com/watch?v=DrTdD-ttjCY
+# speaker: Sait Izmit, Snowflake
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T05:48:45Z
+# sha256: 5ea81ec18909fcb2decfc463e1a798ea8c93880e187f7a50f4a383b9069f8017
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:01] [music]
+[00:12] >> Hi everyone. So, I think I'm one of the last speakers that is standing between
+[00:16] you and the long weekend. So, I hope I can get your energy levels
+[00:19] up. Um so, I'm responsible for our internal
+[00:22] AI tools for our sales team. And the reason I'm here today is indeed
+[00:27] like we launched our internal go-to-market assistant
+[00:30] uh in September last year. It answered more than 1 million
+[00:34] questions so far. We have roughly answered 40,000 questions a week.
+[00:38] Um and we are the customer zero for a lot of Snowflake products. So, this is
+[00:42] built on Snowflake co-work. Um and I meet a lot of customers every
+[00:47] week. Okay? So, I meet a lot of enterprises, Fortune 500 companies, and
+[00:51] then they're all trying to build similar things, and they all struggle, right?
+[00:55] So, and then I end up like having this discussion with them all the time. Like
+[00:58] they ask like how did you guys do it? And then we share our best practices.
+[01:02] So, I will try to share some of those things with you.
+[01:04] Uh I'm told that I need to have some code in my presentation. I don't, but I
+[01:08] will try to show you at least some architectural diagrams just to make it
+[01:11] more interesting for the engineering audience.
+[01:13] Uh but let's jump into it. Um
+[01:16] I think before we start like I think I already I was watching the other
+[01:18] presentations like I think everyone tries to give their interpretation of
+[01:21] like you know, why are we even building things for go-to-market. Okay? So, this
+[01:26] is how I explain it to family and friends.
+[01:28] So, let's take Snowflake. Okay? So, we are a company of like, you know, close
+[01:32] to 10,000 people. So, if you look at that or our
+[01:35] organization, almost half of our basically workforce is sales, right? And
+[01:39] what are they responsible for? They're responsible for revenue generation.
+[01:43] What do they struggle with? And I into I talked to a lot of customers. It's very
+[01:48] common. You know, everyone's data is siloed. We work with a lot of
+[01:51] first-party data, a lot of third-party data. It's all locked down in these like
+[01:54] SaaS tools and things like that. And literally we have for example like reps
+[01:58] who are using 15 different tools, not because they love the UI of those tools,
+[02:02] because every tool has a different data point, and then they end up stitching
+[02:05] all of that together in spreadsheets and running it there, right?
+[02:08] And the data is endless. Like we have reps who have 1,000 accounts assigned to
+[02:12] them, 1,000 customers. They have to stay on top of their recent
+[02:16] news, what's happening with their consumption, did they get in support
+[02:19] tickets recently, what was their latest earning results, everything. There's no
+[02:23] It's not a single human on this planet that can stay on top of that much data.
+[02:27] And then they need to do that 30 times, 40 times a day, right?
+[02:31] So, what does AI offer for them? It offers that data democratization. No
+[02:35] more like 1,000 dashboards, right? No more access to analysts. Like you know,
+[02:39] um it offers automation possibilities for them, right? It frees up their
+[02:43] inbox. It offers tool consolidation. No longer 15 different tools that I need to
+[02:48] work for. And that brings productivity savings. It
+[02:52] frees up your time, right? You can use that time on other things. It helps you
+[02:55] become a better seller. You're more effective with your customers. And that
+[02:58] translates to business results. You can cover more of your book, you know, you
+[03:02] can have better win rates, uh you can have shorter deal cycles, and ultimately
+[03:07] what everyone cares about, you can get incremental revenue. Okay, so that's the
+[03:10] reason why I'm I'm working for, you know, making the go-to-market
+[03:13] organizations more effective.
+[03:16] But, there's a catch. These are non-deterministic systems,
+[03:20] right? And I run into this problem every time
+[03:24] with users. I see many, many, many AI projects
+[03:27] failed, and then it fails on this principle.
+[03:31] User trust is earned extremely hard and is lost overnight,
+[03:37] right? So, at the end what you're doing is
+[03:39] you're putting a free-form chatbot there,
+[03:43] right? And people will come in and they will ask any question they can think of.
+[03:47] If they like what they see in the first five questions, they come back.
+[03:52] If they don't like what they see, it's 10 times more effort for you to win them
+[03:55] back, if you can ever win them back. Right?
+[03:58] So, we have a saying in our team, we say quality is P minus one.
+[04:03] Right? And that's basically we take that very,
+[04:06] very seriously. So, one of the things that we really
+[04:10] cared about is when I first joined the team,
+[04:13] you know, the team had all these like data sources connected from our top
+[04:16] dashboards. We they had a knowledge assistant built into it and so on. We
+[04:19] had three lines of agent instructions. And then before I even tried the agent,
+[04:24] I opened a spreadsheet, I took the sales process, I wrote down 150 questions.
+[04:28] And then the sales our engineering team was like, "What are you doing? We don't
+[04:31] have that data in the agent." I was like, "It doesn't matter. These
+[04:34] are the questions your sellers are going to ask."
+[04:36] Right? And then we run our test, 50% accuracy, you know, like everyone's
+[04:40] depressed and so on. So, we said, "Okay, let's make sure that we don't go for
+[04:44] coverage, but we go for quality." Right? We don't want to try to answer 100
+[04:48] questions and get them 70% right. We want to answer 50 questions, but get
+[04:52] them 95% right. Right? Because with that you get a first impression, good first
+[04:56] impression, you build a trust with them. And then rather than being in that boat
+[05:00] of, "Oh, this thing doesn't work." people are like, "Oh, this thing is
+[05:03] awesome. Can I get more of that?" Right?
+[05:06] So, we started small and 60% of the data we actually added after the launch,
+[05:11] after the 6-7 months post launch. Today, if you look into our agent, I mean, it's
+[05:16] not a small agent. We have 15 semantic views, 85 tables, 3,000 columns of data.
+[05:22] We have like five to six different MCP connections on it. You know, close to 20
+[05:26] skills connected to that and so on and so on.
+[05:28] Right? So, it's a huge system that we are managing in here.
+[05:33] And then you cannot just launch these things to everyone, right? So, we said
+[05:36] that, "Look, we need to do this in a controlled way because we want to make
+[05:39] sure that we earn that first five questions. We don't want to burn our
+[05:42] bridges in that first five questions." Right? So, that's why with every product
+[05:46] we do, we do a face launch. The first one is a pilot. The goal of
+[05:51] the pilot is to prove the accuracy, prove the quality, right? You get your
+[05:55] top, you know, AI native folks in the organization who are eager to work with
+[06:01] you, give you feedback, improve the product, make sure that you got the
+[06:04] rough edges through that, right? And then after a couple of weeks, you come
+[06:08] to a point where it looks like, okay, those rough edges are more smoother now.
+[06:12] Okay? Then you go into your better launch. We do 10% better, right? With
+[06:16] 600 people. There you are looking at do I truly have
+[06:20] an basically a minimum viable product? Is the MVP really there, right? And what
+[06:25] will happen is that you will start getting tons of requests. Can you
+[06:27] connect this data? Can you connect that data and everything? And then you are
+[06:30] looking at like where are the actually the concentrations happening? Because
+[06:34] that means that if you don't get those things in, you don't truly have an MVP,
+[06:37] right? Then it's not going to work for their daily workflows.
+[06:41] And then at this stage, you're also trying to prove are they coming back?
+[06:45] Right? So, the things that we really track there
+[06:48] is basically like, okay, how many questions they're asking and everything,
+[06:51] but what is the retention rate? So, we exited for example that at like more
+[06:55] than 70% retention rate that the weekly active users were coming back. Okay, now
+[06:59] we're in a good place, right? We have confidence on the accuracy, we have on
+[07:03] the confidence of the basically the coverage of the product we have, and
+[07:06] people are coming back. Okay, now let's go to GA, and then you launch through
+[07:10] the GA. And then you have your next problem.
+[07:13] So, I know that this is a technical conference, but this is also where a lot
+[07:16] of these products fail. It's basically how do you drive change
+[07:20] management? So, you launch your product, you are 2 weeks into the launch, and
+[07:24] then you are here. And all your management is like disappointed or
+[07:28] frustrated. Why aren't people using this? Why are numbers are real low?
+[07:32] Right? And I show them this graph. I say that only 20% of your basically
+[07:37] organization actually tried the product. I cannot do anything. This is not the
+[07:42] product's fault if people are not even taking 5 minutes to try try the product.
+[07:46] Right? If they try it and if they don't come back, okay, that's my problem.
+[07:50] Right? But if they don't try it, then we have another problem.
+[07:53] So, the first and I've been, you know, I've seen this with many many sales
+[07:57] organization in my past life as well and so on. Usually this is a couple of month
+[08:00] process. And then you significantly invest in basically change management,
+[08:05] in activation. I will spend 60 70% of my time in sales meetings, giving demos,
+[08:10] building dashboards, which teams adopted, you know, shaming the like the
+[08:14] managers whose team is actually doing good, getting sponsorship from sales
+[08:18] leaders to basically like make sure that they you know, they push their people to
+[08:21] try these things and so on. And then ultimately that gets your blue line up
+[08:24] and then your questions are start coming up and then your focus can shift into,
+[08:29] okay, how do I drive more depth? Right?
+[08:32] And I want to really really emphasize this because if you hadn't done this,
+[08:35] we would probably be doing, you know, half of where we are today. So, this is
+[08:39] a very very important part. And then as engineers, if you spend all your effort,
+[08:43] you want to have a good product, make sure that the activation and the change
+[08:46] management is like lined up, like post launch of the product as well.
+[08:52] Now, you run into another issue. Okay, you are let's say that four to six
+[08:56] months down the road. Right? What happens is you successfully
+[09:00] launched the product. You are first like rockstars in the company.
+[09:04] Right? People literally show you on the corridor like, "Hey, your product is
+[09:06] awesome. We can talk to our data now. We don't need to wait on the queue to like,
+[09:11] you know, get access to like analysts to answer our questions in every 2 weeks
+[09:14] and so on. Right?" And after a couple of months, they start coming back to you
+[09:18] with frustrations. Say, "I cannot do this in the product anymore. Right? I I
+[09:21] would like to I mean, I saw this other AI product that does this and so on."
+[09:25] This is what I call the collapsing of the wow factor.
+[09:28] Okay? So, initially you are cool, but then
+[09:32] and that becomes a habit, right? You basically change their habit and it
+[09:35] becomes standard for them. Now, you need to raise the bar again.
+[09:38] So, the journey that we usually see with the sales teams is like you start with
+[09:42] talk to your data. How do we get you out of those like, you know, hundreds of
+[09:45] dashboards situation, dependency to the analyst, and then first we'll basically
+[09:49] like democratize the data for you so that you can basically talk to your
+[09:52] data. Then the next wave comes with all the
+[09:56] MCP connections, right? All the integrations that you are building.
+[09:59] Now it becomes like automate my workflows.
+[10:02] We literally have now sellers who are going to use our agent basically to
+[10:05] monitor their inbox, they monitor their Slack channels, you know, keep track of
+[10:09] all the customer questions coming about like product questions, uh use the agent
+[10:13] to draft responses that save that in Gmail, review them afterwards like send
+[10:17] those things out, right? Or they automate their like outreach workflows
+[10:20] and so on. Okay, that's great. Now I became an orchestrator, right? I'm
+[10:24] basically automating my workflow workflows.
+[10:27] Then the next thing you see start happening is teams, they get these like,
+[10:31] you know, tool democratization, this empowerment coming to them, right?
+[10:35] Because historically a lot of these go-to-market teams, they have been
+[10:38] always in the backlog of someone, backlog of of an IT team or like trying
+[10:42] to get a SaaS budget to learn and get a vendor on board to actually like enable
+[10:46] something. And now all of a sudden
+[10:48] they're able to build team skills. They're able to build like, you know,
+[10:51] the custom dashboards that are basically like fully, you know, optimized for what
+[10:55] their team needs. Are able to like deploy applications, automations,
+[10:59] alerts, and things like that, right? And then the comes the phase of
+[11:03] hyper-personalization, right? Everyone is able to now like get
+[11:07] everything personalized for them, not only for themselves, but also for their
+[11:10] customers with living context of customers, contacts, and things like
+[11:13] that. I think the main message I want to give
+[11:15] here is if you just do the first stage,
+[11:20] and if you just wait there, you will get disrupted in a month or
+[11:23] two, right? Because now you already raised
+[11:26] their expectations, that already became a baseline, and then they will find
+[11:29] another product that does better than you, and right now the switch is very
+[11:33] easy. They're going to just switch over night. Okay? So, you need to keep
+[11:36] iterating. You need to keep that wow factor, and I cannot just rely on the
+[11:40] fact that, you know, what I built so far is going to stay cool forever.
+[11:45] And the next thing is, how do you deal with basically the changing technology?
+[11:49] So, I talked to a lot of customers. And then, you know, it sometimes you run
+[11:53] into these customers, big enterprises, very big brands. And then they are still
+[11:57] trying to purchase that perfect architecture.
+[12:00] They're trying to like test different frameworks. They're trying to see how
+[12:03] the, you know, the technology is maturing and everything and so on. But,
+[12:06] the thing that they don't do is they don't build, and then they don't launch,
+[12:10] and they don't learn. Right? All these blue boxes that you see
+[12:13] here, those are all the things we added after the launch.
+[12:17] Right? When we literally first launched the agent, it was a nine-page long agent
+[12:21] instructions. It was couple of Cortex analyst tools,
+[12:25] semantic views. It was a Cortex search service for our unstructured data. And
+[12:29] we were managing the agent instructions versions out of a Google Doc. That's how
+[12:32] we launched it. To 6,000 people. Right? Now we realized, okay, it's not going to
+[12:37] work out. Let's figure out CICD. It's not going to work out. Let's figure out
+[12:40] our basically eval infrastructure with all the like the unit test, routing
+[12:43] test, and everything. Right? Then we start basically like coming to a point
+[12:47] where, for example, we were creating all these like business processes and
+[12:50] workflows. We couldn't fit them into the agent instructions anymore. And then the
+[12:54] skills came, and we were like, "Oh, perfect. Let's build a skill library."
+[12:57] You know, then the MCPs came. Perfect. But now, like we have to put bunch of
+[13:01] other instructions to basically orchestrate that, we hit the limits on
+[13:04] the agent instructions. What do we do? Okay, let's do the progressive
+[13:07] disclosures. Right? And then user memory comes, task
+[13:11] scheduling comes. We want to go beyond the chat screen and then, you know, chat
+[13:14] interface and start doing the Slack interface and things like that. If I
+[13:17] look at the PRD and the architectural diagram we wrote in the beginning of the
+[13:20] project, if I compare to this architecture we have now, 80% of it It
+[13:25] match. Okay? So, like if you look at our
+[13:28] sprints, like maybe 60-70% of the work we are
+[13:32] doing is adding new features, improving quality, and all kind of things.
+[13:36] But 30-40% of the work is that we are constantly re-architecting with the new
+[13:39] technology. So, this is a time where like you need
+[13:42] to get your hands dirty, you need to run with the new technology, and then you
+[13:46] shouldn't be like, you know, too much tied to your architecture. You should be
+[13:49] okay to like pivot very easily, so that you can basically double on down on
+[13:52] these like new capabilities and things like that.
+[13:55] And then the longer you wait, the more, you know, you lose towards your
+[13:58] competition, because if your competition is doing these kind of things like 3-4
+[14:02] months ahead of you, right? That means that they're also getting more
+[14:05] customers.
+[14:08] Um last thing is I would really, really recommend investing in your logs. Okay?
+[14:14] Because they create the basically the feedback loop.
+[14:17] So, first of all, technically it's very fun. Okay? So, you basically use LLMs to
+[14:21] like classify your logs and things like that. As I said, like we have 1.2
+[14:25] million questions, we get 40,000 questions every week. It's technically
+[14:28] very fun, you know, how you do that at scale without breaking the bank and so
+[14:32] on. You know, our data scientists love working on those things, and then they
+[14:35] really experiment with new things. But as a result of that, what we get is
+[14:39] we get a very extremely detailed breakdown of topics and, you know,
+[14:43] things that we are having. I'm just to showing you the top category
+[14:45] categorization level there, but then basically we are able to track like, you
+[14:49] know, what kind of questions they are asking. We are able to break down each
+[14:52] of those categories to subcategories, you know, they are able to get like
+[14:56] detailed example questions, this and that, and so on.
+[14:59] All good, but how do we use that? Then we start creating the basically the
+[15:02] feedback loops. Right? I know, I mean, I still
+[15:05] interview, of course, users, but now I see in real time what my feature gaps
+[15:09] are. I'm clearly seeing what people are
+[15:11] asking and we are not able to answer or where we have a like a quality issue,
+[15:14] where they are swearing at the agent or like at repeating their question, so
+[15:17] that we see where to improve. For sales enablement is a goldmine.
+[15:22] Let's say that we launch a new product. Usually, you know, they would need to
+[15:26] interview maybe 100 sellers a week to be able to understand like how basically
+[15:30] the you know, the topics are changing where there's gaps in terms of like
+[15:33] knowledge documents, battle cards. I see that in real time in a minute or two by
+[15:37] just asking an element question. And then we can then, you know, connect to
+[15:40] Confluence, we can connect to Jira, we can connect to Slack channels, we can
+[15:44] ingest the PRDs, and in couple of minutes we can actually like, you know,
+[15:47] generate battle cards, sales enablement document and then feed it back into the
+[15:50] agent. Right? I mean, you cannot do that kind
+[15:53] of a like a feedback loop with humans, right? So then you we can basically
+[15:56] automate these kind of things. Um within the sales organization, there
+[16:00] will be different teams that are good trying to connect each other. They are
+[16:03] trying to maybe target similar accounts from different angles. They don't know
+[16:06] about each other. We do. We are now able to ping them. And then we are able to
+[16:10] basically do matchmaking. Right? I'm just giving you couple of
+[16:13] examples, but this is also one of those areas where like you start building your
+[16:17] AI platform, you start building your architecture.
+[16:20] The first features are difficult to get out. The next ones are easy. And then
+[16:25] once you start tapping into your logs, this this like hockey stick exponential
+[16:29] thing actually starts happening and it's magical.
+[16:34] So, if you were to take a couple of things from this talk,
+[16:38] like quality over coverage. I'm very, very like religious about
+[16:42] this. If you go for the coverage,
+[16:45] you are going to shoot yourself in the foot.
+[16:47] Okay? Change management. A lot of engineers
+[16:51] doesn't think about this, right? A lot of these AI initiatives, they don't fail
+[16:56] because there's an issue with the technology, there's an issue with that
+[16:58] as assuming you did the first one, right? Right? So, they fail actually in
+[17:02] activation. So, make sure that you have a plan for
+[17:06] that, especially in larger organizations where we are dealing with like 6,000
+[17:09] go-to-market users, right? Um again, don't forget this concept of
+[17:14] collapsing law factor. You cannot stay where you are. You
+[17:18] cannot just say that, "Hey, I did an innovation. I'm going to surf that for a
+[17:21] year." You know, every time people are happy,
+[17:24] you should be paranoid. You should be like, "Okay, what am I going to show
+[17:27] them in a month or two now?" How do I basically keep that excitement
+[17:30] going on? Right?
+[17:33] Build fast with today's stack. Like, don't try to invest in these like high,
+[17:36] you know, super like plat, you know, architectures and have these like 6 9
+[17:41] months of long projects and things like that. How do you turn around these
+[17:44] things in weeks, days, and so on? And just be comfortable with the fact
+[17:48] that you are constantly going to be re-architecting. That's fine.
+[17:51] Right? Just don't over-invest in the current
+[17:54] architecture. Just make sure that you keep your like flexibility out there.
+[17:58] Um and then the feedback loops. I think that's what kind of like gives you
+[18:01] really that like, you know, the incremental part of like that hockey
+[18:04] stick exponential part of the thing. Um we constantly publish like blog
+[18:08] posts, I mean, where we kind of like try to have our, you know, learnings shared
+[18:12] with uh our customers and so on. Like, we have blog posts on like how we do
+[18:16] agent instructions, how we do our structured data with semantic views, you
+[18:19] know, how we basically build our rack-based like knowledge assistants,
+[18:22] the non-technical side of the story, like how do you derive change
+[18:25] management, and so on. So, feel free to check those.
+[18:28] Um and yeah, I think that's the end of my talk.
+[18:33] Okay.
+[18:36] >> We have time for one question. Okay, there you go.
+[18:47] >> Thanks for the talk. Um I don't know if you already said this, but I saw in the
+[18:51] the titles of the articles Snowflake Intelligence. Is that an underlying
+[18:56] context or layer that the tool or system you built was on top of, or was that
+[19:02] the tool itself or something else? >> Yeah, Snowflake Intelligence, we renamed
+[19:06] that to Snowflake Co-work a couple of weeks ago in our summit. That's
+[19:09] basically our no-code agent platform that we basically build have available
+[19:13] for our business users. I mean, the advantage of that is that
+[19:17] all of these tools are on like, you know,
+[19:19] you know, Cortex analyst or Cortex search or Cortex sense, a lot of those
+[19:23] things are basically comes out of the box.
+[19:26] We made a strategic choice for our internal thing where we said that,
+[19:29] "Look, it is important that we bring all our data together." And we do that in
+[19:32] Snowflake. We bring all the first-party, the third-party data, all the Salesforce
+[19:36] data, everything, the call transcripts, and so on, all together. And then these
+[19:39] agents then can basically basically inherit a lot of the role-based access
+[19:43] controls and so on. And I literally can deploy these agents without writing a
+[19:47] single line of code, right? And then, you know, you don't need to
+[19:51] worry about the UI, the chat UI comes out of the box, and so on. And then we
+[19:55] have been the customer zero of that like internally to build this ourselves. And
+[19:58] then, you know, our customers are able to go and then build similar things
+[20:02] basically on Snowflake over platform as well. And it comes with the guardrails
+[20:05] and things where you don't really need to worry about them going very, you
+[20:09] know, crazy on, you know, what data sources to
+[20:13] do things, and so on. So we are able to do a lot of curation. We are able to do
+[20:16] a lot of security guardrails in there as well.
+[20:21] Thank you.

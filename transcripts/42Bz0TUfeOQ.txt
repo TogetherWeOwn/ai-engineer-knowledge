@@ -1,0 +1,272 @@
+# title: The Transcript Looked Fine. The Call Wasn't. — Debugging Voice Agents, Arize
+# source: https://www.youtube.com/watch?v=42Bz0TUfeOQ
+# speaker: Debugging Voice Agents, Arize
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T04:14:54Z
+# sha256: 172dacba1358850805a24da274a6a9fdf510fdb0b715ce5cfbbed2edfaac7803
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:01] [music]
+[00:12] >> Folks, thanks for coming in out. I know it's
+[00:15] lunch time, so I know a lot of you folks are trying to eat as well. Appreciate
+[00:19] you making the time and for everyone listening online, thanks for tuning in
+[00:21] as well. Uh my name's Fuad. I'm a product manager
+[00:25] here at Arize. Uh I've been leading up kind of the experimentation side of the
+[00:29] house and one thing that I've been really interested in is voice agents. Uh
+[00:33] quick show of hands here, maybe online too. Who here is building a voice agent?
+[00:39] Anyone? Got Okay, we got a couple. Uh I think it's a really cool space.
+[00:43] I'll be talking a little bit about voice traces,
+[00:47] session views of voices, voice evals, and some of the stuff that's new in
+[00:52] Arize. But I do want to kind of mention this isn't a product pitch. This is,
+[00:57] you know, really on why voice agents are invisible and how to see them. You can
+[01:01] use Arize to do that, you can use another platform, but what I want you
+[01:05] guys to take away from this is some of the failure modes and how you can
+[01:08] actually start to see that. So, we all know voice agents are growing
+[01:13] really, really fast. Have a few tweets up uh kind of proving this.
+[01:18] GPT real-time just dropped. That was literally May 7th. Uh I have a
+[01:23] screenshot from a tweet an hour ago from the LiveChat CEO talking about some of
+[01:26] this. Uh and Vercel on June 29th, which is only a couple days ago,
+[01:30] um on
+[01:33] voice agents in Vercel. So, as you can tell,
+[01:36] uh this space is exploding fast and that is going to start to matter because as
+[01:41] the space grows really fast, it is also one of the hardest to debug
+[01:45] categories. So, first off, it's exploding. Second off, it's pretty
+[01:50] fragile. There's a lot of failure modes you can't really see.
+[01:54] Um and
+[01:55] uh things like latency, turn-taking, and transcription drift become really,
+[01:59] really important. Uh, and the log lies. If you're just looking at transcripts,
+[02:03] I'll play a little audio file for you guys in a second. Uh, it doesn't really
+[02:07] capture what's actually going on under the hood.
+[02:10] And just to give you guys some ideas of use cases, um,
+[02:14] there's a lot of them from customer support, I think, which are the more
+[02:16] boring ones, down through drive-thru ordering. If you've been to White
+[02:19] Castle, they have a a bot called Linda now. Uh, Bojangles has uh,
+[02:25] Bo Linda as well. There's McDonald's is doing a lot of these as well, which I
+[02:29] think is pretty cool. And personally, I'd be pretty pissed off if I was at
+[02:33] McDonald's at 2:00 a.m. and I got 600 cheeseburgers. So, I think I'll show you
+[02:37] a little bit about the failure modes and why it actually matters.
+[02:41] So, uh,
+[02:43] this is an example where the transcript looks fine, but the call wasn't. And if
+[02:48] you read the text logs, you know, user says, "I need a refund for order 14."
+[02:53] Agent says, "Sure. Started a refund for order 40." User says, "No, 14."
+[02:58] And it looks like the agent corrected itself. But,
+[03:02] this wasn't actually the case, and I'm going to I'm going to play the call.
+[03:04] It's AI-generated. Let's see if it works.
+[03:06] >> I need a refund for order 14.
+[03:10] >> Sure. I've started a refund for order 40.
+[03:13] >> No, 14. >> Your refund is confirmed.
+[03:17] >> So, if you notice in the transcript, if you could hear the audio there,
+[03:22] uh, it wasn't, you know, the the the
+[03:25] confirm- confirmation on the on the 40 wasn't actually done by the agent. It
+[03:28] kind of interrupted. Uh, and there was a big, uh, kind of latency spike, uh,
+[03:33] after the user asked for the initial refund.
+[03:35] Um, so, we what actually happened was that two
+[03:38] 2.4 seconds of dead air before the agent actually responded. The agent talking
+[03:44] over the caller. 14 misheard, and obviously, the flat
+[03:48] robotic tone is is not a a look, either. Um, so, these are all audio specific
+[03:52] issues. If you just read this from an LM output, you would have no idea anything
+[03:56] is going on. So, what you need to do is you need to
+[04:00] see the conversation beyond just the transcript. Um, so that means the audio,
+[04:06] the transcript, and the trace all in one place.
+[04:09] The session as a whole, so multiple turns from the user back and forth in
+[04:13] the same in the same trace view. And then metrics on those, so what was the
+[04:18] latency like? What was the time to first audio like? Were there any
+[04:21] interruptions? Sentiment analysis, et cetera. And these are some of the
+[04:25] features we've just released at the beginning of this month in Arize AIX.
+[04:29] Uh, and really the point of this is the same workflows that you're running now
+[04:33] to help your coding agents, uh, which are, you know, pretty complex processes
+[04:38] now with harnesses, evals, uh, handoffs, and subagents, tool calls, you want to
+[04:43] start to bring some of those best practices into your voice agents as
+[04:45] well. So, first off, you got to trace it. You
+[04:49] got to see each individual span. Um, you got to see the live audio and play it
+[04:54] inline from your trace. Really matters to have all this data in the same place
+[04:58] so you can start to debug things. Uh, you want to see inputs and outputs.
+[05:02] You want to see the transcript, obviously, but you also want to see, you
+[05:05] know, specific metrics like I mentioned, like time to first token,
+[05:09] uh, audio token cost, interruption events. And then finally, you want to
+[05:12] see linkage between these. You don't want to just see these as a list. You
+[05:15] actually want to see some of the linkage between things, right?
+[05:20] So, Arize gives you that one trace view where you can actually play the audio
+[05:24] inline, view the transcript, view latency inline, see the conversation
+[05:29] turn between the user, uh, and the assistant, uh, and see your evals inline
+[05:34] as well. And this gives you a really, really powerful tool to debug.
+[05:40] Under the hood, what this looks like is we've actually mapped, uh, the semantic
+[05:44] conventions for audio onto open inference. So, if you guys aren't
+[05:47] familiar, Arize is first to market with open inference in 2023.
+[05:52] It is the first set of semantic conventions that is completely open
+[05:55] source that maps kind of what is happening with GenAI to
+[05:59] an OTel-compliant set of conventions.
+[06:03] And I say this to say it's open source, it's free, and it maps pretty much any
+[06:08] of the major foundational models or model providers. You guys can go rip
+[06:12] this and send it to a Grafana back end. Completely free to use. Not pitching the
+[06:16] product here, just explaining some of the real engineering work it takes to
+[06:20] map things like web socket events to an easily understandable set of semantic
+[06:25] conventions. So, you can start see things like the session life cycle, the
+[06:28] audio input, the transcript, conversation items, the output, and then
+[06:33] the response life cycle and token counts as well.
+[06:36] And so, yeah, real engineering work went behind this. It's all open source.
+[06:40] We've mapped all the foundational models for you.
+[06:43] What this allows you to do is you can now be provider agnostic and have one
+[06:49] queryable schema. So, those semantic conventions normalize sort of these
+[06:54] disparate model providers, whether it's OpenAI, real-time, or Google with Gemini
+[07:00] Live into a set of schema that you can query. And if you've ever tried to debug
+[07:05] at 2:00 a.m. off of a customer call, you know how
+[07:08] important it is to be able to query across thousands,
+[07:12] millions, even billions of traces that are coming in. You know how important it
+[07:16] is to actually get to the part that you need to see, to filter that, to sort by
+[07:20] that. All that becomes incredibly important.
+[07:23] And, you know, as new models drop, you also want to be able to swap in new
+[07:27] providers and make sure that your systems are still functioning.
+[07:31] So, no bespoke parsing per vendor. It's one auto instrumenter. It captures every
+[07:36] single thing that I just mentioned.
+[07:40] And then finally, you want to be able to replay the whole conversation. So I play
+[07:43] I played the audio for you guys in the beginning of this, but the session ID is
+[07:47] essentially what stitches every turn into the timeline, the full call with
+[07:52] every websocket event that's submitted with some tags on whether it's the user
+[07:55] or the assistant. You can actually play the audio in the
+[07:59] UI directly from the trace. No external tooling.
+[08:03] No exports. Just play it straight from the trace.
+[08:06] That allows you to see who spoke when. When the agent paused, where it got cut
+[08:11] off, where the user got cut off, what tools the agent actually went and called
+[08:15] when it did this. And so this really starts the paradigm shift, which is
+[08:20] you're not just reading transcripts, you're listening to audio, you're really
+[08:23] understanding the failure cases from there with the trace open right next to
+[08:27] it. And um
+[08:30] I'll just show you kind of quick quick sneak preview of what this looks like in
+[08:33] Arise. As you can see here, this is an example
+[08:36] of like you know an agent that can call to get a
+[08:40] specific weather event. You can actually see when the agent kicks off that tool
+[08:44] call in line with the rest of the audio. And this allows you to debug failures of
+[08:48] that tool call while you're looking at the session audio. So you're no longer
+[08:51] looking at disparate events from distant systems, but you're actually looking at
+[08:55] the entire trace tree for everything that happened in that session.
+[09:00] So that real session, few issues that we
+[09:03] saw, right? Turn one, "Hi, need help with the order, a refund for order 14."
+[09:08] We saw you know kind of that time to first audio of 2.4 seconds of dead air,
+[09:13] which really impacts the user experience. We saw in turn three that
+[09:17] the agent actually spoke over the caller's interaction, which is not a
+[09:21] good look for any assistant, especially one that's trying to be helpful. And
+[09:25] then ultimately if you look at the tool call, you'll be able to also understand
+[09:29] that the refund was processed for order 40 and not 14.
+[09:33] Um which is a huge huge mistake and
+[09:37] actually seeing that live in the tool call is really really important. And
+[09:41] every single one of these things would be invisible in a text log. But with the
+[09:45] session view you can actually scrub the audio and find those failure surfaces
+[09:49] within the tools, within what the agent is doing as well.
+[09:53] The next thing I want to talk about real quick is evals that are specific to
+[09:58] audio. So I kind of mentioned a few of them.
+[10:00] I think tonality and sentiment analysis is really important. You want to be able
+[10:04] to classify user emotion based on the actual audio.
+[10:08] Transcript can't do this for you. It's very very easy to look at a transcript
+[10:13] and see that it it, you know, looks fine, but tonality really matters.
+[10:18] Positive, neutral, negative, not just a guess. Latency is really really
+[10:22] important in audio and it's important in a few use cases. Models are getting
+[10:26] better. There's, you know, jet bar architectures, etc. But time to first
+[10:30] audio SLAs are still really important for customer service use cases.
+[10:34] And you want to be able to flag things that are breaking that.
+[10:38] You also want to flag things like I mentioned like interruptions,
+[10:40] inaccuracy, transcription drift, and the task success.
+[10:45] Um And you want to be able to run these
+[10:47] evals directly against the audio with evals that are based on audio models.
+[10:53] So, you know, LLM as a judge evals on a transcript are only so good. But
+[10:56] actually evaling the underlying audio is really important. And so,
+[11:00] um we have kind of the tooling available in Arise to be able to do that and we're
+[11:04] supporting all the major audio platforms as well as they come out with new
+[11:07] models. So again, evals specific to audio really
+[11:11] matter. They're not just transcription based evals.
+[11:15] And as you start to scale up your LLM as a judge evals or even move to agent as a
+[11:19] judge that are doing like complex tasks like, for example, doing our back checks
+[11:24] to making sure the agent actually access the system it was supposed to have
+[11:28] access to. Being able to run these agent as a judge
+[11:31] workflows in Arise, starts to become really important and we're kind of
+[11:34] seeing the industry move away from, you know, just an LM as a judge analyzing a
+[11:39] transcript or even analyzing audio, but actually accessing tools, accessing
+[11:43] third-party systems, and hydrating some of that evaluation
+[11:47] information inside of it. So, really easy to get started with
+[11:51] evals in Arise through skills. It is literally as simple as, "Hey
+[11:56] Claude, create an audio eval for me for sentiment analysis using GPT audio and
+[12:01] catch frustrated user tone on those audio spans." And Arise will kind of
+[12:06] take care of all the rest for you. The CLI under the hood
+[12:10] is able to query spans, do some trace analysis, filter for the spans that are
+[12:14] audio specific, actually create that eval, deploy it, and put it against
+[12:19] traces and spans in your actual system. And this is part of why Arise exists.
+[12:24] Yes, of course, you can do this yourself,
+[12:26] but when you're trying to query, you know, billions of spans
+[12:30] with sub-second query latency, it becomes really hard and also deploying
+[12:34] these live evals as they come in. So, you're scoring them
+[12:38] while users are actually interacting with your platform is really important.
+[12:42] And then the final thing I'll mention is you also want these evals on the spans
+[12:46] themselves because then you start to be able to do really complex querying and
+[12:50] filtering across your data. So, you're not just looking at a failure and
+[12:54] looking up in an external system. You actually have the eval scores in line
+[12:57] with the exact audio that you're looking at.
+[13:01] And that's why some of this is really powerful in Arise. Being able to see
+[13:05] those eval outputs directly on the spans that are relevant helps you kind of get
+[13:09] a full understanding of what is going wrong with the user interaction.
+[13:15] And then you can kick off workflows from that. So, evals and monitors attached to
+[13:19] those evals can kick off investigation agents that automatically start to dive
+[13:23] into, you know, what tool calls and misrepresenting,
+[13:27] Um, where is my agent failing? Is it capturing, you know, maybe a product
+[13:32] surface area that I didn't code it for? Is there a new edge case I need to code
+[13:36] for in my agent? Maybe I need to expose a new tool. All those become
+[13:41] um, possible once you have the results directly on the spans.
+[13:47] And so, I'll I'll just kind of flag and and end
+[13:50] with this thought. The same loop that you're doing to improve some of these
+[13:54] tools like coding agents, we now need to do for voice. And the
+[13:57] loop really follows observe, evaluate, and improve. And then from that loop,
+[14:03] you can start to get some really really cool continuous improvement loops within
+[14:07] the Arize platform or within another platform if you choose to use it as
+[14:10] well. Um, and the idea is once you observe and you have the data available
+[14:15] to you, then you evaluate and you have the
+[14:18] scores in line with your observations. Then you can start to kick off fixes,
+[14:22] whether they're fixes that you make or whether they're fixes that an agent is
+[14:26] automatically making on behalf of you. And then you can start to verify and
+[14:30] validate those fixes. So, we just released agent experiments as well in
+[14:33] Arize. Agent experiments, you could think of it kind of like Postman with
+[14:37] tracing. So, imagine a world where you have audio
+[14:42] streaming in from your users, it's automatically traced, you have live
+[14:45] evaluations in the platform that are automatically scoring those
+[14:48] interactions. And then you have SRE agents, so not an actual engineer that
+[14:53] you hire, but an SRE agent that's looking through the traces,
+[14:57] understanding the failure modes, hypothesizing a fix, and then actually
+[15:01] standing up a fix for you in dev, replaying those failed traces for you
+[15:05] against that fixed endpoint, tracing that to validate that the
+[15:09] latency actually decreases. And you wake up in the morning, you look at a PR, the
+[15:15] PR has a description of a problem. Hey, I found out why the latency was high.
+[15:19] Turns out we were not truncating our tool results, and so we were passing in
+[15:23] way too much information to the agent. Context got overloaded. I introduced the
+[15:27] truncation algorithm. I shipped it. I actually stood it up in dev.
+[15:32] I tested against the traces that failed. Here's the report card. Here's how
+[15:36] latency decreased. And you wake up in the morning and all of this is ready for
+[15:40] you, and you just click approve or deny on the PR. That is the future that I
+[15:44] think we want to see at Arize, where self-healing software and continuous
+[15:49] improvement are realities for everyone who's building agents. And I think
+[15:53] making that possible for voice is really, really important.
+[15:57] So, start seeing your agents. Add the Open Inference Instrumenter. Open
+[16:01] source, free to use, OTEL compliant. You can send it to any back end. Um so, use
+[16:06] Arize, don't use Arize, start tracing your audio.
+[16:09] The second part of this is actually starting to do that analysis, and we
+[16:12] would recommend Arize to do that. Sign up for a free account. Uh I'll have a
+[16:16] code up at the end of my presentation for you guys to sign up for a a free
+[16:20] year of pro. Um but start checking time to first audio. Start checking your
+[16:24] interruptions. And start evaluating um
+[16:28] how these interactions are actually going and whether they're accomplishing
+[16:31] your use cases. Whether it's a tone or latency eval, um try using the Arize
+[16:35] skills to actually create that eval. Uh we have some docs set up for you if you
+[16:39] want to follow along. Bunch of examples and cookbooks ready. Uh and bring voice
+[16:44] into the same rigor as the rest of your stack. You wouldn't be okay with this
+[16:48] happening at the coding agent level. You wouldn't be okay with it happening uh
+[16:52] for an agent that's able to execute stocks on Robinhood. You shouldn't be
+[16:55] okay with it, uh though the stakes might seem a little lower, for a McDonald's
+[16:59] agent that's ordering your cheeseburger, either. Um
+[17:02] and so I'll end with that. Please, please keep building. Please connect
+[17:07] with me also on Twitter. I still call it Twitter, not X. Uh on Twitter or
+[17:12] LinkedIn. Would love to kind of talk and hear about some of the use cases you
+[17:15] guys are building towards so we can add more echos to our library and make sure
+[17:18] this is useful for you. And if you found this talk useful and you want to start
+[17:22] investigating your voice agents, there is a free code up on the screen. It
+[17:25] gives you a year of Voice Pro for free. It's a i w f 2026
+[17:32] and you can get started and start tracing your voice agents. So thank you
+[17:36] very much. My name is Ali. I'll be available for questions for a couple
+[17:39] minutes after but really appreciate you guys listening. Cheers.

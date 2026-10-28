@@ -1,0 +1,699 @@
+# title: Evals for High-Stakes AI Agents — Doneyli De Jesus & Annabell Schäfer, Langfuse
+# source: https://www.youtube.com/watch?v=obfPzbapMIM
+# speaker: Doneyli De Jesus & Annabell Schäfer, Langfuse
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T02:43:21Z
+# sha256: ab4f2327b56db832ee11492cb7cde5c3001a7daad46353b3ee0bafb5f32c75a9
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:12] All right, let's get started. Welcome everybody to our workshop on evaluating
+[00:16] AI applications with Lancuse. My name is Annabelle. I'm a um AI engineer uh AI
+[00:22] solutions engineer at Langfuse. And I'm today joined by my um colleague Donelli
+[00:27] who is leading AI solution architecture at Langfus. So working with our biggest
+[00:30] customers on making sure they actually shipping reliable agents to production.
+[00:35] I myself uh was in my previous life how I like to call it because it feels like
+[00:39] a lifetime in a company building AI agents for medical device compliance.
+[00:43] And in this industry it was super important to make sure we are running.
+[00:48] We're making sure we have ground truth data set that is validated by our
+[00:51] customers and we also ran a lot of human in the loop systems and a lot of my time
+[00:56] I actually spent in Lenfuse and at some point I decided okay why not swap sites
+[01:00] and also help other teams that are shipping agents especially also in
+[01:04] regulated industries and uh joined the langu team uh roughly seven months ago.
+[01:09] So but before we dive right into it we wanted to get a little bit of a feeling
+[01:12] of who is here today and who we are um yeah coming together with. So uh we were
+[01:17] wondering who of you has brought AI agents to production before and with
+[01:21] that I mean been part of a team doing it not necessarily yes someone in the
+[01:26] company did it so actually like been part of a process to bring it to
+[01:29] production okay that's good amazing it's a lot of
+[01:34] people and we hoped uh to have this also and who of you has worked with languages
+[01:38] before okay quite some and any other kind of
+[01:43] observability in evas tool Okay. Yeah, also a few uh amazing. And
+[01:49] then finally, who has solved EVAs for AI applications?
+[01:54] For the confident hands, I would love you to come by at our booth and explain
+[01:57] us how. Um because actually it is quite hard and I think um all of you have
+[02:02] experienced it if you're working with AI or also just chatting with Chat GPT or
+[02:06] Claude. H it is quite tough uh because AI agents can fail while the system
+[02:11] metrics themselves look green. So if you for example look at this example here we
+[02:16] have a user support agent and the user is asking can I get a refund. The agent
+[02:22] takes in the request looks up some policies and then it's like yeah sure I
+[02:26] issued your refund and the user is like thank you and it will take some days
+[02:30] until the user sees if it actually worked out and the status is green.
+[02:34] Nothing went wrong in traditional observability terms. There's also no
+[02:38] latency issues. But if we dig deeper into what actually happened, the agent
+[02:42] never did refund anything. So the tool was never called. It was never executed.
+[02:47] And the agent lied about doing it to the user. And we will only know about it in
+[02:51] a few weeks when the user come backs and is like, "Hey, by the way, I never get
+[02:55] I've never gotten my refund." And this is the problem that we have with those
+[02:59] nondetermin deterministic systems. They might tell us they do things, but they
+[03:02] actually don't. And this is why you have to find an approach and a way to
+[03:07] continuously mine for those signals where things are going wrong and make
+[03:10] sure they don't happen again or maybe not even at all in the first place. And
+[03:14] this is a problem our founders also faced three years ago when they were in
+[03:17] the way combinator batch and they realized okay there's nothing like a
+[03:21] unit test for AI applications and we need a solution for it. So they built
+[03:25] Langfuse which is by now an open source platform to continuously trace monitor
+[03:30] and improve your AI systems. And while we started out as a dev tool mostly by
+[03:34] now we also have domain experts as a target group. So collaborating with AI
+[03:39] engineers to make sure the system does what it actually should be doing. Uh but
+[03:42] also a new user group for the past probably 8 to 12 months uh which are
+[03:46] coding agents that are helping our engineers also to work with AI
+[03:50] applications and improve them. Lenfus is by now adopted by more than
+[03:56] 150,000 uh developers globally also largely driven by our open source um
+[04:01] setup. Of course, 21 of the Fortune 50 have us as part of their core tech stack
+[04:05] when shipping AI applications. And every month more than 90 billion observations
+[04:10] are ingested into uh length use instances. Uh of course increasing
+[04:14] tendency as agents are taking more more and more steps and also taking over more
+[04:18] and more tasks. Companies like RAMP, Canva, Khan Academy and SUP uh work with
+[04:23] us and over the last three years we of course spend a lot of time with them and
+[04:26] one thing we realized working with those companies is that the ones that
+[04:30] successfully manage to ship reliable agents and also continuously improve
+[04:35] them follow something that we call like some form of this and the AI engineering
+[04:41] loop and it is about a set of practices that help you to continuously improve
+[04:46] your system by taking a systematic approach.
+[04:50] The foundation to this is always tracing. Tracing is about getting all
+[04:53] the steps of what your agent is doing into a more or less lock, but ideally
+[04:58] also in a way you can inspect it as a human. Monitoring is about finding the
+[05:03] interesting ones. So what is going wrong? What is going right? Where should
+[05:06] we look deeper into? But also understanding how is it performing on
+[05:10] average. Building data sets is about finding a representative set of examples
+[05:15] that you want your application to be able to handle and also how you want it
+[05:18] to handle it and then you want to run experiments on it. So try different
+[05:23] variations of your system to check um how it is performing, how it's going and
+[05:27] then of course you want to evaluate how it's going and this is not something you
+[05:30] do once but you continuously close this loop and want to improve uh those AI
+[05:36] agents and learn from production and get get it back into data sets. Uh but let's
+[05:40] dive in each of those steps a little bit more into detail.
+[05:45] So for traces, the most important goal is that you want to get deep insights
+[05:49] into what your agent is actually doing. On the right side of the screen, we can
+[05:54] see a trace that is also a screenshot from Lenfuse and in this case it's an IT
+[05:59] support agent. So an agent that is answering questions from your parents so
+[06:02] you don't have to do it. And we can see that there's first like the root trace
+[06:07] and we can see aggregate um time and also uh costs of this step. But we then
+[06:12] also get a breakdown of each of the individual steps that agent is taking.
+[06:16] So both the generations which are the open AAI chat ones and also the tool
+[06:20] calls which we can see with a little tool in front of it. So we have a
+[06:24] detailed view of what's going on and if the screen would be wider we would also
+[06:27] see that we can see the inputs and outputs and all the metadata involved.
+[06:32] This is then the foundation to track the cost, the latency, the tokens involved,
+[06:37] and also have a log to inspect for you as a human to really dig into what's
+[06:40] going on, but also for your coding agents to work with it and look at it at
+[06:44] scale and just have this this inspectable lock of what's actually been
+[06:47] going on. Monitoring is then about making sense of
+[06:52] it at scale because especially now with increasing uh automation levels, longer
+[06:56] traces and like a lot a lot of use cases. It's just not feasible anymore
+[07:00] for you as a human to look through those logs completely manually. But you
+[07:04] actually want a way to get aggregate metrics on what's actually going on and
+[07:09] also uh detect signals where things are going wrong. So for example, cost and
+[07:13] latency metrics, but maybe also quality signals like our compliance guardrails
+[07:17] um kept true to or also like how many users are actually frustrated with our
+[07:22] system. How many are writing all caps messages because they are maybe a bit
+[07:25] upset with what uh the agent just did and um yeah all of this aggregating and
+[07:31] then u of course also finding the interesting stuff that you want to dig
+[07:34] deeper into. what you get from production through
+[07:38] this monitoring is then also one of the foundations um that you can use to build
+[07:42] out your data sets and data sets are in the end a representation of what you
+[07:47] want your agent to handle in production. So all the cases that it might be
+[07:51] getting also maybe out of scope requests that you want to like correctly also be
+[07:56] deferred and make sure that like the agent is not trying to give investment
+[07:59] advice or also uh answering what the weather in New York is going to be like
+[08:02] if it's actually just a dead IT support agent. And those um items you can then
+[08:08] have like the input but also what you expect um it to have as the output which
+[08:12] can both be like a sample reply or also expected behavior that you want to see
+[08:16] or keywords you want to have covered. And this can then be used as a stable
+[08:20] benchmark either for like improving and iterating offline or also as part of
+[08:24] your CI/CD.
+[08:29] Those data sets are then used to run experiments on and experiments are um if
+[08:33] you maybe look back into university and statistics or anything that you might
+[08:36] have done. It's in the end this idea of varying something about your setup and
+[08:40] looking what happens then. So for example, changing a prompt, changing a
+[08:43] model, changing the context or the tool description and to see if it's then
+[08:47] better dealing what you actually what you with what you actually wanted to
+[08:50] deal with and ideally isolating concerns. So if you want to check if the
+[08:54] same model performs better with a different prompt, you ideally only
+[08:58] change the prompt and not five other things because otherwise it's going to
+[09:01] be hard for you to interpret what you actually see.
+[09:04] And then finally, you need evals or evaluation approaches to make sure you
+[09:08] can also measure what's happening in those experiments because again you
+[09:11] don't want to look at everything yourself. Uh which you by the way should
+[09:15] should probably sometimes do. Um but still you also want the scalable
+[09:18] approaches which are for example LLM as a judge. So using another LLM to check
+[09:23] what the LLM did. um or also code based evals for things like um classification
+[09:28] tasks where you can check for an exact match or um also checking behavior can
+[09:33] be a a deterministic check or if you are checking for all caps type um things.
+[09:40] So this is the AI engineering loop and what we observe with um many of our
+[09:44] customers is that there's depending on your use case a few different entry
+[09:48] points into this. So if you're for example in a low stakes environment and
+[09:52] you're only building your internal chat agent, you might first not have a
+[09:57] observability tool in place at all and then you maybe get started with tracing
+[10:01] and add some monitors to just check where are people getting frustrated but
+[10:05] you don't care about the eval part too much in the first place. You just build
+[10:09] it out over time and just like add those test cases as you progress but you can
+[10:14] go to production directly. However, if you're building a case that is customerf
+[10:18] facing and especially if you're building a case that is in regulated
+[10:22] environments, you probably don't want to risk the
+[10:25] agent doing something that it's actually not supposed to do. So for those
+[10:28] regulated industries, we've seen a few approaches emerging and the foundation
+[10:33] is always tracing. So you always want to know what is actually happening, what
+[10:37] steps is it taking, what inputs and outputs is it seeing and also what tools
+[10:41] are being called. And then on top of this um those teams in regulated
+[10:45] industries found a few approaches on how to go about building out these ground
+[10:50] truth data sets that you can then also loop on improve on and also you probably
+[10:54] all heard about auto improvement. Um all of this definitely needs the foundation
+[10:59] of a ground truth data set and you yeah have a few approaches to get there. For
+[11:03] example expert curation so working with your domain experts within the company
+[11:07] to make sure you're building out the crown to data set. Then for example
+[11:11] shadow runs. So you run the process continuously manually but in parallel
+[11:16] you also have the agent running and you can always compare how would the agent
+[11:19] have handled it? How would the agent have gone about it and then like this
+[11:22] measure the accuracy but also build out your ground truth and then finally um
+[11:26] like we did it also in my previous company. Run a fully human in the loop
+[11:30] system and over time slice the data into parts where you are confident to
+[11:35] automate versus things where you always want a human in the loop.
+[11:40] So, so much on the introduction. Uh, we now want to go in a more practical
+[11:43] example. And for this, I'm also welcoming Donelli again on stage and
+[11:47] we're going to look together into how to trace your agent execution into length
+[11:51] use, how to evaluate and improve your system, and how to continuously close
+[11:55] this loop. >> Hi everybody. Like Annabelle said, I'm
+[11:58] Don, but you can call me Don to keep it easier for everybody. Only my mom calls
+[12:01] me Don when I'm in trouble. Um, yeah, that okay, that's great. heard a few
+[12:06] giggles. So, you know, nice nice icebreaker. So, that's the first eval.
+[12:10] It went perfectly. Um, so now what I'm going to show you is an example that we
+[12:16] built for a few financials institutions that we're working with because they're
+[12:21] in the in in kind of this process of they build their first prototype, they
+[12:25] build their first demo, but then the question comes from leadership or maybe
+[12:29] from the teams. How do we we evaluate this customerf facing agentic solutions
+[12:34] that we're building? How many of you here are in financial services or in
+[12:38] finance? Yeah, we're in New York. So, of course, you all are. Um, any other
+[12:42] industries others than financial services, regulated industries like
+[12:45] healthcare and stuff like that? Okay, cool. Awesome. So, I think this is going
+[12:49] to this going to speak to you very much. Um, so basically what I have here is,
+[12:55] you know, a typical, you know, banking assistant. Everybody, anybody of us that
+[13:00] has a banking services probably have seen this in each of of your banks,
+[13:04] right? However, the all the stuff that happens behind is you know very
+[13:09] important for the bank itself or for the institution to provide you with very
+[13:14] accurate information because there is like financial liability, there's legal
+[13:18] liability. There's a bunch of you know risk for the bank itself to put out
+[13:23] these type of solutions when they are powered by LLMs which as we all know are
+[13:28] inherently non-deterministic. So we want to make sure that we reduce the
+[13:33] unpredictability and that we can then reproduce the outcomes as much as we can
+[13:38] and figure out where are the failure modes and where is the agent giving us
+[13:42] the results that we don't want so that then we can you know improve upon those.
+[13:48] In this example I have a few things that I I would like to show you. The first
+[13:51] thing is that I can impersonate, you know, a few different type of clients
+[13:55] because obviously a bank is always going to have customers that are like, you
+[14:00] know, your everyday Joe like myself. I only have a couple of bucks in the bank,
+[14:03] but then you're going to have your ultra high net worth individuals and all of
+[14:07] that. So, we can have here impersonation of different kinds. And this is
+[14:11] important because we want to be able to know if the agent is able to respect any
+[14:16] guard rails that we have put in place when it comes to those type of uh
+[14:20] personas that we have. The other thing is if you notice here maybe let me blow
+[14:24] it up. We also have PII identification uh enabled and any sort of uh data that
+[14:31] is deem as PII is automatically masked before it gets persisted into Langfuse.
+[14:37] Again, this is another very big requirement for spec specifically
+[14:42] financials institutions that they don't want to, you know, persist in an
+[14:47] observability system their credit card information or social security numbers
+[14:51] or their clients. They want to keep that on the systems of record and as much as
+[14:54] possible in their systems uh that they own. So, that is also enabled and I'll
+[14:59] show you a couple examples on how we can uh get that to work. And then we're also
+[15:04] going to see if the agent itself is respecting some of the controls that we
+[15:09] have put in place and how is being scored and if the quality gates that we
+[15:14] have defined are also being enforced. So we're going to me measure all of that.
+[15:18] I'm going to show you a few examples and then take you behind the scenes in the
+[15:23] product itself to show you how you can set that up and then how an end toend
+[15:27] flow looks like. So let's say that I am, you know, in this case I'm coming in as
+[15:32] Anna. I'm asking about international wire fees. Very simple question, just a
+[15:37] knowledge base. And then in a few seconds, it's going to come back and
+[15:41] give me the results from our knowledge base. And here you go. You see in here,
+[15:45] I'm surfacing information that obviously I wouldn't surface to a to a customer,
+[15:49] but I'm doing it here for the purposes of the demo. But I'm calling out here
+[15:53] the tools that are being called, the the data sources that are being called as
+[15:58] well and some of the details as well that make up the configuration of this
+[16:02] agent when it comes to giving back this answer. If I were to then say, okay,
+[16:07] look, I I lost my card. This is my number. Is it blocked? I'm putting my
+[16:12] credit card number in clear text, right? So that is obviously that's not not
+[16:16] great. So you want to make sure that even though that the user you cannot
+[16:20] control that you cannot control what your uses your users input in the system
+[16:25] you want to make sure that you catch that whenever you are instrumenting and
+[16:29] whenever you are uh building your evals so now we'll see in the trace itself
+[16:34] that the credit card will be indeed redacted if I come here to langfuse and
+[16:38] I open my trace you'll see that now the question is my car number is and then it
+[16:44] landed in LA completely redacted That is because I have a masking function that
+[16:48] automatically any sort of PI information that I have defined will be immediately
+[16:53] masked and then is not persisted in plain text in my system. So just to show
+[16:57] you uh in terms of what a a typical interaction looks like and I can see
+[17:02] from the top here this was the the prompt that the user sent but then as
+[17:07] you all know behind the scenes there's a lot of stuff going on that we don't
+[17:10] necessarily surface to our end users but are critical for us as the platform
+[17:16] teams as the developers to understand how the agent is is behaving performing
+[17:20] and the quality of the outputs as well. I can see the entire tree of all the
+[17:25] steps that he took. You know, here the the the anthropic LLM call that he made,
+[17:30] the tools that are available. Here it called a list of tools. It listed the
+[17:35] accounts and and so forth. And these are the outputs. But then more importantly
+[17:40] here on the top, I can see all the scores that I have defined for this
+[17:45] particular use case. You see that they're they're automatically calculated
+[17:49] whenever there's a a new interaction or a new trace being captured by the system
+[17:53] and I can I can capture things if you know down from if the information that I
+[17:58] gave to the customer is compliant with banking information meaning that the
+[18:03] customer is asking about the weather I'm not going to give that information it's
+[18:06] not compliant um if there's any sort of failure modes um if there's any guard
+[18:12] rails that we're that we're blocking any any answers that we're giving back to
+[18:16] the customer. One example of that is for instance I can come someone can might
+[18:20] come and ask can I put my savings in bitcoin right so that is something that
+[18:26] the bank itself shouldn't be providing information about that because that is
+[18:31] you know that has some ramifications and the agent you know correctly does that
+[18:35] but at the same time it is flagging it as investment advice and this requires
+[18:41] you know for the person to either talk to an advisor or or something else and
+[18:46] we are using a score to do that. And if I go again to my trace, this is how I
+[18:51] see it. I have the input guard rail here that tells me that this is the primary
+[18:56] risk is investment advice. And in the score here, I can see that the intent of
+[19:02] the customer on this score was indeed investment advice. So that way I can
+[19:07] very easily go out and filter for those in particular. But anyways, I wanted to
+[19:12] show you kind of a simple flow of this. The last one before getting into the end
+[19:17] to end on how you build a data set and how you build an evaluation flow is that
+[19:22] the fact that we can also support multimodal. So let's say that instead of
+[19:25] you having the customers writing via chatbot they're calling your contact
+[19:29] center. We can come here. We can say I want to process this call and this going
+[19:34] to do a speech to text and then the text is going to be evaluated to to figure
+[19:39] out if there's any violation on on here and I can come then in here it says that
+[19:45] the customer was asking about blocking his card and I can indeed see the trace
+[19:50] here and I can even see the actual link to the media that the customer was sent
+[19:56] or in terms of that audio uh or that call that the customer made and also the
+[20:02] transcript and what the assistant gave back. So that is in terms of the tracing
+[20:06] how can I capture all of those activities. Now when I am trying to then
+[20:11] think about okay how do I then put together or put in place a framework on
+[20:16] how to evaluate this interactions that my customers are going to be sending
+[20:21] through my system because as we all know customers are unpredictable. We might
+[20:26] design a system or a solution with a a specific intention, but our customers
+[20:31] are always going to find very clever ways to use a system in a different way.
+[20:35] And we also cannot anticipate every single outcome specifically with LLM
+[20:41] power solutions that are going to happen when we we release this into the wild
+[20:46] for customers to use. So that is when we start relying on building our evaluation
+[20:52] criteria and for for us the anchor of that is building data sets. So what is a
+[20:58] data set? A data set is basically and let's go to this one that is the the
+[21:02] generic one. A data set is basically your set of questions and expected
+[21:06] outputs that allow you to then measure the quality of the outputs of your LLM
+[21:12] or AI solution. If you come from a software development background, the way
+[21:17] that I like to think about this is that these are your test cases. And I don't
+[21:21] think anybody here that has shipped software into production will ship
+[21:25] anything without passing into QA unless you merge into main or prod, which I'm
+[21:30] pretty sure most of you have done it, but it's not a best practice. Um, I know
+[21:34] I know I have, but whatever. Um, but at the same time, this is the way that you
+[21:39] can then have the evidence that you pass the agent through a series of steps or
+[21:45] requirements that measure all the things that you want to capture. And one thing
+[21:50] to note here that the expected output doesn't necessarily need to be the
+[21:55] answer that the the agent is going to give. It could also you want to measure
+[21:59] maybe the intent of the agent. You want to measure what the agent is supposed to
+[22:04] do. If you want to measure behavior, there are different ways that you can
+[22:07] measure the quality of the output. And that is why you typically end up with
+[22:11] different sets of data sets to measure a specific things or or specific areas of
+[22:18] quality in your agent fleet. You see here how I have one that is like
+[22:23] basically red teaming my agent and looking for prompt injection attacks and
+[22:28] any sort of uh attack that will allow someone to come in and circumvent the
+[22:33] guardrails that we have put in place to then provide information that they
+[22:37] shouldn't get. The other one I have here is like very specifically for a use case
+[22:42] that I want to know which uh which cases have been disputed and where the dis the
+[22:49] that dispute has not been solved. So the point here is that I can come and and
+[22:54] curate a specific data sets that are very specific to not only the use case
+[22:59] but also the technical requirements that I have for that agent. This is where I
+[23:04] would say that not unfortunately because I think I still think humans we are very
+[23:08] important. So this is where you still need your domain experts in the loop
+[23:13] working with the development teams defining what are these. There are two
+[23:17] main ways that you can basically create your golden data sets. You either have a
+[23:22] team and I've seen variations of both. You either have a team that already has
+[23:26] a spreadsheet somewhere. these are all the things that we want to test on my
+[23:30] agent and just upload it and that's pretty easy. You can come here and say
+[23:34] okay perfect I want to create a test data set and then I want to upload a CSV
+[23:40] and you can upload the CSV and it will exactly bring up everything that you
+[23:43] just had before. The other thing I like to mention here everything that I'm
+[23:47] showing you can do it as well identically through our CLI or NCP in
+[23:51] our APIs. It's just that I think it's very it's better for me to show it in a
+[23:55] UI rather than telling claude to do it end to end. Make no mistakes. Okay. Um
+[24:00] so that is that on that but then I could also come here and say that I want to
+[24:07] add um you know items into my data set for instance that are already as part of
+[24:14] my production traces. So let's say that you
+[24:19] saw how I was already collecting a lot of activity from my application. I can
+[24:23] come here and say I want to add all of these into my data set and then select
+[24:29] the data set that I want to select. So this way you can kind of dog food in a
+[24:34] way the data set that you're going to use by looking at the production traces
+[24:38] that your agent is producing as long as you have determined that yes these are
+[24:43] good examples of what I want future outputs or traces to look like. Now an
+[24:51] important thing here to do is a process that I always like to call out which is
+[24:57] error analysis. Right? So error analysis is basically this idea that I want to
+[25:02] look at my traces and I think Annabelle kind of talked about this uh very
+[25:06] eloquently as well when she was on the other side as a user of of Langfuse that
+[25:12] she had to like and we were talking earlier today. She spent like days like
+[25:16] literally looking at traces like that was her job like looking at the trace
+[25:20] the structure what was what were the outputs and all of that. And that is
+[25:24] still a very important process because when you look at the trace you you first
+[25:30] start understanding how the agent is behaving if it's taking all the steps
+[25:34] that you needed to take if it's calling all the tools that it needs to call and
+[25:38] if it's giving you the output that you want. That's you know very very
+[25:42] important. But then how do you simplify that process? because obviously it is
+[25:47] not feasible for me as a human to go out and look at thousands of traces once the
+[25:52] system is in production. So what we typically do is we want to curate a
+[25:57] sample that is representative of our production system on of traces for a
+[26:02] human expert to come look and give me feedback. Right? It's the same as like
+[26:07] hey I have all this activity. I'm just going to take 10% or 20% and I can say I
+[26:13] just want to focus on the ones that the customer is talking about, you know,
+[26:17] disputes or credit card information, whatever filter that you want, you can
+[26:21] do that. And then you can build for them what we call an annotation queue, right?
+[26:27] In this annotation queue, effectively what you're doing, you're telling a
+[26:32] domain expert, in this case, let's say me, that, hey, you are the risk expert.
+[26:36] I need you to take a look at this output that the agent is giving us or is giving
+[26:41] our clients and give me your input. And the thing is here you want to make it
+[26:47] very very simple for the domain expert because obviously they have their day
+[26:52] job. They cannot spend just hours looking at this. So the the typical
+[26:56] things that I recommend is you can give them like a couple scores that they can
+[27:02] give you, you know, yes, no, true, false, a scale 1 to 10, whatever that
+[27:08] is. And then they can also come here and give you a comment. So let's say here
+[27:14] failure mode, let's just say for for for the sake of argument that in this case
+[27:19] is missing a citation. And then I'm going to I'm going to put a comment.
+[27:24] Citation is not there. Needs to be included
+[27:31] in all these cases, right? You're going to go through this process and and look
+[27:36] how you know it was simple for me. It took me what 10 seconds maybe. So let's
+[27:40] say I have I don't know a hundred of these and it takes me 30 seconds each.
+[27:44] That is what 50 minutes. No, no, not even. Right. I'm I'm I'm bad at math
+[27:49] today. But anyways, you get the idea, right? So you you you can tell your
+[27:52] domain expert, hey, give me an hour of your time. I'm going to curate a bunch
+[27:57] of activity for you. Just give me your feedback. Just give me a few comments.
+[28:02] And now with whisper flow or something, they can just dictate it. They don't
+[28:05] even need to type it. Right? So make it very simple. The second thing that
+[28:09] you're going to do with this, I'm going to mark this as completed. Now this
+[28:13] human annotation lives with the trace as evidence. But then the second step that
+[28:17] I want to do is take all this information, all this annotation that
+[28:21] they gave us and then actually use an LLM to find all the failure modes or
+[28:27] categories that are patterns across all of their comments. Right? So it there
+[28:34] might be you're not asking the the the theme to invent categories. You're just
+[28:39] telling them, give me your unfiltered raw commentary on these traces and then
+[28:45] you're going to use an LLM to then figure out the categories because that's
+[28:49] what they are great at. They are great at pattern matching. They are great at
+[28:53] extracting information from text. So that way you keep it simple for the
+[28:56] domain expert and use LLM for what they are great at. Now once you have all
+[29:02] those categories that is where we can then get into our failure modes and
+[29:08] those failure modes if I come here and look at my experiments that is what
+[29:13] you're going to see whenever I run an evaluation you see all of these things
+[29:19] that I'm measuring against. Maybe let me brought it up here. So now after I have
+[29:24] my domain expert give me the the the inputs I extracted what are the most
+[29:29] common categories that appear in my corpus of data based on my domain
+[29:33] expert. I can then define what are my vectors or dimensions of you know
+[29:40] quality. Let's just call it we just call it scores right but I like to come up
+[29:44] with fancy words to to say things. But you see here how one of them was sites
+[29:50] experts expected source correctness for formal register meaning that you know in
+[29:55] some languages you want to address your customers with a more formal tone uh if
+[30:01] the language matches what the customer came in with u must include non
+[30:06] solicited and so forth. So now that I have that foundation of the categories
+[30:11] that I'm going to measure on the quality of my outputs, then I can decide okay
+[30:16] cool. So now how am I going to grade that right? What type of score is that?
+[30:21] What type of evaluator is that? And for that I can either do come here and build
+[30:28] my kind of library of evaluators, right? So that those as as you know traces
+[30:33] coming in they're automatically calculating those scores for me but at
+[30:38] the same time I can have the scores being calculated directly from the
+[30:44] client application whenever something happens online in real time so that then
+[30:49] I can surface it back to the system. But basically, I want to have a a way of me
+[30:56] measuring the outputs of the agent across both LLM as a judge scores or
+[31:03] evaluators, but also deterministic evaluators. Another lesson that we've
+[31:07] that we've seen working with these clients is that the more that you can
+[31:12] have a mix um a balance mix that is depending on the type of categories that
+[31:16] you identify between LLM as a judge evaluators and deterministic evaluators
+[31:22] the better because what that's going to do is if you rely 100% just on LLM as a
+[31:28] judge there's a nonzero chance that some of the outputs are going are not going
+[31:33] to be accurate because that's just the nature of the LLMs. But if you factor in
+[31:39] some deterministic checks that are always going to be exactly the same for
+[31:44] the same inputs irrespective of what happens, then you can have a blended
+[31:49] score or a blended assessment on the quality of your agent. So that's what we
+[31:54] typically would like to see. And you see here when I'm def trying to define a new
+[31:59] evaluator I can come and say I want it to be a new LLM as a judge evaluator or
+[32:06] I want it to be a code evaluator and I can define all the details on as to how
+[32:12] I'm going to evaluate that particular agent activity. So that's that. And then
+[32:18] if I want to have a code evaluator, you see this is just code. It's a function.
+[32:22] It's code. This is very simple. It's just a reax. This is doing an exact
+[32:26] match. But this is going to give me the same output 100% of the time. This is
+[32:33] not going to be well 95% or 80%. It's always going to be 100% the same output
+[32:38] for the same input. So again, the lesson here, you want to have a mix of both. So
+[32:43] that's on the evaluation side. So now we've talked about like Annabelle said
+[32:48] and maybe let me go back here to the AI engineering loop. So we've talked about
+[32:53] here building the data sets. We've we touched on how we can then
+[32:58] operationalize the measurement of the quality of those agents running
+[33:03] experiments. And then maybe let me go back here. So basically an experiment is
+[33:09] anchored on a data set. That's my test cases. Those are my tasks that I'm going
+[33:14] to run against my agent. And now I'm going to say, you know what, this agent
+[33:19] is running today with this system prompt, this model, these tools. What
+[33:24] happens if I change the model? What happens if I make a change on the system
+[33:28] prompt? What happens if I now all of a sudden I give it access to new tools to
+[33:33] access new data? So you want to be able to kind of prototype that before, you
+[33:39] know, promoting into production and just running on Vibes, which is pretty much
+[33:43] what all we've all been doing, right? It's like, ah, yeah, it looks kind of
+[33:46] good. Let me just push it into prod. But this is a a systematic way of you doing
+[33:51] that. And in a few minutes, I'll show you how you can incorporate this as part
+[33:55] of your CI/CD pipeline, so you don't have to be in the loop. So that anytime
+[34:00] a change hits on your agent, then a CI job is going to kick off to run the
+[34:06] experiment against the data set. It's going to evaluate your agent with a new
+[34:10] configuration and it's going to give you a pass fail gate effectively across all
+[34:15] of the scores and evaluators that I mentioned before. So you have a
+[34:18] consistent way on how you evaluate and measure the outputs of these agents.
+[34:23] Make sense? Okay, perfect. So that's experiments. That's great. So we touched
+[34:28] on experiments. We touched on data sets and human annotation to bring those
+[34:32] humans and their expertise into the loop. So now how do I bring it all
+[34:38] together? Right? If I come here and I have my prompt this my system prompts
+[34:44] that I'm versioning here in Langfuse. You can do it either here in Langfuse.
+[34:49] You know we don't we don't have it's okay. We don't we don't even charge for
+[34:52] this. So that's fine. A lot of our customers what they do is they have
+[34:56] another version in system. they have a version in GitHub, GitLab, whatever that
+[34:59] is. But you should look at this as your trigger for then kicking off the
+[35:05] automation to do your eval completely automatically. So the way that this
+[35:10] happens is I already have defined an automation here. And if you see the
+[35:14] configuration is triggering on any prompt changes that I have here. And
+[35:20] then the action is it's going to launch a CI job in my GitHub, which is this guy
+[35:27] right here. Hopefully I don't I'm not get I'm not
+[35:32] getting the unicorn from from GitHub. So it's this guy right here. So I have
+[35:36] already my CI set it up set up waiting for any changes in the config of my
+[35:41] agent. Let me bring it closer here. And then I can come and see my prompt. Let's
+[35:48] just see this one. I have five versions of the prompt. You see how the prompt
+[35:52] has evolved over time. Version one, it used to have this and then version two,
+[35:59] a slight change. Then version three, it was, you know, we tried something
+[36:03] different. This is for development. Then version four, we added more details and
+[36:07] also passing different parameters into the configuration of the agent. But what
+[36:11] I can do now is I can say, you know what, this is the production system
+[36:16] prompt that I have right now. I want to test again with version 4 because I saw
+[36:21] some regressions. So I can come here and do promote into production. And again,
+[36:27] I'm showing you this as a human, you know, like a caveman like clicking
+[36:30] through. All of this can be done via the API on the CLI. So you don't even have
+[36:34] to do this by hand. You can just call the API and say promote this prompt
+[36:38] version with a production uh tag and it will kick it off for you. I have the
+[36:43] production tag. I'm going to save and promote promote to production which is
+[36:47] the new configuration. In a few seconds we should have a new CI job that is
+[36:53] going is going to launch here that then is going to kick off the experiment to
+[36:58] run my evaluation run. Okay, there you go. Thank you GitHub. Thank you so much.
+[37:04] So perfect. So now I have this job that is running automatically. So any time
+[37:09] that I push any changes in the config of my agent, it's going to hit the CI. It's
+[37:15] going to run the eval gates to tell me if I'm passing or failing any of the
+[37:20] evaluators that we have defined from before. And then with this way, I can
+[37:24] have the evidence and also the assurance if I can go into production, you know,
+[37:29] safely with this new configuration. if it's actually the agent is degrading or
+[37:33] improving in quality or maybe even violating any sort of guard rails that I
+[37:37] have put in place. That's going to run for a few minutes, but let me show you
+[37:40] one that I run earlier. And to show you the result, I can come here and see what
+[37:46] the output is. And it's telling me that this was the prompt that was sent, the
+[37:51] version, the labels, and then it's telling me that they gave passed, right?
+[37:56] So, perfect. And these are the evaluators that I measured my agent
+[38:01] against. I have here the most include, the source recall, the language match,
+[38:06] the correctness and not unsolicited upsell. And I can also define minimums.
+[38:11] I can say this is the minimum threshold I have for this specific score. If it
+[38:16] doesn't clear that bar, it's not going to be considered as a pass uh to go into
+[38:20] production. Now, obviously, in this case, I'm not crazy enough to just say,
+[38:26] okay, cool. So you pass, go merge it and push into into main. I'm just letting it
+[38:31] sit there. But admittedly, you could have a full end to end process that it
+[38:36] will just create the PR for you and it will just wait for someone to review the
+[38:40] PR or maybe if you are, you know, like like everybody's doing today, just
+[38:45] pushing the PR into main straight up uh if it's clearing the bar, but at least
+[38:50] you have the evidence here, right? So you're not pushing a PR just running on
+[38:55] vibes or just running on what you think that the agent is good at at doing.
+[38:59] You're actually have the the paper trail so to speak and the evidence on why you
+[39:04] make that decision for this new configuration of the agent. Perfect. So
+[39:10] now I want to show you one couple more things as an actual like use case,
+[39:17] right? because we've been talking a lot about the technical aspects of of langu
+[39:29] and more you know organizations are focused a lot on tokconomics right I
+[39:35] think 2025 in beginning 2026 everybody was token maxing now everybody is like
+[39:42] token valuing or whatever they're calling it now so everybody's like
+[39:45] trying to extract as much value as they can of their tokens. So now let me show
+[39:51] you a couple of ways that you can then show your bosses or your leaders or
+[39:56] whoever or maybe you want to build this for your business stakeholders for them
+[40:00] to feel a little bit more reassured that whatever agent solution that you're
+[40:04] building is actually bringing benefits to the business. This is not just like
+[40:08] oh the cool thing that we're building. Now I have here a dashboard that I'm
+[40:14] trying to put together a few metrics that I can report on to the business
+[40:19] based on the data that I'm being collecting from my agent. Right? The
+[40:23] first one is and this is where you might argue with me in the logic behind this
+[40:29] but you know every organization is different. But what I'm trying to show
+[40:33] here is that I've had 1,400 interactions of this agent over the last
+[40:39] seven days that didn't need to go to a human agent, right? So that's great. So
+[40:46] that means that I'm saving, you know, human capital from spending time to
+[40:51] talking to customers in in and do the math then. How much has that cost me? It
+[40:56] has cost me less than $7, right? Over the last seven days. If you take any
+[41:02] contact I used to be a contact center employee back in the day 20 years ago
+[41:07] you know what you gonna pay that person $15$20 an hour right so that person is
+[41:12] not going to handle 1400 calls in one hour so already you're showing at least
+[41:17] some directional business benefit by having this solution in place right so
+[41:22] that's the first thing the second thing is you could also start pinpointing what
+[41:27] are the areas where your agent is tripping
+[41:31] Right? If you remember, we define the categories or the failure modes as we
+[41:36] call them in the industry where the agent is not giving me the results or
+[41:41] the answers that I want. And these are the ones that I'm capturing in order of
+[41:47] occurrence over the last seven days. You see here that now out of scope, informal
+[41:53] register, and dispute not resolved are are my top three and they've been
+[41:58] creeping up over time. So now, instead of me having to go through thousands or
+[42:04] hundreds of thousands of traces trying to figure out which one is the activity
+[42:09] from the agent that is causing the most errors or the most trouble, I can come
+[42:14] here and scope it down. And I know already that this failure mode is my top
+[42:19] one, the autoscope, the foremost registered and the dispute not resolved.
+[42:24] So now I can come here in my tracing and do a very simple filter and say
+[42:31] dispute not resolved. I can save it as a view. So I don't even need to every time
+[42:36] filter it. You see how it's filtering up top for me. And even on the side I can
+[42:40] come here and say dispute not resolved equals zero. So that shows all the
+[42:45] instances where the customer had a dispute or was asking for a dispute of a
+[42:51] product and it hasn't been resolved by the agent. So it either had to go to a
+[42:56] human agent or it just lingered and the session closed and nothing happened. But
+[43:01] now I can then spend my time instead of going through thousands, I can scope it
+[43:06] down to maybe dozens or hundreds. And now I can do um an investigation that is
+[43:11] more targeted. And now I can also find where are the areas where my agent is
+[43:15] actually uh tripping itself up. So that's that's one. The second one is
+[43:21] that if I want to come here in the dashboards, I want to then be able to
+[43:26] say okay what are the number of times where my customers are giving me either
+[43:33] thumbs up, thumbs down. I can I can capture that as a score very easily. You
+[43:38] see here every time I can come here thumbs up thumbs down and I can just
+[43:42] show it here in a dashboard very easy to consume any business person any user any
+[43:47] human actually is going to be able to see this and say okay most of them are
+[43:52] thumbs up that's cool but what about the thumbs down let's focus on that you know
+[43:56] 18% of them what's been happening and then the other one is around the
+[44:01] security mix more in here good news most of our interactions from the agent is
+[44:08] not catching any sort of risk in the interaction that is having with the
+[44:12] customers. But we see here that in 89 cases over the last seven days, it
+[44:19] actually the customer was asking for investment advice and the agent might
+[44:23] have given or might have tried to give investment advice. So we can then go out
+[44:27] and focus on those. And again, same thing. I can come here and say, let me
+[44:33] go back to my default view. And now I can say instead of the numeric score, I
+[44:40] can come and say the categorical scores add a condition. And then say what is
+[44:46] the intent or the security risk and then the security risk, let's say investment
+[44:51] advice. And now I can see what are the specific examples where investment
+[44:57] advice was identified as a reason for being flagged and that the that the
+[45:03] agent shouldn't engage on that with the customer. And you see here even from the
+[45:07] previous example um that I was showing you. So that's kind of what I wanted to
+[45:12] show in terms of first the the nature of going end to end on a solution that
+[45:19] you're putting customerf facing first. Obviously, which has a lot of critical
+[45:23] implications in terms of liability, you know, financial implications for and
+[45:27] reputational as well because you don't want to be putting out information that
+[45:31] is not accurate or is hallucinated in front of your customers and how you can
+[45:36] follow a systematic process so that then you can show evidence and validate that
+[45:41] the outputs of these agents is actually following the guardrails and the
+[45:46] controls that you have put in place. And with that I would like to leave you with
+[45:53] Annabelle again so we can close and then maybe we can take a couple of questions
+[45:57] at the end. Thank you. >> So what we see some companies trying to
+[46:02] do or some teams trying to do is this. Please fix my agent. Make no mistakes.
+[46:08] And there's probably a few things that we can recommend less than this. Even
+[46:12] though your agent might be hooked up via MCP or CLI with your data in Lenfuse or
+[46:17] in whichever tool you might be using. Um this is something that we just see
+[46:21] producing rather slop than anything um that is actually helping you. But of
+[46:25] course we're also very much in favor of working with your coding agents to
+[46:30] continuously improve your applications. Um so we wanted to share this just as a
+[46:35] picture how you can maybe memorize it. So we have two of those a here. We have
+[46:39] one uh being the time invest. So, a lot of time spent or very little time spent
+[46:44] and then also a low quality system or a high quality system and
+[46:51] you don't want to be down there. If you fully automate it and just let your
+[46:55] agent go for it and just be like fix everything, do it for me. Um, this is
+[47:00] not going to turn out well. You will end up with low quality and yes, you don't
+[47:03] have to do anything, but also your customers will not be super satisfied.
+[47:07] At the same time, you also don't want to go go the full manual way anymore. You
+[47:11] don't want to instrument your app yourself anymore. This is something that
+[47:14] can be automated. You don't want to catch all the failure modes yourself and
+[47:17] re review all the data yourself. This can be automated. Um but at the same
+[47:22] time, for some things, you should get your taste in. You should get your
+[47:25] domain experts in the room to build out the data sets to curate what is actually
+[47:29] um what actually is the problem that your application should be solving and
+[47:32] in which direction you want it to go. And for this um you want to land
+[47:36] somewhere here. So where the ideal balance is between like um you reviewing
+[47:41] data, bringing in your taste, bringing in your domain expertise, but also
+[47:45] working with your coding agent for all the things that you can automate like
+[47:48] instrumenting it, finding failure modes, running the evals, maybe making also 20
+[47:53] experiments instead of only one um that you would come up with and yeah, just
+[47:58] like avoid getting down there in the left uh down corner, but try to be the
+[48:02] the tasteful AI engineer that is bringing in the taste, making sure the
+[48:07] the emails are great and then you can also more and more automate this loop
+[48:10] over time. If we were you and we would have to get
+[48:14] started tomorrow, h this is what we would be doing. We would install the
+[48:18] lenuse skill which is a yeah it's an agent skill. So it's a set of markdown
+[48:22] files that is helping your coding agent to wrap its head around how to work with
+[48:26] lenfuse and how to implement those best practices. It is hooked up with our
+[48:29] documentation with all our integration pages. um it is hooked up with our
+[48:33] academy where we ingrain the best practices around data sets and how to
+[48:37] instrument and how to write evaluators and all of this. So it's a a great
+[48:40] starting point um to do the things uh automatically um that you should be
+[48:45] doing automatically but also to maybe curate a set um of data that you should
+[48:49] look manually at. uh you should then start to collect um also ground truth
+[48:54] that you can evaluate your agent against maybe from historical data also from uh
+[48:58] production or from some samples that you're running with your domain experts
+[49:02] and if you're in a regulated space uh define your hard limits in a way to make
+[49:07] sure these are the things that definitely shouldn't happen for
+[49:09] financial services for example it should never give investment advice so make
+[49:13] sure that you're ingraining this also in your evaluation set um that ideally
+[49:18] never happening but at least you will know about it um when it's going to
+[49:21] happen and we have a few resources for you. So
+[49:25] the repository Donelli showed you and used um is also available online. Uh you
+[49:30] can check it out yourself. You can take everything that you want from it and
+[49:33] also use it for your own use cases. It's of course fictional data and not um not
+[49:37] something that actually um was taken from our customers and I think also this
+[49:41] session will be recorded so you can take a look again. uh we then also recommend
+[49:46] the langu academy which is like a larger writeup of uh how to go about AI
+[49:50] engineering um the whole steps um described again and we also have a
+[49:55] self-s serve workshop that is basically guiding you through all the steps so you
+[49:59] understood it once and then um yeah can go ahead with your own application
+[50:04] there's some opportunities to bump into us over the next days uh one is um
+[50:09] Donelli is giving a talk also on building deployment gates for AI agents
+[50:12] on Wednesday so Check it out if you want to understand how you can make sure uh
+[50:16] that AI models that go to production are actually um clearing quality gates. Uh
+[50:21] we're also having a booth, a booth 9. Um I haven't checked out where it is, but
+[50:24] I'm sure you will find it. Um you can meet the team there, but also you can
+[50:28] get custom stickers. So you take a picture of your face and then it AI
+[50:32] generates stickers of your face and length use with a maybe some jokes also
+[50:36] included. Um and you can take them home and sticker it on everything you have.
+[50:40] And then finally, we also have a community run. So if you want to step
+[50:43] out the conference center and meet the team, we also have two of our founders
+[50:47] here um and a few more team members and we're all big runners. So we thought we
+[50:51] just might invite everyone else as well to join us um for this. So yeah, please
+[50:55] come for this one as well. And we're super happy to use the remaining minutes
+[50:59] for any kind of questions. They also have some non-custom stickers here. It's
+[51:03] just a lengthy sticker, but I think it's still pretty cool. So if you want some,
+[51:06] you can come up uh and get them. We're happy to take any questions. and ple
+[51:10] please meet us and don't be a stranger. I'm handing this to Delli.
+[51:14] >> Yeah. Well, the Langfuse per se has a hard dependency for their stores with
+[51:18] click house. Um that is just because you know in the evolution of the product it
+[51:22] started with Postgress. Uh but then Postgress couldn't handle the scale that
+[51:27] we achieved and like billions of billions of events per day. That's when
+[51:31] we moved over to Clickhouse. So in terms of that data plane yes in clickout so
+[51:35] but maybe the followup for you what is the need for you in terms of that data
+[51:39] stores because we also offer the ability for you to export the data you can
+[51:42] export it to S3 you can use the a yeah you can use the API the CLI or the MCP
+[51:48] if you want to consume the data from langfuse so it's totally up to you yeah
+[51:52] >> I want to host it on >> yeah you you can host it 100% on Amazon
+[51:58] um it's you know we have a self-hosted deployment as well um you can either use
+[52:02] our cloud offering that is fully SAS turnkey you don't need to do anything it
+[52:05] runs on Amazon but if you want to run the infra yourself because you have I
+[52:10] don't know some you know EC2 instances lying around there you want to use we
+[52:14] also have a deployment model for that and it comes prepackaged with all the
+[52:17] components >> yeah super important question so the
+[52:20] question was about interator reliability um and also probably just consistency of
+[52:24] LLM as a judge evaluators to make sure it's actually catching um what you want
+[52:28] it to catch um there's actually also part of this language skill is handling
+[52:32] this as well and helping you to um h there's a term for it. Um it fell out of
+[52:37] my head but it's in the end about the process of making sure the LLM is
+[52:41] judging like a human would judge and uh what you do basically is you judge a
+[52:45] sample um ideally a representative sample yourself and then you run your
+[52:49] LLM as a judge and you then optimize for the LLM as a judge being coherent with
+[52:53] what your human human raiders do and ideally you have like a few human
+[52:57] raiders and that's academic approach to it. So probably the practical approach
+[53:01] to it is have one human label some data and then optimize against this ground
+[53:05] truth and then ideally you just check it over time to make sure your set stays
+[53:09] representative and especially if you are using it for um running on production
+[53:13] data it's in the end ideally you just start with having a a few too many false
+[53:18] positives so you catch a little more than necessary but don't miss anything
+[53:23] and then you just tune it down over time.

@@ -1,0 +1,820 @@
+# title: Building durable Agents with Workflow DevKit & AI SDK - Peter Wielander, Vercel
+# source: https://www.youtube.com/watch?v=kmV-qg4uoNI
+# speaker: Peter Wielander, Vercel
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T10:04:15Z
+# sha256: 262d7db92146de976b4964444533957470a1580c28f72acd5c6817226917abe5
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:13] [music]
+[00:20] Thank you all for coming. Hello. Hello. >> Got you.
+[00:28] Uh, I don't know about you, but um, my ride agents, I like focusing on the
+[00:36] capabilities and the features, and I like not thinking about um, all of the
+[00:41] extra effort that goes into getting something that works locally into
+[00:44] production. And something that's very useful for that is uh, a workflow
+[00:50] pattern. And that's why we developed the workflow def kit which is what we're
+[00:54] talking about today. Presumably if you're here you've had similar issues.
+[00:59] Um and today uh we are going to um turn a agent uh coding agent um into a
+[01:08] workflow supported coding agent throughout this session. So
+[01:14] [snorts] this slide. So we um have a open- source
+[01:18] example um ready to go. Uh this is on the versel/examples
+[01:23] repository. Uh so you can clone that and check out the VIP coding platform app
+[01:29] insight. Uh we're going to be using this app um for today's demo.
+[01:35] Um and after we're done we get first class observability built in and also
+[01:42] durability reliability. uh we get a lot of extra features like resumability
+[01:47] um and draft kit makes it very easy to add
+[01:50] human in loop workflows and similar uh things.
+[01:56] So if you think about our uh general agent loop um that we've all seen
+[02:01] before, we mostly have calls back and forth from another LAM um to our to
+[02:08] calls and our backend uh code, right? Which would include MCP servers, human
+[02:13] approval, any kind of async tasks. And uh the usual way to go about this is
+[02:20] to uh wire up some cues um and a database especially if you are doing
+[02:26] longunning agents right that might run for hours um and you want to scale and
+[02:31] you're running on serverless for example uh you want something some kind of
+[02:35] reliability layout in between which usually is filled by cues um and then
+[02:40] you'll also need to add a lot of error and retry code you'll need to store all
+[02:44] the messages that people are sending and also between states and you probably
+[02:49] also need to add some kind of observability layer in between. All of
+[02:54] those things we are going to do today uh using only a single library which is the
+[02:59] workflow development kit. Um it's open source um and it runs with any of your
+[03:06] TypeScript um front ends or backends and can also run on any cloud. Uh we're
+[03:13] going to be deploying to Brazil today, but this could just as easily run or any
+[03:18] of your cloud stacks um orbase or any of your custom stacks.
+[03:25] [clears throat] Um all right, so who here has heard of
+[03:30] the workflow pattern or has used a workflow library before? Show of hands.
+[03:35] All right, that's less than half. Um I'm going to quickly explain what a workflow
+[03:39] pattern is um to uh make it clear what we're doing and then in about 2 minutes
+[03:44] we're going to go into the code. So um a workflow
+[03:49] pattern is essentially a sort of orchestration layer um that separates
+[03:53] your code into steps that can run in isolation and can be retrieded um and
+[03:58] have their uh data persisted and a orchestration layer um that we call a
+[04:05] workflow within platforms have different names for that. And in our case here, um
+[04:11] the the workflow parts would be whatever the loop is that calls um the reason the
+[04:17] LM calls and then goes back to the tool calls and then back to the LM calls. And
+[04:21] the steps would be our actual tool calls and our LM calls. Um
+[04:28] right, so looking at the agenda for today, um we're going to be jumping
+[04:32] jumping into the code. We're going to add workflow development kit which is
+[04:35] going to be quite fast and then we have a lot of time to talk about uh cool
+[04:40] additional features that it adds like resumable streams out of the box um how
+[04:45] to suspend and resume at any point um and how to add web hooks for human in
+[04:50] the loop uh processes. At the end there's going to be ample time for Q&A
+[04:55] but there is a reason that you're here in the workshop and not looking at this
+[04:59] online which is that you can ask questions. Please do so at any point. Uh
+[05:03] feel free to raise your hand or just shout out the question. Um and we'll get
+[05:08] rid of all right so as I said uh we're working
+[05:14] off the baselample repository and we're going to be working off of the conface
+[05:20] branch. Uh why this branch? I stripped a bunch of the access code on the example
+[05:26] to make sure that we can focus on the most important parts. And every
+[05:30] checkpoint from this workshop will have its own branch. So uh if you're not
+[05:35] coding along directly, you can also check out the steps step by step and
+[05:40] then check the diffs and see what changed between.
+[05:44] All right. So um I have already run uh npm dev locally
+[05:52] on this uh um platform just to show you what it looks like. I'm going to run a
+[05:56] simple query. Um so this is a uh coding agent, right? It's like a code editor
+[06:02] but without the code editing and it can take a prompt, generate some files and
+[06:08] it'll eventually show you a iframe with the finished app that is deployed. Um,
+[06:14] so it's it's mostly UI with a few simple tool calls um that we'll look at in a
+[06:18] second. And the file system and output uh runs over the cell sandbox, but you
+[06:24] could just as easily run this locally. Uh, looking at the code, I'm going to go
+[06:31] and check out our actual branch.
+[06:36] Looking at the code, uh, we have one endpoint that accepts our chat messages,
+[06:41] right? Then it does some some regular sort of model ID checking with us to see
+[06:46] whether the model is supported. And in the end it's going to simply create an
+[06:51] agent. Oh yes. >> What was that branch one more time?
+[06:55] >> The branch was conf.
+[07:01] Yeah. And you can see we'll we'll move on to these com/2- etc. Uh just look for
+[07:06] the numbers and you'll find all the checkpoints.
+[07:10] Um yes. So our main endpoint just accepts some messages and calls the AI
+[07:17] SDK agent which is essentially the same thing as a stream text call. Um we'll
+[07:23] pass some tools and internally it'll just loop for stream text to call stream
+[07:28] text call. uh and then it'll uh stream the all of the chunks generated back to
+[07:36] the client in a format that is easy for the client to understand. This is all
+[07:41] sort of AISDK regular code um that you could replace with a different library
+[07:46] if you want. Um that is mostly there to support the UI. Um but again all of the
+[07:51] actual agent stuff is very simple and happens here. So
+[07:56] uh oh let's also take a look at the tools that we have. Uh we have four
+[08:01] tools uh create sandbox get sandbox URL. These are very simple. They just wrap uh
+[08:07] bell sandbox.create and get URL and similar with run command essentially
+[08:13] reps uh sandbox.r run command and generate files um will generate uh a
+[08:20] file from a simple prompt. And we're going to take a look at one of these
+[08:23] root calls as an example. Uh we have a we have a prompt that looks somewhat
+[08:28] like, you know, a markdown file. Sort of what to do, what not to do. Um and
+[08:34] my hotkeys are not working. And
+[08:40] back to the tool call. We also have an input schema that's a Z schema um for
+[08:45] what BI is supposed to pass. This is all very standard. and then an execute run
+[08:50] which wraps sandbox one command with some error handling.
+[08:56] So that's essentially our entire agent code setup and then in the front end we
+[09:01] just call use chat from AI SDK to consume the stream and display uh things
+[09:06] in the UI. So uh let's get started adding workflow to this. Um any
+[09:13] questions before I get started? Cool. All right. Uh, so step one is
+[09:21] we're going to run npm install for workflow and add workflow
+[09:28] which will give us the latest version. Uh, workflow is the main library and add
+[09:33] workflow are some helpers for uh uh some some rappers for
+[09:40] that work well with the workflow development kit.
+[09:44] So now that we have this installed, uh we are running a Nex.js app here. So
+[09:49] we're going to uh extend the compiler to uh compiler workflow code by doing use
+[09:56] workflow or with workflow. Um which we can import from
+[10:05] workflow next
+[10:10] and that'll set up next.js. Yes. >> Verifying question. You are in the
+[10:16] example applied coding directory. >> Yes.
+[10:23] >> So adding this will let the compiler know to also compile our web um
+[10:28] separately which we'll get into more in a second. And then for convenience, we
+[10:33] can also add a TypeScript plugin to our TS config um same package and that'll
+[10:39] give us some better autocomp completion for [clears throat]
+[10:41] our workflow code. And so we talked about uh a workflow
+[10:48] being um having an orchestration layer and
+[10:51] having a number of steps. Uh what we're going to do first is we're going to
+[10:56] write the orchestration layer. Um, in our case, that is essentially just the
+[11:00] agent, right? Does the loop that calls steps um back and forth. We're going to
+[11:07] add a new file. Uh, you can call it whatever you want. And we're going to
+[11:12] take our agent call and move it over there. And
+[11:18] I'm going to call this our uh code workflow,
+[11:25] which is going to be all of our workflow code.
+[11:32] And then I'm going to go and auto complete a bunch of imports.
+[11:42] Thank you, AI. So we're just passing most of the uh arguments that we would
+[11:48] otherwise get from here over there. And this completes the refactor. Essentially
+[11:55] having done nothing but pull out some of the workflow code into our file. So this
+[12:00] is where it gets interesting. Um, now that this is a code, this is a separate
+[12:04] function, we can use the use workflow directive
+[12:08] which will mark this for our compiler as a workflow function.
+[12:14] So what this does is under the hood, yes. Oh, sorry.
+[12:20] uh under the hood it um compiles all of the code related to the function into a
+[12:26] separate bundle and it ensures that there is no imports to anything that
+[12:29] would have side effects because the workflow orchestration layer needs to be
+[12:33] deterministic. So it can be rerun um in a in a uh deterministic fashion and
+[12:41] there's no worries about state uh pollution.
+[12:45] So now that we have this um we would need to now mark our LLM calls as steps
+[12:54] and because the calls are happening inside the agent um this is a little bit
+[12:58] harder to do here and so we uh ended up writing a
+[13:06] durable agent class which is essentially the same thing as agent with a use step
+[13:13] marker in the actual LM calls that it does under the hood.
+[13:19] So, now that we have this set up, we're going to
+[13:25] await the actual streaming and let's see if there's anything
+[13:32] we need to do. Um, checking for errors. Oh, yes, we
+[13:38] need a stream to write to. So, previously we could just write to the
+[13:42] stream that the API handler gave us. Uh, now we're going to have to create a new
+[13:49] stream to write to. Um, we export a get writable function from workflow which is
+[13:57] which gets a stream implicitly associated with the workflow to write
+[14:00] to. And we're going to get get into that a little bit more in a second. But for
+[14:04] now, we'll just pass that to our agent. And we're going to see if this is right
+[14:13] type. Um, presumably
+[14:17] not. Um and then finally
+[14:23] back in our actual workflow we need to call our workflow in a way
+[14:29] that the uh framework understands which for us is a call to start
+[14:37] with the arguments being passed separately which is essentially telling
+[14:41] it to start a new workflow
+[14:45] on this on this function and start can be imported from workflow/ API Okay,
+[14:51] so now we essentially have uh the workflow fully hooked up and a lot of
+[14:57] this was just pulling out some of the codes and adding a directive.
+[15:06] Yeah. Um
+[15:10] has volunteered to help anyone who's like following along and has some
+[15:14] debugging questions. Um just reach out. >> I'm on the team as well. So let me know
+[15:19] if you guys are following one. >> I'll be around to help.
+[15:24] >> And finally, this start call returns a run instance
+[15:28] um that has the stream that just um end up writing to that we can return to the
+[15:33] UI. So this completes our workflow um definition. And now uh we also said that
+[15:40] we would need to mark things as steps. The durable agent class already marked
+[15:45] the LLM calls as steps. But our tools right now are not marked as steps.
+[15:50] Thankfully, this is very easy. Uh in the execute function for each of these
+[15:55] tools, you can just write use step and that will let the compiler know that
+[16:00] this is a separate chunk to uh of code to uh execute in a separate instance.
+[16:07] Right? If this is deployed to production, this would run in a separate
+[16:10] serless instance and the inputs and outputs would be cached if it already
+[16:14] ran and it would be retrieded if it failed. So I'm going to go and
+[16:20] go through the other tool calls and also add use step to these. Thankfully we
+[16:26] only have four of them.
+[16:30] And that should complete our transformation.
+[16:35] So now we can go and run the mpm dev. See if this works as expected.
+[16:44] We're going to reload our page.
+[16:51] And it seems like nothing changed. Let us actually run a query.
+[16:57] And we can see that it's still streaming as expected. So uh for us developing
+[17:03] locally right all we had to do is pull out a function um and then add some
+[17:07] directives. But now if I deploy this um to any adapter again was or an AWS
+[17:14] adapter or maybe you have your own um this will run uh in isolation with
+[17:20] durability and all of those good things. And something that's really nice for
+[17:24] local development also is that if I go and
+[17:30] if I go and I'm going to go into the same folder here and I'm going to run
+[17:34] npx workflow web which is this cli call to start a local web UI to inspect our
+[17:41] runs. Um and you can see that our run is currently still running. Um and every
+[17:47] step everything that is marked as a step will have a uh span here and you can
+[17:52] inspect the inputs the outputs and any associated event. And we can see that
+[17:57] our workflow just completed I think and yeah this gets built in. Yes.
+[18:03] >> And just for clarification every time you're prompting your vibe coder that is
+[18:07] is one instance of the workflow that runs to completion. So then so each one
+[18:12] is Yeah. It's >> exactly Yeah. And you could model this
+[18:14] uh in any way you want. Um you can also model your entire like an entire user uh
+[18:20] sort of uh session as one workflow and uh have the workflow sort of do a loop
+[18:27] wait for the next query um and then again you know we can run code for weeks
+[18:34] if we need to essentially um and I'm going to go into uh some tools
+[18:40] for that in a second. So now that we have this uh set up uh
+[18:46] you can see that um on the right side we do not get any sort of helpful uh
+[18:51] feedback. But um if I visit this link and see that our app
+[18:58] has likely been created correctly um or or it failed because of some
+[19:06] errors and
+[19:10] either way we're not getting any output on the right side. So uh the reason this
+[19:13] is happening is that we are streaming um the agent output to the client but our
+[19:22] tools aren't actually doing any stream calls right now. So what we could do is
+[19:27] similarly in our tool calls uh we could get the writable
+[19:34] um which would which will get the same writable instance as any other uh as the
+[19:40] workflow itself. Um there is an infinite amount of streams you can you can create
+[19:44] and consume in a workflow. Um and you can also like you can tag them with a
+[19:48] certain name and then fetch them from there. Um but this will get the default
+[19:52] instance. And once we have a writable we can
+[19:56] actually connect to the writable by getting the writer. And now we can
+[20:03] write any kind of information um to the to the iPhone to be consumed. I think we
+[20:10] want something like data create sandbox I think is what I hooked up in the UI
+[20:16] and then we'll call ID
+[20:21] we want the sandbox ID do it here. So this is me just writing a data packet
+[20:27] that our UI knows how to consume. So now that I did this and I if I reload the
+[20:33] app and start this again, we'll see that at least the sandbox create call
+[20:41] presumably gets filled in correctly at the start.
+[20:47] >> Yeah, >> you said that there are stream that you
+[20:52] can create and what do you mean by that?
+[20:57] >> Right. Yes. So um a stream the workflow sort of the adapter they
+[21:05] use for workflows in local development right this would just just be a file in
+[21:09] production this might be a reddus instance
+[21:11] >> um supports the workflow calling it to create a new stream for example in
+[21:15] reddus right and then passing that stream back and so anytime you call get
+[21:20] writable it'll create a stream for example again in radius with the ID of
+[21:25] that workflow and it'll pass that So any step can attach to that and any client
+[21:29] can attach to that >> and in local uh host this would be
+[21:34] written to a file and read from a file.
+[21:38] >> Sorry you're setting up right now.
+[21:44] >> Right. So pre previously we had a a API handler that took some messages called
+[21:50] the agent and then streamed back messages from that API handler. Now we
+[21:54] have an API handler that calls it starts a workflow and it'll pass back the
+[22:00] stream that this workflow creates. Um, what this allows us to do also I think
+[22:06] that was not working correctly. I'm going to restart the server just to see
+[22:09] if that's the case. Um, >> anything else so far getting this set up
+[22:14] to where where needs any help with getting set up?
+[22:20] >> Seems good. Um good point you made uh something this allows us to do is that
+[22:26] the stream is not bound to the API handler. This means that at any point we
+[22:31] can resume this stream. If you lose connection to your API handler and then
+[22:35] the user reconnects this stream still exists and we could reconnect to the
+[22:39] stream to resume the session. This is also part of the durability aspect where
+[22:44] everything you do in a workflow you can resume at any point.
+[22:49] I'm going to restart this query and hope that it works this time. Yeah. So, now
+[22:54] that I hooked up this data packet, you can see this special UI handling for
+[22:57] creating a sandbox uh works. But even after it's done, it's not showing up
+[23:02] that it's done. This is because we're only writing the initial loading state
+[23:06] packet. So, I could go through all of our tools and I could add more packets
+[23:09] and just, you know, make the UI richer. Um, but I'm going to go and check out a
+[23:15] different branch which is the uh conf- sleep branch. Uh, just the next step uh,
+[23:21] which already has these actually I'll go for the workflow one.
+[23:26] Sorry, conf /2-workflow which already has all of these writer.
+[23:30] Calls populated. There's no difference otherwise. Um, so now that all of our
+[23:34] tools have these right calls, the stream would again presumably look the same as
+[23:39] it did when we started out in this app. Um, all right. So, now that we have
+[23:46] streams working again, everything is working as expected and we have more
+[23:49] observability and we can deploy this with durability. Um, I talked about
+[23:54] resumable streams before. We're going to see if we can get this stream to resume
+[23:59] so we have durable sessions. So, the only thing we need to do to uh
+[24:05] make that work is to go to our API endpoint.
+[24:10] Um, and what where we get the run instance, we're also going to return
+[24:18] the workflow ID as a as additional additional
+[24:25] information. So I can I can return run.r run ID for example. This is just again
+[24:30] any way you do this is fine. Um, I'm adding it as a header here because we're
+[24:34] already returning a stream. But anyway you pass the ID to the UI um is
+[24:39] something that the UI can then use to resume the stream from.
+[24:43] So what we do from here is uh the UI should be able to decide whether to
+[24:48] whether it has a run ID and whether it should resume a stream. So we're going
+[24:51] to go and create a new endpoint. Um let's call it
+[24:59] ID for type slashexisting ID. Then we're going to make a folder stream and we're
+[25:07] going to add a route handler. So this is just next.js uh configuration for adding
+[25:12] an API route at slash chat/ ID/ stream and we're going to
+[25:20] auto complete with AI. [laughter] Um what we're essentially doing is uh we
+[25:27] get the ID from the params and then all we're going to do is call get run in the
+[25:32] workflow API which gets a uh the run instance and then we can
+[25:39] return the same stream that we return in the other endpoint
+[25:44] just without calling the actual agent um only only doing the stream and
+[25:50] >> this whole project >> I think that should be good. Um, we're
+[25:55] also taking our start index which is very helpful from the AI. We can get a
+[26:00] readable stream um, from a certain start point. I think this is why it's auto
+[26:04] computed. Um, so if you're trying to resume a stream like midway, you can
+[26:08] pass a, you know, which chunk you were on when you initially left off. So now
+[26:14] that this is done, I'm going to comment out these things we don't currently
+[26:17] need. um we need the UI to support
+[26:23] this uh conditional of whether to resume or whether to start a new chat. So I'm
+[26:28] going to go to our chat front end and I'm going to go pull in some code from a
+[26:33] different branch um for simplicity which is the it's on the four-streams branch
+[26:39] which I'm going to just show for
+[26:44] completion. um we do a use chat call already in the UI to consume the stream
+[26:50] and we all we added now is a transport layer which is this big block here that
+[26:56] has some middleware for the stream that says that if I'm
+[27:00] trying to start this call uh I'm going to check first whether we have an
+[27:04] existing run ID and if so I'm instead going to do a reconnect by calling this
+[27:08] different API endpoint instead I'm sort of handwaving over this a
+[27:12] little bit because it's client side handling for for traditionals. Um, if
+[27:17] there's more questions about this, please feel free.
+[27:22] [cough] All right. So, that gives us resumable
+[27:25] streams. Um, and I'm also going to demo uh what if we wanted to deploy this and
+[27:31] see it in production. Uh, so I'm going to call this and then
+[27:36] we can check out a production preview example.
+[27:40] In the meantime, uh the next we're going to do is we talk about
+[27:47] events and resumability. The workflows because they run the way
+[27:52] it runs is that every step runs on its own serless instance in production. The
+[27:57] actual work workflow orchestration layer is only called very briefly to
+[28:02] facilitate a step runs. What this allows us to do is to have a workflow to spend
+[28:07] for any amount of time. a workflow could wait for a week and not consume any
+[28:12] resources. Uh this [clears throat] is built into the workflow development kit
+[28:17] um [clears throat] in a way where we can in
+[28:20] inside a workflow anything tag with use workflow we can simply call sleep
+[28:26] three days for example um and that would also wake us uh that
+[28:35] will pause the workflow for three days and then resume where we left off. If
+[28:40] someone was trying to reconnect to a stream for example, right? This was
+[28:43] sleep an hour, the stream would just reconnect again to the same endpoint and
+[28:47] things would resume from there. So we don't lose anything by uh losing the
+[28:52] instance that runs the code because we can always restart it, resume from where
+[28:56] we left off. [snorts] Um and this is useful for AI agents
+[29:00] because we can to a tool call. uh we can have the UI as the AI agent have a call
+[29:07] that says sleep any amount of time and then use it to make an agent that that
+[29:12] essentially uses a crown job where it says every day read my emails and do
+[29:16] this thing right so that would be sleep one day yes
+[29:19] >> when the when the kind of agent goes down that means all the state goes with
+[29:25] it down >> yes so when it when it sleeps no when it
+[29:27] sleeps for three days >> no then it kind of paused but when that
+[29:31] would be killed output is for some reason where does the state go of that?
+[29:36] >> So the the way it works is that any step call um is cached. So when you when an
+[29:43] input goes to a step call, we register that as an event and we run the step and
+[29:48] if the step completes, we cach the output and say this step has been run um
+[29:53] to completion. Right? So if it was if it was something like this where we run the
+[29:56] agent first, right? Let's say we run the agent and we run a bunch of steps. um
+[30:01] the state of the workflow function at this point in time would be saved and
+[30:05] all of the outputs from all of the stat calls would be saved and at the time
+[30:09] where we restart the workflow from this specific line of code it'll rehydrate
+[30:13] the entire state and it'll just go from here.
+[30:18] Um and this happens so that again we don't have to replay any of the code of
+[30:22] it uh in a way that that does any actual resource consumption.
+[30:27] Um yeah, so
+[30:31] we can use this to make an agent that has it's essentially a crown job again.
+[30:35] Um and we can use it to make agents that run for weeks or interact with any of
+[30:39] your um sort of like information over over a very long time horizon.
+[30:44] And while I've been talking, we have
+[30:48] deployed uh our current app to the cell. So I can check out this preview branch
+[30:52] for example and you can see the app is now live online um and working just as
+[30:58] it usually does. And yes it works perfectly. And if I then
+[31:05] again I can do uh I can use the UI to inspect this at
+[31:10] any point. If I call workflow inspect web or just workflow
+[31:16] web with the dash backend for cell and dash and preview parameters for example
+[31:22] that'll just let us let it know where our deployment is to be found and then
+[31:26] that'll spawn up the same UI and now we can check on this run run run that's
+[31:31] running in production and you can see we're getting the same kind of
+[31:34] information here. Um, yeah. So, this is sort of Oh, I'm not
+[31:41] going to cancel the run. I could cancel the run. Let's cancel it. Um,
+[31:46] this is to show that the way it works in local locally is the exact same way that
+[31:51] it works in production from a conceptual standpoint. Um, which is the UX we are
+[31:56] aiming for. All right. Um, I talked a little bit
+[32:00] about sleep and suspend. Let us go and write this
+[32:06] sleep tool call. It's [clears throat] going to be very simple. Uh I'm going to
+[32:11] go and copy the I mean I already here but I'm going to
+[32:16] copy this and write it from scratch. We're going to write a sleep
+[32:21] uh pool call.
+[32:27] I'm just going to call it sleep.ts. And uh we're going to turn down the
+[32:32] input schema to be something like time out milliseconds
+[32:38] and the actual run command to be
+[32:47] none of this and instead just call sleep.
+[32:54] Um because sleep is already a step um that we export from workflow in workflow
+[32:59] library. We don't need to call uh we don't need to mark this function as use
+[33:04] step but this will now uh let's see if this
+[33:10] is oh this should be a number. There you go.
+[33:15] >> Can you see that again? Why don't you need the use step?
+[33:18] >> Oh uh so this is already a step um that we export from workflow. It's going to
+[33:23] be the observability will also show it as a step which we'll see in a second.
+[33:28] And [snorts] um this should just work assuming the
+[33:32] prompt is good which we're going to modify to be say something like
+[33:37] see of this.
+[33:42] Um yeah, do this. Um only use this tool if
+[33:49] the user directs you to do so.
+[33:55] All right. And get a double quote here. There we go. And so now that this sleep
+[34:00] call is set up, um that should be all that we need to do.
+[34:07] We'll call it run sleep command and sleep tool. And we're going to add this
+[34:15] to our tools list.
+[34:21] [clears throat] And
+[34:26] I think I confused our compiler a little bit or at least TypeScript.
+[34:33] This seems to work great. Okay, now we have the tool. Um, and we also want the
+[34:37] UI to sort of display when it's sleeping. Um, so I'm going to add I'm
+[34:41] going to add a another not a function to log sleep. Uh,
+[34:50] this is the reason we're doing this is we cannot write to a stream directly
+[34:56] from a workflow because then it wouldn't be uh deterministic anymore because
+[35:00] every run of the workflow would write to the stream again. Yeah. So I'm
+[35:03] [clears throat] trying to run the project. Um I had to create a versel API
+[35:07] key for the AI gateway. Did that did that getting error that says
+[35:13] header is missing from the request. Do you have the YC option enabled in the
+[35:18] project settings? >> You skipped this in the beginning but
+[35:21] >> oh yes. >> Yes. Our uh because this code uses uh
+[35:28] [clears throat] sandbox uh you would need to log into this. Um my mistake uh
+[35:33] this should be running locally. Um if you don't use this sandbox which uh I
+[35:38] will uh we'll have a branch that doesn't use this sandbox um for after the talk.
+[35:44] >> For now you might [laughter]
+[35:49] >> um at this point I'll just do it afterwards. It's fine. So here I'm just
+[35:54] going to add another call to writable and we're going to call uh we're gonna
+[35:59] let's see we're going to need local ID and so now this is just going
+[36:06] to writes to the stream and that should allow us to
+[36:11] show it in the UI correctly. Um, let me see if I figured
+[36:18] the UI to correctly interpret this packet.
+[36:24] Um, there is no data sleep type which I
+[36:31] think might wait. Yes. All right. So, now that I have this, um,
+[36:37] I can go start our app again and
+[36:46] And so it loads. We can try out the second prompt here which is sleep for 30
+[36:51] seconds and then return a uh just to show that it's going to
+[36:55] correctly interpret the sleep call and then
+[37:01] sleep. Um, it's not showing the data packet here sadly, but we can go to the
+[37:08] web UI and we can show it
+[37:13] has been it's engaging in the sleep call and this is going to return after 30
+[37:17] seconds. All right, so that's sleep and there's
+[37:23] one final thing um one final feature that I want to show you u which is web
+[37:27] hooks and the ability to resume from web hooks easily. uh implementing web host
+[37:32] is usually quite difficult or a headache and in our case uh I'm going to check
+[37:39] out the conf /5-hooks branch and show you that we can in the same fashion as
+[37:46] we do sleep we can add a new tool that I'll just I'll just show you where the
+[37:50] actual tool call is um just a a log call and then we create a web hook which is a
+[37:58] function we export from the workflow Uh and we can then log the web hook URL
+[38:08] to the client or anywhere else and await web hook and this will suspend for as
+[38:13] long as necessary to uh someone to click on this URL and then
+[38:20] let's see if we can the server is running and I can show you this uh
+[38:24] running hopefully [snorts] reload this and Um,
+[38:35] wait [clears throat] for wait for human approval
+[38:40] before starting and call
+[38:45] Pokemon index.
+[38:49] Let's see if it happen this correctly.
+[38:54] Been changing branches, so I might need to restart my server.
+[39:05] Um, and the way this works under the hood is that again we'd be creating a a
+[39:11] URL and we're going to sleep the um the workflow until a call comes into that
+[39:18] endpoint. And this comes with I'm going to run this query. This comes with a lot
+[39:24] of extra features like I could also do respond with if I wanted to. Uh this is
+[39:29] a full API API request handlaw. I could respond with a request object. Uh I can
+[39:35] treat this as a uh again API endpoint. I could also check the body against the
+[39:41] result schema for example and then only uh resume once that matches.
+[39:48] So this gives you full control. Um, but the nice thing is it does hook up the
+[39:52] URL internally and you can see that it's paused waiting for a human to click on
+[39:56] this link and if you're running in local host it's a local host link running in
+[40:00] production it will be whatever your deployment uh URL is. Um yes about both
+[40:06] sleep and human approval those are like a workflow is is purely steps and steps
+[40:10] always run to completion right so so sleep is a step it's not like the
+[40:14] suspension of you know like some sort of like it's not a suspension of the the
+[40:19] execution it's like it's it's a step >> no it is so we model is the step in
+[40:24] terms for the observability and for the for how you call it but it is an
+[40:29] internal feature that completely suspends the workflow and all steps
+[40:32] nothing is running while to sleep. Um you can also do sleep and another step
+[40:38] and you can promise them if you want. Um it works as a step call in that sense
+[40:43] that it's a execution that takes a certain amount of time. Um and you can
+[40:47] use promise await syntax uh to model that but again it completely suspends
+[40:52] unless there is anything else running at a time and the same for the web hook.
+[40:56] it's modeled as a step um for the observability
+[41:01] um but it completely suspends unless you have auto code running at the time.
+[41:05] >> So just from my understanding if you have an agent running uh with a workflow
+[41:10] it keeps running. >> Yeah.
+[41:11] >> You connect to it again let's say through another session and you would
+[41:15] call sleep in this session does that like the previous one just like whatever
+[41:20] it was doing just goes down. So if you have two sessions
+[41:25] um so let's say we we have a coding session right and it already built an
+[41:29] app and then it's sleeping for a week right um and then we reconnect to the
+[41:33] stream is that the >> no the thing is uh let's say I kick off
+[41:36] a work uh workflow and it's calculating like the numbers of pi just keeps on
+[41:42] right but I connect to the same sandbox and then I call sleep will it stop
+[41:47] calculating pi >> um so the way you would do this in a
+[41:52] workflow is again let's let's see how we would code this
+[41:55] >> you have a sandbox there sleep in the sandbox
+[42:00] >> well you can connect to this sandbox you connect again to the sandbox and some
+[42:05] thread call sleep does the whole sandbox go
+[42:08] >> so the the sandbox is uh it's basel sandbox which is a sort of just imagine
+[42:13] it as an EC2 instance um so this is just a a helper for us to spin up an instance
+[42:18] to run this coding agent like run the code in order to store the files
+[42:22] Um if you met this differently you wouldn't have to use sandbox um and the
+[42:28] sleep call doesn't happen as a as a bash call for example then two different
+[42:33] >> right >> like an orchestration thing and then
+[42:36] when you're actually in this box you you call sleep in a sandbox you're
+[42:40] >> okay so there are two different >> right so so there is sleep that you
+[42:44] could call from a terminal um in the sandbox as a as a as a terminal command
+[42:48] or there sleep from the workflow which suspends the workflow
+[42:54] Uh yeah so we have we have these features for for web hooks right and we
+[42:59] can see that after I clicked on the URL it resumed and then coded me a Pokédex
+[43:05] um that is all of the features we're going to in the session and I think we
+[43:11] have ample time for Q&A about 20 minutes at least
+[43:17] please go for >> how would I spin up claude code session
+[43:21] with this >> a cloud co session
+[43:26] remotely or are you >> no kind of run and kick it off as an
+[43:29] agent doing certain stuff um is that possible and then kind of orchestrate
+[43:35] that as agents >> that is possible so cloud code uh is um
+[43:40] [clears throat] if you're talking about the app like a
+[43:42] tonal app right cloud code then that doesn't use a lot of the workflow
+[43:46] features internally um so it's hard to isolate that or know where the oxidation
+[43:51] There is you could write your own version of uh cloud code or take the
+[43:55] plot code source code and add workflow and step um for the calls and that would
+[44:02] then run as as a workflow in the cloud. There's no way to say like okay I have
+[44:06] my steps you know spin up claw work uh kind of code type this command and wait
+[44:14] for anything that would be a versel workflow but how would I actually boot
+[44:18] drop it like code it >> is one command told right so you know
+[44:23] what you're asking >> if you so if you're calling cloud code
+[44:26] uh in a um so made as a confusion of like where this is running right for a
+[44:30] coding agent here if the coding agent runs make the right for like creating
+[44:35] creating a folder that make the command runs in a step but it runs against a
+[44:40] like in a sandbox there sandbox being a VM and so this VM state is not managed
+[44:45] by the workflow itself um so if you call cloud code on the VM that's essentially
+[44:51] treated like an SSH session but if you run any any agents or steps within the
+[44:56] workflow right those steps are going to be resumable um and observable through
+[45:01] the workflow pattern Um, another question, how do I control
+[45:07] um what my agent has access to from going out to the internet doing stuff?
+[45:14] >> This would be uh whatever you're whatever you're already doing for the
+[45:18] agent, right? If you if you in the end you're going you're going going to be
+[45:22] doing tool calls and stream calls to the LM provider, right?
+[45:27] um that is that is in your code presumably already and whatever you're
+[45:32] already using to control permissions there like your tool calls for example
+[45:35] right if your tool call uh allows you to delete a resource in S3 for example then
+[45:43] you as call uh can write whatever code you want
+[45:48] uh in the usual way that >> it's my job to implement it but it's not
+[45:54] that it has some wrappers by the end Yeah, all in the sandboxes.
+[45:59] >> Workflows is a general orchestration layer for durable execution um and
+[46:03] doesn't necessarily provide a sandbox for running code or um like running
+[46:08] third party code or running agent code or making files. Uh that's something
+[46:11] that the sandbox is good for because every sandbox instantiation is a new VM
+[46:16] um that only lasts for as long as your session lasts.
+[46:21] >> Yes. >> Yeah. So uh if I'm running workflows uh
+[46:26] and I'm like creating a lot of agent uh workflows through my brother uh how does
+[46:33] that do does that get queued up on your system? How does that get run? Is there
+[46:38] rate domain or currency and controls that we can uh use?
+[46:44] [clears throat] >> Yes. So this is this is uh this goes
+[46:47] into sort of uh some of the patterns that all of this is going to be
+[46:53] supported um and for the most part is supported right now which is that if
+[46:56] you're deploying for example to go right and as usual if you do nextjs every
+[47:01] deploy is a separate uh like live URL right that if you call it spawns up a
+[47:07] serverless instance and so your workflows are bound to the deployment.
+[47:12] So if you have something that something very nice that you get here is if you an
+[47:16] agent and it runs for a week but you deploy five times in during this week
+[47:21] those new deploys are going to be isolated from the original workflow and
+[47:25] the original workflow is going to run to completion and then any new workflow
+[47:28] will run on the new deployments and we'll also allow upgrading between
+[47:32] those. So if you have a a workflow that runs for a year, right? Because it's
+[47:35] like every month give me a summary of so and so, right? But you have new code and
+[47:40] you want the workflow to uh you know take its current state and use the new
+[47:44] code for the workflow. Um there's going to be an upgrade button in the UI that
+[47:49] checks for compatibility between the old workflow and the new workflow by
+[47:53] checking all of the step signatures and all of the existing events and then you
+[47:57] can upgrade the workflow. Um or you can currently already cancel and rerun with
+[48:01] the with the new workflow. >> Um is there a timeout for those workflow
+[48:06] steps? >> Oh
+[48:08] >> yes. So uh if you're doing serless right and whatever platform you're on whether
+[48:12] it be like lambda or something else or or uh your serless functions are going
+[48:17] to have timeouts. The nice thing is that every step runs in its own serless
+[48:21] function. So the timeouts only apply to the stats. So if one of individual step
+[48:26] you have runs the risk of running more than five minutes maybe 15 minutes
+[48:31] depending on platform um then you can split into two steps um or if it's if it
+[48:36] runs the timeout right it'll fail it'll retry maybe the will be faster um and
+[48:41] you'll see in the UI that oh this step is being retrieded after 15 minutes a
+[48:45] bunch of times right presumably because it's failing and then you can go and uh
+[48:49] split it into two steps upgrade the workflow and it'll just continue from
+[48:57] And uh yeah the other point was uh around queuing workflows like I trigger
+[49:02] the agent a bunch of times. >> Yeah.
+[49:04] >> Does it get cued? Like how does that process?
+[49:08] >> Right. You can model this in in different ways. Uh right now again we're
+[49:11] doing this from like a API route where every call to this API route will create
+[49:16] a new workflow. Um that is mostly again the only the only the only interactable
+[49:22] output you have is a stream in this case. Um so it'll do things it'll write
+[49:26] to the stream. Nobody looks at the stream. We don't know the work before is
+[49:30] running. Uh you can kick off 10 of these, right? Um and they're going to be
+[49:35] running in the background. Um there is essentially no limit to how many you can
+[49:38] create because they all run in serless functions. So you can scale for as much
+[49:42] compute as there is in your provider. um which is a lot of cute and um you can
+[49:49] also list active runs right there's an API here for doing C interfacing with
+[49:54] your runs look at all of the runs that are running look at which version
+[49:57] they're on uh what step they're on um cancel them [clears throat] I hope that
+[50:01] answers your question oh concurrency yes um you can also so right now it's
+[50:06] infinite concurrency but uh very soon we'll add per step or per workflow
+[50:12] concurrency where you can say This workflow is only supposed to run at most
+[50:16] 10 times at the same time and any extra Q addition gets like any extra start
+[50:23] gets cued so that it will wait for those 10 to uh reduce and then slide in. You
+[50:28] can also use that to have a free tier for example on your product where
+[50:33] there's 10 instances running for your free tier at any one point and some
+[50:37] people that come in later will wait for the queue but your pro tier has infinite
+[50:42] concurrency. >> Yeah.
+[50:46] >> Can I roll back steps [snorts] in a way that let's say I have 10 steps but in
+[50:51] step seven I think like okay let's go back to step three. Would that be
+[50:55] possible to like reset the state of the workflow or
+[50:58] >> you can technically do this do this? We current we don't currently support it
+[51:04] but it would be very easy to implement because uh you have every step again the
+[51:08] inputs and outputs are cached and we can enter the workflow at any point and sort
+[51:12] of play from there. So we'd need to expose this in the in the UI to as a
+[51:16] function to resume from step so and so. But yes, that would be possible. more
+[51:20] more likely what you want to do because you control the workflow.
+[51:25] So you wanted to log there and use this JavaScript
+[51:31] and might have to step into state or do something just
+[51:37] keep growing.
+[51:42] Maybe my second question. So if you go through the steps you said, okay, you're
+[51:46] passing out input and outputs kind of across and that's kind of what get
+[51:50] cached. Is there like a way to attach metadata or does it always have to be in
+[51:56] kind of the input outputs of the function?
+[51:58] >> You can also attach metadata. uh we'll have a tagging API soon where you can
+[52:03] add arbitary tags to the workflow at any point in the workflow run and you can
+[52:08] use those tags also to maybe decide whether to early or dd duplicate your
+[52:12] runs. Um yeah.
+[52:17] >> Yes. >> About the deployment are we tied to
+[52:20] versel or is it possible to like >> as I mentioned before uh so there
+[52:25] there's two aspects to this. There's the the front end side of the framework uh
+[52:29] the docs are on use workflow.dev. Uh you can see for the front end sides um which
+[52:35] is also sort of the the uh API layer it might work with. Uh we currently support
+[52:41] all of these platforms. um and more coming soon. And then
+[52:46] there's separately the deployment target right [snorts]
+[52:48] next.js JS you can deploy to anything right now right this would work with
+[52:52] anything you can deploy XJS2 for example or any of these other frameworks um and
+[52:57] we have implementations first party implementation for a Postgres example
+[53:02] that uses Postgres as the dability layer um and as we'll be building this out and
+[53:07] community comes in we'll have support for essentially any back end um because
+[53:11] underneath the TypeScript framework connects to any storage or Q layer so
+[53:16] anything that provides a storage a database uh or AQ can be used the back
+[53:21] end for for this
+[53:26] >> related question for the observability we also like providers to data dog stuff
+[53:33] >> yeah so uh we we have a uh multiple things we have an an API that you can
+[53:39] use to to uh access data directly um and we also have open source UI components
+[53:44] that you can use to display it and then you can export this to data Um if you
+[53:49] want. Yeah.
+[53:59] >> You talked about screen a little bit and talked about how it essentially like
+[54:04] job. Uh do is there more scheduling and chron controls within workflow? So uh
+[54:11] because it's just typescript uh if you're in a workflow um you can do
+[54:18] something like let's say we call sleep for example right this this would just
+[54:21] be resume in a sorry resume in one day but what you can also do is uh this is
+[54:27] just a promise or you can treat it as a promise so you can do
+[54:33] while true sleep one day and then uh you know do your code and it'll run once a
+[54:40] If you wanted to run once a day at 2 a.m. um you could you could say you know
+[54:46] how much time to you know 1:00 a.m. tomorrow. Thank
+[54:53] you AI. And then you know done. Um and you could also
+[55:00] wake up every hour do some checks whether you actually want to run the
+[55:04] rest of the code. If not go back to sleep. Um anything you can do with con
+[55:08] to do here. And if you want again concurrency controls something um or any
+[55:12] kind of other deterministic controls you have control flow in Typescript here.
+[55:17] You can check check external um APIs. for example, um which you have to wrap
+[55:22] in a step, but you can make fetch calls if you want to actually check data and
+[55:26] then determine from there. >> So if you if you wanted to do a uh agent
+[55:32] that runs every once in a while every day, you could have a scheduling wrapper
+[55:37] scheduling workflow that launches another agent workflow
+[55:40] >> also. Yeah, you can you can you can start workflows from workflows or you
+[55:44] could do this right where you uh sleep a day and then call your agent and then
+[55:50] depending on the the on the stream you want to right this is all right in the
+[55:53] same stream presumably you don't want that presum maybe you can also uh
+[55:58] thatable allows you to do namespace right uh one
+[56:04] um and you can get a new writable here and then every time it runs you can have
+[56:08] a new stream that has a deterministic uh name and you can choose which stream to
+[56:13] connect to. >> Yeah.
+[56:17] >> Is there cancellation logic? Like say I have something waiting for a long time
+[56:21] and then I decide to not have that be a thing. How can I just like stop an
+[56:25] existing sleep from waking, >> right? So you can cancel your workflows
+[56:29] from the observability UI or from the from the API or the CLI. um all of those
+[56:34] avenues uh have you can call cancel or you can also say well I don't even know
+[56:39] if I want to sleep on the end of the zoom what you can do is do a uh let me
+[56:44] remove this part here you can do something like
+[56:50] you know await promise grace and you can do the sleep one day and you can do some
+[56:57] other actually human approval maybe wake up earlier if a human clicks a button
+[57:02] than the one Okay. Um, there you go.
+[57:08] >> Yes. >> Um, if you have multiple agents running,
+[57:11] uh, what would be your advised way of having them communicate with each other?
+[57:17] >> Um, if if you're
+[57:22] sort of depends on what kind of communication you're looking for.
+[57:25] >> Firing things off and they're working, but I wouldn't sure there was. So in
+[57:30] steps um you have access to all code APIs or
+[57:38] NodeJS API fetch etc. You can have a database, right? If you want to automate
+[57:42] over your own data source, you can have a database. Um, if you want to have
+[57:45] multiple agents, um, you can, uh, use one, you can use some of the same
+[57:52] streams to write to and share a stream. Um
+[57:57] yeah,
+[58:03] I guess it's up to us ultimately with our steps that they're like I demp it in
+[58:07] and if they have side effects when they fail halfway that it's well behaved like
+[58:11] that's that's not at your orchestration layer like that's up to us,
+[58:15] >> right? for the workflow layer, we guarantee that there's no side effects
+[58:19] because if you try to import some code that does side effect, I think it'll
+[58:23] just it'll just say like can't compile, doesn't you know, don't do it. Um,
+[58:27] >> that was true for workflows, but for steps
+[58:29] >> for steps, it can have side effects. That's sort of the point.
+[58:32] >> So, it's up to us like if it fails, we need to make sure that transactional and
+[58:36] it's rerunnable and >> identity. There's some there's some uh
+[58:39] there's some error controls you can add here where if a step fails, it'll
+[58:43] usually fail uh with a an error that tells the workflow station layout that
+[58:48] you can retry it. You can also catch this error and say, well, if it's a you
+[58:52] know this kind of error, don't retry it. Instead, signal to the human to do
+[58:56] something or try this other avenue. Yeah.
+[59:14] See there's something else.
+[59:18] >> Do you have one of the branches that has like the complete code for what you just
+[59:22] did? >> Yes. So, uh they all built on top of
+[59:26] each other. So, the conflooks branch has the human approval tool
+[59:31] called the sleep tool call. resumable streams um and using web flow.
+[59:41] >> Uh I will see how I can post one general access
+[59:48] >> just tweet it out. >> Yes, we'll do that.
+[59:52] >> Uh the workflows are in beta and so >> Yes. Yeah. Um
+[1:00:01] >> okay. Yeah. Uh yes, I forgot to mention this important uh workflow devel
+[1:00:10] I believe and we have a a GitHub
+[1:00:24] using production especially durable agent stuff
+[1:00:29] >> internally we have I think more than 1 million workflows have been run on on
+[1:00:33] >> a day. Yeah, >> it's mostly just like getting
+[1:00:39] the API to be stable and a bunch of issues. But one of the things I love is
+[1:00:42] that we actually have more than issues. But uh
+[1:00:49] >> yeah, >> if there's any feature that you that you
+[1:00:53] need or that you really want to see, uh we have an RFC section on GitHub uh
+[1:00:57] discussions for upcoming features, things that we'll ship by GA or shortly
+[1:01:03] afterwards. And then open issues, right? Um where you can add any issue and
+[1:01:08] presumably we'll be able to it soon or someone from the community. Again,
+[1:01:11] [clears throat] this is uh all of the adapters that help workflow develop run
+[1:01:16] on any kind of cloud back end or your homebrew back end. All of those adapters
+[1:01:22] are also open source. So, you can see exactly what's happening and you can
+[1:01:26] connect it to your own back end and only the source um just looking at that code
+[1:01:30] and we'll be happy to help you. [snorts] Can you talk about uh
+[1:01:40] >> uh yeah um what would you like to know >> the road map for like
+[1:01:46] >> right so for versioning um I talked a little bit about about uh the ability to
+[1:01:51] upgrade runs across versions right uh versioning is going to be very simple
+[1:01:55] where we have a crowd interface for all of the versions that you have created
+[1:02:00] which for most people will be a deployment right if you deploy your
+[1:02:03] um you know CI deploys your code to a preview environment or production uh
+[1:02:07] every deployment will be one version um and you can list those versions at any
+[1:02:13] point uh using the the workflow API and the run will know which version it's
+[1:02:19] running on and you can call run.upgrade upgrade to see if it's compatible with a
+[1:02:24] new version to upgrade it to that version and I know any any more things
+[1:02:30] >> version >> no yeah so so every every deployment uh
+[1:02:36] gets its own URL and not just in basel but presumably in your if you go to AWS
+[1:02:41] lender for example right uh every deployment has its own URLs so the web
+[1:02:46] hooks would apply to its own URLs um which means that you don't need worry
+[1:02:51] about versioning except for tagging a version when you first create the
+[1:02:54] deploy. Um and then whatever you think is you want to be your main version is
+[1:03:01] the one you route to via your public API.
+[1:03:04] >> Yeah, I think um sorry obviously I used to work at my
+[1:03:11] experience in this stuff. I think a lot of people unfortunately it's like
+[1:03:16] isolation of but sometimes you want to sort of fix in place things that have
+[1:03:21] been a while. >> Yeah. Migrations almost like agent
+[1:03:23] migrations to new version. >> Yeah. So this is the same as as
+[1:03:28] upgrading in that sense, right? But if you have a bunch of runs that are all on
+[1:03:32] a certain version and you have ship new code and you want all those runs to be
+[1:03:35] upgraded to the new version or migrated, right? Um, in the UI you'll be able to
+[1:03:40] select however many runs you want or for the CLI you want to be able to get a
+[1:03:44] list and then say for these 20 IDs I want to upgrade the run to this version.
+[1:03:49] Uh, will it'll do an internal check of of can I resume these uh workflows from
+[1:03:56] a certain point? um like can I migrate them in place sort of because the step
+[1:04:00] signatures overlap or if not it'll offer you the option to cancel all of the
+[1:04:05] existing runs and rerun them on a new version of the same input. Um if you
+[1:04:10] write your code in a way that's compatible again um there's there's
+[1:04:13] going to be different options for for in place migrations.
+[1:04:17] >> How would it detect that just by code parts not being changed? So because we
+[1:04:21] have because we're essentially a compiler plugin uh we can get full a uh
+[1:04:27] compatibility and and we are saving this a uh
+[1:04:32] the inputs and outputs signatures um to a manifest that we're uploading for the
+[1:04:36] versions and so for every version we can tell what are the signatures for every
+[1:04:40] uh step and for the workflow itself and all the other things that are happening
+[1:04:44] in between. >> Another thing here is the workflow
+[1:04:47] function itself. So yes, we played a whole bunch of times
+[1:04:51] during execution do anyway. >> So when you want to upgrade
+[1:04:59] your event, >> it's kind
+[1:05:05] of the code that you've got on the event against it.
+[1:05:12] >> Sure. There's a lot of variations between kind
+[1:05:16] of I do a step all the previous steps stayed the same or you know this one got
+[1:05:21] changed. So it's like you like if everything's done automatically it feels
+[1:05:25] like okay I could go down immediately with all my agents or up
+[1:05:29] >> there's two ways you could there's two ways you could be versioning
+[1:05:33] and I think the thing with is you build for a platform where you
+[1:05:38] assume that the code your code is always going to evolve in the same place. So
+[1:05:42] what we've seen is you end up with as you start your first version of your
+[1:05:45] workload that you ship but as you start making updates to you starting new
+[1:05:49] version your code now has all the stuff in there that has
+[1:05:54] you have no guarantees of what version running on the actual code that you're
+[1:05:59] running. The default assumption is that my code could be running an event log
+[1:06:04] anyway and you end up with starts great and then you have to do model
+[1:06:13] >> but it was the same with like killing and sustaining
+[1:06:18] already had forever. there's a natural step to go
+[1:06:22] say cool we're just gonna assume that you you push a new version of the
+[1:06:25] workflow you pin everything and so you don't have to worry about
+[1:06:30] that mental model that code but instead it's time to go up push
+[1:06:37] button I can go in
+[1:06:41] or even choose like you know theoretically choose exactly how much of
+[1:06:44] that button get there's a lot of stuff that you can do
+[1:06:48] on top since you have But what's nice is that's that's a hard US and you know
+[1:06:53] [clears throat] for us to build when done well
+[1:07:00] hopefully very [snorts]
+[1:07:07] >> I don't know we're close to done >> I think we're close to done
+[1:07:12] >> uh we'll be sticking around for more questions so uh
+[1:07:16] >> I guess okay so let's say I'm a third party like But I think the other part is
+[1:07:21] observability. Um I don't I I like poked around in I
+[1:07:26] don't see like much of a dashboard. I expect that obviously you're going to
+[1:07:31] build one, right? Uh and then I also want to import it into my data dog. See
+[1:07:36] there not a data dog but hey what's this supposed
+[1:07:41] >> uh open telemetry spans uh which we'll you know be able to emit um we'll add
+[1:07:46] some context to the spans by default presumably. Uh so if you if you just
+[1:07:51] pipe your spans through data dog it'll already have a lot of information on the
+[1:07:54] steps and event log. Um and you can also submit your own uh telemetry obviously.
+[1:08:00] >> So is that the plan or is it you have the first party?
+[1:08:03] >> The plan is that we will we will first party support adding some of the like
+[1:08:07] all of the sort of step and event log related context. Um will uh presumably
+[1:08:13] export a helper to add some of these information to the spans. Um and then
+[1:08:18] every all information you want to tag in there is up to you.
+[1:08:23] >> Can I uh attach like secrets to workflow in a way that when I need to update them
+[1:08:30] they kind like you know >> Yeah. So uh for one like right now you
+[1:08:34] can you can inspect all of the input and output data right and it's obviously uh
+[1:08:38] for you as a someone with access to the API uh which someone consuming the
+[1:08:42] workflow or starting the workflow through web API wouldn't usually have
+[1:08:46] >> no steps in steps
+[1:08:51] >> yeah so the the workflows run in the same deployment as as it would usually
+[1:08:54] do and has access to the process uh environment right so you can inject
+[1:08:59] environment levels the way you would usually do um and as as long as long as
+[1:09:02] you don't log them which again presumably you wouldn't do any anyway um
+[1:09:06] it's the same way as an API endpoint and then if you want your data to be secret
+[1:09:11] right um right right now we expose it in observability um if you have access but
+[1:09:16] we also will allow in the future to do end to end encryption for any data store
+[1:09:21] >> right then we'll uh close the session but we'll be around a little bit more
+[1:09:25] for questions if you want to you know look over
+[1:09:28] She lost
+[1:09:31] [music]
+[1:09:43] heat. >> [music]

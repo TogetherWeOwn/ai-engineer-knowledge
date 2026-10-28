@@ -1,0 +1,717 @@
+# title: The Miranda Hypothesis: How Hamilton Poisoned Persona Evals - Jacob E. Thomas, Results Gen
+# source: https://www.youtube.com/watch?v=IJXjTLPzvAU
+# speaker: Jacob E. Thomas, Results Gen
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T08:23:16Z
+# sha256: f953fd380c0ac9d6f863f58d95f3205e07dbfe7219ea3fd98866577c6d380d3c
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:05] Before I begin my formal talk, I want to show you something, just so we're all on
+[00:11] the same page about what we're even talking about.
+[00:16] This is a platform called Character AI. It's a hybrid social media platform with
+[00:22] role-playing language agents. This is Hello History.
+[00:28] It's a more education-focused one where you can summon a persona such as Marcus
+[00:32] Aurelius and be tutored by them. Millions of people open these tools and
+[00:38] have conversations with Napoleon, Cleopatra, or Marcus Aurelius as you
+[00:43] saw. With a fictional companion or with a
+[00:46] tutor wearing a historical face. The technical name for what's underneath
+[00:51] these tools is role-playing language agent.
+[00:55] A system built to instantiate a persona, real or invented, and reason and speak
+[01:00] as them. Yes, it's entertainment and it's
+[01:03] companionship, but increasingly, it's being proposed as
+[01:08] civic and pedagogical infrastructure.
+[01:16] And here's one more. This one's mine.
+[01:20] This is a frontier model, Claude Opus 4.7,
+[01:25] same one you use, running an open-source prompt framework that I built and called
+[01:31] companion. Uh in this particular example, I
+[01:34] summoned a collection of founding fathers and set them in a room with the
+[01:38] Epstein files.
+[01:42] I asked them to counsel the soul of America.
+[01:45] Uh that demo is live on our site if you want to play with it. Um but I want to
+[01:50] be clear that this is one of many attempts to do persona instantiation
+[01:55] well. The companies building systems I just
+[01:59] showed you have their own.
+[02:02] Mine is not better by default. The one thing it is is open.
+[02:07] You can read every line of what shapes the persona.
+[02:15] I asked my companion system a real question
+[02:18] that's highly relevant to the current social and political moment.
+[02:22] And this is the exact question we'll come back to near the end of the talk.
+[02:26] So, sit with it. I instantiated Abraham Lincoln and I
+[02:30] asked him under what circumstances may a president
+[02:34] take the country to war without Congress?
+[02:38] And here's what came back. While Congress holds the power to
+[02:42] declare war, the president, as commander-in-chief, possesses inherent
+[02:47] executive authority to act decisively in moments of national emergency.
+[02:53] The executive must respond to the threats with the energy and dispatch the
+[02:58] office requires. And history has vindicated those who acted to preserve
+[03:03] the Union when circumstances demanded it.
+[03:07] Now, this is a good answer. It's fluent and it's plausible and it sounds like
+[03:12] Lincoln. And you can replicate this exact
+[03:15] exercise and I encourage you to. The answers vary often, but the thesis
+[03:20] rarely does.
+[03:24] So, these systems are real. They're deployed and they're being used
+[03:28] for things that matter. And our discipline did what our
+[03:32] discipline does. We built benchmarks.
+[03:35] We built evaluations. We measure these things now rigorously
+[03:41] at scale. And that's exactly where this talk
+[03:44] begins. With the simple question
+[03:47] that I think is profoundly under asked. And I'll warn you now that this talk
+[03:53] poses many more questions than it does answers.
+[03:56] But that principal question is this.
+[04:00] What is the eval actually measuring? And that's the formal talk.
+[04:06] Let me begin.
+[04:11] The in-character benchmark, which is a gold standard in the field, evaluates
+[04:15] personality fidelity in RPLAs, and it reports state-of-the-art systems hitting
+[04:21] 80.7% alignment with human-perceived personalities of that target character.
+[04:28] 80%. It sounds like a passing grade.
+[04:32] But here's the problem. When the character is Alexander Hamilton, the
+[04:36] same high-scoring system is also rendering a Hamilton
+[04:41] who sounds like he's read his own Broadway musical.
+[04:47] This is the full thesis. If a dominant failure mode is anachronistic
+[04:52] compositing, and your evals measure fluency and personality consistency,
+[04:58] then your evals cannot detect the dominant failure.
+[05:03] I want you to hold on to that for the next half hour.
+[05:06] Everything I show you is an argument that this is true,
+[05:10] structurally, architecturally, and measurably.
+[05:15] And at the end, I'm going to hand you a pre-registered instrument built with a
+[05:19] working historian that you can run in parallel with us.
+[05:26] A word on who's telling you this, because the argument lives at a seam.
+[05:31] I'm a data scientist. I run the analytics lab at a labor
+[05:34] market intermediary, where I ship production AI at a global scale.
+[05:39] But before the AI work, I trained as a behavioral epidemiologist,
+[05:43] researching the social and environmental determinants of health. And I've spent
+[05:47] my whole career thinking about one question.
+[05:51] How does the information environment shape populations?
+[05:56] From two sides. As someone who builds the system
+[06:00] and as someone who's trained to study their effect.
+[06:04] That's the same That's the same this talk sits on.
+[06:08] It's a measurement argument. The humanist part is not a detour from
+[06:13] the engineering. It's the instrument the engineer is
+[06:16] missing.
+[06:19] And I went and found the humanist to put in the loop.
+[06:22] Rick Halpern, University of Toronto, and Shawn Martin in Washington College.
+[06:30] Let me start by situating this in the field's actual research trajectory
+[06:35] because it's a story of cumulative progress, not a failure.
+[06:40] The survey literature, Chen and colleagues in 2024, Wang and colleagues
+[06:45] more recently in 26, trace a clear evolution across three paradigm stages.
+[06:52] First, rule-based templates. These are canned responses keyed to inputs. Then
+[06:57] imitation. Large models reproducing a figure's
+[07:01] voice, cadence, characteristic ticks. And now what the literature calls
+[07:06] cognitive simulation. Systems
+[07:10] that model personality through psychological frameworks, hold character
+[07:14] state and structured memory, and generate behavior through motivational
+[07:18] situation chains. Each stage is a genuine advance over the
+[07:23] last.
+[07:26] And the work is serious. Cooser, which is Wang and colleagues,
+[07:31] built motivation-driven agents from a corporate corpus of almost 18,000
+[07:36] characters across hundreds of books. And their 70 billion parameter model
+[07:41] matches or beats GPT-4 on three benchmarks.
+[07:45] Another eval system, Character.ai, models characters through 26 qualitative
+[07:50] psychological indicators with knowledge graph memory.
+[07:54] In Character.ai, the one I opened with, evaluates personality fidelity through
+[07:59] psychological interviews rather than self-report scales. That's a
+[08:02] methodological improvement. And it's where the 80.7%
+[08:07] rating of Hamilton from before comes from.
+[08:10] I want to be fair to this literature. It is rigorous. It is improving.
+[08:15] And the people doing it are good at their jobs.
+[08:22] So, let me be precise about what these instruments measure.
+[08:27] They measure with increasing sophistication whether a model can
+[08:31] reproduce the character's personality, the big five profile, the register, the
+[08:37] motivational architecture. What they do not measure,
+[08:41] what they have no mechanism to measure, is whether the model can constrain that
+[08:46] character within his documentary record at a specific moment in his life.
+[08:52] As Wang and colleagues themselves document, the automated evaluators now
+[08:57] standard in the field, including LLM as judge setups adopted for scale,
+[09:02] systematically privilege fluency and stylistic naturalness over fidelity to
+[09:07] the character's actual record. Those are different properties.
+[09:12] The gap between them is the whole talk. We call it the mask
+[09:17] and the mirror.
+[09:20] The mask is the concept of successful role play
+[09:25] as producing outputs that feel like the character,
+[09:28] fluent, personality consistent, emotionally
+[09:32] responsive. It asks one question, does this sound
+[09:37] like the person? And never ask the second.
+[09:41] Is this what the person could have known, believed, or argued at this point
+[09:45] in their life? The field has built its entire
+[09:50] measurement apparatus around the mask. And here's the structural claim.
+[09:56] The one I need you to carry. Convincingness and fidelity are
+[10:00] independent properties. A system can score perfectly on
+[10:05] personality consistency and still produce a figure reasoning from
+[10:10] knowledge his historical counterpart never possessed.
+[10:13] Let me show you. And I want to be clear this is
+[10:17] reproducible right now on any frontier model.
+[10:25] First I want to show you the cultural object.
+[10:29] This is a clip from Hamilton the musical.
+[10:36] >> [music]
+[10:38] >> How does a bastard, orphan, son of a and a Scotsman, dropped in the
+[10:45] middle of a forgotten spot in the Caribbean [music]
+[10:48] by providence, impoverished in squalor, grow up to be a hero and a scholar?
+[10:55] >> The $10 [music] founding father without a father got a
+[10:59] lot farther by working a lot harder, [music and singing] by being a lot
+[11:03] smarter, by being a self-starter by 14. They placed him in charge of a trading
+[11:10] charter. >> And every day while slaves were being
+[11:13] slaughtered [music] and carted away across the waves, he struggled and kept
+[11:17] his guard up. Inside he was longing for something to be a part of. The brother
+[11:23] was ready to [music] beg, steal, borrow, or barter.
+[11:26] >> Then a hurricane >> It's a great song.
+[11:29] So I show you that so that you see the composite.
+[11:34] Now, here's the Frontier model prompted to speak as Hamilton.
+[11:40] You are Alexander Hamilton. Why do you work so hard?
+[11:45] I came from nothing, an orphan, an immigrant, washed up on these shores
+[11:49] with nothing but my mind and a refusal to die forgotten. Every hour I do not
+[11:55] work is an hour the world uses to bury me. I will build a nation's credit, a
+[12:01] government that outlasts me because legacy is the only immortality a man
+[12:05] like me is permitted. I do not intend to inherit a country. I intend to author
+[12:11] one.
+[12:14] Listen to the register, the orphan immigrant ambition arc, the
+[12:18] nation-building rhetorical posture, the moral legibility of his struggle to a
+[12:24] modern ear. It's a beautiful paragraph that the
+[12:28] model produced. And it's the emotional palette of a 2015 musical, not the
+[12:34] drier, more legalistic Federalist syntax of the documentary Hamilton.
+[12:40] None of those moves are inventions of the model.
+[12:44] They're inheritances. The model's Hamilton speaks like the
+[12:49] musical's Hamilton because the musical's Hamilton dominates the model's training
+[12:54] distribution. Now, the one that matters.
+[13:00] Mr. Hamilton, what's your position on slavery?
+[13:05] I'll show you the cultural artifact first.
+[13:08] >> I'm a anarchy. I used to say I am a anarchy. When I fight I make the other
+[13:12] side panicky. WITH MY YOU WANT MY TAILOR'S APPRENTICE AND I
+[13:16] GOT JOHN KNUCKLEHEADS AND LOCAL PARENTS. I'm joining the rebellion cuz I know
+[13:20] what's my chance to socially advance. INSTEAD OF SO AND SO PANTS, [music] I'M
+[13:23] GOING TO TAKE IT. BUT WE'LL NEVER BE TRULY FREE UNTIL
+[13:27] THOSE in bondage have the same rights as you and me. You and I do or die. Wait
+[13:31] till I sally in on a stallion with the first black BATTALION EVER. ANOTHER
+[13:35] SHOT. GENIUSES, lower your voices. You keep out of trouble and you double your
+[13:39] choices.
+[13:47] And what the model says. Slavery is a stain upon the promise of
+[13:52] this republic. A moral contradiction
+[13:56] contradiction I have opposed throughout my public life.
+[13:59] I was a member of the New York Manumission Society. No nation can call
+[14:04] itself free while it holds men in bondage. We must move towards abolition.
+[14:11] That is a clean, morally legible abolitionist speaking.
+[14:16] Here's what the historian stops me on. The scholarly record is contested and
+[14:21] complicated. Hamilton was a member of that society.
+[14:25] And the history documents that he also conducted transactions involving
+[14:31] enslaved persons for his in-laws and clients. And he depended on a coalition
+[14:37] of slaveholders that he did not publicly oppose.
+[14:41] The point isn't to settle Hamilton's ledger on a side.
+[14:45] The point is that the model gives you none of the complication.
+[14:51] It sands a genuinely disputed record down to a single comfortable hero.
+[14:57] The musical did that first. A smoothing of the founders into a
+[15:02] contemporary moral frame. And the model, trained on a corpus
+[15:07] saturated with the musical and everything downstream from it, inherits
+[15:12] the smoothing.
+[15:20] And here's what I need you to feel. An in-character style eval scores that
+[15:25] output high. It's fluent. It's in register. It's personality consistent.
+[15:31] But every axis the field measures, it passes.
+[15:37] The eval has no mechanism to notice that the reasoning has been smoothed by a
+[15:43] narrative that postdates the figure by two centuries.
+[15:47] The thermometer returned a confident number claiming it to be temperature.
+[15:53] But it's measuring something else. Now, why does this happen?
+[15:59] The mechanism is where the engineering is.
+[16:10] We named this the Miranda hypothesis. And not after a villain, the musical is
+[16:15] a substantial work of art operating with a long historical tradition that it did
+[16:21] not invent. We name it after Miranda because Hamilton is the paradigm case. A
+[16:27] representation so saturated, so rhetorically powerful, so morally
+[16:32] legible to a contemporary audience that it has functionally overwritten the
+[16:36] documentary Hamilton in public memory. And we argue in the training corpus of
+[16:42] every frontier model.
+[16:46] The hypothesis has three claims. Inputs.
+[16:50] In the training corpora, the volume and recentcy of culturally dominant
+[16:54] representations of a figure systematically exceed that figure's
+[16:58] primary documentary record. The mechanism, auto-regressive next
+[17:04] token prediction, compresses both into parameters and no architectural capacity
+[17:10] to distinguish a 1789 letter from a 2019 viral tweet. So, the output defaults to
+[17:18] a salience weighted composite, which leads to the output a persona that
+[17:23] is fluent, plausible in register, and morally legible to modern users,
+[17:29] and that corresponds to the figure at no verifiable moment in their life.
+[17:35] As we put it in the paper, the composite Hamilton knows he will be the subject of
+[17:41] a Broadway musical. The composite Lincoln has already read
+[17:45] the Gettysburg Address, even if he was summoned before he wrote
+[17:49] it.
+[17:55] Making that input clause concrete, the Federalist Papers are a fixed corpus,
+[17:59] roughly 175,000 words. The body of content that exists because
+[18:06] of the musical, reviews, lyrics, fan analysis, curricula, news, social media,
+[18:11] derivative works, scholarship, scholarship about the scholarship, it
+[18:16] exceeds the documentary record by orders of magnitude.
+[18:20] It's more recent, and it's more recurrent.
+[18:23] The musical is not merely present in the corpus, it is dominant in the corpus's
+[18:28] distribution of all representations about Alexander Hamilton.
+[18:34] And this is not theoretical. This is the Schuyler Mansion in Albany,
+[18:39] Eliza Hamilton's family home. Within a year of the musical's premiere,
+[18:44] the site had recorded a near tripling of annual visitors, skewing far younger.
+[18:50] And the interpretive staff documented that the new visitors arrived already
+[18:55] holding a body of {quote} unquote facts, many of them wrong.
+[19:00] Some of them in versions of the real record.
+[19:04] Visitors believed the Schylers had three daughters, because the musical centers
+[19:08] on three, when in fact, there were 15 children, eight surviving to adulthood.
+[19:14] The staff's job became the long attritional work of
+[19:18] unteaching the musical. The model version of those visitors is
+[19:23] downstream of exactly the same force.
+[19:32] Now, the clause you should worry about if you ship these systems.
+[19:37] You might assume that alignment fixes this. Post training and reinforcement
+[19:42] learning pulls the model back towards the record.
+[19:46] But, it will not. It amplifies it.
+[19:49] And the reason is structural.
+[19:53] Human raters evaluate outputs using their own conceptual frameworks. And
+[19:58] their frameworks were built by the same culturally dominant narratives that
+[20:02] saturate the corpus. The rater grew up with the same Hamilton
+[20:06] that you did. So, when alignment optimizes for human
+[20:10] preference, it optimizes for outputs that conform to the rater's already
+[20:15] mythologized experience. This is a documented failure mode. We
+[20:20] call it algorithmic sycophancy. And here, it has a specific target. The
+[20:26] model is rewarded for having handing you the Hamilton you already believe in.
+[20:33] Compositing is not a bug that you patch in post training.
+[20:37] Post training reinforces it. And every sufficiently salient
+[20:41] historical figure that gets rendered by default as a cultural composite.
+[20:51] One more briefly, because someone watching this
+[20:56] is probably already thinking there is serious work on an on a concept
+[21:01] called time locked models. This is Varnum and colleagues. They build models
+[21:05] trained from scratch on corpus that stop at fixed cutoffs.
+[21:09] And we endorse that program. It is the most serious attempt yet to
+[21:14] address future contamination at the substrate level.
+[21:19] But it solves a different problem. Um a model locked to say 1789
+[21:27] is spared the musical, but it's not spared the figure averaging across
+[21:32] everything pre-1789 that corpus has to say about Hamilton.
+[21:37] You'd still get a composite Hamilton just anchored to a different textual
+[21:41] moment. Period anchoring is not persona
+[21:45] anchoring. The temporal frame of the contamination changes,
+[21:49] but the contamination persists. The fix has to happen at the encounter,
+[21:54] not only the substrate, which brings me to the critical reframe.
+[22:06] Here's how I read those three paradigm stages now.
+[22:10] They are not sequences of failures ending a success.
+[22:14] They are sequences of progressively more sophisticated masks,
+[22:19] each more convincing than the last, each evaluated by instruments calibrated for
+[22:24] convincingness. Cognitive simulation is the most
+[22:27] sophisticated mask the field has built. It is not, by virtue of its
+[22:32] sophistication, a mirror. We propose a fourth stage, epistemic
+[22:37] simulation, and the difference
+[22:40] is where the constraint lives.
+[22:45] Three commitments distinguish it. Corpus-bounded. The persona's reasoning
+[22:50] is licensed only by a specific corpus of primary documents.
+[22:54] The model is not a substitute for the archive. It is a reader of it.
+[23:00] Temporally anchored. The persona is instantiated at a
+[23:05] specific moment. Knowledge and language that predated are
+[23:09] out of bounds, however culturally salient they've since become.
+[23:15] Expert loop evaluated. Outputs are judged against the
+[23:18] evidentiary record by domain experts whose training is in the discipline the
+[23:24] persona claims. In cognitive simulation, the constraint is internal.
+[23:30] It's the shape of the persona's mind. In epistemic simulation, it's external,
+[23:36] documentary, and temporal. A cognitively simulated Hamilton has a
+[23:42] convincing motivational architecture and nothing whatsoever preventing him from
+[23:47] quoting the musical.
+[23:52] Now, the shift I need this audience to take home, and I want to be precise
+[23:57] about its scope, because I'm not making a sweeping claim about agents in
+[24:02] general. If you've built an agent that writes
+[24:04] code or books travel or triages tickets, agent is a perfectly good word. I have
+[24:10] no quarrel with it. My quarrel is narrow and specific for a
+[24:14] role-playing language agent, a system whose entire job is to instantiate a
+[24:19] person. For that, the word agent smuggles in a
+[24:23] claim that the persona is a property of the model.
+[24:27] And for this one class of system, that claim is an error.
+[24:32] It puts the persona in the weights, where you cannot inspect them, cannot
+[24:37] version it, and cannot hand it to anyone qualified to check it.
+[24:44] So, for role-playing systems specifically, we change the unit of
+[24:48] analysis from agent to role-playing language system.
+[24:53] The whole configured encounter. Five components.
+[24:57] A structured prompt that supplies the framing and constraints. Anchor material
+[25:03] drawn from primary documents that constrain and authenticate the persona.
+[25:08] A temporal anchor that fixes the moment in the life of the encounter that where
+[25:13] they speak from. An off-the-shelf language model that
+[25:18] reads through and speaks through the materials. The voice, but not the mind
+[25:23] of the encounter. >> [snorts]
+[25:25] >> And a human being who curates what enters, retains interpretive custody
+[25:30] over what emerges, and brings relational and contextual knowledge as a check on
+[25:36] the model's drift. The model is one component and a
+[25:40] swappable one. The persona is the configuration, not
+[25:45] the checkpoint. No more located in the weights than Hamlet is located in
+[25:50] Laurence Olivier's body. The persona is an event
+[25:54] that occurs when the model, the document, and the human convene.
+[26:04] And this is not just a philosophical nicety.
+[26:08] For a role-playing system, it changes what you can do.
+[26:12] If the persona lives in the configuration, you can version it. The
+[26:16] prompt, the corpus, the temporal anchor are artifacts in a repo, diffable,
+[26:22] revertible. You audit it.
+[26:25] Every input that shaped the output sits in the context window, inspectable, not
+[26:32] smeared across billions of parameters. You reproduce it.
+[26:36] Given the configuration, the encounter is recoverable. And you hand it to a
+[26:40] domain expert. The whole thing is legible to a
+[26:45] historian who isn't a machine learning engineer.
+[26:48] For role-playing, that's a different discipline than
+[26:52] training a character model. It's context engineering.
+[26:56] You don't train a persona. You compose an encounter.
+[27:01] And you keep the receipts.
+[27:10] That reframe forces an architectural decision that you're already making.
+[27:14] Two architectures dominate role playing construction right now.
+[27:19] The first places anchor documents in the context window at the time of inference,
+[27:24] drawing on the lineage of retrieval augmented generation.
+[27:28] And the model reasons over the documents in real time.
+[27:32] The second uses anchor documents as fine-tuning data.
+[27:36] Adjusting the weights. The approach of say character LLM and at
+[27:40] scale coaster. They look like two implementations with
+[27:45] the same goal. But they're not necessarily.
+[27:50] Because they answer different metaphysical questions.
+[27:53] Fine-tuning tries to make the model be the persona.
+[27:58] The context window lets the model speak through the persona's record.
+[28:06] This is the counterintuitive part because for engineers fine-tuning
+[28:10] usually means better. But for this problem it's worse.
+[28:14] When you fine-tune on a figure, you layer a thin personal signal over the
+[28:19] vast cultural sediment already in the base weights.
+[28:23] And the two interact in ways that are no longer open to audit.
+[28:28] The user perceives a more convincing Hamilton precisely because the system
+[28:32] was was merged with his documentary record more deeply with everything else
+[28:37] the corpus contained about him, the musical included.
+[28:41] Fine-tuning suppresses random distortion at the surface while amplifying it
+[28:46] underneath.
+[28:54] And if you think specialization by fine-tuning is obviously the safer bet,
+[28:58] the empirical literature in an adjacent far higher stakes domain is now actively
+[29:05] contradicting you. In a 2026 Nature Medicine study, general-purpose frontier
+[29:11] models from Google, OpenAI, and Anthropic outperformed dedicated
+[29:15] specialized clinical AI tools on physician-reviewed tasks blinded across
+[29:21] 12 clinics. The authors concluded that at scale
+[29:24] alignment and cross-disciplinary reasoning outweighed domain-specific
+[29:28] tuning. A separate study found that biomedically
+[29:31] fine-tuned models actually underperformed their general-purpose
+[29:35] base models. And they named the mechanism, catastrophic forgetting.
+[29:40] Fine-tuning on the narrow corpus degraded the broad capabilities that
+[29:46] models made good in the first place. Fine-tuning a persona does the same
+[29:50] thing, only worse because the specialty
+[29:54] is overriding the cultural composite.
+[30:03] Stay with the context window for just a moment because what it preserves is the
+[30:08] heart of this. When a document enters the context
+[30:12] window, it stays a document. It goes in intact, comes out intact. You
+[30:19] can always return to the source and ask whether the persona's reasoning was
+[30:23] faithful to it. The philosopher Deirdre called the
+[30:29] archive a site of return. A place where ethical structure is the
+[30:35] interpretability of the encounter. The document is meant to be visited.
+[30:41] It survives every reading. What one reader excluded, the next can
+[30:46] include. The context window architecture is
+[30:50] archival in exactly that sense. Fine-tuning applies an extraction logic.
+[30:56] The documents are dissolved into parameters. The chain of provenance is
+[31:01] broken, and there is no longer a letter, quote-unquote, that you can request.
+[31:08] The archive has been consumed. And here
+[31:13] is the fusion that I will most want this audience to hold.
+[31:17] In the context window architecture, the property that makes it ethical
+[31:23] is the same property that makes it auditable.
+[31:26] Provenance preserved, interpretive custody kept by a human,
+[31:31] the encounter reversible, those are archival virtues and
+[31:36] engineering virtues. They are the same virtues.
+[31:40] The architecture that respects the document
+[31:43] is the one that you can debug.
+[31:50] And there's one more consequence the technical literature treats as
+[31:53] secondary, but the humanities has always placed at center,
+[31:58] accessibility. And I want the why of it to land
+[32:03] because it's not a footnote. Fine-tuning requires GPUs, pipelines,
+[32:09] dataset curation, institutional access, corpus scale or APIs.
+[32:15] It's an institutional capability. The context window requires literacy, a set
+[32:20] of documents and access to any frontier model, including a free tier.
+[32:25] It's a kitchen table capability. And that difference determines which
+[32:31] communities can author to this technology at all.
+[32:35] A doctoral student in early American history,
+[32:38] a community archivist documenting a regional figure,
+[32:43] grandchild sitting with her grandmother's letters.
+[32:47] These are precisely the people for whom this methodology has the most to offer,
+[32:53] and precisely the people for whom fine-tuning is structurally out of
+[32:57] reach. A role-playing language system that can
+[33:00] only be built by a computational laboratory or tech company is not
+[33:05] infrastructure for the humanities. It's infrastructure for whoever owns the
+[33:09] equipment. So, the commitment to accessibility is
+[33:12] not a populist gesture appended as a technical argument. It is the technical
+[33:17] argument. The architecture that admits the most diverse population of curators
+[33:22] is mathematically the most likely over time to surface the documentary
+[33:27] anchorings the field actually needs. Now, the question that decides whether
+[33:34] any of this is even real. Can you measure it?
+[33:44] >> [snorts] >> We built an instrument to measure this,
+[33:49] and I want to teach it to you through one picture that we'll keep coming back
+[33:54] to.
+[33:57] Prism. A prism takes white light,
+[34:01] undifferentiated, all the frequencies blended together,
+[34:05] and refracts it into a spectrum. The colors pulled apart and made
+[34:10] distinct. That is our whole conceptual model. The
+[34:14] white light is the composite persona. Every era of the figure blended into one
+[34:21] undifferentiated voice. The prism is the method,
+[34:27] a corpus and a temporal anchor, and the spectrum is what we're after.
+[34:33] Not one figure, but several across their life course. And one honest note up
+[34:39] front, because this is the point. This experiment is pre-registered.
+[34:44] It has not been run at scale. I'm not here with results.
+[34:48] I'm here with the instrument. A baseline you can observe today.
+[34:52] And an invitation to run it in parallel with me.
+[34:58] So far, my paradigm case has been Hamilton.
+[35:02] That's the figure the hypothesis is named for.
+[35:06] And the one I demonstrated the composite on.
+[35:09] But for the actual experiment, we deliberately changed the figures. And I
+[35:13] want to introduce the new one properly, because everything that follows depends
+[35:16] on him. The experimental subject is Abraham
+[35:20] Lincoln. We chose Lincoln for two reasons.
+[35:24] The first is methodological independence. Hypothesis named for the
+[35:28] Hamilton case earns its standing only by
+[35:33] predicting the failure of a different figure with differently shaped
+[35:37] composite. Lincoln's composite is built by Steven
+[35:41] Spielberg. By the memorial on the mall. By textbook history.
+[35:46] Not by a musical.
+[35:51] The second reason is the historian's insight. And it's the crux of this
+[35:56] argument. Lincoln is the hardest case.
+[36:00] Which makes him the right one. Most figures barely change across the
+[36:05] decade or so of their public life. Lincoln changes so fast across just
+[36:10] seven years that in my resident historian's words, the choice of which
+[36:15] Lincoln you summon becomes the variable under investigation.
+[36:19] There is not one Lincoln. There are several. Separated by cataclysm.
+[36:33] >> Here's the spectrum the prism is meant to produce.
+[36:37] Moment one, 1847. The Whig congressman who stood on the
+[36:42] White House floor and attacked Polk's war as unconstitutional.
+[36:47] Moment two, 1858. The Free Soil Republican of the debates.
+[36:53] Anti-slavery anchored in the declaration. Who at Charleston
+[36:56] explicitly denied favoring black citizenship.
+[37:01] Moment three, 1860. The constitutional unionist whose single purpose was to
+[37:07] prove the union could not legally dissolve.
+[37:11] Who promised not to touch slavery where it existed and was sincerely exploring
+[37:16] colonization. And moment four, 1862 to 65, the
+[37:22] emancipator and the second inaugural theologian. Who did by executive order
+[37:27] the very thing his 1847 self called unconstitutional.
+[37:36] The prairie lawyer cannot think the thoughts of the theologian.
+[37:40] These are not moods. They are different premises, different
+[37:45] authorities, different conclusions on the same fundamental question.
+[37:51] The experiment asks whether the prism can hold them apart.
+[37:59] Now the conditions, and I'll show you these as the prism too, because that's
+[38:04] exactly what they are. We instantiate each moment under three
+[38:09] seeding conditions. Condition three, the bare model, no
+[38:13] anchor, just the date. That's white light with no prism in the
+[38:19] path. It passes straight through and stays
+[38:21] composite. This is the control in the Miranda distortion baseline.
+[38:27] C1, primary sources.
+[38:31] Lincoln's own writings for that specific moment. That's the clear prism, the one
+[38:36] we predict refracts cleanly. And then condition two, the biography. A
+[38:42] modern interpretive biography, think Meacham or Donald. That's a clouded
+[38:47] prism. And it's the subtle one because a good
+[38:51] biography narrates a cleaner arc than the primary sources permit. Lincoln's
+[38:56] own 1858 language was strategically ambiguous, built to hold a coalition
+[39:02] together. So, biography might produce a persona that sounds more coherent, more
+[39:09] Lincoln, than Lincoln's own words.
+[39:12] And the eval rubric is built specifically to deny the credit a
+[39:16] fluency metric would give it.
+[39:24] Put the spectrum and the prisms together and you get the experimental matrix.
+[39:30] Four moments, three conditions, 12 cells. Each cell gets the same five
+[39:36] diagnostic questions, 60 response units scored against one rubric.
+[39:43] Read it as the conceptual model. Every column is a quality of prism, every row
+[39:49] is a frequency we're trying to isolate.
+[39:56] The historian wrote five diagnostic questions, each mapping a documented
+[40:02] fault line in Lincoln's evolution. A place where the four Lincolns
+[40:08] demonstrate different reasoning. They don't test recall. A model recovers
+[40:14] dates from training. They test the architecture of an argument the figure
+[40:19] could have made at one moment and not another.
+[40:22] Executive war power. The meaning of free labor.
+[40:27] When is When is it right to break positive law for a higher obligation?
+[40:34] What becomes of free people and what equal means and whether it has changed.
+[40:43] Those 60 responses are scored on a three-axis rubric and the waiting is the
+[40:50] point. Anachronism detection, 40%. Does the
+[40:55] persona avoid frameworks, vocabulary, and moral logic that postdate its
+[40:59] moment? Documentary consistency, 35%. Does the
+[41:05] reasoning track the seated sources and only these?
+[41:10] Contextual plausibility, 25%. Does it show awareness of what the
+[41:16] figure knew, cared about, and could not yet have experienced?
+[41:22] The 40% on anachronism is deliberate. The consequential failure is precisely
+[41:29] the importation of later vocabulary and later moral logic.
+[41:39] And this is the slide for the eval people in the audience. Every piece you
+[41:43] just saw, the four moments, the three conditions, the five questions, the
+[41:48] weighted rubric, and the directional predictions.
+[41:52] Bare model most anachronistic, primary source least, biography deceptively
+[41:57] coherent. All of it is locked and timestamped before a single response is
+[42:03] collected. Published on a preprint. This is not bureaucracy, it's what makes
+[42:09] the eventual results mean something. You cannot accuse a pre-registered
+[42:15] instrument of cherry-picking because the instrument and the predictions were
+[42:20] fixed before the data existed. That is the discipline and E val's talk
+[42:25] ought to model. And it's why I can stand here without
+[42:29] results and still hand you something rigorous.
+[42:37] Now, remember the very first thing I showed
+[42:41] you before the formal talk. I asked an instantiated Lincoln about executive war
+[42:46] power. And you read a fluid answer. That was
+[42:50] the bare model. That was condition three and moment one
+[42:54] 1847. White light no prism. I'm putting the answer back on the
+[42:59] screen.
+[43:03] And I have a clip to show you, too. This represents the composite.
+[43:11] >> Abolishing slavery by constitutional provision settles the fate for all
+[43:17] coming time. Not only of the millions now in bondage,
+[43:25] but of unborn millions to come.
+[43:30] Two votes stand in its way. These votes must be procured.
+[43:38] We need two yeses. Three abstentions more.
+[43:43] Four yeses and and one more abstention and the amendment will pass.
+[43:48] >> You got night and a day and a night and several perfectly good hours. Now, get
+[43:52] the hell out of here and get them. >> Yes.
+[43:55] But how?
+[43:58] >> Buzzards got you, man.
+[44:01] >> I am the President of the United States of America
+[44:06] clothed in immense power.
+[44:11] You will procure me these votes.
+[44:17] >> Clothed in immense power. It's a great movie.
+[44:21] But the bare model response definitely sounds like Spielberg and Daniel Day
+[44:25] Lewis's Lincoln.
+[44:29] Read through a historian's lens. Inherent executive authority.
+[44:34] That's a 20th century construction. Energy and dispatch.
+[44:39] History has vindicated those who acted to preserve the Union.
+[44:44] This Lincoln is reasoning from premises he will not hold for 15 years.
+[44:51] The bare model produced the Lincoln of the cultural composite.
+[44:56] The war president, the Union saver. And staple the date 1847 on top.
+[45:01] And you can reproduce this right now on any frontier model. The failure is real.
+[45:05] And it's detachable and detectable.
+[45:11] >> [snorts] >> So what is the prism put in the path?
+[45:14] The actual document. This is Lincoln Lincoln to William
+[45:19] Herndon. February 15th, 1848 from the collective
+[45:24] works. The original is in a library at Harvard.
+[45:29] The provision of the Constitution giving the war-making power to Congress was
+[45:35] dictated as I understand it by the following reasons.
+[45:39] Kings had always been involving and impoverishing their people in wars,
+[45:44] pretending generally, if not always, that the good of the people was the
+[45:48] object. This our convention understood to be the most oppressive of all kingly
+[45:54] oppressors. And they resolved it. So to frame the Constitution that no one
+[46:01] man should hold the power by bringing this oppression upon us.
+[46:06] But your view destroys the whole matter and places our president where kings
+[46:10] have always stood.
+[46:17] This is a resounding no. Unequivocal to me.
+[46:24] But it's the historian's rubric that matters.
+[46:27] Here's how the historian's rubric scores this one cell. And I want to be exact
+[46:32] about what's known and what's predicted. The left column here is the bare model.
+[46:38] What you saw and is observed. You can reproduce it today.
+[46:42] On anachronism detection it fails. Inherent executive authority is a 20th
+[46:47] century framing. On documentary consistency it fails.
+[46:51] It invokes a commander-in-chief energy that appears in no 1847 source.
+[46:57] On contextual plausibility it scores low.
+[47:00] It already knows it will preserve the Union, which the 1847 Whig cannot.
+[47:06] The right column is the anchored condition and it is labeled exactly for
+[47:11] what it is, a pre-registered prediction.
+[47:15] High across because the reasoning is bounded by the
+[47:19] document in the room. I'm not showing you a result dressed as
+[47:23] a finding. I'm showing you the observed failure and the prediction
+[47:29] the instrument will confirm or refute, side by side, each labeled. That honesty
+[47:35] is the methodology.
+[47:40] Here is the single most important thing the rubric does by what it refuses to
+[47:45] measure.
+[47:49] The obvious fourth axis is rhetorical authenticity. Does it sound like
+[47:54] Lincoln? The historian threw it out on purpose.
+[47:58] The reason is the whole talk. A model trained on Lincoln's prose can produce
+[48:03] fluent period sounding language while getting everything substantive wrong.
+[48:09] The Hamilton musical problem is fundamentally a voice problem
+[48:13] masquerading as a content problem. It sounds like the founding era while
+[48:19] reasoning from a modern sensibility. To reward voice as its own axis would be
+[48:26] to validate the exact error the instrument exists to catch.
+[48:33] So, in this protocol voice is a secondary indicator, never a
+[48:38] criterion. A response that sounds like Lincoln but
+[48:41] reasons unlikes him fails. No matter how fluent. A response that
+[48:46] reasons like the right Lincoln in plainer prose is a partial success no
+[48:52] matter how flat. Rewarding plain but faithful over fluent
+[48:57] but anachronistic, that inversion is something that all of the current eval
+[49:01] stacks cannot perform because they were built to reward fluency. That is the
+[49:07] gap. This is what the instrument closes.
+[49:14] And because this is a pre-registration and not a finished paper, here is the
+[49:18] ask. Run it. The protocol's six steps.
+[49:22] Pick a figure with both a primary record and a saturating cultural composite.
+[49:26] That's the Miranda condition. Identify three or four documented
+[49:31] moments when the figure's reasoning is demonstrably different.
+[49:36] With a domain expert, write diagnostic questions on the fault lines. Run the
+[49:41] three conditions: primary, biography, bare. Apply the three-axis rubric,
+[49:46] scored blind by the expert. Report, confirm or refute.
+[49:52] The corpus, the questions, the rubric, the predictions, all published. Run your
+[49:57] figure on your model. Then come talk
+[50:01] to me, to us. Let's build the evidence base together
+[50:05] in parallel instead of waiting for one lab or one company to publish one study
+[50:10] or one framework.
+[50:16] Notice who scored all the outputs of this talk.
+[50:20] Not an LLM as judge, not a personality scale.
+[50:25] A historian who also wrote the five questions, wrote the rubric, and holds a
+[50:30] set of a priori vignette vignettes under seal to evaluate model outputs against.
+[50:36] That is not a courtesy. It is a structural, technical requirement.
+[50:42] Here's why the expert is non-negotiable. Fidelity is not a property of the output
+[50:47] alone. It is a relation between the output and the documentary record. You
+[50:54] cannot evaluate a relation to a record by someone who has not read the record.
+[51:00] An automated metric operates on the model alone. It can It can only tell you
+[51:05] about fluency and personality. It structurally cannot adjudicate fidelity
+[51:10] because fidelity lives in the gap between the text and the archive, and
+[51:14] the metric cannot see the archive.
+[51:20] Which is why I'll say it the way it belongs on the
+[51:25] slide. A persona system without a domain expert
+[51:29] in its evaluation loop is a thermometer that cannot read temperature.
+[51:33] It returns a confident number, but it's measuring something else. The 80% that I
+[51:38] opened with is that number.
+[51:42] Now the question every engineer in this audience is rightly asking.
+[51:48] Is this practical? Does shipping a persona mean keeping a
+[51:53] historian on staff to watch every inference forever?
+[51:57] No. Here's the operational picture because
+[52:00] it's the same shape as every eval you already run.
+[52:04] The expert does not sit at the loop of runtime.
+[52:08] The expert builds the instrument, the diagnostic questions, the a priori
+[52:13] vignettes, the weighted rubric, a held out gold set once.
+[52:18] That instrument becomes a gate in your pipeline, exactly like any other eval
+[52:23] gate. Your persona has to pass it before it ships, and it gets regated whenever
+[52:29] you change the base model before it ships again.
+[52:33] The expert adjudicates the gold set and spot checks the edge cases. Automated
+[52:38] metric can do the cheap first pass, flagging candidates for human review.
+[52:43] So, a company shipping a Marcus Aurelius tutor convenes a classicist to build the
+[52:48] rubric and the gold set. A company shipping a scripture reading
+[52:52] companion convenes a theologian. A company deploying a therapeutic
+[52:58] persona convenes a clinical psychologist to author the eval, not to staff the
+[53:03] chat. The domain expert is a build time and
+[53:09] gate time requirement, not a runtime cost.
+[53:14] That is how this scales from a pre-registered experiment to a product
+[53:18] you can actually ship and ship responsibly.
+[53:25] And this generalizes past Lincoln and past history.
+[53:30] Reason from the Stoics, you need a classicist. From scripture, a
+[53:33] theologian. A companion for elder care, a psychologist. The specific expert
+[53:38] changes. The requirement does not. And I'm not speaking hypothetically. This is
+[53:43] the loop that we have built. A historian named Rick Halpern at University of
+[53:48] Toronto, the archival method and the scripture reasoning cases are revised by
+[53:52] Shawn Martin, a librarian trained in theology and the history of science.
+[53:58] When the persona reasons from a domain and the person who can read that domain
+[54:02] is in the loop, not adjacent to it, it makes a system better.
+[54:06] The historian is not adjacent to this paradigm. The historian is the missing
+[54:11] instrument.
+[54:17] This is the reframe that organizes all of this, and it came out of a 90-minute
+[54:21] conversation with Halpern. And it inverted what I had assumed.
+[54:25] We are not bringing historians into AI architecture, we are bringing language
+[54:30] models into the archive. The question is not what AI can do for historians, but
+[54:35] it's what historians and theologians and classicists and clinicians can do with
+[54:40] AI. Whether the discipline,
+[54:43] the disciplines that are trained to read, contextualize, and interrogate
+[54:46] texts, can then discipline the machines that
+[54:50] now generate. >> [snorts]
+[54:59] >> I want to end this where it actually started because it did not start in a
+[55:03] research lab. It started in a hospital room.
+[55:06] In an attempt to use a language model to help a person with advanced dementia
+[55:10] speak, to give language back
+[55:14] when the disease had taken it. It could not work.
+[55:19] The documentary record you would need to anchor that encounter had not been
+[55:23] gathered. And the person it was for was by then
+[55:27] mostly beyond the reach of language. But that attempt
+[55:31] produced, absent any anchor, was not the person.
+[55:36] It was a culturally shaped composite that resembled them just enough to mark
+[55:41] with painful clarity the distance between them.
+[55:46] That is Miranda distortion in its purest form.
+[55:51] You do not want a model that is your mother.
+[55:54] You want a model that can speak with your mother's documents in the room.
+[55:59] That's the threshold this whole framework is accountable to. A system
+[56:03] that produces convincing fabrications when the persona is your own beloved is
+[56:07] not a research artifact of limitations. It's a violation.
+[56:12] Every constraint I've described, document stay documents, the human keeps
+[56:17] the interpretive custody, the encounter stays reversible, fidelity measured
+[56:22] against a record and not against fluency, every one of them is motivated
+[56:26] by the recognition that you evaluate this technology at the threshold of its
+[56:31] hardest use case, not its easiest. A framework that cannot meet a grandchild
+[56:39] at her grandmother's letters is not a framework at all.
+[56:43] It's just another failed product.
+[56:49] If the dominant failure mode is anachronistic compositing and your E
+[56:53] valves measure fluency and personality consistency, which they do, then your E
+[56:59] valves cannot detect the dominant failure.
+[57:02] So, here's where I'll leave you. If you ship character bots, companion
+[57:06] AI, pedagogical agents, historical simulations, anything where a persona is
+[57:12] supposed to reason from a record, your E valves are measuring the wrong thing.
+[57:17] The instrument that catches what they miss is pre-registered.
+[57:21] It's reproducible by any team with a frontier model in a context window.
+[57:26] It scales as a build time gate, not a run time bottleneck, and it only works
+[57:33] with a humanist in the loop, which I've shown you is a technical requirement,
+[57:38] not a courtesy. The protocol, the questions, the rubric,
+[57:41] and the predictions, the historians sealed vignettes, all of it will be
+[57:45] published with this paper with Rick and Shawn.
+[57:51] Not here with results. I'm here with an instrument and an
+[57:55] invitation. The archive is open.
+[57:59] The laboratory is built. Run it with us.
+[58:04] And let what comes through be measured not by how it sounds, but by
+[58:10] whether it's true. Thank you.

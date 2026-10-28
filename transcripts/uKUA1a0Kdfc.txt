@@ -1,0 +1,285 @@
+# title: Move Fast and Don't Break Things: Scaling Databases for the AI Era — PlanetScale
+# source: https://www.youtube.com/watch?v=uKUA1a0Kdfc
+# speaker: PlanetScale
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T04:06:19Z
+# sha256: 5788f6ed73f939702871ddd6f89f5884b0e1d52cd4c5e0b981c864e07e4ffab4
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:12] Hey everybody, how's it going? Hope you're having a good last day of AI
+[00:15] Engineer. Uh what I'm going to talk about today is how to move fast and not
+[00:20] break things. So the the phrase move fast and break things. You've probably
+[00:25] heard this before and what this uh refers to is it's a phrase from early
+[00:30] Facebook engineering culture days, right? And the idea was we want to be
+[00:33] able to move fast and ship fast and not be constrained by, you know, databases
+[00:38] going down or breaking certain features because the priority is there's so much
+[00:41] value in shipping fast. And this was 20 years ago, right, before we had AI
+[00:46] agents writing code for us and shipping things and deploying things on our
+[00:48] behalf. So, if anything, the idea of doing this is more true than ever. But
+[00:54] in my opinion, we can actually achieve both, right? I want to be able to ship
+[00:58] fast, build great features, get things out to my customers, but also not break
+[01:02] the databases, the infrastructure, the application servers that are powering
+[01:06] what I'm doing. And we've probably all seen something that looks approximately
+[01:11] like this. And I'm not calling out any particular company. There's a number of
+[01:14] companies right that due to the kind of insane scale that we've seen over the
+[01:18] past even 6 months year two years right where we've had like daily active users
+[01:24] double triple 10x 100x a lot of that powered by like the demand of AI agents
+[01:29] um where the infrastructure struggles to keep up and some of this is simply
+[01:32] because it's a very hard problem right this is not meant to call anybody in
+[01:36] particular out it's hard to scale things to tens of millions or hundreds of
+[01:40] millions of users but what we'd like to have is great products that scale well
+[01:45] for lots of users and have our status pages look a little bit more like this
+[01:49] one, right? Three or four nines of availability uh maybe five of
+[01:53] availability where our databases are healthy, our applications are healthy
+[01:57] and ultimately our users are happy, right? So this is kind of the idea
+[02:01] behind what I want to talk about which is a little different than probably most
+[02:04] of the talks you've been at. A lot of the talks are probably talking about
+[02:07] inference or specifically how to do things with agents or different kinds of
+[02:11] automations. This is more of an infrastructure talk, but how you can do
+[02:15] that and ship fast both with the demand of AI agents as well as the you being
+[02:21] able to use AI agents to make all of these processes more optimized and
+[02:25] smoother. So, there's three parts to this that I want to talk about. The
+[02:29] first one is how do you even build systems regardless of the number of
+[02:33] users you have that aren't going down all the time? and then tying that into
+[02:37] well okay if you're going to build the next hit application that's going to
+[02:40] scale to millions of people using it how do we scale that using these same
+[02:44] principles and then finally how can we take these two things and let AI agents
+[02:49] do them for us or at least in part work with them in doing this
+[02:54] so I should probably introduce myself a little bit too why I'm talking about
+[02:58] this is I'm Ben and I'm from planet scale and we do databases this is our
+[03:02] whole thing and we work with a lot of these AI companies that are scaling
+[03:06] extremely fast. We work with companies like cursor for example and power
+[03:10] databases for them. And so this is something that we as a company take very
+[03:14] seriously. How do we scale and support companies that have millions of users uh
+[03:19] on their platforms and some of what I'm talking about comes from a article that
+[03:23] we published last year about kind of our philosophy of how we operate databases.
+[03:27] I would encourage you to go Google that and read that. Um but a couple of these
+[03:31] principles let's go over some of these. So the the first and one of the most
+[03:36] important is isolation. Right? When you are running infrastructure, one of the
+[03:40] things you want to make sure you do is have a setup where if something fails,
+[03:44] it doesn't take down the whole system, but every component is very isolated. So
+[03:48] what I'm showing here is data plane. That basically means where are your
+[03:52] databases? Where does your most critical data live that you need to be using for
+[03:55] your users to log in and interact with your application? But there's lots of
+[03:59] other components, right? There's your control planes, there's your
+[04:01] observability pipelines, there might be your analytics frameworks, there's your
+[04:04] apps, there's your MCPs, and there's all these different components that can
+[04:07] potentially fail. And in fact, assuming you're using a good database platform,
+[04:12] the database is hopefully low likely to fail, but these other things you're
+[04:16] shipping and deploying to more frequently, so are more likely to fail.
+[04:19] So we want to make sure that we've designed things where if I deploy a bad
+[04:23] ship to the control plane and take it down, nothing else is impacted and can
+[04:27] still access the database, right? And anything in my data plane. So this is
+[04:33] one of these kind of core principles that we take very seriously. And another
+[04:37] thing is redundancy. And if any of you have worked with databases before in the
+[04:42] past, you've probably seen a diagram that looks something like this. And
+[04:46] similar things apply to your app infrastructure and your other
+[04:49] infrastructure. Although in the case of application servers, usually redundancy
+[04:53] is a little bit easier to solve because it's a stateless workload, right?
+[04:57] There's lots of sort of autoscaling cloudflare workers and versell functions
+[05:00] and AWS Lambda that can scale and have redundancy very easily because it's not
+[05:05] storing state. But in the database world, you have to store state reliably.
+[05:09] You can't lose a single bite of data. And so how do you do this? Um, a very
+[05:13] common approach which costs more money and is more complex but it's the way
+[05:16] that you scale reliably is by having a primary node. So this is where most of
+[05:21] your traffic goes to. But you always have replica servers or follower servers
+[05:25] standing by in different data centers or different availability zones ready to
+[05:29] take over because the fact is servers do fail sometimes. Uh, and on a small scale
+[05:35] when you've got an app that has a hundred users and you have one database
+[05:38] server, you might only experience a failure once every couple of years. But
+[05:42] at a large scale when you have thousands of servers a once or twice a year
+[05:45] failure becomes a weekly or monthly failure. And so you need to have systems
+[05:50] in place to deal with this very well. Okay. So we've talked about uh what the
+[05:56] principles of of scaling reliably are or of um having reliable systems are. But
+[06:03] then the question is what I've just told you here we could write a whole book on.
+[06:07] Right? So there's lots more that you know there's people who spend their
+[06:09] entire careers focused on this. So, we're going a little bit quickly through
+[06:12] it, but these principles apply no matter what point of this user growth chart
+[06:18] you're at, right? You could be at 100 users and in this case, uh, it's still
+[06:24] good to have redundancies, to have isolation, to have failure even for that
+[06:27] smaller set of users. And you want to apply those same principles when you are
+[06:31] all the way up here. I don't know if you can see that line very well, but at
+[06:35] millions of daily active users. But there is a point where you actually have
+[06:39] to incorporate different technologies to scale efficiently and effectively. So,
+[06:44] uh, let's talk about how we scale those systems for a few minutes. And probably
+[06:48] the part you're most excited about is the AI agents part, which we'll get to
+[06:50] at the end. Um, so one of the key things, and this is what we do a lot of
+[06:55] at Planet Scale, is sharding. Um, I just realized my mouse is on the screen, so
+[07:00] let me get that off the screen here. See if that will go away eventually. Um, so
+[07:04] database sharding. What is this? What you do is instead of relying on
+[07:09] that single node, which works fine when you have 10 gigabytes of data, it
+[07:14] doesn't work so well when you have 10 terabytes of data or 100 terabytes of
+[07:18] data or a pabyte of data. So what do you have to start doing? Well, what you need
+[07:22] to do is spread your data and your queries out across many servers. And so
+[07:27] that's what all of these shards down here below are. And typically you put
+[07:30] some kind of proxy and we'll talk more about what VTGate means later in between
+[07:34] that intelligently handles distributing all of the user requests or the query
+[07:38] requests across all of these servers. Uh and this is exactly what we do a lot of
+[07:42] for some large customers at planet scale. We do sharding through vitess for
+[07:46] my SQL and niki for postgress. Um and so this is a very fundamental way of doing
+[07:52] sharding. But the other thing is you don't just use sharding by itself. If we
+[07:55] look at this and we see for example shard A, within that box, you actually
+[08:00] would want a redundant system. So you'd have a primary and several replicas in
+[08:04] there. So if one of those servers fails, that single shard can do self-healing
+[08:08] and get back online very quickly if there's a problem.
+[08:11] So this is one of the ways that we see and is probably the most common and
+[08:15] performant way to scale databases. But really the same principle of hey let's
+[08:20] take queries and data and spread them out across many servers, many nodes,
+[08:23] many drives uh applies to lots of other areas of the stack that you're building.
+[08:29] Back pressure. So this is another one that is sort of a mix of being a part of
+[08:34] scalability but also a part of reliability. And what we mean here is
+[08:38] there's a lot of systems like MySQL and Postgress and SQLite, these very popular
+[08:42] databases that people run that don't do a good job at handling being overloaded.
+[08:47] The moment that they have too many queries or using too much CPU or they
+[08:52] run out of RAM for the cache in many cases, if not taken a lot of care for,
+[08:56] they'll just crash and now your server is down and now all of your users are
+[09:00] impacted and they can't use your service that the database is powering. What back
+[09:04] pressure is is it's designing a system to be able to push back and say when I
+[09:07] detect that I'm above a certain threshold of resources I can actually
+[09:11] say I want to push back and start failing requests denying query uh
+[09:15] denying connections right so that I can keep the existing users or some of the
+[09:20] traffic healthy while gracefully degrading some of the other traffic and
+[09:24] then the rest of your stack has to be built to support that. So, this is a
+[09:28] principle that applies in lots of areas of the stack, but in the database, it's
+[09:32] arguably the most important. Uh, let's see here. The clicker. There
+[09:36] we go. And then the last component of this that I want to talk about before we
+[09:39] move into how to do this all with AI is decoupling. Uh, there's a lot of people
+[09:44] that you'll talk to and when it comes to databases will argue that you should
+[09:49] probably have all of your services combined into one because there's some
+[09:52] convenience to that. your Postgress database, your OOLTP workloads combined
+[09:56] with what you're doing for analytics combined with your your queuing and your
+[10:00] job system, your caching. There is convenience and some technologies try to
+[10:05] do this where we put this all in one. But that does one add a lot of
+[10:08] complexity, but it also breaks some of the fundamental principles from earlier
+[10:12] like failure isolation, right? If one service goes down, that actually means
+[10:16] everything is going down. And then you also have to deal with contention of
+[10:20] resources. So if you suddenly have a burst of Q jobs and you need to scale up
+[10:24] your cues, but maybe nothing else really needs to scale, it would be nice if we
+[10:28] can independently scale the amount of compute resources that we've given to
+[10:31] each of these parts of our backend service powering your favorite
+[10:35] application. Right? So this is not a complete list. What did
+[10:40] we go through so far? We went through sharding. We went through back pressure.
+[10:44] And now we're talking about decoupling. There's many other aspects to
+[10:48] scalability. And again, you could spend your entire career becoming an expert in
+[10:51] scalability. Uh, but this is a lot of what we think about a lot at planet
+[10:56] scale because our customers rely on us to be reliable and to scale.
+[11:01] So, finally, let's go to the last part of this. We let's say we have all of
+[11:07] these principles in place. We are doing things reliably where we have fault
+[11:11] tolerance. We're doing things that are very scalable. But these days in a lot
+[11:16] of organizations and we talk to a lot of people that feel this both at the small
+[11:19] scale and at very large organizations. How can we allow agents to whether in
+[11:24] part or in full have control over what is arguably the most important
+[11:29] infrastructure of your company, right? The databases, the cues, the things that
+[11:32] are powering every other layer of your stack. Um, and this is something that
+[11:37] can be a little bit intimidating because it's pretty much the standard these
+[11:41] days, right, to write code with AI. In some cases, people are not even writing
+[11:46] any lines of code anymore, right? AI is actually writing all of your code,
+[11:48] reviewing all of your code. Um, and you're just sort of guiding these agents
+[11:52] to doing that. But it is quite different to say, I'm going to now also give my
+[11:55] agents the ability to deploy changes to the database or make changes to how
+[12:01] things are configured there or to shard my database, right? because that's
+[12:04] something if it gets wrong, it's generally not as simple as clicking a
+[12:08] button to roll it back, right? It's taking down your entire application and
+[12:11] every user notices. So, we want to do this effectively and safely. So, I'm
+[12:15] going to revisit a couple of the concepts that I previously talked about
+[12:19] and think about how do we use agents to solve this. So, going back to sharding,
+[12:24] what I'm going to talk a little more specifically about is Vitess and this is
+[12:27] an open- source project. uh we operate the test databases for our customers and
+[12:32] it works with my SQL to do sharding. So what you can see here is like all of
+[12:36] those shards down there those would be my SQL databases and the VT gate that's
+[12:40] the proxy that is basically an intelligent proxy that takes my SQL
+[12:44] queries parses them figures out which shard they need to go to and routes all
+[12:48] of those requests in a very sophisticated way. So the software is
+[12:52] fairly complicated, but the interface that we present for specifying how do
+[12:56] you want all of your queries and your data sharded is actually quite simple.
+[13:00] It's what we call a v schema and it's literally a JSON file where you say
+[13:04] here's the column I want to shard on and here's the way I want to do sharding and
+[13:07] you can specify certain tables to go on certain shards and have lots of control
+[13:11] over where and how things are configured. And the great thing is, as
+[13:15] we all know, AI agents are excellent at working with things like text files and
+[13:20] JSON files. So you can give your agent and say, "Hey, I'm struggling with
+[13:23] scalability of my database. Here's my schema. I want you to come up and help
+[13:28] me prototype a good v schema." Right? And once you've developed and designed
+[13:32] something that it has thought through and made decisions about the most
+[13:34] efficient ways to shard when you are on a platform like planet scale you
+[13:38] literally will plug this in and you make a deploy and you you can we give you an
+[13:41] interface for creating new sharded systems and scaling up your database and
+[13:45] a lot of this can happen with either the help of AI or letting AI take some
+[13:49] control over these processes uh given our API and our command line interface
+[13:53] that we run. So this is one of those things right very complex infrastructure
+[13:58] in reality under the hood that is scaling your systems but you provide the
+[14:01] right interfaces for it like simple configuration files and those things
+[14:05] become much more accessible to any company trying to scale. Um, another
+[14:10] thing, so this is getting into the uh concept of back pressure that we talked
+[14:15] about earlier, right? So when a database is overloaded, and this, as you might
+[14:19] imagine, probably happens all the time at some of these companies, right? I
+[14:22] think there was a a tweet a couple of months ago from GitHub that basically
+[14:26] said like their traffic had like two or three or 4x from what already was an
+[14:30] extremely high load. And pretty much all of that was attributed to AI agents,
+[14:34] right? So they already had gigantic infrastructure because they're the most
+[14:37] popular place in the world to develop. and then they had multiple uh uh traffic
+[14:43] increases especially over like the holidays right due to these uh
+[14:46] overloaded systems. So how do we deal with this? One of our solutions and the
+[14:50] way that we like to think about it is we give users a system called traffic
+[14:54] control which allows you to essentially categorize and tag all of the traffic
+[14:58] coming into your database and then you create resource budgets to say hey this
+[15:03] segment of my traffic cannot exceed this amount resources of CPU usage or of
+[15:07] backend processes and again we do graceful degradation when that happens.
+[15:12] So what I'm showing here is this is a graph of I have a budget set up um to
+[15:16] say don't exceed these amount of resources and warn if I do start
+[15:19] exceeding these resources. So it's showing me uh this is the amount of
+[15:23] queries that are exceeding your budget over time and we're we're we're sending
+[15:26] warnings back to the client like hey I'm overloaded you need to slow down and we
+[15:29] can even make it more strict where we actually kill those queries that are
+[15:32] executing. Right? And this is one of those things that like, okay, it's not
+[15:36] ideal to have to deny requests, but it's much better than your whole application
+[15:41] going down and being offline for all of your users.
+[15:45] Uh, and then finally, one other thing I I want to talk about, and I know I'm
+[15:49] showing this is the planet scale UI here, but this is not even so much
+[15:53] specifically about planet scale, but it's about the philosophy of how we do
+[15:56] these things with agents, which is most developers are used to using a gitlike
+[16:02] flow when you're building. And this applies to your agents as well, right?
+[16:04] You have a main, you create a branch, you make code changes, you do merge that
+[16:09] in, and you deploy that dynamically to wherever your application is deployed.
+[16:13] What we have done, and this was long before agents even existed, is we wanted
+[16:16] to take that same UX and mirror that for your database because a lot of the times
+[16:21] when you're building new application features, you're also making changes to
+[16:25] your schema. You're adding tables, you're adding columns, you're deleting
+[16:28] things, you're you're adding indexes, you're doing all of this stuff to your
+[16:31] database to keep it in sync with your codebase. So what we give you powered by
+[16:35] that same vitess earlier is the ability to branch your database schema, make
+[16:39] changes to that schema in an isolated environment and then merge that back
+[16:43] into production with what we call a deploy request. All with no downtime.
+[16:47] And not only that, but actually the ability, you might see here at the
+[16:50] bottom, the ability to, if you deploy a schema change and you see a problem, we
+[16:54] give you the ability to oneclick revert that go back to the old state of your
+[16:58] database without data loss. Uh, and so this is something that was great for
+[17:03] humans, but we also have the APIs and the CLI to be able to let agents
+[17:07] automate this. So when they are doing things and automating code and branching
+[17:12] and making pull requests and doing code review, there can actually be a mirror
+[17:16] database state that is working in sync with all of those things, right? And
+[17:20] that can either be fully automated, it can be semi-automated. Obviously, many
+[17:23] of us are working in a human in the loop fashion where humans are still reviewing
+[17:28] all of these changes that AI agents are making, which is a good thing. Um, but
+[17:32] we have the primitives in place for building these uh systems. And there's a
+[17:37] number of other things that I didn't get to to talk about this, but kind of the
+[17:40] the ending point that I want to make is we're a company and I know a lot of
+[17:45] companies out there like to focus on the developer experience. And when I say
+[17:49] developer experience, I don't just mean like light and dark mode switches and
+[17:52] good keyboard shortcuts and all of this, but I mean the actual experience of,
+[17:56] hey, if you're a developer that's responsible for your company's database
+[17:59] or responsible for some piece of infrastructure, do we give you the tools
+[18:03] that you need to not mess up to do deploys safely to make your database
+[18:07] faster to get better performance? Uh, and we've been building these things for
+[18:11] years. And it does kind of turn out that when you really focus on that core of
+[18:14] the developer experience, what you actually end up with is also very good
+[18:18] primitives for AI being able to work with a database safely and reliably and
+[18:23] helping it scale. Uh, and so because we expose a lot of these things through our
+[18:27] MCP server, through command line interfaces, obviously there's plenty of
+[18:31] debate on which of those is better when working with your AI agents, but because
+[18:35] we expose those things to both parties, it's actually a great experience for
+[18:40] operating your database and working well with AI agents. So that is all that I
+[18:45] have to say. Thank you guys for coming. I'm Ben and have a great rest of the
+[18:49] conference.
+[19:02] >> [music]

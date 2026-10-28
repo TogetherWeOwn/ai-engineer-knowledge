@@ -1,0 +1,487 @@
+# title: Bending a Public MCP Server Without Breaking It — Nimrod Hauser, Baz
+# source: https://www.youtube.com/watch?v=U00AOI1eJUE
+# speaker: Nimrod Hauser, Baz
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T09:59:02Z
+# sha256: 73747f4052a9eafac3a5bb010cd818348c3be90458a6743ade237c1c014edc32
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:00] Hi everyone and welcome to our talk today about bending a public MCP server
+[00:05] without breaking it. But today we may have just broken it because our MCP
+[00:09] server seems to have caught on fire. We're glad you're here. We need all the
+[00:13] help we can get. Let's go through our talk and see how we can improve whatever
+[00:18] is going on right here. I'm Hower. I work at Buzz. We've been building AI
+[00:23] part code reviewers for the past few years now as well as a bunch of other
+[00:26] features. anything that can can make the lives of people at R&D easier and
+[00:30] better, whether they're devs, PMS, anything else. If it's a Gentech, we're
+[00:34] probably tinkering with it. But let's jump right in and start looking at
+[00:39] what's going on with our MCP server. I suspect it's the tools. Uh we're going
+[00:44] to talk about third party tools and why they might blow our applications.
+[00:50] First of all, it's me. As I said, Nimrod Hower, a founding engineer at Buzz. I've
+[00:55] been with the company since it was founded in 2023. I've been at backend
+[01:00] and data for the past 20 years or so. Had a in my career had a brief stint in
+[01:04] Salesforce and ever since mostly startups um cyber crypto and now
+[01:09] developer tools. Nowadays I mostly want to talk to you guys about agentic tools.
+[01:17] All right. Agentic tools and specifically thirdparty tools. They can
+[01:23] be a great force, a great addition to our application, but they don't always
+[01:28] work out of the box. We expect them to make our application better. Sometimes
+[01:33] we'll see degradation, and we'll try to understand why that happens. After that,
+[01:38] we'll explore a framework of five best practices that we can follow in order to
+[01:43] turn this around and make our application kickass. Along the way,
+[01:48] hopefully we'll fix the busted MCP server that we just saw. Put out that
+[01:51] fire, make it work, and make our agents behave the way we want them to.
+[01:58] Yep, this is looking kind of bad. Think we should dive in.
+[02:04] So, we're going to talk about agentic tools. When we use MCP servers, we get
+[02:11] tools from coming from the MCP server. So, as long as we're talking about
+[02:15] thirdparty tools, I don't care if they're coming from an MCP server, from
+[02:19] a library, maybe we copy and pasted them from somewhere else. If they're a gentic
+[02:23] tools, they were written by a different team. They're relevant for this
+[02:26] discussion. So, what are these tools? Essentially, tools are just callable
+[02:31] functions wrapped with a nice description. The description is
+[02:35] important because it lets the agents know when to use the code and how to use
+[02:40] the code. and we'll dive deep into these aspects of the description. But again,
+[02:46] it's kind of like glorified integration code written by a third party. In
+[02:51] today's talk, we're going to take Playright's MCP server as an example.
+[02:55] So, essentially, we're looking at integration code written by the good
+[02:58] people at the team of Playright wrapped with their descriptions, and we'll see
+[03:03] how we can make these tools work better, kind of tail tailor them for our use
+[03:09] case. Yeah. So, third party tools have their
+[03:15] challenges. Uh, first and foremost, they might cause our agents to behave
+[03:20] unexpectedly. You know, agents are already non-deterministic, unpredictable
+[03:24] things. You give them tools and you get unpredictability at scale. But also,
+[03:29] they can just degragate performance. You might want the agent to do a certain
+[03:33] thing and you get subpar results, wrong results, or maybe it just does it, but
+[03:38] in a way that's not optimal. And through today's best practices, hopefully we can
+[03:44] see how we can make the implementation of thirdparty tools in our Aentic
+[03:49] workflows much much better. Last and foremost, these bad performances that
+[03:54] unexpected behavior that can also mean full-blown security issues. I mean just
+[03:59] imagine a scenario pretty classic scenario uh like a multi-tenant
+[04:05] architecture and your agent might not know all there is to know about your
+[04:09] architecture and the division into folders or databases and schemas. Uh it
+[04:14] just does doesn't have the proper guard rails and it might leak client data to
+[04:18] another cl to another client things of that nature. you really want to
+[04:22] guardrail your agents and and this is becomes even more important when dealing
+[04:27] with thirdparty tools who are not aware of your architecture. So we'll cover
+[04:32] that as well.
+[04:36] All right, I think I think we're going to we're about ready to look at a use
+[04:42] case to look at some code actually, but we'll need a use case and with your
+[04:46] permission I'll we'll choose one of ours.
+[04:50] So today our use case will be Buzz's spec reviewer. So what is the spec
+[04:56] reviewer? It's one of our products which is essentially an agentic reviewer that
+[05:00] knows how to compare requirements with implementation. So as a first step it
+[05:07] needs to kind of collect requirements. It will go to your ticketing systems
+[05:11] like your Jiraas or linear or anything of that nature and read a ticket. And it
+[05:17] can also go to Figma and look at visual designs
+[05:21] in kind of a multimodal uh way of operation. It will actually see the
+[05:25] design that is intended and that part is the requirements. Once once it
+[05:30] understands what a developer was tasked with, that's when it will spin up
+[05:35] Playright's MCP server to actually open up a browser, go into your system, check
+[05:41] the branch, see the implementation, and it will need to assess whether the
+[05:46] implementation meets the requirement. It will give us kind of a verdict. It will
+[05:51] take a snapshot as evidence whether this was fulfilled or wasn't fulfilled. And
+[05:56] it does all this automatically and can save uh people mostly PMs a lot and lot
+[06:02] of time doing menial validation work. So we've built a toy example of our spec
+[06:08] reviewer and we're going to see how we handle the tools to get the most of it.
+[06:14] I hope this makes sense. At a high level, I think it's time to
+[06:19] look at some code and hopefully everything will be much much clearer.
+[06:25] All right. So, we have a toy example of our spec reviewer. We'll go through it
+[06:31] kind of quickly. We don't need to dive into every aspect of it. It's it's a
+[06:36] pretty small project and we'll see what's going on and focus on the parts
+[06:41] that we care about. So, we start here with our main function.
+[06:46] And um we have some a directory where we want to save snapshots. We'll get to
+[06:54] that later, but right off the bat, we have our MCP server configuration. We
+[06:58] have just the one. We're using only Playright's MCP server. This is pretty
+[07:03] standard. So, we have the one MCP. As we go into our main function, you can
+[07:10] see that we're uh defining our MCP client and we're
+[07:16] going to use that in just a little bit. We'll put it in our agent, but I want to
+[07:20] focus on this. This is where the magic of this talk happens. We have built a
+[07:25] base class for getting the tools and all it does it
+[07:31] has one function called get tools. As we will go through the talk we will go in
+[07:38] increasing complexity and improve the way we handle the tools that are coming
+[07:44] from our third party MCP server. So here it is. We're starting with the
+[07:50] baseline. We'll look at it in just a second. And as we start our session,
+[07:56] this is this is where this inheritance is going to take place. Every time we
+[08:01] run this, we will uh the get tools will do something a little bit more advanced.
+[08:08] So we start we we want to start the our flow. We have this function called login
+[08:15] to buzz because for this talk our example is going to be logging into our
+[08:19] system and we will talk about why we need this towards the end. There's
+[08:23] actually an interesting point here. We will define an LLM. We'll create an
+[08:28] agent. Uh we will uh give it a system message and a human message to start to
+[08:35] kick to kick it off. These are the messages it's going to get and we will
+[08:40] invoke it. Um um you're probably kind of wondering maybe you want to see a little
+[08:46] bit more under the hood maybe look at the prompts.
+[08:49] So this should be uh relatively um straightforward you know system prompt.
+[08:55] This is mostly AI generated saying things like you are a meticulous QA
+[08:59] agent. You need to review requirements from the ticket as well as visual
+[09:03] verification. Everything we talked about at high level is right here. Some
+[09:08] guidelines. First, read the ticket, understand it, navigate through the
+[09:11] system, and then at the end, like we said, it needs to give us a pass or fail
+[09:16] verdict, specific observations, and reference
+[09:20] everything with a screenshot for evidence. Uh, human prompt is very
+[09:25] similar. It does have a multimodel aspect to it where we take images and we
+[09:30] embed them in the human prompt, but these days it's very straightforward and
+[09:35] any coding agent can just whip that out for you if you need it. Speaking of
+[09:40] images, we have two images here. We have a ticket that we took a snapshot
+[09:46] of. Our real product doesn't take tickets as snapshots. We were just lazy.
+[09:51] But um the agent can definitely read this understand the requirement. There
+[09:57] is a an accompanying design which is this one. So the ticket states that we
+[10:05] want to have a configuration drawer for our spec reviewer in our system in Buzz.
+[10:10] It explains how it should look and a design is given. So the agent should
+[10:16] understand that it's looking for a drawer inside our agents tab for spec
+[10:22] reviewer and it should look roughly like this. Amazing.
+[10:28] I think we it's about time we just fire this up and uh hopefully it will make
+[10:33] everything so much clearer. We have a breakpoint here right after we get the
+[10:37] tools. Almost forgot. Our first run is going to be with this V 0 the benchmark.
+[10:44] What is our benchmark? If we go to our get tools, we see that what we do for v
+[10:50] 0ero is classic out of the box. We just use lang chains load mcp tools uh
+[10:58] method. That is it for the first round. We're not tinkering with tools at all.
+[11:04] Let's see how it behaves. Vanilla. All right.
+[11:15] Okay, so this is starting up and we have our tools.
+[11:20] Let's see what we have here. So, right off the bat, the good people at the play
+[11:24] at Playrite have given us 21 tools and everything that has to do with
+[11:30] manipulating the browser, browser close, browser resize, console messages, handle
+[11:35] dialogue, file upload, fill form, install, all the press key. And then we
+[11:40] can look at the descriptions. What is the description for a tool called press
+[11:43] key? Press a key on the keyboard. What is the description for something like
+[11:47] resize? Resize the browser window. Browser close. Close the page. These
+[11:52] seem very shallow and very generic, but we don't blame them. The people at
+[11:58] playright don't know what our specific use case is. This MCP server will need
+[12:02] to cater to I don't know how many different use
+[12:06] cases. It has to be generic. But for us using this, we and we'll see this going
+[12:13] forward. We might want to put in our own descriptions that really are tailored to
+[12:18] our use case. But we're not there yet. We're still at the baseline. So let's
+[12:23] just continue and we will see that this is running.
+[12:30] Okay, so Plret is running. It's spinning up a browser
+[12:37] and and now it's going to log in. And once it's logged in, the agent is
+[12:43] gonna take over and start running according to the prompt.
+[12:51] And there it's off to the races. It's opening our it's it's logged in. This is
+[12:56] our homepage, which is the changes screen. And now it's going to need to
+[13:00] find the relevant um page which is the agents tab. So it's going to need to
+[13:07] explore the system a little bit and it might work, it might not work.
+[13:13] Remember the tools are not optimized at this point. And it's done. Let's see how
+[13:18] it did. So looking at the results, it tells me that the requirement is not
+[13:25] implemented, that the status is fa it's a failed verdict. It gives me an
+[13:30] observation and it tells me that the require requirement is not met because
+[13:34] it couldn't navigate to a seemingly madeup page called buzzco/spec
+[13:41] reviewer. This might be an hallucination, a lapse in judgment on
+[13:44] the agent's part, a bunch of other things. And it gives an evidence of a
+[13:49] 404 screenshot which probably took and we can probably check out in our
+[13:52] screenshots folder. It did didn't even manage to take the screenshot properly.
+[13:57] So a lot of things went wrong and this is actually a great outcome for the
+[14:02] beginning of a talk whose whole concept is optimizing our use of aentic tools.
+[14:08] So let's see what we can do to improve our tools and we'll run this again and
+[14:13] see if we can turn this upside down. All right, cool. Our MCP server is
+[14:20] already starting to look a little bit better. The fire is put out. It's just
+[14:23] this spark now. And this is probably because we've gone through some code.
+[14:27] We're starting to understand the problem. But we still need to start
+[14:30] actually implementing our improvements and see what can be done to really make
+[14:34] the system better. So, time to introduce our five concepts that we're going to go
+[14:40] over. We're going to look at how we can curate thirdparty tools, wrap thirdparty
+[14:45] tools with our own descriptions, and perhaps some additional things.
+[14:50] Adding deterministic guardrails whenever we feel it's necessary, and we'll give
+[14:54] an example. Creating new tools out of the existing tools, actually using the
+[14:59] existing tools as building blocks. And lastly, there's always the option to
+[15:04] treat tools as simple functions, just calling them, using them as that
+[15:09] integration code we spoke about written to us by the good people at the team of
+[15:12] playright. Uh, you know, taking some parts of the workflow outside of the
+[15:17] agentic flow whenever we feel it's necessary. We'll talk about this towards
+[15:21] the end. So, it's also a tool in our arsenal. I did kind of split these into
+[15:27] two buckets. One is more in the realm of context engineering, the other
+[15:30] deterministic guardrails. It doesn't really matter at the end of the day.
+[15:33] Whatever gets our application um to work as we want it, that's what we need to
+[15:38] use. So now we'll go over them one by one
+[15:42] looking at code. See how we can improve our toy example that we just saw.
+[15:47] Starting with our first point, curating third party tools.
+[15:52] All right, let's see how this one looks. All right, we're back here at our
+[15:57] familiar project and through the magic of video editing, we have now imported
+[16:02] V1. It used to be V 0 original. It's now V1 curated. The only difference like we
+[16:09] we've seen is that now we have this as V1 and this as we said it's that class
+[16:15] that inherits from the base class. It used to have just get tools vanilla
+[16:20] using lang chains function. Now we can see what we have implemented here. So we
+[16:26] go in and we used to return this right but now we have this big list of all the
+[16:33] tool names that we get from our playright MCP
+[16:36] and this small list. This is pretty you know standard stuff in Python um list
+[16:43] comprehension. So we just created this list of tools that we want to exclude.
+[16:46] We just went over them and we we know the tools. We've been using the this MCP
+[16:50] server for a while and we decided that for our use case, we might not need
+[16:55] resizing the browser. We don't want our agent to drag things. We don't want to
+[17:00] run code inside the browser on its own. These are just not things that our
+[17:05] Spectre viewer needs to do as part of its operations. Maybe for your use case,
+[17:09] this is needed, but for ours, not so much. So all we do is we get all the
+[17:14] tools and instead of just returning them, we simply exclude the ones that we
+[17:19] don't want. So there are a bunch here six here that we're going to simply not
+[17:24] use. We fire this up. We have our break point and instead of 21 tools which we
+[17:30] used to have, I expect to see less. And so we have 16. Amazing. Um, so this
+[17:39] means our context window already has less tools in it. Our agent has less to
+[17:45] choose from. So everything might become simpler. We'll see that not all the
+[17:50] guidelines that we're going to go through will necessarily um reduce stuff
+[17:54] from our context window. Some will actually add to it, but this is all part
+[18:00] of this tradeoff, this juggling act that we're going to talk about.
+[18:06] Moving on to our next point, the practice of wrapping third-party
+[18:13] tools. This is amazing. We talked about how the descriptions specifically coming
+[18:19] from the Playright MCP are super shallow and very, very generic and that it's
+[18:24] totally understandable because they need to cater to every possible use case in
+[18:28] the world that might want to use the browser. But if you really want to
+[18:32] optimize, you might want to start tailoring stuff for your own use case.
+[18:36] Let's see how this happens. Okay, this is becoming familiar
+[18:41] territory by now. And as always, through the magic of video editing, we have uh
+[18:46] V2 imported wrapped. So, we're wrapping tools this time. Going down, we see that
+[18:51] we're calling the V2 uh class, which will implement get tools. And we'll see
+[18:57] what's going on here. If I go to v2 wrapped, I see that we as before we get
+[19:03] all the tools. But now we have this new class called tool wrapper which has a
+[19:07] method that we're calling wrap playright tools. Let's see what's going on here.
+[19:12] As before, we still have this list of all the tool names, we'll do the
+[19:15] filtering a little bit further, but instead of just the tool names, we also
+[19:20] have all these descriptions. And so for every tool, we we want to specify what
+[19:26] needs to happen. And from experience, we have our own kind of little emphasis
+[19:33] that we want to give our agent. We might tell it, you know, before calling the
+[19:37] browser tool, first call this other tool. This tool we found to be
+[19:41] especially helpful. It's uh it has kind of a misleading name. It's called the
+[19:46] snapshot tool. It's actually not a visual snapshot. It's the accessibility
+[19:49] snapshot [snorts] that kind of shows you all the different buttons and all the
+[19:54] different menu items in text. And we feel that the agent re the agent really
+[19:59] gets a good understanding of what is in a page when it calls that tool. So we
+[20:04] tell it for a bunch of tools you know instead before calling hover before
+[20:09] calling click please use this tool before. So we can kind of really affect
+[20:13] its behavior. We can uh make it more eager to choose one tool over the other.
+[20:17] We can do a bunch of things. Um for instance this is the tool I just talked
+[20:22] about the accessibility snapshot. we will tell it always prefer this over
+[20:27] taking an actual snapshot which is this tool. So you can really give a lot of
+[20:33] guidance from your own experience for your own particular use case and this is
+[20:39] very very powerful. In here we have this dictionary which
+[20:43] just maps tool names with their new enhanced descriptions. Still we have our
+[20:48] tools to filter. At the end we have the function that we called called wrap
+[20:53] playright tools and it just goes through all the tools that we get from playright
+[20:58] out of the box. We filter what needs to be filtered and for for other tools we
+[21:05] get our enhanced description based on the tool name and we create this tool
+[21:10] and we append it to the list of wrapped tools. So we get enhanced tools. What is
+[21:17] this method that creates an enhanced tool? Well, it's a method that gets the
+[21:22] original tool and the enhanced description creates a new tool and
+[21:27] returns it. And so what does this amazing new tool what what does it do?
+[21:34] Exactly what the old tool did. It just invokes the original tool. It just has
+[21:39] an enhanced description. So if we run this,
+[21:44] going back to main and we run this and we still have our breakpoint,
+[21:52] we can see that we still have less tools like we wanted to from before, even
+[21:58] less. We filtered a bunch more. But when we look at the descriptions,
+[22:02] you see that they're much longer and they are they are the ones that we
+[22:06] wanted. For example, here is the tool we spoke about, browser snapshot. Capture
+[22:11] an accessibility snapshot of the current page, yada yada yada. All the things we
+[22:15] said. If we look at another one, browser click. Here's our guideline for first
+[22:19] call the other tool and then call this one. Now our agent knows how we want it
+[22:24] to behave.
+[22:29] All right, on to the next one. First of all, our MCP server. I don't
+[22:35] know if you can notice, but things are looking even better. Some of the
+[22:39] interfaces seem to work. Lights blinking, things firing, but we're still
+[22:44] far from the home stretch. We'll move on to point number three and keep making
+[22:50] this better. Now, we're moving into the realm of
+[22:55] deterministic guardrails. And this is putting in deterministic guardrails.
+[23:00] taking control of sensitive or mission critical aspects of our tasks with
+[23:04] deterministic logic that is not up to agentic decision making. Sometimes there
+[23:10] are aspects of your tasks that are just too
+[23:15] sensitive to leave at the hands of the agents. We talked before about scenarios
+[23:19] like multi-tenant architecture and may and scenarios where the agent might not
+[23:24] be fully aware of your architecture, things of that nature. And of course,
+[23:27] you need to specify everything you can in the tool descriptions and the
+[23:30] prompts, but sometimes you really want to enforce that it is not doing anything
+[23:35] funky. You know, agents are non-deterministic things and sometimes
+[23:39] they will ignore you. We know of all these phenomenons such as needle in the
+[23:43] haststack and loss in the middle and a lot of instances where agents will just
+[23:49] not work as you intend them intended them to. This is where you want to put
+[23:54] some deterministic enforcement. We did this around the tool that takes actual
+[24:00] visual snapshots. Not the accessibility snapshot we talked about before, but the
+[24:04] actual visual snapshots. We had a folder that we defined and we said this is the
+[24:09] output folder. This is where we want you to put images, but there is a
+[24:13] possibility that the agents will go rogue and just store images in other
+[24:17] places. So that's where we want to draw the line and make sure this never
+[24:21] happens.
+[24:25] Okay. So as always we have V3 now which is the one we want to look at. So going
+[24:33] back to main we see we have this here V3 guard rail. We dive in and we see uh
+[24:41] that we have again our wrap playright tools. Obviously, this time it's going
+[24:45] to do something a little bit different as we increment every time. So, we still
+[24:50] have the names, we still have the descriptions and uh going down down down
+[24:54] down. By the way, we can already see that apart from the V3 that we always
+[24:59] have which looks like this and the tool wrapper which we had before, we now have
+[25:04] another class called path validation. Let's see where we use it. So, we're
+[25:07] going down down down. We're going past the dictionary, pass the tools to
+[25:10] filter. We're in the um the method that method that we're always importing wrap
+[25:16] playright tools and rap playright tools as before. It goes over all the original
+[25:21] tools we got from our playright MCP filters what needs to be filtered. Uh
+[25:26] gives the enhanced description for each of the tools if we find it. And then as
+[25:31] before we have the same helper function create playright tool wrapper. That
+[25:35] function that takes a tool gives it the enhanced description and creates a new
+[25:40] tool out of it. Same functionality, new description. Let's see what's changed
+[25:44] now. So when we want to create the new tool, right? So this is the tool we're
+[25:49] creating. As we said, a tool is just a a callable function with some description.
+[25:55] We give the new description. And before we had this part because we said what
+[26:01] does the new tool do? Exactly what the old one did. But we added this part.
+[26:06] We're saying if the tool that is now being activated if it is the take
+[26:11] screenshot tool and we've kind of researched the tool and we know that it
+[26:15] uses under the hood it will use either the path or file name as keywords at
+[26:19] least relevant keywords for us. So if if you're trying to invoke the tool and it
+[26:25] is this tool then find the these keywords and validate
+[26:32] them and we have some helper functions. This path validation these are just
+[26:36] helper functions. We don't need to go too too much into them but they're just
+[26:40] deterministic logic where we take the path that the tool chose and we take our
+[26:46] path where we want to enforce things being stored. We call it the screenshots
+[26:50] route and we just use this method. We want to know if that path is relative to
+[26:57] the screen the chosen path is relative to the screenshot path. So it is a
+[27:02] deterministic way once we understand where the tool intends of to store the
+[27:07] image. We know if it is inside the right folder.
+[27:12] So going back to our helper helper function, every time the tooling is
+[27:17] invoked before it actually gets invoked, we we kind of extract the path it
+[27:24] intends to save to to invoke it with. [snorts] We try to validate and if it is
+[27:29] not a valid path, it will not reach invocation. It will raise an error. So
+[27:36] this is a deterministic way where we can stop the tool right in its tracks with a
+[27:40] deterministic guardrail. Now another nice thing to note is that we might
+[27:44] raise an ex exception. We don't return an exception. We don't want the whole
+[27:48] agentic process to fail. Instead we handle this nicely by creating a very
+[27:53] nice agentf facing explanation and and what the error what the agent will get
+[27:57] back is this nice me message saying listen access is denied. You can't save
+[28:02] it there. You need to save it here. Please provide a proper file name and
+[28:07] proper path. An agent that gets this message is most likely to just try again
+[28:12] but aligned. This is our way of aligning it and it will try again. Give a correct
+[28:18] path uh manage to traverse this get here and save the image. So that's exactly
+[28:25] what we want to happen in these very mission sensitive um security related
+[28:32] scenarios. So that is amazing. Okay. Personally, I love this point. I
+[28:39] think it is so common and a tool everybody must have in their arsenal.
+[28:43] But it is time to go forward. We have two more.
+[28:47] This might be a little bit more niche, more in the advanced side, but it is
+[28:50] worth kind of checking out knowing that it is a possibility. This talks about
+[28:55] composing new tools from existing tools. And the place where we did that was
+[29:01] interesting. It was actually it also had to do with the same take snapshot tool.
+[29:05] We felt that sometimes we want to take snapshots in general. It's kind of a
+[29:11] generic thing. But when we take screenshots uh in the context of
+[29:17] evidence at the end of the flow, we felt that maybe having a separate tool for
+[29:24] that was uh was in order. Why? We can create a new tool whose functionality is
+[29:32] essentially a pretty much the same as take regular snapshot but because it
+[29:37] will have separate descriptions, the agent can choose either this or
+[29:42] that. And we can also tell it to behave slightly differently in both cases. And
+[29:48] we can also give some additional uh additional actions to do maybe even
+[29:53] deterministic actions just before invoking the original tool. So we
+[29:58] created a new agent called the evidence tool and let's take a look what we did
+[30:02] there.
+[30:08] All right, this time around we have V4 imported as we would expect by this
+[30:14] point. So we can take a look at V4, see how it implements get tools. We go in,
+[30:20] this opens up. This looks very similar to before. Actually everything looks
+[30:24] similar. We have tool wrapper. We have path validation. very very similar.
+[30:28] What's the difference? Well, we inject a new tool. So, we have uh you know inside
+[30:34] tool wrapper what we would have come to expect by now. We have the the tool
+[30:37] names, the tool descriptions, the dictionary. We have our tools to filter.
+[30:43] Everything's the same. And then we have the same old same old rap playright tool
+[30:47] which iterates over all the tools, filters what needs to be filtered and
+[30:51] creates any tools that we need to create with enhanced descriptions.
+[30:55] But so this is what we used to have. We finished the loop and we have this. We
+[31:01] have this part injecting a brand new tool. We chose and you don't have to go
+[31:05] the same route, but we said because this is building on the screenshot tool, then
+[31:10] only create this new tool if the screenshot tool has not been filtered
+[31:14] out. Totally optional, just what we chose to do in this particular use case.
+[31:18] And so we have our new um description for this new tool. And we create a new
+[31:24] tool. Let's take a look at the at the screenshot.
+[31:28] Sorry, the description. So,
+[31:33] description as you might expect from a description of this kind of tool, take a
+[31:37] screenshot specifically for the purposes of evidence. And because the prompt when
+[31:43] it describes the flow tells it that this ends with taking snapshots for evidence,
+[31:48] the agent will probably know to choose this tool over the regular screenshot
+[31:52] taking tool. uh we tell it to use this only when capturing things for evidence.
+[31:56] And we also specify how to go about doing evidence. We say for example that
+[32:02] when it creates an image and it wants to store it, we want it to identify the
+[32:07] relevant ticket and put include the ticket number in the file name being
+[32:13] saved. And so you can see a nice example of how we're going to have two tools.
+[32:17] the agent will know to differentiate when to use this one or whether to use
+[32:20] the other one specifically in the context of evidence taking. And when it
+[32:25] chooses that tool in the context of evidence taking, it will this will cause
+[32:28] it to uh have different considerations when choosing the image name for
+[32:33] example. And you can do a bunch of other things. You can add guardrails or
+[32:37] deterministic actions that are specific to this tool for example. So really the
+[32:41] sky's is the limit. The world is your oyster and knock yourselves out.
+[32:47] So this was this. Moving on to our final fifth and final point.
+[32:53] Look at this. Our server all the fire is out. It's the system is booting looks
+[33:00] and still we have one final point which we actually touched on in the beginning
+[33:05] of the talk. This is treating tools as deterministic functions or callable
+[33:11] functions. Sometimes we get all these wonderful functions, all this code from
+[33:16] the people at these third party teams. In our case, the team of playright, they
+[33:20] gave us all this really nice code and we can just call this code
+[33:26] um outside of the agentic flow. Just just call it just disregard the
+[33:31] description and just use the function they gave us. Where do we use that? I
+[33:35] don't know if you remember, but when we first looked at the code, we had this
+[33:38] function called log to buzz, and we said we'll get back to that. This is us uh
+[33:44] kind of closing that loop. Let's take a look.
+[33:49] Okay, back to the top of our main pi file. We go down, down, down, down,
+[33:55] down, down, down, down, down. Here is the imported V4. But today, we're
+[34:00] interested in But now we're interested in something else, which is this part.
+[34:04] when we just when we just start out, we kind of define the MCP client. We define
+[34:10] this uh class that implements get tools. We get our tools and the first thing we
+[34:16] do is we have this deterministic function called login to buzz. Only
+[34:21] after we log to Buzz do we actually create an agent and then and then we
+[34:26] give it all the messages it needs and we invoke it. So why is the logging
+[34:31] deterministic here? Well, it seems that logging is kind of tricky because this
+[34:38] is a toy example again, but in our real product, we need to log into our system.
+[34:42] We need to log into client systems. So, and each client might have a different
+[34:47] logging mechanism and they can be tricky and they can have secrets and they can a
+[34:53] lot of things can make this kind of complicated. So on the one hand it's
+[34:56] complicated and on the other hand it is a an action that we will always want to
+[35:02] take. There is no agentic flow for spec reviewer that does not begin with a
+[35:07] login and so we and so we do use tools we got from MCP server uh in order to uh
+[35:15] achieve this. We're just not letting the agent try to do it because it's we saw
+[35:21] it gave us subpar results. So for these very specific niche uh use cases
+[35:28] sometimes you might want to take matters into your own hand. Here if we go into
+[35:33] the function not much going on. I again toy example the real product
+[35:40] behaves very differently but here I just hid some JWT tokens as environment
+[35:44] variables and I you know this function accepts all the tools from the MCP
+[35:50] server. kind of pluck the the ones we want and we uh and the gist of it is
+[35:57] that we are going to inject these JWT tokens into the browser's local storage
+[36:05] and then when we click the login button we will just log in like magic. So we
+[36:09] just do this deterministically once we have logged in. We take the reigns and
+[36:15] give it to the agent. We say you're logged in. You're off to the races. And
+[36:19] that's how we just unbburden the agent from this somewhat clunky action it
+[36:25] needs to take which we can just take off its hands, not bother it and its context
+[36:30] with it. Um, cool. So that simplifies things at least for us.
+[36:38] Oh, I almost forgot. I still owe you one last thing. I think we should fire this
+[36:43] thing up now with all the improvements and see where we land. We failed on the
+[36:48] previous run, didn't we? Okay, let's let's see how it works. So, going back
+[36:54] to the familiar codebase, our main Nope. And we run this. We no longer need the
+[37:03] break the break point. I think I took it out. Yep. And this is just running.
+[37:10] >> Okay. So, this is going to start by doing all the JWT magic in the back,
+[37:13] which we now know how it works. And let's see how it goes. I'll take the
+[37:19] time to remind you that we gave it a ticket and a uh a design. And it needs
+[37:27] to see this drawer. That's what it's actually doing now. Okay. So, it kind of
+[37:31] reloaded. I think maybe the JWT tokens have kicked in. it go it's going into
+[37:37] our homepage called changes and it's probably going to do a little bit of
+[37:40] reasoning and it's going to need to find the way to navigate itself through the
+[37:45] system to the agents tab. It doesn't always show it. It has a lot of lat
+[37:50] latency and lag at least from our experience but it does take a screenshot
+[37:54] as evidence. It finished. Let's see what it did. So it says that this past it
+[38:01] said it claims that the configuration drawer is present and includes the
+[38:05] sections that uh are need to be there. It has a screenshot. The screenshot has
+[38:10] a file name that includes the ticket like we said. It has reasoning. Let's
+[38:14] take a look at the screenshot. So you see the the image we gave it was a night
+[38:20] dark mode and it it was navigating in in light mode and it took it and it looks
+[38:27] it looks great. It looks like it's it's done and it's correct. Now I will say
+[38:32] that um uh it did see a configuration uh drawer. It did see everything that's
+[38:37] supposed to be in it. It might not be pixel perfect, but pixel perfect uh
+[38:42] verification is something that we worked very hard on in our real product. So
+[38:48] outside of this toy example, pixel perfect does work because it is super
+[38:52] important for front-end validations, making sure the padding and the margins
+[38:55] and all the uh style is just as it needs to be.
+[39:00] Amazing. So with that done, I think we're It's sad. It It's almost goodbye
+[39:06] time. So, I think it's we're all we're starting to get ready to wrap up. Look
+[39:12] at our server. Look at it. It's amazing. It's beautiful. It's working. Green
+[39:15] lights are blinking, engines roaring, GPUs churning. Um, millions of spec
+[39:21] reviewer being being executed and a great acceptance rate. Thank you for all
+[39:26] your help. Let's just uh do this one final uh summary before uh we each go
+[39:34] our separate ways. So as we said we looked at agentic tools today whether
+[39:39] they comes whether they come from libraries MCP servers or any other place
+[39:43] we saw that sometimes they will fail out of the box they might be very generic
+[39:47] they might be not tailored enough for our use case and tailoring them is
+[39:52] what's going to make our agents pop. Now sometimes we wanted to curate the tools
+[39:58] and kind of ease the load on the on the context window. Sometimes we wanted
+[40:02] longer descriptions and more verbose tools. So there's no oneizefits-all.
+[40:07] It's mainly a question of how do I kind of mold the tools to best fit my use
+[40:13] case. Sometimes they'll be deterministic. Sometimes they'll be
+[40:16] flexible. It depends. And you're going to need to tinker with it and make it
+[40:20] your own and and and and strive for the best possible setup that you can do to
+[40:26] achieve your goals. I hope this has given you a few pointers uh things that
+[40:31] you can try out. This has been amazing and great fun. Uh I'm I'm going to move
+[40:36] up here now because I have a shameless plug after I thank you for listening and
+[40:41] so always feel free to reach out. I will see you guys in the next one. Cheers.

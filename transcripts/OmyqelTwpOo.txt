@@ -1,0 +1,286 @@
+# title: How to Build Voice Agents That Don't Fall Apart When You Interrupt - Jesse Hall, LiveKit
+# source: https://www.youtube.com/watch?v=OmyqelTwpOo
+# speaker: Jesse Hall, LiveKit
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-27T04:42:48Z
+# sha256: 2b197d1ee8ffefd83f871b31e1bd38c4c0c7e43f5595178667ea066dcc9858d1
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:01] [music]
+[00:12] >> Um all right, we're going to talk about voice agents. And
+[00:17] most of the agents that we deal with on a day-to-day basis,
+[00:21] um they they do things in the background, right? They they write code
+[00:25] for us, they do research, we give them something to do, a task, and we walk
+[00:29] away, we come back, and we don't really care if they take an extra 10 seconds,
+[00:34] an extra 10 minutes, maybe sometimes 10 hours, right? Um and we expect that. But
+[00:40] at some point in the last year or so, you have probably interacted with
+[00:45] another kind of agent, a real-time agent. Maybe when you called your
+[00:49] pharmacy, maybe uh when you called the airline. I talked to one just the other
+[00:54] day when I called a car dealership. And at some point in that conversation,
+[00:58] you did the the most human-like thing possible. You spoke over it. You
+[01:03] interrupted it. You confused it. And the entire conversation fell apart, it just
+[01:08] didn't feel natural. And then you did what I do every single time,
+[01:11] operator, hit zero, like get me to a human, right?
+[01:16] So, how do we fix that? How do we make these agents as human-like as possible?
+[01:21] Um and so, like in in a um a finance space, what if your caller
+[01:28] was calling to schedule a payment, and they changed the the payment amount
+[01:33] midway through, they changed the date, um and and the agent didn't keep up with
+[01:37] it, right? That is where we start having issues, especially in the finance space.
+[01:42] The the the the risk is much higher, right? So, how do we fix that?
+[01:47] So, we're going to talk about how can we build human-like voice agents for
+[01:51] financial services. And when you think about building a good voice agent, one
+[01:56] of the first things that comes to mind is latency. We need it to be as fast as
+[02:00] possible, right? Well, latency is part of the equation.
+[02:03] Latency has a finite budget, and we'll talk about what that is.
+[02:07] Um but the keyword here is human-like. How do we make these voice agents as
+[02:12] human-like as we can? That's the goal. So, there's quite a few people that are
+[02:17] talking about voice lately. Um some of these might look familiar. We've got
+[02:21] this this guy Sam. Um he's excited about voice models. He
+[02:27] says uh that they're starting to change the way they that we interface with AI.
+[02:33] Isn't that true? And then this this um weird name here in the bottom right,
+[02:37] Swyx. I don't know if you've heard of him.
+[02:40] Um he says oh uh that this is the OG modality.
+[02:44] Um the correct modality for aligning AGI to our intents is very good voice AI
+[02:49] engineering. That's that's that's a pretty bold
+[02:53] statement there. And then like get here says we learn to speak before we learn
+[02:57] to read. Right? Voice is the most natural interface that we have. So, how
+[03:02] can we make it as natural as possible and human-like as
+[03:05] possible? Quick show of hands, who who here has ever built a voice agent and
+[03:09] deployed it to production? All right, I see a few hands. All right,
+[03:14] so some of you know the challenges that you might face when doing this.
+[03:19] Um others here who have not built one, maybe you have um seen a very good
+[03:24] example of one. Have you ever used ChatGPT's advanced voice mode to have a
+[03:29] conversation with ChatGPT? Okay, so that's that's cool. Segue here
+[03:34] that OpenAI actually chose LiveKit to power that that functionality there. So,
+[03:41] it's a very good example of a good use case or a good uh good example of a good
+[03:46] voice agent. Um LiveKit is the open-source
+[03:50] real-time framework and infrastructure for these human-like agents. Um agents
+[03:56] that can hear, see, and speak to a person on the other end. And so, we're
+[04:01] not just talking about voice, actually. Um
+[04:04] there's there's multiple ways to interact with with agents, voice, video,
+[04:08] data streams, uh even physical AI. We have a robotics division as well, but
+[04:13] voice is the entry point voice is is the most natural modality, and voice is
+[04:17] where there's a lot of challenges. So, we're going to focus just on voice
+[04:20] today. So, in a traditional voice
+[04:23] uh voice agent, you have what's called a cascaded pipeline. This is three models
+[04:28] that work together. You've got your speech-to-text model, your LLM, and your
+[04:32] text-to-speech model. And these all have to work in unison. And there are also
+[04:37] these other models, these real-time models, speech-to-speech models, right?
+[04:41] And they replace that pipeline. But that's a newer concept. Um it's it's
+[04:45] getting better, but it's not quite there for every use case yet, right? But even
+[04:50] then, we've got the traditional pipeline with three models, we've got the
+[04:53] speech-to-speech models. There's so many things to choose from, so much
+[04:57] complexity. Where do we even get started? And here's what we have to
+[05:00] choose from. Hundreds of models, dozens of providers,
+[05:05] and quick show of hands here, who has ever picked a model based on a
+[05:08] leaderboard? Like you pick them whatever model's at the top of the leaderboard,
+[05:11] that's what we're going to use, right? Well, we're going to talk about why that
+[05:14] does not work for real-time agents. We can't just pick models off the top of a
+[05:18] leaderboard. Um because leaderboards, they score
+[05:21] these models, these components, but we're shipping a conversation. We need
+[05:26] to be able to score them together. So, we're going to talk about how we can do
+[05:28] that. So, let's go through a scenario here. Let's let's suppose that a caller
+[05:32] uh wants to pay their bill. And they say, "I want to pay on the 3rd."
+[05:36] But the speech-to-text model hears the 30th.
+[05:40] And then the LLM is planning now for the 30th, and that goes into the system. The
+[05:45] LLM doesn't know any better. It doesn't know that the speech detects model got
+[05:48] it wrong. And so all of those errors flow downhill from there. And so the the
+[05:54] the leaderboard, it can't show us this. It can't judge this because it just was
+[05:58] looking at it individual models, right? And so also these leaderboards, they
+[06:04] score these models based on clean audio. But your callers, they're calling on the
+[06:09] speakerphone in traffic with kids in the backseat, right? So we need to be able
+[06:14] to score our own agents based on real-world use cases and examples.
+[06:20] So let's let's say that we fall into this leaderboard trap. We just pick a
+[06:23] model. Um then the the first question that
+[06:26] people ask is always, you know, which model should I pick? So they use a
+[06:30] leaderboard, they pick a model, but that the actual question that we should be
+[06:34] asking is which stack should I ship for my use case?
+[06:39] And so that is what we're going to figure out. How do we answer that
+[06:43] question? So
+[06:46] before we answer that question, let's say that you have picked some models and
+[06:52] you start measuring. How are these models performing?
+[06:55] Let's uh say you're you're testing your TTS provider. And TTS provider on the
+[07:00] dashboard, it's it's uh reporting time to first byte. And
+[07:04] that looks really fast, 210 milliseconds time to first byte. That's super fast.
+[07:08] Um but we've actually tested lots of popular providers that are shipping up
+[07:13] to 3/4 of a second of silence after that first byte. So a byte does not equal
+[07:20] audio. So what we're actually looking for is
+[07:24] time to first audio. How much time does it take for our user to actually start
+[07:29] hearing something? So time to first audio is what we should be measuring,
+[07:32] not time to first byte. Um so imagine, you know, the payment
+[07:37] went through and and and you you're asking, you know, um you know, did my
+[07:41] payment go through?" And then you hear 2 seconds of silence. That's not very
+[07:45] reassuring, right? So, we need to be able to measure this this gap that the
+[07:49] caller hears. Now, the same story for lang- uh large
+[07:54] language models. So, time to first token is what
+[07:59] we get in text. It's it's a text-based measurement, but tokens do not equate to
+[08:05] audio, either, right? Your TTS can't start speaking on a token. A TTS model
+[08:11] text-to-speech model actually needs an entire sentence to start speaking.
+[08:15] Um and so, that's what we need to measure is actually time to first
+[08:18] sentence. Um because a an LLM that is very fast at
+[08:23] producing tokens is not always the same LLM that produces the first sentence the
+[08:27] fastest. So, time to first sentence is what we
+[08:30] should be looking at. And then another thing that
+[08:34] most leaderboards don't measure is these these agents, they need to do things.
+[08:38] They're not just there to chat with us. They need to be able to do things on the
+[08:41] back end. They have to look up a transaction, uh check for a payment
+[08:46] status, submit a dispute, right? And so, these take time, 2 10 40 milliseconds.
+[08:52] And and so, how do we handle that? How how do we hide
+[08:56] 40 seconds or more of latency? Well, we can't. That The answer is we
+[09:01] can't. But ask yourself, what would a human do in the situation?
+[09:06] So, is a human just going to go silent while the system is doing something?
+[09:11] No, they're going to say, you know, "Give give me a second. I'm looking that
+[09:14] up. Um system's running a little slow, almost there." Or they're going to move
+[09:18] on and they're going to ask another question while the system is doing
+[09:20] something in the back end. So, that's that that's the human-like behavior,
+[09:24] multitasking, right? We can do that. So, why can't agents multitask and do that?
+[09:30] Well, that was a trick question because they can. They should. They should be
+[09:33] able to. And this is the shape of that. Um this is the only code that I'm going
+[09:37] to show you uh in this in this talk, but this is a normal tool call and the the
+[09:43] one line is what makes the difference here.
+[09:46] Um, this one line, this update, this async await, this awaiting this tool
+[09:51] call is is the whole trick here and this is what's handing the mic back to the
+[09:55] agent. This is allowing the conversation and the tool to stop sharing a thread.
+[10:02] They're just they're separate now. And so um, this is what again makes the
+[10:07] agent more human like because it's able to keep the conversation going as
+[10:11] something is going on in the back end. So, don't don't take my word for it.
+[10:14] I've got a quick demo here and we'll listen and see what it sounds like.
+[10:20] >> Thank you for calling The Gilded Rose Hotel. How can I help you?
+[10:23] >> Yeah, I'd like to book a room. >> What dates are you looking at?
+[10:28] >> Uh, next week, Wednesday through Friday. >> Next Wednesday, July 30th to Friday,
+[10:35] August 1st? >> That's right.
+[10:38] >> How many guests will be staying? >> Two.
+[10:42] >> I have queen two beds, king double queen, a suite or the penthouse?
+[10:48] >> Would you prefer a city or ocean view? >> Ocean.
+[10:54] >> May I have your name for the booking? >> Jesse Hall.
+[10:58] >> Is that Jesse Hall? >> Yes.
+[11:03] >> What's your email? >> me@me.com
+[11:07] >> Is me@me.com correct? >> That's right.
+[11:13] >> And your phone number? >> 555-123-4567
+[11:20] >> Is that 555-123-4567?
+[11:25] >> That's right. >> I'll need a credit card to hold the
+[11:29] room. What's the the number? >> We'll stop here.
+[11:32] Okay, so you notice here that the conversation kept going. There were no
+[11:37] awkward pauses. Um I even interrupted it and it just kept rolling with it, right?
+[11:42] It It didn't ever fall apart or feel unnatural. And we see here, you can see
+[11:47] the the tool calls that are happening along the way and the things that it's
+[11:50] doing. It's actually communicating with a back end and it's saving every uh
+[11:55] piece of information that I'm giving it. But what it's doing is it's not waiting
+[11:59] for the back end to say, "Okay, that's saved. Now you can move on to the next
+[12:02] one." "Okay, that's saved. Move on to the next one." It's moving on to the
+[12:05] next thing immediately. It's keeping the conversation going. And if for some
+[12:10] reason a tool call would have come back with an error or something, it would
+[12:12] have then corrected itself. It would have said, "Let me Let me verify this or
+[12:16] that, whatever happened, right?" And worst case scenario, if it was having
+[12:19] issues, it would uh it would actually
+[12:23] uh um pass me over to a human in that in that
+[12:27] uh scenario then, right? So, this is how our agents should operate.
+[12:33] Now, there's one more um axis of this, and that is knowing the agent knowing
+[12:38] when to speak and when to to listen, when to keep listening. And so, this is
+[12:43] called turn detection. And so, LiveKit has a um a built-in turn detector that
+[12:49] doesn't only listen to the transcript like most turn detectors do. It also
+[12:53] listens to the audio. It listens to the rhythm, the pitch, the intonation. And
+[12:58] we published the numbers on this. The the leading um um alternative still
+[13:04] interrupts and cuts users off 9.9% of the time. And ours, 4.5%
+[13:10] in our use case. We ran it against the our hotel agent and others. And that hap
+[13:15] And that is what the numbers that we got for our use cases. This is all open
+[13:19] source. You can actually run these e-vals and run this against your data
+[13:22] set and see what numbers you get. See if you get a um uh better uh increased
+[13:26] numbers here. And this is just one small piece of the puzzle again to make these
+[13:31] voice agents more human-like. Them knowing when to stop talking or when to
+[13:36] listen. For instance, if if I were trying to make a payment and I said I'd
+[13:39] I'd like to pay 500 and $55.23,
+[13:45] right? Most of the turn detectors would have stopped at 500 because they saw 500
+[13:50] on the transcript and they saw 2 second pause, I must be done, right?
+[13:55] But ours would have heard my inflection, knew I wasn't done talking, and it would
+[13:59] have waited for me.
+[14:02] So, let's look now at that latency budget, that the gap. This is the gap
+[14:06] between the caller's last syllable and the agent's first audible response. So,
+[14:13] the turn detector decides when the caller is done, the language model
+[14:18] begins preparing a response based on a provisional
+[14:23] transcript, and then the TTS starts generating that audio as soon as it can.
+[14:30] And so, every model that you choose, every function, every handoff, all of
+[14:34] that is right here within this window, and this window has a finite number, a
+[14:40] fixed window, a fixed size. And so, if you can stay roughly inside 1 and 1/2
+[14:45] seconds, the call still holds, the conversation
+[14:49] holds. It's starting to feel a little off at 1 and 1/2 seconds.
+[14:53] But if you can get down to 5 or 600 milliseconds
+[14:57] between this the two turns, that's when it really starts to feel human-like. And
+[15:02] so, that question before, how fast can I go? We just needed to get
+[15:05] to go faster and faster. That's not the answer. The answer is how human-like of
+[15:09] an agent can I fit within this latency window.
+[15:15] So, again, latency, that's a budget, and and we know how how to fit into that,
+[15:20] but how can we be as human-like as possible? That's the goal.
+[15:24] So, if we add all this up, that that question, which model should I pick? We
+[15:28] That was never something that we could answer because these scores, again,
+[15:32] these leaderboards, they can't answer that because they're basing it off the
+[15:36] models, but we are shipping a conversation. So, let's answer that
+[15:40] actual question. How can we pick the models? Which models should we pick?
+[15:44] So, this is what we have to do. We test the conversation. We take a complete
+[15:48] working agent So, that hotel receptionist that you heard just a
+[15:52] minute ago, we took that. It has a real back end. Um it's an actual It's not
+[15:56] just a demo. It actually works. Uh and it's open source. You can check it out.
+[16:00] So, we take that agent and we put simulated callers against it.
+[16:04] And these callers can pursue goals. They can change their mind. They can
+[16:08] interrupt. They can mumble. We can add background noise. We can make sure that
+[16:12] this is a real-world scenario, and we run all of these simulated users against
+[16:17] that agent. Um we can run text-based simulations,
+[16:21] which just tests our business logic. Or we can also run audio-based simulations
+[16:26] that tests the speech recognition capabilities. It tests turn-taking. The
+[16:31] entire um the entire voice pipeline is what's tested there. And so, we take the
+[16:37] scenarios, and the scenario should describe what the caller wants and what
+[16:41] actions the agent should take, what the outcome should be.
+[16:45] And then we score that. We score those outcomes. And so, in the hotel
+[16:49] benchmark, you know, did the correct reservation hit the database? In a
+[16:52] financial benchmark, you know, did the correct authorized amount get charged,
+[16:57] right? And so, we we check these agents. We make sure that every all the outcomes
+[17:02] are met. And then we don't score it based on just the completion alone,
+[17:07] right? Because we know that agents can game completions, right? We have to make
+[17:11] sure that they took the right steps. Did they take 10 steps when they only should
+[17:15] have taken two steps, right? Did they hallucinate a function call? These are
+[17:20] the things that we have to test, the entire conversation there. And then, we
+[17:24] swap the stack out. We We have the same agent, the same scenarios, but we change
+[17:29] the models. And then, we run that loop again. The
+[17:33] identical input Every model sees identical input byte for byte. We swap
+[17:38] the models, we run the loop. We swap the models again, we run the loop
+[17:43] continuously over and over, and we are building at that point a benchmark, a
+[17:47] personalized benchmark, for our use case, for our agent. So, there are as
+[17:51] many benchmarks now as there are agents. You run this against yours, and you find
+[17:55] out which models work best for your situation. That is the only way to find
+[18:00] out which model is best for you.
+[18:05] Now, this is how you catch surprises. Um a model that that gets the answer for
+[18:11] you the quickest is the right model for you, right? And surprisingly, that model
+[18:16] may not be the model that that's at the top of the leaderboard, right? But it's
+[18:20] best for your use case. And again, these benchmarks, the simulations, all this
+[18:25] this methodology, it's all open source. So, you can You can check it out for
+[18:30] yourselves, you can run it against your agent, and see how yours performs.
+[18:35] And so, here is the results of that benchmark on our hotel agent. This is
+[18:40] the LLM that ranked the highest for our hotel receptionist agent. That's Gemma 4
+[18:45] 31B on LiveKit inference. You notice on the second line, the same
+[18:49] model, Gemma 4 31B on another provider, was slower. So, LiveKit optimizes its
+[18:55] inference serving for voice workloads. And LiveKit is model agnostic, so you
+[19:00] can use any model that you want. So, again, you plug those models in, and you
+[19:04] figure out which one is work it will work best for your use case.
+[19:10] Now, if you remember one thing from this this entire talk, remember this that a
+[19:15] voice agent isn't just a chatbot with a speaker attached. It's There's so much
+[19:20] more complexity there. It's a real-time system and that needs to respond like a
+[19:25] person. We need to make it as human-like as possible. And and and when we
+[19:30] evaluate it from that viewpoint, we will be able to to build that.
+[19:35] And so, here's a checklist. You can take a take a photo here. We need to set our
+[19:38] latency budget that the caller hears. Measure time to first audio, time to
+[19:42] first sentence. Confirm critical dates. Anything that's financial money, we need
+[19:49] to make sure that we have those those checks in place. Verify identity before
+[19:54] an account is accessed. Keep listening while slow tools run. Keep the
+[19:58] conversation going. And then run the complete conversation repeatedly through
+[20:03] simulations. Test the final state, privacy safeguards, unnecessary tool
+[20:07] calls, turn-taking. All these things and then when you find these failures, you
+[20:11] turn those into regression scenarios and you keep testing over and over again.
+[20:16] So, start with one one of those workflows or failures that you care
+[20:20] about. Keep Keep iterating then. Run it. Listen to the conversation. Check what
+[20:26] happened on the back end. At some point in the very near future, I hope, that we
+[20:30] all call one of these voice agents and we talk over it. We confuse it and it
+[20:36] just rolls with it and it's and it's a very human-like experience.
+[20:41] That's That's our goal, but here's what I need from each and every one of you. I
+[20:45] need you to go build that. Thank you.
+[20:54] >> Woo!

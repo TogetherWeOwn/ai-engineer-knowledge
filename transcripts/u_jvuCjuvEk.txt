@@ -1,0 +1,265 @@
+# title: Can Your AI Analyst Keep a Secret? - Aaron Linsky, Bridgewater & Nikhil Benesch, turbopuffer
+# source: https://www.youtube.com/watch?v=u_jvuCjuvEk
+# speaker: Aaron Linsky, Bridgewater & Nikhil Benesch, turbopuffer
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-25T20:41:15Z
+# sha256: 6bcf6307e8b405974f5d9cd93e1180511a7bbb1fdfc9ec0a16d9889e57daf2c8
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:01] [music]
+[00:12] >> All right. Hello, everyone. Thank you all for coming. I'm Nick Hill, CTO of
+[00:16] Turbo Puffer. >> And I'm Aaron Linsky, the head of
+[00:21] product engineering at Bridgewater Associates.
+[00:23] >> And we're here to talk to you today about how you build an AI analyst that
+[00:27] can keep a secret. And I'll explain a bit more about what that means.
+[00:31] Here. Now, this is a very oversimplified view
+[00:35] of how you would go about building an AI analyst, but it is meant to capture an
+[00:39] important dimension around permissions. So, in this diagram,
+[00:43] you're user interacting with this AI agent, you start with a question, maybe
+[00:47] something like, "Why have token prices come down so much in the last month?"
+[00:52] And you feed that question into an LLM, which will begin thinking about that
+[00:55] question, investigating, researching. And as it does that investigation, it's
+[00:59] going to search for facts to ground its information, to lead its investigation.
+[01:05] Some of those facts might come from the public web,
+[01:08] but other facts might come from private documents in your organization. Now, the
+[01:13] public web is on one dimension much easier to search than the information
+[01:18] that's private to your organization. By definition, the public web is public.
+[01:21] Everyone in your organization can see exactly the same documents. So, there's
+[01:24] no permission issue there. Every public web document can be immediately fed into
+[01:29] the AI analyst, no matter who's asking the question.
+[01:32] But the information internal to your organization looks very different. Every
+[01:37] email, every meeting note, every report might have a completely different set of
+[01:40] permissions attached to it, belonging to different groups, maybe individual
+[01:43] permissions assignments on those docs. And you can see here, we've got
+[01:46] different colors here reflecting the fact that every document in that private
+[01:49] data set has a different set of permissions. And this is a classically
+[01:53] hard problem in information retrieval, and it's something we explicitly
+[01:58] designed Turbo Puffer to solve. But before I get into that, I'm going to
+[02:01] hand it over to Aaron to talk about why this private information is so important
+[02:05] to Bridgewater's AI analyst. >> Great. Thank you. Oh.
+[02:10] There we go. So, first I'm going to go talk a little bit about what who
+[02:14] Bridgewater is, what we do, and then we get into how
+[02:19] how we're using Turbo Puffer and and the needs there.
+[02:22] So, for the past 50 years, we at Bridgewater have pursued the best
+[02:28] understanding of how markets and economies work. We then encode that
+[02:32] systematically with logic into a system that we can then stress test over time.
+[02:38] What you see here are on the on the left with the yellow legal pad, that is our
+[02:43] bond system from 1980. It's a set of if-then statements that we used to trade
+[02:49] bonds back then. Over the next few decades, we've evolved
+[02:54] that process from a yellow legal pad to Excel to eventually Scala and now Python
+[03:01] um to
+[03:02] to a different learning process with humans
+[03:06] at the center. This five This research circle, as what
+[03:11] we call it, has five steps. Perception, that's seeing what's going on the
+[03:15] outside world. Hypothesis, which is coming up with ideas of why that might
+[03:20] be true. Investigation, which is the research of seeing is that thing true.
+[03:25] If it is true, we then systematize and integrate it with our system and
+[03:28] industrialize and run that every day and trade on that. That's been our learning
+[03:32] process. I've been at Bridgewater for about 20 years. That's been what we've
+[03:35] been doing doing for 20 years with humans at the center.
+[03:38] We're now moving towards putting machines at the center and running that
+[03:42] process. In order for even you know, for both
+[03:46] humans and machines, in order for that to work well, we need access to
+[03:50] high-quality data. We need both time series data, which we
+[03:53] spent decades uh decades creating a
+[03:58] great bi-temporal time macro time series database, which we call Delorean.
+[04:04] And more recently, we've been creating a unstructured database, which we call the
+[04:09] Vault. And so, what is the Vault?
+[04:14] Um today, it's about 100 million documents,
+[04:17] which we index, organize, and secure that we think represents some of the
+[04:22] best third-party and extra third-party external research, and also our internal
+[04:27] research. So, we've sourced with 135 different external sources, which is a
+[04:33] huge deal for both legal and our data team to actually nego- negotiate and get
+[04:37] them in. And all of all of those sources have um some sorts of permissions around
+[04:42] it where it might not be open to everyone at Bridgewater.
+[04:46] And then, of course, we also have our inter- internal sources of unstructured
+[04:49] data. That's our own writing, our meeting recordings, and and our internal
+[04:53] reports, as well. And both that those all go into the
+[04:57] Vault, and then both humans investors and our AI agents read out of the Vault.
+[05:02] What I haven't shown here is actually it circles back. So, the investors and
+[05:06] and the agents will create new new content that goes back into the
+[05:11] Vault. So, it's constantly improving.
+[05:14] And so, here's a very high-level view of what permissions in the Vault look like.
+[05:20] So, I have a user we'll just say their ID is user one.
+[05:25] They're in groups B and C. This is incre- incredibly simplified,
+[05:29] unfortunately. Um and there's a set of all of our
+[05:32] documents where it could be either um uh permission to them via groups
+[05:40] or directly. And then, here we have
+[05:44] the actual code of us going ahead and
+[05:47] creating a query to try to look for some data with whatever that query vector was
+[05:53] that matches the viewers and groups. And so, this is
+[05:59] simple in one way. And actually, when we first implemented this without Turbo
+[06:03] Buffer, we thought it worked fine. Um but then,
+[06:08] pretty quickly, as we started to add more and more documents to the vault, it
+[06:11] fell over um tremendously. And so, what I did then
+[06:15] was I looked for other possible providers.
+[06:18] We found Turbo Buffer, tested them out, and they had a solution which Nikhil is
+[06:23] going to go over right now. >> Awesome. Thank you, Aaron.
+[06:29] Let me very quickly talk about what Turbo Buffer is. We are an extremely
+[06:34] fast, extremely scalable, extremely cheap search engine built entirely on
+[06:38] top of object storage. And what that means is we write directly to S3 or GCS
+[06:43] or Azure Blob storage, whatever your hyperscaler provides.
+[06:47] And that gives us S3 economics. So, by default, your data is inert, cold on S3.
+[06:53] Only when you start querying it do we pull it into more expensive storage
+[06:57] mediums, like SSD or memory. And this is really powerful because once a query is
+[07:02] hot, once the data query is accessing is in the cache, it's fast.
+[07:08] But if you're not accessing a particular namespace or a particular region of a
+[07:12] namespace, that data can just hang out on object storage where you pay
+[07:15] rock-bottom prices for it. So, this architecture allows Turbo Buffer to
+[07:19] scale cheaply to terabytes of data, which would cost tens of millions of
+[07:23] dollars in in other systems, and we can often do it at a tenth of the cost at
+[07:28] performance that's comparable once you get the data hot uh to what you get with
+[07:32] traditional disk-based search systems. And we support all types of search. We
+[07:38] support keyword search. We support regex search. And what Aaron was showing
+[07:42] earlier, vector search. Um so we're really not uh
+[07:46] opinionated about how you search your data in Turbo Puffer. We want to do
+[07:49] search generically. But for the rest of this talk, I'm going
+[07:53] to focus on vector search because uh it's it's good to zoom in and go deep on
+[07:59] one particular type of search. Let's do a little bit of napkin math.
+[08:04] That's something we love to do at Turbo Puffer. It helps us anchor in the
+[08:08] simplest possible solution. We never want to introduce complexity to Turbo
+[08:11] Puffer that's not justified. One of the justifications for taking on complexity
+[08:15] is if you need it for performance. The absolute simplest way to do search
+[08:20] is to put everything in a list and every time somebody shows up saying, "I want
+[08:24] queries that match this. I want documents that match this query."
+[08:27] You look at every single piece of data. Let's conservatively say that every
+[08:32] document that you store in Turbo Puffer is 1 kilobyte. This is incredibly
+[08:37] conservative. A vector embedding is often 1,024 dimensions. So if you're
+[08:41] using just a byte per dimension, that's a kilobyte right there. Uh in practice,
+[08:46] documents are often larger than this. But for the sake of example, let's say
+[08:49] it's a kilobyte per doc. Even if you had all of that data
+[08:52] resident in memory and you were ripping through it as fast as you possibly
+[08:56] could, which on modern hardware is about 20 gigabytes a second.
+[09:00] Once you get up to 100 million docs, that's going to take 5 seconds. And for
+[09:04] most search workloads, that's way too slow. What we see in practice is most
+[09:07] people want their search results to be about 100 milliseconds. [clears throat]
+[09:11] So the naive solution here does not work. If you've only got 10K docs,
+[09:15] great. That's going to take half a millisecond. Turbo Puffer can do
+[09:17] literally anything and it will be fast enough. But as you get to scale, once
+[09:20] you're at 10 million or 100 million, you really need to start thinking about how
+[09:24] you represent your data so that you're not crunching through all of that.
+[09:28] And of course, I gave you the the numbers for memory here. That's only if
+[09:31] the cache is hot. If that data's on S3, you're looking at a minute or more to
+[09:36] pull that data off S3. So, this just isn't viable at the scale that
+[09:39] Bridgewater operates.
+[09:43] So, step one in Turbo Puffer is to build a vector index. And this is something
+[09:48] that we handle under the hood for you. When you store vectors in Turbo Puffer,
+[09:51] we automatically build this index behind the scenes once you get enough data to
+[09:55] to justify it. Vector embeddings, if you're not
+[09:59] familiar, are the internal numeric representation of concepts in LLM space.
+[10:05] And we like to use this example of red shoes and maroon sandals. You as a human
+[10:10] know that these are very similar concepts and much more similar to one
+[10:13] another than concrete block is. And maybe you're thinking about shape and
+[10:17] size and texture and and weight. The LLM can translate that into this
+[10:23] numeric vector. Here, I've only got two dimensions shown so that we can think
+[10:27] two-dimensionally, but in practice, there's often thousands of dimension.
+[10:31] 1024 dimensions is a very common size. Thinking multi-dimensionally like that
+[10:35] is very hard. So, for the sake of example, we're just going to imagine
+[10:38] that there are two dimensions here. Now, we don't actually know what those
+[10:42] dimensions represent, but again, you can think of it as like size and color.
+[10:45] And then you can plot that on a coordinate system. So, red shoes might
+[10:50] be at the top left along with maroon sandals, and then concrete block is
+[10:54] going to be down at the bottom right. >> [snorts]
+[10:56] >> And I'm going to simplify wildly here, but a very
+[11:01] workable vector index in two dimensions is just to plot things on a graph. And
+[11:05] then you can zoom in. If you're looking for red shoes, that's the Q on this
+[11:08] diagram, you plot that on this two-dimensional
+[11:12] graph, and you zoom in, and you look for the vectors around it. And because of
+[11:17] the way these vectors are created by the LLM, vectors that are near each other
+[11:21] represent similar concepts, represent good search results to return.
+[11:25] So, if we were just doing similarity search, great. We look in our
+[11:29] two-dimensional coordinate grid, we find some nearby vectors, we return them, and
+[11:34] life is good. And this saves us a lot of time. We
+[11:37] don't have to search the whole vector space. We can zoom right in to the
+[11:41] documents that are going to be relevant to the query. So, that napkin math from
+[11:44] earlier, we can we can ignore. We're maybe only looking at 10,000 vectors
+[11:48] here, and we know we can do that in a millisecond or two.
+[11:50] >> [snorts] >> The problem is when you add in these
+[11:53] permissions, not all of the documents that are most relevant for a given query
+[11:57] are going to match those permissions. And you can see in this diagram here,
+[12:01] the minuses don't match the permissions, while the pluses do match the
+[12:06] permissions. So, our vector index is not immediately
+[12:10] helpful to us. And we've invested a lot of time and energy at Turbo Puffer into
+[12:15] solving this problem.
+[12:19] Naively, you might try a post-filtering strategy.
+[12:24] And the way that works is the query comes in,
+[12:27] you get maybe the 10,000 closest vectors, and then you throw away all the
+[12:31] ones that don't match. This does not work very well
+[12:36] because it doesn't provide the results that you're looking for. If I'm the user
+[12:41] that only has access to that data in the bottom right,
+[12:44] and I search for Q, I still want to see the documents that
+[12:49] were closest to Q from my perspective, that include the results that I can see.
+[12:54] But when you do post-filtering, you kind of spiral outwards, and then at
+[12:58] some point you have to give up because it's been a couple seconds and you
+[13:01] haven't found any docs that match, or you haven't found
+[13:03] the top 100 docs that match. Maybe you were only able to find 40. And this
+[13:07] makes users unhappy because they might know that a doc exists
+[13:11] with maroon sandals, and they were searching for red shoes, and you don't
+[13:15] turn it up. So, you have very poor recall.
+[13:20] So, instead of starting with the vector index,
+[13:22] what if we start with the filters? Turbo Puffer builds an index of all of
+[13:29] the documents that match the filters. So, Aaron can show up and say, "Hey,
+[13:33] show me all of the documents that I have access to."
+[13:37] And then Turbopuffer can scan over all of those documents and see which of them
+[13:40] are closest to the query vector. But what if Aaron has access to 50
+[13:45] million out of the 100 million documents in the vault? Now we're back to square
+[13:49] one. We're back in that napkin math problem where it's going to take
+[13:53] multiple seconds, if not minutes, to get through all of that data. We're not
+[13:57] actually using the vector index. If you look here, you can see we're just
+[14:00] finding all the docs that match the filters and then scanning through them
+[14:03] sequentially. So, this also doesn't work very well.
+[14:08] And the trick to doing well on this problem is to do
+[14:12] both. So, Turbopuffer's vector index
+[14:16] automatically clusters similar vectors. So, you can see there's a group of
+[14:19] documents here that are similar labeled five and another group labeled zero and
+[14:23] another group labeled one. And when we build these permissions
+[14:27] indexes, we say, "Well, Aaron has access to documents in
+[14:32] cluster five and maybe cluster two, but he doesn't have access to any documents
+[14:37] in cluster three or any documents in cluster zero." So, we can just throw
+[14:41] those clusters out. We don't have to consider them at all.
+[14:45] So, first we find all of the clusters that Aaron has access to,
+[14:50] uh i.e. he has access to at least one doc in those clusters,
+[14:53] and then we search the closest clusters, and then we just scan sequentially
+[14:58] inside those clusters. And in Turbopuffer right now, the clusters have
+[15:01] about 200 documents. This is something we're always tuning. Over time, we'll
+[15:05] probably increase that number to to maximize throughput. But this basic
+[15:09] strategy fundamentally makes search at scale with
+[15:14] permissions possible. And the trick is to combine pre- and
+[15:17] post-filtering into what we we native filtering.
+[15:23] And this is the result. Across 450 million vectors, those 100
+[15:29] million documents turn into 400 million vectors,
+[15:32] TurboPuffer is able to get 120 millisecond searches. That's the P90
+[15:36] latency across all of those namespaces. By employing this sophisticated native
+[15:41] filtering strategy.
+[15:47] So, with TurboPuffer,
+[15:50] you show up with your permissions logic and your conceptual model, and you do
+[15:54] what I think is a very simple translation of those permissions into
+[15:58] TurboPuffer filter language. And hopefully, you can directly map this
+[16:03] code sample here, viewers contains ones viewers contains one groups contains any
+[16:08] BC. Hopefully, you can see how you would project that onto your organization's
+[16:12] own permission structure. And that turns into this very
+[16:15] complicated systems engineering challenge under the hood, but
+[16:18] TurboPuffer hides that all away from you.
+[16:21] So that you don't have to think about it. You can just express the logical
+[16:24] filters that represent your permissions in a fairly direct way.
+[16:27] And we handle the complicated query planning under the hood to make that
+[16:32] search come back in 1 to 200 milliseconds even at 100 million
+[16:36] documents scale. Now, we're engineers at TurboPuffer, so
+[16:40] there are some limitations here. In particular, when you have nested groups,
+[16:43] things get tricky. I'm not going to have time to go into that in too much detail,
+[16:47] but if you have problems that look like that, please come talk to us. Uh we have
+[16:51] a lot of experience working through these, and we're always looking for ways
+[16:54] to improve the product so that stuff is handled more automatically.
+[17:00] So, permission filters are really just the tip of the iceberg
+[17:03] in TurboPuffer. We're trying to build an isolation native search engine. That
+[17:07] means whether you have fine-grained permissions within namespaces, whether
+[17:11] you have security, regulatory compliance obligations that force you to regionally
+[17:17] lock data, keep that data in your own VPC, encrypt that data potentially not
+[17:23] just with an encryption key you control, but that your own customers control.
+[17:27] Turbo Buffer has solutions for all of those levels of isolation. So,
+[17:31] permission filtering is just one piece of the puzzle in building
+[17:35] isolation-aware search in Turbo Buffer.
+[17:40] So, that's all we got. That's how Turbo Buffer and Bridgewater work together to
+[17:43] do fast isolation-native search at 100 million scale.
+[17:48] Thank you, everyone. >> [applause]

@@ -1,0 +1,224 @@
+# title: Going beyond RAG: Extended Mind Transformers - Phoebe Klett
+# source: https://www.youtube.com/watch?v=cS6M6Jec0lU
+# speaker: Phoebe Klett
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T14:31:55Z
+# sha256: d67b9ad8554a531c00ad2feaef97175b9832a721d8b61e196b4a076887ceda61
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:00] [Music] I'm Phoebe I'm a machine learning
+[00:15] engineer at normal Computing and I'm really excited to tell you guys about
+[00:18] some of our recent research uh and in particular extended mind
+[00:22] Transformers all right so just to briefly cover what we're going to go
+[00:25] over in today's talk uh we'll introduce the problem which I think will be quite
+[00:28] familiar given the amazing talk which came before mine uh and then dive right
+[00:32] into the method so uh what is the retrieval mechanism that extended mind
+[00:36] Transformers Implement uh and then we'll dive into some experiments which give us
+[00:39] confidence that these methods are actually performant after that we'll get
+[00:43] into two of my favorite and I think most compelling features that extended my
+[00:46] Transformers enable this is a new kind of citation uh as well as a new kind of
+[00:50] generation Paradigm which is active learning inspired uh and then we'll go
+[00:55] over the most important parameters to tune when implementing uh EMTs in your
+[00:59] applications and generally how to use
+[01:03] them all right so we pre-train language models uh so that they have general
+[01:08] knowledge but as we've been discussing all this conference that's not enough we
+[01:13] need a lot of application specific information and a topical uh description
+[01:17] of the world in order to make these things useful um I'm not going to
+[01:21] belabor the two most popular methods um which try to load this description into
+[01:26] the language model those being long context and rag as a I think yeah we've
+[01:30] heard a lot about those um great methods already but I'd like to point out that
+[01:34] they solve the problem in different ways and th suffer from different downsides
+[01:39] so long context seeks to extend the context window of the Transformer model
+[01:44] so we train language models we train them on sequences of a fixed length and
+[01:48] then we're trying to say well can we can we extend that so we can include more in
+[01:53] the context more in the prompt during inference time uh fine tuning is usually
+[01:57] how this is done and that's awfully expensive
+[02:00] uh and more so than that including all of that context in your prompt can
+[02:05] confuse the model with a lot of irrelevant information um and kind of
+[02:09] beyond that just conceptually speaking it seems a little like wasteful right
+[02:12] like if we're trying to do question answering over a big code base uh our
+[02:16] query is most usually does not need to reference like all of those different
+[02:20] function definitions but just need some subset of them to answer the query
+[02:24] correctly um okay so this is what rag tries to do right let's try to subset
+[02:28] that information down and just include the most relevant context in our prompt
+[02:34] um so what are the issues here well these these mechanisms which are
+[02:39] external to the Transformer are kind of like necessarily limited by being
+[02:43] external to the model so we make this choice of what's relevant once and
+[02:47] upfront before the generation starts and we're also making this choice about
+[02:51] what's relevant using kind of the least granular representation of that data and
+[02:56] often ones that are disjoint from the way that the model will reason about
+[02:59] that data um kind of also just conceptually neither of these methods
+[03:05] make a difference uh or make a distinction between things that should
+[03:09] go in memory and things that should be included along with your inference query
+[03:13] and this is more than just Aesthetics it's actually going to enable us to
+[03:18] oh it's going to enable us to have these like more granular causal citations uh
+[03:24] and allow the model to retrieve more information when we can tell it's
+[03:27] uncertain kind of actively within the generation
+[03:32] all right so how do we do this extended mind attention is a very simple edit to
+[03:36] the attention mechanism of the Transformer I'm not going to get too
+[03:39] much into the math because we don't have a ton of time today but would love for
+[03:42] anyone to check out the paper and let me know what you think um so but I'll just
+[03:47] go over kind of yeah from a qualitative perspective how this works so the model
+[03:52] represents data within each decoder layer most of the Transformers that
+[03:56] we're using today are decoder only Transformers and within each of those
+[03:59] decoder layers the model will represent that data as a key value pair so it
+[04:04] actually already has this retrieval mechanism built into the Transformer all
+[04:08] we have to do is kind of hack around it and so we pass all of the memory tokens
+[04:14] through the model and save off those key value representations and then during
+[04:18] generation time we allow each query token just like rag using cosine
+[04:23] similarity to go retrieve a particular number of those memory tokens and attend
+[04:28] to them so this in this picture these kind of red tokens red highlighted
+[04:33] tokens are meant to uh represent those retrieved
+[04:37] tokens uh again this actually ends up being a very simple change to the
+[04:41] Transformer model what's difficult uh is figuring out how to assign position
+[04:46] information to those tokens so this uh work is based on Research from a couple
+[04:51] years ago but they needed to fine-tune their model in order to kind of teach
+[04:55] the model how to leverage these retrieved tokens and that's in large
+[04:59] part due to absolute position embeddings that were popular during that time so
+[05:03] because Transformer models are position agnostic we have to figure out how to
+[05:07] kind of tell them like okay this token is position zero this one is to position
+[05:11] one etc etc um but due to today's more kind of like their softer position
+[05:18] embeddings this allows us to really leverage this method without any further
+[05:22] fine-tuning so in particular these relative position medings that have
+[05:26] become popular and I'll talk about two different methods that we've tested and
+[05:30] implemented this on um really enable the model to kind of generalize um to these
+[05:36] retrieved tokens the first one uh that we tested on is present in all of the
+[05:40] Llama models these are the rotary position embeddings and this generalizes
+[05:45] the principle of using kind of like an angle between two vectors as a distance
+[05:49] metric so we kind of take the whole embedding and we rotate kind of two
+[05:52] positions at a time the other one that we implemented um this method into is
+[05:58] The Alibi uh linear biases so these actually aren't positioning embeddings
+[06:03] at all it's just kind of linearly damps down uh information which is further
+[06:09] away and these are uh the way that all of the mosaics MPT models are
+[06:16] trained okay so let's talk about some evaluations um we also just open sourced
+[06:20] a new counterfactual retrieval Benchmark and I'm just going to briefly describe
+[06:24] what that Benchmark looks like so this is a long context Benchmark so our input
+[06:29] context is are query answer pairs uh and the context to answer those questions
+[06:34] range from about 2,000 tokens to all the way up to 16,000 tokens and the again
+[06:39] these are like query so like the question might be who wrote the song
+[06:42] these shoes were made for walking and then the corresponding Wikipedia snippet
+[06:47] um we wanted to control for facts memorized during pre-training though and
+[06:51] actually any fine tuning also so what we did was we looked up for instance in
+[06:56] this case the answer is Lee Hazelwood we did a little bit of research we figured
+[06:59] out okay well Terry Allen is a similar songwriter this is a plausible answer
+[07:04] but it's wrong we went in and we replaced all the instances of Lee
+[07:08] Hazelwood with Terry Allen and now we asked the model to retrieve this new you
+[07:12] know not factually correct but in the sense it we're trying to test whether
+[07:17] it's prioritizing what's being provided at inference time um so now we're asking
+[07:22] it to retrieve this Terry Allen
+[07:26] answer all right so how to extend M Transformers stack up here we're
+[07:31] comparing it with fine-tuned models as well as the base llama model with uh
+[07:36] interpolated position embeddings so we can see here in the green that the base
+[07:41] model does a pretty good job extrapolating even like many times more
+[07:46] this is a model trained up to like 20 48 tokens um during pre-training and you
+[07:51] can see even up to 8K it's like doing okay 16k it really falls off the
+[07:56] position embeddings can't extrapolate that far the tune models you can see
+[08:00] actually perform worse than the extended mind model on these shorter inputs and
+[08:05] this is another data point that suggests that fine tuning on super long contexts
+[08:09] actually degrades the quality of attention that you get on shorter inputs
+[08:13] and extended mind Transformers continue to be competitive with those fine-tuned
+[08:16] models all the way up to 16k again our models are not fine-tuned at
+[08:21] all and in this particular experiment so what the extended mind model sees in
+[08:27] context is the query only so it only sees the like who wrote the song these
+[08:31] uses made for walking and relies heavily on that internal retrieval mechanism to
+[08:36] go look up that new information in this second experiment we seed it with a
+[08:41] little bit more information in context uh using rag but again mostly relying on
+[08:47] that uh internal mechanism still uh and you can see we're outperforming dpt4
+[08:51] here now when we combine it with that more information and context as
+[08:57] well okay now we're going to talk about citations so I think uh this would be a
+[09:01] topic that lots of you here can empathize with uh as AI Engineers I
+[09:06] think this is one of the most important things to provide in an application such
+[09:10] that people can learn to trust the model outputs in fact you might actually use
+[09:14] rag just to get citations um so with rag though the citations that you get are a
+[09:19] little bit kind of like post talk rationalization so maybe if like the
+[09:24] date appears in the output and we knew it was also in the input to the language
+[09:27] model we feel pretty confid that that date is not hallucinated um but again
+[09:32] this is not really like a causally related to what information the model
+[09:35] used during the generation now with extended mind Transformers We can look
+[09:39] up exactly which tokens were retrieved from the from those memories and used
+[09:45] during generation so in this example on the top left here we have the memories
+[09:49] this is a sampit from Wikipedia about one of my favorite mathematicians
+[09:53] Alexander grend and the query is when did he get his friend citizenship and
+[09:58] then in the bottom you can see the completion with a correct date I think
+[10:01] he got it in 1971 so the blue highlighted tokens here
+[10:06] uh importantly the 1971 as well as some of the Alexander growth and de tokens um
+[10:11] those are the ones that the model retrieved and attended to when
+[10:14] generating that 1971 correct token and so being able to report that uh gives a
+[10:19] lot of confidence and also just insight into how the model is using those
+[10:23] retrieved
+[10:26] tokens okay we can also use extended mind Transformers to reduce
+[10:31] hallucinations so how do we do this so right now we have access to in the like
+[10:36] simplest case just kind of token level entropy over that output distribution
+[10:41] and if you wanted to get fancier we're also doing some basy and fine-tuning of
+[10:44] language models at normal but you can use any uncertainty metric to determine
+[10:49] kind of how certain the model is about a generated token and if we kind of can
+[10:54] detect that the model is uncertain about that token we can regenerate that step
+[10:58] using more information from these memories uh okay so in the top right
+[11:03] here we can see this is we just set like a baseline default number of memories
+[11:07] that each query token is allowed to retrieve and attend to and you can see
+[11:11] it wasn't quite enough information uh to get this query right so if you remember
+[11:15] from the previous Slide the correct answer here is
+[11:17] 1971 and you can see we've got 1993 here so wasn't enough we didn't attend to
+[11:23] that memory quite enough to get this question right and in the bottom example
+[11:28] we allow it to read generate some subset of those tokens using more information
+[11:32] from the cache when we can tell the model was
+[11:36] uncertain and again got this right so it's kind of like kind of a nice
+[11:41] intuition for uh when the model's uncertain and then okay if it's really
+[11:45] uncertain let's go use more information and also can be more efficient kind of
+[11:49] depending on how the math works
+[11:52] out all right so now I'm going to tell you guys about the most important uh
+[11:56] parameters to set when using extended mind Transformers so you may have heard
+[12:00] of something called stride length before uh and this is um a parameter that comes
+[12:05] up a lot even just kind of in regular perplexity computations so when we
+[12:09] compute the memories that we're going to attend to we pass them through the model
+[12:13] and then again save off these key value representations that the model saves
+[12:17] internally um but again the models that we're using are trained on this fixed
+[12:22] context length so we need to kind of pass over them with some stride such
+[12:27] that each of those tokens has an appropriate amount of context um to
+[12:32] generate the representation so if the stride is smaller uh you're going to get
+[12:37] more uh high quality representations but also will require more computations um
+[12:42] so you can kind of tune this and there are some graphs in the paper as well
+[12:46] that kind of represent this tradeoff um but this is an important parameter to
+[12:50] set when yeah generating the memories themselves top K is uh probably the most
+[12:55] important parameter to think about so this is the number of key Valu pairs or
+[12:59] memories that each query token is allowed to retrieve and attend to um
+[13:04] when your memory is quite long kind of the more the better um but again uh yeah
+[13:10] this it's kind of should be dynamically set based on how long your memory
+[13:14] is um okay yeah so lastly uh we want to retrieve as much information as we can
+[13:20] from the memory without confusing the model it's making analogy back to kind
+[13:25] of putting everything into context we don't want to just throw everything in
+[13:28] there because that will be confusing to the model um so we have two different
+[13:32] regularization techniques that we Implement that we have found to be
+[13:35] especially effective um the first one is called similarity masking so again we we
+[13:42] retrieve these tokens uh based on similarity with our query token and the
+[13:46] key that we are retrieving from and so we might say like well if we don't hit
+[13:50] some similarity threshold like we'll retrieve a lot of them but then if they
+[13:54] you know if they're not at least like 0.25 similar then we'll just throw them
+[13:58] out so we can retrieve and then just mask the ones that end up being less
+[14:01] important uh another another important regularization
+[14:06] technique in particular for models that are trained using rope uh is to
+[14:10] eliminate tokens from the memory that correspond to unknown tokens so
+[14:14] especially if your data is super messy a lot of the Wikipedia based benchmarks
+[14:18] are like really way more messy than I even knew before I started working on
+[14:21] this stuff uh they have a lot of like just unknown tokens and so they're kind
+[14:26] of like poorly represented by the models often because they're unknown
+[14:29] they end up having a lot of matches with your query tokens but then they're not
+[14:33] actually containing a lot of useful information um so we just eliminate
+[14:36] those from the memory before we allow it to start
+[14:41] retrieving all right so we have a whole collection of these models on hugging
+[14:45] face all of the uh code is on GitHub as well as that data set um and encourage
+[14:50] you all to read the paper if you're curious about more of the technical
+[14:52] details uh as I hope you can see here it's actually pretty easy to use these
+[14:56] things so it's as simple as passing those memories in in as inputs uh as
+[15:01] tokens into the model during instantiation um you can dynamically
+[15:05] change them after that as well but it's the easiest way to do it uh and then
+[15:08] making sure your config is set up
+[15:12] correctly all right so just to conclude here uh I hope you all will take away
+[15:16] that these new kinds of models um improve achieve impressive performance
+[15:21] on retrieval tasks they enable these great new kind of citations um they also
+[15:26] enable this new kind of hallucination reduction Tech technique which is
+[15:29] inspired by Active Learning they do not require fine-tuning unlike kind of long
+[15:34] context methods uh and they can easily run using our open source models and
+[15:40] code thanks so much and uh find me after four questions
+[15:48] [Music]

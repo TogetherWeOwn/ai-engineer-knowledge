@@ -1,0 +1,271 @@
+# title: Building Effective Voice Agents — Toki Sherbakov + Anoop Kotha, OpenAI
+# source: https://www.youtube.com/watch?v=-OXiljTJxQU
+# speaker: Toki Sherbakov + Anoop Kotha, OpenAI
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T11:40:21Z
+# sha256: 09237c0c09322b09dc787c2d84068daf224192f29411094f37efa891ce93f285
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:00] [Music]
+[00:14] Hello everyone. Thanks for coming to to our talk here. Um, just briefly
+[00:18] introduce myself. I'm Toki. I lead the solution architecture team uh in the US
+[00:22] for OpenAI and I have Venoop here as well on the solution architecture team.
+[00:26] Uh, and we'll talk about building practical audio agents. Um, before I
+[00:30] jump in, maybe a quick raise of hands. Who has either like built an audio agent
+[00:35] or voice agent of some kind or thinking about building a audio agent?
+[00:39] Okay, so like halfish of the room. Okay, good. It's always good to know what
+[00:42] people's interests are. So yeah, we'll talk a bit about like um some of the
+[00:45] things we we've learned, where audio models are today, and then some of the
+[00:48] kind of patterns and best practices. So just to take a quick step back, um,
+[00:53] Genai applications broadly to date, as many of you all know, have been very
+[00:56] textbased, right? This is uh models that really deeply understand uh and generate
+[01:00] text with very much humanlike fluency and there's a lot of production
+[01:03] applications out there built on text and that's continues to scale. I think we've
+[01:07] really started to enter a bit more of this multimodal era where we now have
+[01:12] models that can understand images extremely well. There's now models that
+[01:15] can generate images really well if you were part of the image gen Studio Gibbly
+[01:19] craze uh or Sora that generates videos for example. Um and then now also audio.
+[01:24] These are models. We've had models like transcription models or texttospech
+[01:27] models for some time, but now this kind of emerging speechtoech capability is
+[01:31] getting a lot better. And I would say now we we will see I think a much more
+[01:35] of an explosion of use cases around these modalities of images and video.
+[01:38] And today we're really going to focus on the audio modality uh across this. So I
+[01:44] would say like one important thing we're starting to see is that audio is really
+[01:47] getting to that point where it's becoming much more usable at scale. And
+[01:51] again, we've had the transcription and the TTS side, but especially that
+[01:54] speech-to-pech low latency experience. The models are getting, I would say,
+[01:58] good enough and are kind of at this tipping point where you can start to
+[02:01] really meaningfully build high quality production applications at scale. So, I
+[02:05] would say before the models were a lot slower, robotic, and brittle, and now
+[02:08] they're a lot faster, expressive, and accurate. I'll show an example. The
+[02:12] first one will show what the models were like not even six months ago. It's a
+[02:15] very painful example, so I hope you feel a bit of the pain uh in this.
+[02:20] >> Hello. Hello. Please give me a topic for your
+[02:24] haik coup. >> Uh,
+[02:28] well, you can see the the initial delay. Um, that's actually honestly
+[02:33] >> Could you write me a haiku about whispers?
+[02:40] >> Silent air, faint words. Drift through darken rooms. Secrets linger near.
+[02:52] Dust slides through my hands. Sifted grains forget the weight. What is left
+[02:56] behind? So, I hope you felt the pain a little bit. Right. So, these models are
+[03:01] uh this is actually not just not even six months ago, right? The models are
+[03:04] incredibly slow. Um they're very robotic in how they sound. Uh and they're quite
+[03:09] brittle. So, in that example, we actually tried to interrupt the model
+[03:12] and tell it no, don't write a don't write a poem about uh whispers. Write
+[03:16] one about stars. They wrote one about sand. I'm not sure where it got that
+[03:20] from. So just showing you that's actually where it was. And then now if
+[03:22] you like fast forward to today, these are the models that uh for a very
+[03:25] similar use case kind of how they how we'll behave today.
+[03:28] >> Hello
+[03:34] >> share with me a topic and I shall weave a ha coup for you rich with emotion and
+[03:40] imagery. What shall it be? >> Can you make a ha coup about whispers?
+[03:45] >> Whispers? Actually, could you make a ha coup about stars?
+[03:49] >> Stars, whispers of light adorning the velvet night,
+[03:55] eternal secrets. >> So, you can see it's much faster. It's
+[03:59] incredibly expressive, emotional. You can steer it, you can get it excited,
+[04:03] you can slow it down, and it's accurate. We interrupted it. We had it change
+[04:06] course and do something else, and it responded well. Um, so the models are
+[04:09] really, we do believe, at that good enough tipping point where you can start
+[04:11] to build much more reliable experiences around it. Um, in terms of actually
+[04:16] building on top of the uh, audio models, there's really two emerging
+[04:21] architectures that we see. One is kind of the one that's been around for a bit
+[04:23] and then I'd say a little bit of the newer one, which I'll talk about. The
+[04:26] existing one has been what we call kind of the chained approach. This is
+[04:29] stitching together these three approaches. You have audio come in, you
+[04:32] transcribe it, you have some sort of intelligence layer with an LLM that does
+[04:36] some sort of intelligence, and then finally text to speech on the output.
+[04:40] Um, but again, this is stitching together three models. There's a lot of
+[04:42] problems with this. slow across time like it takes longer time to actually
+[04:46] generate your output audio. Um it also has some lossiness across this right you
+[04:50] kind of lose a little bit of the semantic understanding of the
+[04:52] conversation. So really this emerging pattern is more this speechtoech
+[04:56] architecture where it really it takes these three models into a um single
+[05:00] model which for us it's the real-time API uh and it does all these layers it
+[05:05] does the transcription it does that intelligence layer and then finally does
+[05:08] the speech as the output. So this simplifies the architecture quite
+[05:11] dramatically. Really reduces the time it takes to output. This is really good for
+[05:15] low latency experiences. Um and it doesn't have that lossiness problem. You
+[05:18] actually are able to maintain semantic understanding across a conversation. So
+[05:22] this is really kind of the emerging pattern we see.
+[05:25] And when building there's some kind of key trade-offs and considerations to
+[05:29] take into account um when building on tops of these architectures. And we
+[05:33] think it's kind of across these five main areas. You have latency, you have
+[05:36] cost, you have accuracy and intelligence, user experience and
+[05:39] integrations and tooling. And depending what you're building, your trade-offs
+[05:42] will be different. Right? So if for example you're talking about a consumerf
+[05:46] facing application, um the trade-offs are quite different. Here you care a lot
+[05:51] about user experience. Um these are usually a low latency experience that um
+[05:55] a lot of end users are are interacting with the model. So user experience
+[05:58] matters a lot. Latency matters a lot. It can't be slow. It needs to be really
+[06:01] fast and attractive. But things like cost probably doesn't matter as much. It
+[06:05] doesn't need to be accurate. Not really, right? It's more about expressiveness
+[06:07] and quick answers. Um, and integrations and tooling like you don't really need
+[06:11] to integrate with uh SIP or like Twilio for for a broader experience. It's
+[06:15] pretty simple um uh interaction. So things like this would really the
+[06:19] real-time API works really well for a consumerf facing application depending
+[06:22] on these trade-offs. Now if you go to customer service as another example, the
+[06:26] trade-offs are different, right? So here accuracy intelligence actually probably
+[06:29] matters the most. you can't get an order number wrong. If it uh goes to delete an
+[06:34] order instead of updating an order, that's a big deal. So, accuracy and
+[06:36] intelligence matters probably the most. Integrations and tooling start to matter
+[06:40] a lot more, too, because now you have to integrate your with your various
+[06:42] internal systems. You have to integrate with, yeah, SIP and phone providers if
+[06:46] needed. Um, so those are probably the most important things, but user
+[06:49] experience still matters, but you'll probably take a hit on that a little bit
+[06:51] to make sure it's more accurate. Again, latency still matters, but not as much
+[06:55] because accuracy intelligence matters more and cost um you're saving a large
+[06:59] cost for this anyway. So, I think these are just the other considerations to um
+[07:02] to take into account for customer service. So, for this real-time API
+[07:05] might make sense for uh a situation where latency might matter the most, but
+[07:10] if you care about determinism and accuracy and intelligence, then actually
+[07:13] the chained architecture would make a lot of sense here, too. Um but it's just
+[07:16] important to consider what your trade-offs are depending on what you're
+[07:19] trying to build. So hopefully that gives you paints you a picture a bit of like
+[07:22] what to consider. I'll hand it off to Noob to talk about very specific
+[07:25] patterns we've seen when working with customers building on this.
+[07:27] >> Cool. Awesome Tobi. Um so me just like taking a step back. I think we've
+[07:32] probably defined agent a bunch of times but here's just like a a canonical
+[07:36] definition to hopefully keep everyone grounded for this session. Um think of
+[07:39] an agent as some model, some set of instructions. So your prompts, the tools
+[07:43] you give your model and then the runtime. So like the guardrails like how
+[07:46] you do your execution environment. Um, and generally like when you're building
+[07:50] voice agents, that's all the same things you should be worrying about, but
+[07:53] there's also a few other things that are maybe a bit different that we're going
+[07:56] to focus on today. Uh, so the main stuff is like your system design is probably a
+[08:00] bit different than a traditional LM agent. Um, it's probably a bit different
+[08:03] on the prompting side and customization of the voice. Um, the tools you're using
+[08:07] probably a bit different. Um, and then also eval guardrails you might have to
+[08:11] think about um, as well. So these are the things we'll we'll probably focus on
+[08:15] that are like distinct when you're building specifically voice agents
+[08:18] compared to like traditional agents. Cool. So if you've all built uh maybe
+[08:25] like a textbased agent, let's use like customer service as a conical example.
+[08:28] Um you have like some user question. You have some sort of triage agent that it's
+[08:32] like a small model that goes to other models here that will do like the harder
+[08:36] tasks. So you have like an 03 to do like the refund or maybe like an L4 mini to
+[08:39] do some of the cancellation. Um, and typically that's like how you build a a
+[08:44] normal agent today. Uh, for voice, one pattern that we're starting to see more
+[08:48] and more of is some sort of like delegation through tools. So you would
+[08:52] have like the real-time API be your like frontline agent. So it does a lot of the
+[08:55] normal interaction patterns that you're used to. So it can respond to like the
+[08:58] easy questions that you sort of want your model to answer and you know you're
+[09:01] confident in your model answering. Um, but then there's also other questions
+[09:05] that might be a bit harder. Um, and then you want your model to like do a tool
+[09:08] call to these other agents that are run by smarter models behind the hood. Um,
+[09:12] so that's a pattern that we'll show a quick video of of like how this would
+[09:16] work.
+[09:21] >> I've authenticated you now. What item would you like to return?
+[09:25] >> Yeah, I want to return the snowboard I bought.
+[09:29] >> Got it. I'm reviewing the policy and we'll get back to you with next steps
+[09:33] shortly. So, here's a scenario where we're actually using like a much smaller
+[09:37] model04 mini uh and delegating to that because we don't want uh a smaller
+[09:41] model. >> It looks like the return you are making
+[09:43] is within the 30-day return policy. We will process the return and send you a
+[09:48] confirmation email with next steps shortly.
+[09:53] >> So, that's like one pattern uh we've seen on the architecture side. Another
+[09:56] point I touched on is like the the way you basically customize your brand and
+[10:01] what you're sort of building. Uh so the prompts you're using is a huge part of
+[10:04] that. And the way to think about this is when you're prompting models today uh in
+[10:09] the textbased world, you only can control like the instructions you're
+[10:12] giving it and sort of what you want the model to do. But in voice based
+[10:16] applications, you can also control the expressiveness of the voice and how you
+[10:19] want the model to speak or sound. Uh, so this is like an example prompt here of,
+[10:23] hey, you can control like the demeanor, the tone, the level of enthusiasm, all
+[10:27] those things that don't really get captured in a in a text agent that you
+[10:31] do have much more control over in a voice space agent.
+[10:36] Um, here's just a fun website you can use to play around with this open. Um,
+[10:40] where you can play around with different voices and also click through sample
+[10:43] prompts that we've created. Uh this is just a great place to get started on
+[10:47] like actually playing around with the expressiveness of voices and seeing that
+[10:50] there is a ceiling and like a lot of fluctuation you can get in performance
+[10:54] just by the prompts you do use. Uh, another side of this is when you're
+[11:01] when you're prompting models in the the textbased approach, you'll probably have
+[11:05] like a lot of few shot examples of like, hey, I want you to do these few steps uh
+[11:09] and then do these next few steps um and go through like a typical uh
+[11:14] conversation flow. Uh the same thing you can sort of mimic in voice. So if you
+[11:18] see in in this picture uh there's like some ID of hey I want you to do some
+[11:22] greeting, the description of it and then the instructions for the users. Um and
+[11:26] you can just go through that. So this is like a sample way of you to think
+[11:29] through how you should be prompting models especially for more complex tasks
+[11:33] that you want the real-time API to handle.
+[11:37] Uh the next big bucket of things that are sort of important or maybe like a
+[11:41] bit different for the voice agents you're building is tools. Tool use in
+[11:46] general is like very uh important because you want your model to connect
+[11:49] to other things that are sort of important for you. Um and the first step
+[11:53] is honestly just start simple. you don't need to connect 10 tools or like 20
+[11:57] tools to a given model. Uh keep the number of tool calls pretty limited for
+[12:01] a given agent. Uh and that maybe goes back to the first diagram we showed of
+[12:05] you want to delegate to different models or agents to do different tasks. So here
+[12:10] a given agent don't give it a ton of tools to start with and then slowly add
+[12:13] on more tools as needed. Um handoffs. So if you ever you uh use the agents SDK,
+[12:18] this is a concept of if we have a given model um you want to pass it to another
+[12:23] um and here you can manage context between handoffs as well. So the thing
+[12:27] to remember here is you might have a given agent and you're going to another
+[12:33] one but you want to keep the context the same between them. Um so a good pattern
+[12:38] to do is actually summarizing the conversation state and then passing it
+[12:41] to the other agents so you don't lose any of the the context and it's not
+[12:44] lossy. Uh a final one is delegation. So the concept we showed a bit earlier of
+[12:48] like using 03 mini or 04 mini to do the tool call that's like natively built
+[12:52] into the agents SDK if you'd like to try it out.
+[12:56] >> Um evals. So I think this is a pretty big part of the like voice experience
+[13:03] and maybe like breaking it down into like four key buckets. I think the first
+[13:08] and most obvious thing is always start with observability. um you're not going
+[13:13] to get very far if you don't know how your data looks. Um so just make sure
+[13:18] you have traces of what's going on with your agents uh the audio and everything
+[13:22] so you can actually look at it and take actions. Um and the next thing is when
+[13:26] you're actually starting to do evals like the most important thing is
+[13:29] actually havememes to label these data um and actually go and iterate on
+[13:34] prompts from there. It sounds maybe a bit too easy or it's like not the most
+[13:39] appropriate or uh maybe the best approach but it is the most effective
+[13:44] that we've seen when working with customers. Um it lets you go a lot
+[13:47] faster. Uh and then from there the next step is transcription based evals. So
+[13:52] this is where you would have your traditional as a judge evals or like
+[13:55] testing your function calling performance on certain business criteria
+[13:58] and having a rubric in place. Um, and then there's this next bucket, uh, where
+[14:04] a lot of people ask us, how do we actually test the audio that's
+[14:07] generated? Um, and for the most part, it's there's not a lot of things that
+[14:13] audio uh, evals get you that maybe text evals don't, but the things that maybe
+[14:18] it does get you is like understanding the tone, understanding the pacing, or
+[14:21] other things that are maybe a bit harder to capture just through text. And this
+[14:26] is where you can use like a completions model or some other audio model. Uh so
+[14:29] for example GT4 audio to like understand the tone, the pacing and what other
+[14:34] intonations that you care about for your business. Um and then the final one that
+[14:38] we've started to see a bit more is actually synthetic conversations. So for
+[14:42] example, maybe you have two real-time clients going back and forth across to
+[14:46] each other. So maybe one is your real-time API agent or whatever and then
+[14:50] the other is a set of customer personas that you have and you can simulate like
+[14:56] many many of those conversations and then extract those evals across maybe
+[14:59] like transcriptions or audio and then have a much better way to understand
+[15:02] what you've sort of built. Cool. Uh and then the final thing here
+[15:08] is guardrails. Um because especially for the real-time API it's pretty fast. uh
+[15:15] you want to have guardrails that make sure that you have the safety that's
+[15:18] needed for uh to actually have confidence in in the solution you're
+[15:22] you're rolling out to users. Um so the main things we have here is like run
+[15:26] them async uh generally because the generated text from the real-time API is
+[15:31] much faster than the spoken audio that you get back from the model. So you have
+[15:35] room to play with the latency here. Uh the next thing also is you have control
+[15:40] to set like whatever debounce period you have here. So in the code snippet uh to
+[15:43] the right hand side of the screen you'll see that like right now it runs every
+[15:46] 100 characters to run the guardrails but you can control that if you want to.
+[15:52] Awesome. And then maybe just some learnings that we've seen from other
+[15:56] folks in the field. Um Lemonade so uh AI like insurance company they're like
+[16:01] building e one of the things we like noticed from them that made them
+[16:04] successful is they like focused really early on eval guardrails and like
+[16:07] feedback mechanisms for their team. And even if it wasn't scalable, they
+[16:10] realized that and it actually made them move a lot faster in the end. Um, and
+[16:14] then finally for Tinder, um, they realized that customization and brand
+[16:18] realism was pretty important for them when they were launching their RZ chat
+[16:22] experience. Um, so that's what they focused on and it created a much better
+[16:25] experience for their users. And now I'll hand it off to Toki to
+[16:30] >> Yeah, just to wrap us all up. So I kind of what I said in the beginning is we're
+[16:33] really entering this multimodal era. So away from or in addition to textbased
+[16:38] models, we have now obviously um video and image models, but now audio. So very
+[16:42] much in the multimodal era and this real-time speech to speech technology is
+[16:45] emerging. And I think we had a kind of lowkey update yesterday, a real time
+[16:50] API. We had a new snapshot that we that we released that's actually a lot
+[16:52] better. So I really feel like now is the time to to build. So you kind of have
+[16:57] this first mover's advantage to to build now. I think the technology is getting
+[16:59] to that point where it is good enough to build scalable production applications.
+[17:04] Um, so really excited to see what you all build. Please test it out. Um, we'll
+[17:08] be around after the talk if you guys have any questions, but thanks for the
+[17:10] time.
+[17:15] [Music]

@@ -1,0 +1,237 @@
+# title: Semantic Blindness: 500,000 Sensors Confused an LLM - Raahul Singh & Vanč Levstik, Phaidra
+# source: https://www.youtube.com/watch?v=EUsPvBeIx70
+# speaker: Raahul Singh & Vanč Levstik, Phaidra
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T07:43:25Z
+# sha256: fda62276e6e05a38a6432abd158db84e340a2c14c3a38c944375028f65fd084f
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:00] Welcome everyone. My name is Rahul Singh. I'm a staff AI research engineer
+[00:04] at Fedra. >> And I'm Vance Kulistik. I'm a senior
+[00:07] engineering manager, also at Fedra. >> And today we want to talk about the time
+[00:11] when we gave an LM 500,000 sensor names and it got confused. We call this
+[00:15] problem semantic blindness. At Fedra we build AI agents for AI
+[00:20] factories. This includes agents which allow our
+[00:24] customers to talk about their data centers
+[00:26] and explain to themselves and understand how the data centers are working and
+[00:31] what problems they are facing on a day-to-day basis.
+[00:34] User queries can be anything from what chiller is running hot to analyze the
+[00:39] distribution of temperatures across my data halls to is
+[00:44] any of my GPUs facing any problems? Now from this variety of
+[00:49] queries you can see that these include talking what specific equipments is
+[00:55] chiller six all right to talking about a groups of equipments GPUs in data hall
+[00:59] one. The industry has not really figured out
+[01:02] a common naming pattern yet and every single customer can have their own
+[01:06] things from simple names like racks with GPUs with data halls which give you an
+[01:12] exact idea of where different things are to something that is more difficult to
+[01:17] comprehend like CH3 something something six. We've seen
+[01:21] all kind of names in the industry going forward.
+[01:24] Now when you're building a demo system this works because you're working at a
+[01:28] small scale. A a simple LM can look at all the names of your equipment
+[01:33] and figure out what user is talking about. But this problem really becomes
+[01:38] intractable as you go to for scale. For example at 1 gigawatt scale
+[01:44] factories you will see 400,000 plus GPUs and to support those GPUs you have power
+[01:50] meters, you have chillers, you have other equipments.
+[01:53] LM context windows are finite and you will very quickly saturate uh and it
+[01:57] just becomes a problem. Like we say, a product is something that
+[02:01] works for all scenarios and does not fail silently. A demo just has to work
+[02:05] for one. >> In addition to having the LLM figure out
+[02:09] these names, uh we could also have uh embedded them in a
+[02:13] rack database, a vector embedding approach. But, the problem is often
+[02:17] times the names are so similar that semantic search just fails. Uh there's
+[02:21] very little difference between a vector of Sorry, a string name of 20 characters
+[02:26] long which just differs by, let's say, one character. Chiller 6 instead of
+[02:30] Chiller 7. Or uh CDO something uh versus, well, something else. It's
+[02:36] very small. So, you get a lot of uh problems with getting accurate uh
+[02:40] recall. Also, LLMs suffer from what we call a
+[02:44] frequency uh penalty. If you keep on outputting very similar names over and
+[02:49] over again, or very similar tokens, uh more accurately, over and over again,
+[02:53] there are internal penalties in the LLM which just shut off their output. So,
+[02:57] if the user says, "Can list all the names of uh let's say GPUs in i7?" There
+[03:03] are, let's say, 100. Just by listing through them, the LLM's guardrails would
+[03:08] see uh think that well, it's spiraling, and it would just shut the system up.
+[03:13] So, we can't really have these two approaches. RAG would not work.
+[03:16] Just naive LLMs would not work. As we move into production systems, we
+[03:21] need something that can scale as the system scales. Now, there are naive
+[03:24] solutions which we shall discuss going forward.
+[03:27] A naive approach to solve this problem would be just to well, divide and
+[03:31] conquer. Take your different uh equipments, branch them in different
+[03:36] shards, and pass them through LLMs. Uh parallel calls should work, right? Well,
+[03:41] that's what we thought. The problem is you get horrible recall and
+[03:45] hallucinations. You will see LLMs invent phantom
+[03:49] equipment that do not exist, and also silently drop things that do exist. Now,
+[03:54] this creates a problem for mission-critical systems where the users
+[03:57] need to know exactly what is happening with their systems. Any problems there
+[04:00] will quickly erode user trust. At the same time, you will miss on specific
+[04:05] problems which can cascade into bigger, bigger problems going forward.
+[04:10] Anyhow, something that we realized here is that as the size of these physical
+[04:15] infrastructure grows, LLMs can not the LLM-based solutions can
+[04:20] not grow with the size of individual components or instances or nodes.
+[04:25] They We have to find something that grows sub-linearly with increasing
+[04:28] equipment count. And this is what we figured out.
+[04:32] So, we should not grow with instances, we
+[04:34] should grow with tree depth. Now, what do we mean by tree depth is
+[04:38] we realized that there's a hierarchical structure in which an AI factory is
+[04:41] arranged. You will have data centers, then each data centers will have
+[04:44] different data halls, you have each of them will have different aisles,
+[04:48] and you will have different rows and then racks and then GPUs. Similarly, a
+[04:51] chiller plant will have rooms where chillers are arranged, then you will
+[04:55] have pumps. There will be a separate cooling tower
+[04:57] unit. It's kind of like a tree. The depth of the tree grows very slowly,
+[05:03] the width grows extremely fast. In other words, you will have a hierarchy that
+[05:08] only adds new equipments very rarely, but it adds a lot of them when it does.
+[05:14] You will have a lot of GPUs, but without GPUs, you won't have a lot of things.
+[05:18] Now, we realized that this could be used to
+[05:21] solve our problems. And there are four insights that really
+[05:25] come into the picture for this. One is a linearizer.
+[05:29] What I mean by the linearizer is the LLM has to figure out where each of
+[05:34] these things are arranged and how to map from a vague user query to specific
+[05:39] equipment or groups of equipments. Here
+[05:42] a summarized representation of our
+[05:44] system's graph can be really, really useful. For example,
+[05:48] uh if you're uh
+[05:50] a 1 gigawatt scale factory can have over a million nodes and each node represents
+[05:55] a unique equipment. But, because you want to go from the
+[05:59] root to the leaf, all you have to do is describe all the paths and that's a very
+[06:05] small finite list. For example, here you can see that to get to a GPU, you can
+[06:10] just you just need four different layers to get to it. To get to a chiller,
+[06:14] similarly four layers to get to switches, similarly four layers.
+[06:19] With this, 64 GPU layer
+[06:23] sorry 64 GPU system and a 460,000 GPU system produce
+[06:29] roughly the same size of summaries. This consolidated context gives your LLM
+[06:36] all it needs to know to figure out how the distribute how a plant is arranged
+[06:40] and how different equipment are distributed in that plant.
+[06:43] The second insight that we had was LLMs are good for planning but not good for
+[06:48] searching. This is what we realized when we saw
+[06:52] very poor recall with our sharded solutions. So,
+[06:56] instead of making the LLM sift through all the different fuzzy names that we
+[06:59] can get from our users, we asked the LLM to give us exactly how to look for them.
+[07:06] So, for example, here the query says, "Give me all the GPUs that are running
+[07:09] hot in data hall 11." The LLM does not need to go through all
+[07:13] these names of all our GPUs to figure out which one of those are in data hall
+[07:17] 11 and then figure out how they are running hot.
+[07:20] All it needs to do is structured outputs which tells us that well, we need to
+[07:24] collect GPUs. The scope under which we need to collect is a subtree which is
+[07:29] just data hall 11 and the filter that we need to apply to
+[07:33] finally figure out what exactly we need is GPUs that are running hot. Now, this
+[07:37] can be different things depending on the context and you can implement different
+[07:41] filters. All we need to know is how do we create the set that we want to know
+[07:45] get to. The third thing that we realized is that
+[07:49] once you have a structured output to figure out what exactly you need, uh
+[07:55] building the back end for it is relatively simple and straightforward.
+[07:59] Now, all we need to do is create different uh subsets of uh our equipment
+[08:05] or pre-index trees as we like to call them based on their location and based
+[08:09] on how they interact with other uh equipment around to get an idea of what
+[08:13] you need to look at. So, for example, from the previous uh slide we saw that
+[08:16] we wanted to look at GPUs in data hall 11. We could just get all the GPUs in
+[08:21] data hall 11 in one pre-index subtree or other data halls, for example, or other
+[08:26] racks, for example. And then to get to the final result, all we need to do is
+[08:30] uh run a query to find all GPUs that are running hot and take their intersection.
+[08:35] Set operations ensure that we have perfect recall and accuracy irrespective
+[08:39] of uh how we want to filter uh the queries and what uh you know, fuzziness
+[08:45] the user may have in their query. Next slide, please.
+[08:50] Yes. And finally, uh what if you have something that is very,
+[08:54] very vague? In which case, uh you have to get the LLMs to get to
+[09:00] searching, but instead of searching directly over names, we figured out that
+[09:04] getting the LLMs to uh give us patterns to look for. This
+[09:07] could be uh patterns in the data but in the names can be much more useful to
+[09:12] figure out uh what the user is talking about instead of just passing the entire
+[09:17] name list uh to the LLM. The LLM never has to see uh
+[09:21] very large number of tokens. All it needs to do is uh see some patterns in
+[09:26] the naming convention, figure out what exactly the user is talking about,
+[09:30] create a pattern, and then we can execute it uh on the back end on our
+[09:34] side. This makes sure that the LLMs has a constant or relatively constant uh
+[09:40] cost of operation. Whereas if we had to read through everything, we would have
+[09:45] been scaling linearly with increasing equipment count, which itself grows
+[09:49] exponentially as the size of the system increases.
+[09:54] Finally, to process a user query end-to-end, we
+[09:59] go from the user's query, which could be anything from one equipment or a group
+[10:03] of equipment, to a planner LLM, which figures out user's intent and gives us a
+[10:08] search pattern. Based on that search plan, we have a deterministic resolver,
+[10:14] which indexes, does set operations, figures out exactly what we need to do,
+[10:19] and creates the final set that maps to the user's query, and this is what we
+[10:24] call the result set. All of this is a two or three-step process instead of
+[10:29] a multi-step agentic loop, which can keep on running over and over again. And
+[10:34] this keeps our total cost also relatively flat and constant.
+[10:40] >> Cool. Yeah, if Rahul's job is to design the
+[10:43] architecture, my job is production readiness.
+[10:46] So, we need to make sure that whatever we designed, the elegant solutions we
+[10:50] came up, actually hold up under real load, real customer data, and all the
+[10:55] messy edge cases you only ever see production.
+[10:59] So, before any of this went near a customer, we put it through some
+[11:02] extensive tests and evals. We measured the new system head-to-head
+[11:06] against the old ones with same LLM model, same data,
+[11:10] and we did three runs per case just to make sure.
+[11:13] Our goal was simple, prove that Rahul's solutions are ready
+[11:16] for production. And they definitely are.
+[11:19] If you look at some stats here, the old approach degraded pretty fast at scale.
+[11:24] So, we got 80% correctness at 64 GPUs, and that dropped to about 30% when the
+[11:29] GPU grew to 400 460,000. On the other hand, the our new approach
+[11:35] has maintained correctness with 100% accuracy across all of those um
+[11:40] tests that we give it. And this is not just synthetic test. Uh
+[11:44] this is also a real data. So, we we had 66 cases on six real production systems
+[11:50] and they product they produce zero failures as well.
+[11:56] And not just correctness, it's also dramatically lighter.
+[11:59] So, when we talk about 1 GW scale uh data center, the old approach burned 116
+[12:06] million tokens for just a single validation pass
+[12:09] while still having a lot of errors. If you look at the new one,
+[12:12] it's a 390,000 tokens, which comes to around 300 less tokens fewer tokens.
+[12:19] But the part that matters the most, the cost is flat.
+[12:22] As as Rahul was talking about before, the the system grows
+[12:26] in size, but we the cost of the query was 9,000 tokens a query where the
+[12:31] system was 64 GPUs or 460,000. So, instead of getting the cost grow
+[12:36] exponentially w- when the customers grow their
+[12:39] systems, it stays the same.
+[12:43] That's the impact. Now, there's something about uh what we learned and
+[12:47] the part I want you to take back to your own work.
+[12:50] It starts with a lens from Karpathy. Most of you have probably seen his
+[12:54] presentation or his framing talk about this before.
+[12:57] He talks about different kinds of software.
+[12:59] Software 1.0 is a deterministic code you write. It's predictable, exact,
+[13:04] but a lot less flexible. On the other hand, we have software 3.0,
+[13:09] which is basically a behavior you prompt out of an LLM.
+[13:12] In our case, that might be show me the GPUs in data hall 11 that are running
+[13:16] hot. The This is very flexible, smart, but
+[13:20] it's a bit fuzzy. Now, his observation was that in legacy
+[13:23] software, the 3.0 is steadily eating 1.0.
+[13:28] More of what used to be deterministic code becomes a prompt.
+[13:32] Just hold that picture because the lesson for new built AI native systems
+[13:37] runs a little bit the other way.
+[13:41] But the real skill is knowing which work is the LM not best for.
+[13:46] And you always want to keep the thing the L
+[13:50] LM should be used for the things that it does well. It's great at parsing
+[13:53] ambiguous requests, judging where to look for data and what
+[13:56] to look for, handling phrasing we've never seen from
+[14:00] a new user that has a different query, and at the end also synthesizing and
+[14:04] writing the final human-readable answer. But But everything you you can data
+[14:10] model, you should move into code. This is the key one especially for large
+[14:14] systems. If your data has structure, call it a hierarchy, graph, or a schema,
+[14:19] a language model scanning it token by token is definitely the wrong tool.
+[14:24] Both retrieval, exact set logic, counting, dedup across near identical
+[14:29] names, which happens a lot in the data center land,
+[14:32] anything that must be 100% reproducible, it should be a deterministic code.
+[14:37] The simple heuristic that usually works, if you can write down the structure or
+[14:42] the rules, it's a 1.0 job. And pure LM is weakest exactly when the
+[14:47] system is large and well structured, which is precisely where we operate and
+[14:52] our customers. So, in a sense, we ran Carpathia's trend
+[14:57] backwards. We started almost pure 3.0. We threw everything in the context
+[15:02] window because that is the fastest way to find out what's even worth building.
+[15:06] And as we said, it worked pretty well on a simple demo to start.
+[15:10] Then, as it had to really scale, we moved the parts that can be treated as
+[15:14] known engineering problems into 1.0. And we still kept the hard judgment in
+[15:19] the LM. So, that's the inversion. Legacy
+[15:23] software drifts from 1.0 towards 3.0 and new AI native software starts at 3.0 and
+[15:29] matures towards 1.0 for the use cases that earn it, of
+[15:33] course. We are not here to replace model
+[15:35] judgment. We want to feed it with the 1.1.0 tools, as we call it.
+[15:41] So every 1.0 function you add is more reliable ground for the LLM to stand on.
+[15:48] So to finish up, let the LLM keep the hard decisions.
+[15:52] Everything it shouldn't be guessing on, add add it in as code and hand that
+[15:57] structure back to the model to work with.
+[16:00] So develop with software 3.0, productionize by adding in software 3.0
+[16:05] 1.0. Thanks for watching everyone. Uh any
+[16:09] follow-up questions at all, you can reach us by email
+[16:12] Rahul Russell Google at fidra.ai, Lanza at least to get fidra.ai,
+[16:18] or you can drop them in the video comments below.
+[16:20] >> Thank you for watching. >> Thanks.

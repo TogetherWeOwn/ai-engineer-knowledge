@@ -1,0 +1,237 @@
+# title: The Small Model Infrastructure Nobody Built (So We Did) — Filip Makraduli, Superlinked
+# source: https://www.youtube.com/watch?v=qdh_x-uRs9g
+# speaker: Filip Makraduli, Superlinked
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T09:25:15Z
+# sha256: 15b2725e25a03fa5d829c20208545f76166867de9f6c403cc428968c8e6e57d2
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:15] Hello everyone. Um, welcome to this talk.
+[00:19] I'll be speaking about small model inference and a gap that we've
+[00:24] recognized in the market. And what we did about it and why we kind
+[00:30] of made this approach. And as you can see this background slide
+[00:34] here, um, this is no accident. So, if you can guess what this is, I'll prompt
+[00:40] you at the end of the slides, you win a little reward. So, you can
+[00:44] catch me at the break afterwards. So, think about this, but also listen to me,
+[00:50] so don't think too hard. So, the story starts with me posting an
+[00:56] article a few months ago on Substack that got a little bit of traction, got a
+[01:01] few people interested, and I explained flash attention, I explained how models
+[01:06] worked, how processes can be memory-bound, compute-bound, and I felt
+[01:11] really good cuz I kind of went deep into this and as a person who's been in AI
+[01:17] for a few years, I felt very confident. And that was true, but then some people
+[01:24] pointed out that actually I had overlooked one key aspect
+[01:31] around what makes these models fast in the real
+[01:34] world. And that aspect that I overlooked was
+[01:38] inference. So, as someone who kind of wants to
+[01:43] understand things in first principles and
+[01:47] work to understand the problems and the solutions deep, I realized, "Okay, I
+[01:51] need to figure this out. I need to know kind of where I've made my mistake and
+[01:57] as a AI researcher and engineer, I need to find more about
+[02:02] inference. So, I've done a lot of work with VLAM,
+[02:06] training models, fine-tuning, kind of doing applied
+[02:11] ML and AI, did a bit of also research in academia as well.
+[02:15] But this part around kind of how models run in production, scheduling GPUs,
+[02:22] routing, and automation, I guess was a bit of a blind spot for me. So, I
+[02:27] realized, "Okay, this is the time I have to now figure this out, learn, and make
+[02:32] it work." And what better way to do this than to actually
+[02:36] build stuff. So, I decided to join a team,
+[02:42] um, a team at Superlinked, comprised of
+[02:45] very good, uh, infrastructure engineers, and
+[02:49] actually work with them and build something around inference. And that
+[02:54] something is, um, this, uh, repo, the Superlinked
+[02:58] inference engine that we have open-sourced, and this is kind of like
+[03:01] the soft launch that I'm doing today. So, you can have a look at that later.
+[03:06] So, basically it's inference for small models around AI search and document
+[03:10] processing. And we've tested this out, as you can
+[03:13] see, with some of our partners. So, we've tested out with Chroma, Quadrant,
+[03:17] Weaviate, so a lot of the vector DBs, as well as LanceDB. And as you can see,
+[03:24] they've tried it out a bit. Sounds fun, sounds interesting. So, this
+[03:28] is working. And, um,
+[03:31] it was the right step for me to kind of figure this out and learn
+[03:36] where inference, um, kind of truly is and how that combines with my ML
+[03:41] experience. So, the three key points I want you to,
+[03:45] uh, go away with from this talk are these. So, first, I want to tell you
+[03:52] why this matters. So, why doing inference
+[03:56] for AI search and document processing actually matters when you're building
+[03:59] agents or when you're building workflows that involve, uh, agents. So, this is
+[04:05] very important, the why. Then I want to talk to you about the
+[04:08] second thing, which is what inference is not about. So, there are some
+[04:13] misconceptions or ideas of how inference looks like, but it's not all about those
+[04:19] things. And the third thing is how we see
+[04:23] inference, and I call this as like the yin and yang of model inference, and
+[04:28] it's a way of combining a few things around model support and infrastructure.
+[04:34] So, why this matters for your agentic
+[04:37] workflow? Well, what you have encountered for sure
+[04:42] is context rot. And as we probably all know, this research paper from Chroma
+[04:48] from some time ago, um, showcases this effect that no matter
+[04:53] what you do, there is this effect of context rot. So, quality degrades as
+[04:57] context increases. So, being able to manage this context
+[05:02] and do some context management is very important and a useful way to solve
+[05:07] this. So, using small models that can preprocess your data so that then you
+[05:11] can actually use your agents and build your workflows is a very powerful
+[05:16] technique. You can also use the small models for
+[05:19] tool calling to again do similar things and tackle this,
+[05:25] uh, problem of context management. And you might say, "Okay, why would I not
+[05:29] use like code and grepping?" And that's a valid point.
+[05:33] However, you can still do that and having your data being preprocessed is
+[05:38] actually making the grepping and file systems that you build even better. And
+[05:44] it's not just me saying this, so this is how the community has responded to this
+[05:48] problem. So, Andrej Karpathy is building knowledge bases graph-based. So, for
+[05:53] example, you can use named entity recognition models, um, to generate
+[05:58] ontologies and then build knowledge graphs or you generate your file systems
+[06:02] in that way. Chroma have also, uh, shipped their own model that
+[06:07] actually does this. It kind of preprocesses and filters the input,
+[06:11] manages the context in order to tackle and achieve the same
+[06:15] problem. And there's also people in the community
+[06:19] building a lot of solutions that, um, lower this, um,
+[06:24] context and kind of reduce the token amount so that the agents can be even
+[06:29] more effective. And we've done this in production as well. We have a use case
+[06:34] where this repo that I showcased, uh,
+[06:38] Superlinked inference engine, we've used it as a tool calling,
+[06:42] basically, uh, solution where it was around taxonomy classification for like
+[06:48] an e-commerce store. So, going directly, uh, with tool calling where the small
+[06:54] models are tools that can retrieve and go through your data is also a powerful
+[06:59] way to approach this.
+[07:03] So, now I'll go about inference and what
+[07:07] inference doesn't look like. So, the traditional maybe perspective is,
+[07:13] "Okay, I will just chuck in more GPUs, get more compute,
+[07:17] all good, I've solved inference." However, um,
+[07:20] with small models where actually each model,
+[07:24] um, takes up only a small space in memory. So, you can see, for example,
+[07:28] Stella, which is an embedding model, then other rerankers,
+[07:32] um, the named entity recognition Glyner model, they only occupy like a few
+[07:37] gigabytes of memory. And if you provision a GPU for each
+[07:41] model, you're wasting a lot of, um, idle space. Your GPU stays idle and it's not
+[07:48] used. So, in this case of small model inference, it's very important to be
+[07:52] able to hot-swap models. So, what we've done is we've built the ability for you
+[07:57] to swap all of these models in one GPU so that per GPU, you get much higher
+[08:03] utilization. So, this lowers your costs, but also enables you to hot-swap and
+[08:08] switch around between models quickly. If you want to have one tool that's one
+[08:12] reranker or another tool that's another model, you can switch them around
+[08:16] quickly, and we have this least recently used eviction policy that we've built
+[08:21] in. And also what inference is not about is,
+[08:26] um, only the server or only kind of the
+[08:31] production situation. So, we have solutions for both the server and the
+[08:35] production, but building something, so for example,
+[08:39] like using Tay or VLAM or having even, um, some API wrapper in order to get
+[08:44] that in production where you actually do routing, auto scaling,
+[08:50] you do kind of monitoring with Prometheus metrics and Grafana,
+[08:55] you have to write that code yourself. And on the market currently, there is no
+[09:00] open-source solution that leads you from creating the model inference to actually
+[09:05] productionizing this at a scale, um, of this size. So, that's why we've kind of
+[09:11] wanted to fill this gap as well. So, um, we've included a lot of stuff around,
+[09:18] routing, auto scaling, queuing mechanisms, and provisioning GPUs.
+[09:24] So, I've talked about what inference isn't, why this is important,
+[09:28] and let me tell you now about, um, what actually inference is about.
+[09:36] And I call this the yin and yang of inference because I feel like this is a
+[09:40] holistic approach that has to combine two key things.
+[09:45] So, first, the yin is model support. So, your inference is
+[09:53] worthless if you're not supporting the right models or you're not offering
+[09:56] enough breadth of um, options for your users.
+[10:01] And open source models, so on hugging face currently, there are
+[10:05] millions of models. This is from March. Now, there might be
+[10:08] even more like close to 3 million models.
+[10:11] And open source is moving very quickly both
+[10:15] in size, but also in accuracy. So, you need to support these models because
+[10:20] people want to use them. People want to work with open source, and the
+[10:23] performance is also getting better and better. So, it's not even a sacrifice
+[10:28] anymore. It's actually you're being able for specific tasks. So, if you look at
+[10:33] MTEB or different benchmarks, you can see that for very narrow tasks,
+[10:38] open source models are beating managed services.
+[10:43] And we see this even with more general-purpose models like what Gemma
+[10:48] have done. So, they've released very low parameter models that have ELO scores
+[10:53] that are higher than much, much bigger models. So,
+[10:59] open source small models are very relevant, and you need
+[11:04] an infra to support to support them.
+[11:10] And we decided to do exactly this. Okay,
+[11:14] let's do it. We'll build and support hundreds of models.
+[11:18] However, that's not as straightforward as it might sound because all of these
+[11:24] models have different run times. So, for example, with if you use BERT and Qwen
+[11:30] as models, they have different
+[11:33] implementation of flash attention. They have different
+[11:36] positional embeddings, and you need to adjust this in order to
+[11:41] make make this kind of applicable to your
+[11:45] case and make it more general. So, there is no universal engine that can handle
+[11:51] BERT, Qwen, and modern BERT as well because their architectures are
+[11:54] different. So, what what we've done is we've set up a way of re-implementing
+[12:00] this forward pass in order to adapt attention, in order to do padding where
+[12:05] needed, so have variable length attention as well.
+[12:08] Work with kind of fuse fusion of the query, key, and value. And
+[12:16] this is kind of an underrated component, especially if you look at supporting
+[12:21] models like ColBERT that has multiple vectors as output. So, late interaction
+[12:26] models, also cross encoders, and re-rankers that do not output a vector
+[12:31] at all, but they output kind of scores. So, it's very important to
+[12:37] figure this out, and one example of this is, for example, this, which is
+[12:43] a comparison of a few models that are totally different in these five aspects.
+[12:49] So, normalization is done differently in BERT and Qwen. So, that needs to be
+[12:55] accounted for. In ColBERT, it's also totally different.
+[13:00] The Q The query, key, and values are also can be fused somewhere. In others,
+[13:07] for example, in Qwen, it cannot be because there is um
+[13:11] grouped query attention. So, that's another problem. The position positional
+[13:15] embeddings are also different. You can do in BERT absolute lookup, where it
+[13:20] with Qwen, there is rotary positional embeddings. So, these
+[13:24] are problems that maybe people don't think about straight away,
+[13:28] but if you want to support a lot of models, there needs to be a consistent
+[13:32] way of doing this. So, we've set up this with kind of working with agents as well
+[13:38] as with humans to be able to support this and re-implement this forward pass
+[13:42] in order to make um the the inference of this models
+[13:47] efficient, and we've also worked to do flash attention
+[13:52] where it's variable length flash attention, so that you can do
+[13:56] padding, and that there is no waste because what happens is if you want to
+[14:00] do token-based batching, you can have tokens that are kind of
+[14:06] lower number of tokens one request, and then another is a higher amount, and
+[14:10] then if both are padded at the higher amount,
+[14:13] you basically are wasting compute on empty tokens. So, you need to adapt this
+[14:17] in order to make the models work even better and quicker.
+[14:24] And that's a key differentiator in our way
+[14:28] of approaching inference. The other part, the yang, is around
+[14:36] infrastructure. So, this is the complex plot.
+[14:39] It's kind of this is the deep dive. We have
+[14:42] this in our website and in our repo. I won't go into each component here, but
+[14:46] basically what's up there is the three primitives
+[14:49] of our API, so encode, score, and extract.
+[14:53] And then the infrastructure layer happens, and this is kind of the summary
+[14:56] of it. So, basically, we have the three primitives of the API, and then we have
+[15:02] a router and also queuing mechanism depending on
+[15:06] the load. So, we're adjusting between these and also different pools of
+[15:11] different GPUs and resources that we use in order to kind of distribute
+[15:17] the workload, and we we use spot instances, but also bigger GPUs. So,
+[15:23] it's about being able to provision the hardware and also have the metrics
+[15:28] to auto scale this. So, we're doing KEDA auto scaling with Prometheus metrics in
+[15:32] order to be able to kind of switch models around,
+[15:36] not keep GPUs idle, and kind of waste resources. So, the key driver here is
+[15:43] that we want you to have the cluster as well as the model support. So, not just
+[15:48] one or the other, and then you have to merge them together and write all that
+[15:53] code, but we want to give you the whole end-to-end thing so that you can work
+[15:58] with this models quickly, and the models are basically just a config that you can
+[16:02] switch around and then do Terraform apply, and that's it. And we also have
+[16:06] published Helm charts and Docker images as well.
+[16:10] And that's how I learned my lesson. We've built Sie. So, this is kind of our
+[16:16] soft launch in a way. And we've open sourced both the model inference that I
+[16:21] talked about with kind of adapting this forward pass, working with attention,
+[16:25] re-implementing different aspects on the model, but also the cluster so that you
+[16:30] can actually use this straight away without having to think about hardware,
+[16:34] provisioning GPUs, and all of those problems that arise in in the real
+[16:39] world. You can scan the QR code to look at the
+[16:43] repo, and it's called Sie, so S I E. And the company Superlinked.
+[16:50] And also, now we have the the background as well. So, a quick reminder on that.
+[16:56] Does anyone have any ideas maybe from the audience? I'll reveal it in the next
+[17:02] slide, yeah, I don't want to
+[17:05] maybe do it too quickly if anyone knows what this is. Think of it machine
+[17:10] learning a bit kind of foundational knowledge. I was talking about attention
+[17:13] and all that, so it's a bit around embeddings, but also how transformers
+[17:18] work.
+[17:21] Okay, no no no reward, I guess, for you, sadly.
+[17:25] Or yeah, sorry.
+[17:28] I don't remember exactly, but it was one of the ones like ColBERT embeddings for
+[17:31] the clustering of the like one area. It wasn't using basically
+[17:34] the embedding space. Okay. >> Because of the
+[17:38] way they were doing the positional coding.
+[17:41] How much of that So, I will take that as a correct
+[17:45] answer. So, it was around positional encodings, and yes, this is basically
+[17:50] yeah. Congrats. So, yes, this is around vector
+[17:54] visualization of positional encoding. So, this is done when transformers are
+[17:59] trained, this is how positions are encoded, and it's sinusoidal. That's why
+[18:04] you get this pattern because it they're embeddings, and yeah.
+[18:10] Thank you very much.

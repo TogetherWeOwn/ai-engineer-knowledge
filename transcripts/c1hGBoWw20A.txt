@@ -1,0 +1,217 @@
+# title: Weight Folding, CUDA Streams, and the Bug That Made My Model Speak Backwards — Filip Makraduli
+# source: https://www.youtube.com/watch?v=c1hGBoWw20A
+# speaker: Filip Makraduli
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T04:57:01Z
+# sha256: 38a2db6a6845b843270bfff0fe7850829f75a93ce09147a4b5658fc8d8529205
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:12] Hello everyone. Uh Thank you for coming and
+[00:18] uh I'll start the talk now. So
+[00:23] This talk is uh around a paper that I did um
+[00:29] which is very simple.
+[00:33] The proposition is very clear. It's basically
+[00:37] two lines of algebra that make uh the RMS norm layer in transformers
+[00:44] cheaper, quicker, and kind of improve improve it as like a layer
+[00:49] in the transformer architecture. Similar to how layer norm
+[00:56] once used to be the standard and then it was substituted by RMS norm.
+[01:01] This follows along um this way of thinking.
+[01:06] And I got the chance to kind of meet some people from the open source world
+[01:11] and um I co-authored this paper together with uh Niels Graf who was the
+[01:18] kind of the creator of this. And the work follows from there.
+[01:24] So this is uh presented on archive. You can have a look, read it, test it out.
+[01:29] There is a repo as well. And the concept the
+[01:35] let's say the idea and the way of thinking it's easiest to explain with
+[01:39] maybe flash attention. So in a similar way of how um flash attention kind of
+[01:46] weights until there's a multiplication and tries to limit this uh
+[01:51] communications between memory so that the whole process is faster. This is
+[01:57] kind of a similar thought along those lines and it does certain improvements
+[02:01] that make the RMS
+[02:05] norm process much quicker and
+[02:11] in in effect improve the whole transformer.
+[02:16] And one question is okay, why RMS norm since that layer does almost none of the
+[02:23] math? And that's true. So the share of the
+[02:27] kind of math portion if you look at it is quite small.
+[02:31] However, the clock time or wall time as they say is
+[02:36] quite big and for example in one decode step. So right
+[02:41] when like inference is performed the RMS norm can be started like 33
+[02:46] times. Of course, it depends on the model and so on. In the paper, you have
+[02:51] the specific models and how this was tested.
+[02:54] Um and the question is
+[02:58] how this can be improved and how this wait for the matrix multiplication
+[03:03] can be kind of avoided. And the reason why this is slow is
+[03:09] because the GPUs are not slow or bad at math, but they're bad at
+[03:16] everything else around the actual math. So that means starting the work, the
+[03:22] actual work. So for example, starting the process
+[03:29] as it happens in some of the experiments 33 times that takes a long time
+[03:35] and for example, fusing um
+[03:39] each normalization into the matrix multiplication can help avoid this. Also
+[03:44] doing weight folding can help in kind of moving data between
+[03:49] memory and um that's a process that's also slow for
+[03:53] GPUs. And also waiting. Uh so, for example,
+[03:58] deferring the division that's done in the RMS norm layer is also a way to
+[04:04] avoid this waiting step. So, basically, what this paper does is it improves all
+[04:11] these three aspects by doing a few algebraic tricks in the way RMS norm is
+[04:18] computed. That's it.
+[04:22] And math-wise, these are the tricks. Uh it's mainly around the first two
+[04:27] propositions. One is weightless normalization. Uh you can see that here.
+[04:33] Um and deferred normalization, so um that's the second one. And now in more
+[04:38] newer architectures, there is a situation where um RMS can be kind of
+[04:44] can appear twice. Uh for example, in Gemma 4, this happens. So,
+[04:50] canceling the pre-normalization also works. Um and all of this is
+[04:53] algebraically proven in the paper.
+[04:58] And the first proposition is this where kind of the the gain and the weight fold
+[05:04] folded to one matrix W, uh you can see here with an asterisk.
+[05:09] And that is computed offline, similar to how maybe in flash attention, you
+[05:14] compute some stuff on the side so that there is no uh communication between
+[05:19] memory all the time. So, this is one step that's kind of um done, this weight
+[05:25] folding. And the other step is um deferring um
+[05:30] the scalar the scalar divide of the matmul so that they can be done in
+[05:34] parallel. So, in a normal case, you would have to compute once, then wait,
+[05:39] and compute again. In this case, the idea is to kind of split this so that it
+[05:44] can be parallelized. And the third one, which is kind of a
+[05:50] version of this is that um
+[05:53] there is kind of if there are two um because this is scale invariant, one
+[05:58] of them can be dropped and this still works.
+[06:02] And this is applicable to newer models um that can have this architecture and
+[06:07] implementation.
+[06:10] So, in order to make this happen in real life, especially
+[06:15] this proposition number two, um
+[06:18] so for this one, for example, it's easy. There is a repo called Transformer
+[06:22] Tricks. You can just apply this to any model and it works.
+[06:26] But in order to do this, there is some kernel work. So, it's not as
+[06:30] straightforward to do. So, in order for me to do that,
+[06:35] I was implementing this and I
+[06:40] came out with this experiment once. So, it looks okay in general, where it's
+[06:45] like, "Okay, the prompt is the Transformer architecture revolutionally
+[06:49] revolutionized NLP because and then there is some kind of expected output."
+[06:54] But in the output I got, I saw this repetition and one-step lag, as you can
+[06:59] see here, the word because appears again. And
+[07:03] there was something happening with the GPU streams and I was trying to figure
+[07:09] out what was happening. And I was getting this one-step lag and
+[07:13] kind of um outputs that were from the past in a way.
+[07:18] Um and in debugging all of this, I realized that um
+[07:24] in the process of building something like this, so
+[07:27] as I explained the proposition two or deferring these two operations,
+[07:32] um in CUDA, you can do two things. You can do like tensor cores that do one
+[07:37] part of the matrix multiplication and you can do CUDA cores that kind of run
+[07:42] stuff like element-wise operations, reductions, square roots, and so on. So,
+[07:47] the idea was to do this in parallel and get the benefit
+[07:52] of what I was explaining in the paper to actually test out this concept.
+[07:58] So, this is how it was supposed to look like. So, there is if you do things
+[08:02] sequentially, there is this idle waiting time when you when the vector unit
+[08:07] computes the RMS and scaling, and then there is a matrix multiplication. So,
+[08:12] the idea was okay, with flash norm, which is the technique in the paper,
+[08:16] you're supposed to do those both in parallel. So, the matrix unit computes
+[08:20] the matmul and the vector unit computes the RMS. So, in that way you save uh
+[08:26] time. However, you cannot just do this in Python, you have to go a bit lower.
+[08:31] And I did that with CUDA code like this.
+[08:36] And this looked in general okay at my uh at that time.
+[08:42] However, um
+[08:44] I realized that I did something slightly wrong.
+[08:47] And that thing was that the join in the end, where you're
+[08:52] supposed to join the two streams, was implicit in my case.
+[08:58] And when I tested this out, the unit tests worked, the quality seemed
+[09:02] similar, like perplexity testing, and so on, because it's just like um similar
+[09:07] generation, but over long generation, I was able to see this problem. So, I had
+[09:12] no idea what this was. And the reason was that when I was doing
+[09:17] this uh implicit um join,
+[09:21] basically, one of the streams hadn't finished the work, so I got race
+[09:26] conditions that kind of read the past from the unfinished matrix
+[09:31] multiplication. So, the idea that I had to fix this was um
+[09:37] around the fact that I had to be explicit about the join and wait until
+[09:41] one of the operations is finished so that I'm certain that when I join I'm
+[09:46] not reading from the past. So, that was the realization um in this
+[09:51] exploration of CUDA streams. And this is how I had things done. So,
+[09:58] the join was implicit. So, the post um scale read like an old uh buffer value.
+[10:06] And how this is fixed is with this where basically you need to mark the end of
+[10:11] the matrix multiplication, then mark the end of the RMS,
+[10:17] and then post scale wait for
+[10:20] the first stream and then wait for the second stream.
+[10:24] And that fixed the bug and made kind of the paper work and the model speak
+[10:30] forwards instead of backwards. And
+[10:35] that was the cool maybe academic perspective, but I also wanted to try
+[10:39] things, right? Deploy this, test it out, see how I can make it work um
+[10:45] in maybe a more production setting. And you can also read the paper and see all
+[10:49] the tests. Um some are done most are done around llama
+[10:52] models, but like this works for other architectures as well.
+[10:57] Um so, what you can do for this specific paper is um for example, the weight
+[11:03] folding that I explained the pre-position one, you can just do it
+[11:07] with um some code in the repo
+[11:10] that's like flash you say flashify and it does that. However, with this second
+[11:15] thing that I mentioned, you need to do a bit of kernel work if you want to do
+[11:18] that uh like I explained in my example. And these are some results that are
+[11:23] based on llama models and there are different kind of details that you can
+[11:27] have a look at as well as well. Like what happens if you do only the third
+[11:32] normalization, what happens if you do a full fused kernel. Um so there are a lot
+[11:36] of experiments of going lower here to test all the propositions, and this have
+[11:41] been our results um in different, let's say, levels of um
+[11:45] scrutiny and detail. But even the simple one with like weight
+[11:50] folding um shows some improvement.
+[11:54] And this also works with like the day-to-day tools that you use in the
+[11:59] models. It's not like you have to reinvent the wheel or, you know, do
+[12:03] things from scratch. So it works with uh torch compile
+[12:08] um because the it's kind of like a new checkpoint, and that's it. Flash
+[12:13] attention does similar tricks at a different layer, and also it works with
+[12:17] quantized models. So it's totally cool to actually apply this, and you can get
+[12:23] a model that has this cool new normalization layer.
+[12:27] And where you can get this um
+[12:30] details and code to actually run this is this transformer tricks repo. So
+[12:35] uh it has different algebraic tricks like I explained, as well as this paper
+[12:40] that I mentioned. And also there is the GitHub uh not the
+[12:45] GitHub, but the Hugging Face uh model repo where I've done this with some
+[12:49] models, and you can have a Hugging Face link to that model and test it out.
+[12:54] Um and what you also can do with this Hugging Face models is to deploy them in
+[12:59] production. And so when I was thinking about doing this, um
+[13:04] I realized that, okay, now that, let's say, the science is done and there is a
+[13:09] link to a Hugging Face model, um Superlinked's uh inference engine was
+[13:14] a cool way to actually deploy any um uh Hugging Face model, and we've done
+[13:20] this at hackathons where people would bring like a custom Hugging Face model
+[13:24] or checkpoint that they have with their fine-tuned stuff, and you can test out
+[13:28] like even if you have some version of this algebraic tricks that you want to
+[13:33] improve a model and test on test your own research ideas, you can actually try
+[13:38] that out and have a deployed version on a cluster of this model and not have to
+[13:44] worry about this glue code around deploying models.
+[13:49] So, that's um pretty cool. And the the point is that
+[13:53] if you have the full cluster open source and the model inference open source, you
+[13:58] can actually test out this kind of maybe
+[14:02] more novel research ideas where if you want to
+[14:06] do kernel manipulation or
+[14:10] flash norm and things like that, it's much more difficult to do that do this
+[14:15] at a rented endpoint where you don't own the inference. It's you want something
+[14:19] that's portable and flexible to actually allow you to do this stuff, but it's
+[14:23] also production ready enough so that you can test things out at scale.
+[14:29] And you can, for example, use site to combine this with other models like, as
+[14:34] you can see in the top left, there is you can have this flashified models with
+[14:39] different other models to do agentic tasks if you want and kind of do that
+[14:44] end-to-end bigger use case. And the way site works is this
+[14:49] production cluster helps you deploy the models, so you can have a look at site's
+[14:54] repo as well for more details on this. Um and also there is a smarter queuing
+[15:00] mechanism that helps you, especially if you work with smaller models cuz when
+[15:04] doing the flash norm stuff, I worked with like smaller llama models and also
+[15:09] with small agents from hugging face. So, having a way to deploy
+[15:15] smaller models that can also work on like the same GPU so that you don't have
+[15:19] to spend your money on GPU cost, but
+[15:24] actually kind of switch models around, especially smaller
+[15:27] models. It was quite useful. And you can also control the model
+[15:32] configs through an API as well as the cluster, which is also pretty convenient
+[15:36] without having like an infra guy supporting you in your open source
+[15:40] research. So, that's cool as well. Um, and you own your cloud, which is
+[15:46] useful if you want open weights, open models, open source.
+[15:51] And there's also like a catalog that Sci has of different models, um, not just
+[15:56] the ones I mentioned, but you can have a look. There's also re-ranking embedding
+[16:00] models if you're building something along those lines.
+[16:04] And with that I'm kind of finishing this story of my research journey where
+[16:10] I co-authored this paper, um, around the technique that improves
+[16:14] the transformer, but also found a way kind of to bring this to, let's say,
+[16:19] production and test it out and find a way to play around with this open source
+[16:23] models. And feel free to contact me on LinkedIn, maybe if you have any
+[16:28] questions or contributions. A lot of this stuff that I've mentioned, like
+[16:32] some of them are PRs on like vLLM or on Hugging Face. You might find them all
+[16:37] around. You can also see the check out the paper. That's the archive link that
+[16:42] you have there. Um, and you also have the Sci repo and my LinkedIn.
+[16:47] Um, so thank you very much for attending.
+[16:53] >> [applause] [cheering]
+[16:57] >> And you can catch me for questions. We'll be here, close by.
+[17:16] >> [music]

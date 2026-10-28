@@ -1,0 +1,345 @@
+# title: Can LLMs Write Fast Multi-GPU Kernels? — Simran Arora, Together AI
+# source: https://www.youtube.com/watch?v=pOvWgX7IJsc
+# speaker: Simran Arora, Together AI
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T05:44:36Z
+# sha256: c565cbf44fd06d7c99224f5edc1972d19445827c05ae5da6e1336ad422dbe8ce
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:01] [music]
+[00:12] Hi everyone. Uh, sorry it's a bit loud in here. Was not expecting this. Um, I'm
+[00:18] Siman. I'm a principal scientist at Together AI. Um, I previously did my PhD
+[00:23] in the Hazy Research Lab with Chris Ray at Stanford and I'm an incoming
+[00:27] professor at Caltech. Um I lead the frontier performance research team at
+[00:33] together where we develop systems, frameworks and algorithms to extract as
+[00:37] much performance as possible out of modern um AI hardware. Today I want to
+[00:42] share a little bit about our contributions towards simplifying the
+[00:46] development of uh multi-GPU AI kernels. A few years ago, um, GPU utilization
+[00:54] used to be limited by poor intraGPU memory access and single GPU kernels.
+[01:01] But with significant investment in better kernels like flash attention, uh,
+[01:06] memory efficient architectures like from deepseek, sparse attentions, mambas and
+[01:11] so on, um, and better DSLs, we've sort of shifted the bottleneck to multi-GPU
+[01:17] communication.
+[01:21] During this talk, I'll start by telling you a little bit about why now, why GPU
+[01:26] networking now. Then I'll tell you about um the sort of problem space. So what
+[01:31] are the challenges in maximizing hardware utilization and development
+[01:35] simplicity for multiGPU kernels. Um three, we'll talk a little bit about the
+[01:40] fundamentals be behind designing effective multiGGPU kernels. Four, we'll
+[01:45] look at whether frontier AI models can uh leverage these fundamental
+[01:51] principles. Do they understand them? Can they reason about them? Um, you know, in
+[01:55] theory, these models are very good at reasoning. Um, and then five, we'll talk
+[02:00] through the results of these frontier models on a benchmark that we've
+[02:03] developed called um parallel kernel bench for multiGPU kernel generation
+[02:08] evaluation.
+[02:12] Okay, before we dive into those five parts, just basic preliminaries. So,
+[02:17] this is an Nvidia GPU, uh, an H100 GPU that you can see on the screen. Um, I
+[02:24] always like to help ground people in GPU kernels via looking at the hardware. So,
+[02:30] these rainbow colored dots are processors where actual compute is
+[02:34] happening. um all of the you know parallel threads are operating within
+[02:38] one of those colored dots and there's typically you know 100 200 of them on
+[02:44] modern AI GPUs. Um around those processors you can see
+[02:50] um some of the memory that these processors retrieve data so large
+[02:55] weights activations from. So these rectangles between the colored dots are
+[03:01] an L2 cache slightly faster memory. um not a ter like crazy large amount of it.
+[03:07] And then these black boxes are high bandwidth memory. So when you Nvidia Smi
+[03:12] and see you know 80 gigabytes, 1008 gigabytes, whatever it is on your GPU,
+[03:17] that's that memory. Um a GPU is operating a highly parallel
+[03:23] program. So multiple threads are combined together in uh into larger
+[03:29] coarser units. and we schedule these threads and and blocks onto these
+[03:34] processors to perform our AI compute. Beyond the GPU, we'll have multiple GPUs
+[03:41] and we'll also have, you know, CPUs um that have memory as well.
+[03:49] Um so to perform computation um the memory that these threads use is going
+[03:55] to be stored in a really fast register memory that's right next to the
+[03:59] computation units. um simple physics if I am pulling data from very very close
+[04:06] to my proc my compute unit it's really fast to get to it because it you know
+[04:10] that data is right next to me but there's not a large radius and not a
+[04:14] large volume of space that's close by to my process uh my my compute units and so
+[04:20] I don't have very much of it so you can see that the fastest memory here the
+[04:24] registers is sup is you know 130 terabytes per second on an H100 but we
+[04:29] don't have very much on of it and as we go to the further away memory we have a
+[04:34] lot more of it but it takes longer to reach it. Uh again simple physics.
+[04:40] So in multiGPU systems in particular um there is a hierarchy of interconnects.
+[04:46] So we will have something called PCIe um as the channel for CPUGGPU
+[04:51] communications. We'll have multiGPU or multi- uh node communications over
+[04:57] infiniband TCP and then in the we're going to focus mostly on the Nvidia
+[05:03] sphere here. Um in uh the intraGPU regime we'll have NVLink um providing
+[05:09] point-to-point connections between GPUs and the NV switch. NV switch connects
+[05:15] all NVLink in endpoints into a non-blocking fabric for full GPUGGPU
+[05:21] communication and NV switch is exciting because it also provides support for in
+[05:26] network offdevice acceleration for oper like communication primitives like
+[05:33] multiccast and reductions.
+[05:37] Okay, so diving in with the preliminaries in mind. Why GPU
+[05:42] networking now? So as I mentioned at the beginning,
+[05:46] we've really put a lot of effort into making AIO uh more efficient over recent
+[05:52] years. Um again, we have uh architectures that use less compute,
+[05:57] less memory like Mamba or sparse attentions. We have algorithms that make
+[06:02] AI more hardware affair aware like flash attention. We have tools to make it easy
+[06:08] to map AI algorithms to the hardware like tileang, mojo, triton, gluon,
+[06:13] thunder kittens. Um, and we have new techniques to overlap uh execution
+[06:19] across many AI operators very tightly like mega kernels. And we also have
+[06:24] tools to make it easy to run on multiple vendor and silicon platforms like
+[06:29] thunder mittens for Apple silicon or or hipkittens for AMD and so on.
+[06:35] Um, at this point we really believe that GPU networking offers many new and
+[06:40] exciting opportunities for AI efficiency.
+[06:45] Modern AI workloads are getting very big and require kernels that span multiple
+[06:50] um, you know, GPUs. So on many production um distributed training and
+[06:56] inference workloads, communication is increasingly consuming the majority of
+[07:01] the runtime and yields low model flop utilization at scale.
+[07:08] So the uh pace of innovation and diversity of approaches that different
+[07:13] hardware providers are taking in their networking stacks is another reason why
+[07:17] it's an exciting time to study um you know networking and communication. So we
+[07:22] can see here um AMD hardware with uh what's called XGMI interconnects um
+[07:29] providing pointto-point links between different GPUs in a scaleup domain. We
+[07:35] can see here TPU and uh interconnect uh as well. So the TPU will use a 3D Taurus
+[07:42] and also have optical wraparound links. So yet another diverse form of the
+[07:48] topology and links. Um and then again for Nvidia we'll have the INV um switch
+[07:54] which integrates um compute capabilities directly into the interconnect fabric
+[08:00] like for in network reductions and then we'll have our NV link providing up to
+[08:05] you know 900 gigabytes of unidirectional bandwidth between any two remote GPUs
+[08:10] high bandwidth memory um on you know particular generation of Nvidia hardware
+[08:19] um Beyond the diversity in the networking stacks, there's also a lot of
+[08:23] evolution in um how AI workloads are adapting to take advantage of this
+[08:29] hardware and the diversity of types of um you know hardware that we're we're
+[08:34] using simultaneously for one AI workload. So um KV cache memory in
+[08:40] modern inference systems is going to beworked across GPU, CPU, disk and
+[08:44] remote machines. um inference systems increasingly disagregate different steps
+[08:50] of inference across different hardware backends. So you could run speculative
+[08:54] decoding on some hardware, decode on different hardware, prefill on different
+[08:58] hardware. Um hardware is also evolving to have larger scaleup domains than ever
+[09:04] before with you know 72 GPUs and a scaleup domain in in the coming um chips
+[09:10] and Nvidia planning on a single system in 2027 with 576 GPUs.
+[09:17] Um at the same time to take advantage of these more uh intensive scaleup domains
+[09:22] we're getting richer uh primitives for fine grained control and kernel writing
+[09:27] over these domains. So we have something called tensor memory acceleration where
+[09:32] we can provide uh perform asynchronous network transfers from the device side
+[09:37] um on these GPUs. So all of these changes are opening up
+[09:42] new opportunities and challenges in um both AI you know how do we build models
+[09:48] that take advantage of these trends and in systems.
+[09:53] Okay, so the problems that we're going to go after um how do we get peak
+[09:58] hardware utilization and also development simplicity um for these
+[10:03] multiGPU kernels. So um it's been very difficult to write
+[10:10] multiGGPU kernels and there's a lot of there are a lot of papers a lot of
+[10:14] systems reports that document you know challenges here. Um, one of the things
+[10:19] here is it's compounded by the fact that communication hardware around GPUs has
+[10:24] progressed a lot more slowly relative to compute and memory. Um, so comparing
+[10:30] NVIDIA A100's in 2020 to B200s in 2024, u BF16 tensor core speeds improved by
+[10:39] 7.2x. um while intra node communication by
+[10:43] just 3x and inter node communication by just 2x. Um and coming back to my points
+[10:49] about how diverse networking is right now things like tensor cores that run
+[10:54] map moles and our memory hierarchies are pretty consistent and resemble one
+[10:59] another across diverse AI vendors and multisilicon. Um but again as I I
+[11:04] mentioned the networking stack is something that is really different
+[11:06] across vendors still um you know a first step as we went
+[11:12] about all this work is to just study the baselines um that are out there. So um
+[11:17] one of the popular tools for um communications is this nickel library or
+[11:24] Rickle on AMD um that both you know companies respectively spend a lot of
+[11:29] you know engineering investment into releasing to make it easy for people to
+[11:33] do multiGPU work. Um but they're not very flexible. So they're tuned for bulk
+[11:38] transfers for large contiguous chunks of data transfers. And the design really
+[11:44] breaks down when you care about peak performance, fine grain communication,
+[11:48] um, and sort of non-trivial collectives that you want to fuse together.
+[11:54] So as a result, you can achieve much higher performance by writing custom
+[11:58] communication kernels that directly address these needs.
+[12:03] If we look at a naive baseline that's representative of very popular libraries
+[12:08] in machine learning stacking pietorch with nickel um we can we find that
+[12:13] across um you know the many uh problems in our parallel kernel bench benchmark
+[12:19] that the majority of these um simple baselines will fall below 50% of their
+[12:26] communication aware roof line bound. So there's a lot of room for improvement
+[12:32] here. Um the current frameworks beyond um
+[12:36] nickel which is popular in like Megatron LM, Flex Flow, Nanoflow um you know all
+[12:43] again these systems are primarily orchestrating bulk collectives via
+[12:47] nickel um and require synchronization before and after data transfers. So
+[12:52] beyond th those off-the-shelf libraries, we have compilers and DSLs that exist.
+[12:58] So there's Triton distributed is one of them. Um and uh you know tile link is
+[13:04] another one. Um we have found that it's very difficult to support the rapid pace
+[13:10] of networking improvements within these frameworks. So our benchmarks and our
+[13:15] papers highlight results where Triton distributed originally tuned around 8 uh
+[13:20] H800 GPUs fails to adapt efficiently to other architectures like H100s.
+[13:27] And then the third category of how people can proceed here is to really
+[13:32] handtune specific AI operators one by one. So there's a lot of popular work um
+[13:38] DPP um comet ring attention um flux flashdoe
+[13:45] um and then several distributed gem kernels from cutless and these methods
+[13:50] achieve peak performance but often um they do not you know some of these
+[13:56] methods have been designed in one precision and it takes five or six
+[14:00] months to scale it to another precision and just the scalability of this hand
+[14:04] tuning and um fine grain kernel writing is not very um effective.
+[14:10] So um with this landscape in mind, our research question was really about
+[14:15] whether there is a small set of principles and fundamentals that really
+[14:20] governs multiGPU kernel writing and whether there are methods that can
+[14:25] leverage those principles if they exist to simplify the development of these
+[14:29] kernels. Um I'll briefly highlight two works here
+[14:34] that um govern like that that represent our approach. So first we think it's
+[14:40] important to build our own fundamental understanding and to manually do the
+[14:44] work to understand it rather than just throwing say an LLM at the problem. So
+[14:50] we spent the time to build out parallel kittens which is a small set of minimal
+[14:55] primitives and patterns for multiGPU kernels. Um we use this to understand
+[15:00] the trade-offs of multiGPU kernels and to one write a large collection of um
+[15:06] peak performance kernels for a variety of parallelism schemes. Um and this I
+[15:12] will use to hopefully you know educate and bring us all on the same page on
+[15:16] what patterns we figured out. Um and then once we found that there is indeed
+[15:22] a small set of trade-offs governing this landscape, we were curious whether
+[15:26] models, especially these models right now that claim to be very good at kernel
+[15:31] writing and also reasoning um could reason about these trade-offs when we
+[15:36] provide them in context to actually generate a bunch of net new multiGPU
+[15:40] kernels for us. Unfortunately, we found they were not very good, but we'll dive
+[15:45] into more of that at the end. Um so just the fundamental section this
+[15:50] is going to be more you know educational what are the trade-offs that go into
+[15:54] these kernels. So there are three main ways to do um
+[15:59] intraGPU data transfers. Um there's the per GPU what's called copy engine and
+[16:06] this is host or CPU initiated work. It's really good for large message transfers.
+[16:12] So when your message size, the amount of data being transferred is really big um
+[16:17] and it can get to sort of like peak bandwidth um on on the communication
+[16:22] side. In contrast, you can use device initiated or GPU initiated transfers via
+[16:28] that tensor memory accelerator that I mentioned or via register level
+[16:32] instructions called uh in sort of their PTX lingo like LDST red multime. Um, and
+[16:40] the uh T TMA is really nice. These device initiated ones are really nice
+[16:45] because they can saturate our NVLink bandwidth using relatively small message
+[16:51] sizes. And this means that they can be really nice when we're trying to do fine
+[16:55] grain communication rather than sending bulk amounts of data over the links all
+[16:59] at once coarsely. Um, there are some trade-offs here. So
+[17:05] the copy engine is really nice because it doesn't take away or you know waste a
+[17:10] lot of our precious registers that I mentioned are important for compute on
+[17:14] the GPU. Um and it doesn't also use any of those rainbow colored dots the
+[17:20] processors on our GPU allowing us to repurpose those for memory or um
+[17:25] computation on our uh you know other parts of the AI pipeline. Um, TMA, the
+[17:31] second option here, consumes very few registers, which is why it's nice. Um,
+[17:36] and it also can achieve high utilization using very few of our processors. So,
+[17:41] it's a nice useful tool for fine grain overlapping. Um, TMA does have
+[17:47] limitations. It can't effectively take advantage of these in network um,
+[17:51] computations that I mentioned are feasible with technologies like NV
+[17:55] switch. And the register level instructions are really nice for being
+[18:00] able to take advantage of um you know those those sort of in network
+[18:05] reductions that NV switch offers. So again there are different tradeoffs
+[18:11] different functionalities that these transfer mechanisms offer and they face
+[18:15] different trade-offs. Second um beyond transfer mechanism the
+[18:21] trade-off is around how to overlap compute memory and uh communication in
+[18:28] GPU kernels. So there's two main categories of schedules. The first is
+[18:34] intraSM within one of those rainbow dots um where we'll we'll have different
+[18:39] warps or threads within that processor specialized to handle either compute or
+[18:45] one specialized for communication concurrently. Um we can dedicate you
+[18:49] know different warps to each of these. The challenge with this intm overlapping
+[18:55] is that the communication and computation pattern really need to like
+[18:59] align and jive with one another. they need to use the same data as inputs for
+[19:04] the computation and communication. When they don't align, you could use
+[19:08] something like interm um schedules that are shown on your right here where we'll
+[19:15] now have each of the different rainbow colored dots on our GPUs, those
+[19:19] different processors specialized to compute communication and memory. Um and
+[19:26] so this this is nice when the colonel would others wise need to split across
+[19:31] resources like the register file or shared memory um across these different
+[19:36] steps in misaligned ways. Um this is also really nice when it's
+[19:43] hard to maximize NVLink traversal with intram
+[19:47] overlapping. So I just wanted to highlight one quick
+[19:52] example here where each of the patterns excels in popular you know AI uh uh like
+[19:57] kind of patterns that you'll see. So on a gem plus uh reduced uh scatter here we
+[20:04] can see that the um intraSM overlapping scheduleuler schedule is very effective
+[20:11] in the gem plus all reduce we can see that the interSM which again leverages
+[20:17] the in network reductions of envy switch is very effective. So we face these
+[20:22] trade-offs and you can read more about um the design decisions that go into
+[20:26] them in our parallel kittens paper. Um, and then finally, ideally,
+[20:31] abstraction should allow the developer flexibility to control how they're
+[20:35] buffering and synchronizing between data senders and receivers.
+[20:41] So, we encapsulated these ideas into parallel kittens. Again, a simple set of
+[20:46] programming primitives and templates for these multiGPU kernels. Parallel Kittens
+[20:52] is used in production at Together AI as well as our partner um you know Cursor
+[20:57] and other uh companies in the AI space. Um here's some sample code. I won't
+[21:03] spend too much time here, but we usually add roughly a dozen lines of code over a
+[21:07] single GPU kernel to insert these multiGPU primitives.
+[21:13] Um, and you can see here across data sequence and expert parallelism how our
+[21:19] parallel kittens kernels are achieving state-of-the-art results um, compared to
+[21:24] strong reference baselines. And you can check out our repo to learn more.
+[21:30] Okay, so we understand a little bit about um the trade-offs that underly
+[21:35] these multiGPU kernels and there's just a couple main, you know, ones that
+[21:39] exist. So can models reason through them um and give us these uh you know kernels
+[21:45] models are getting better at reasoning today. Um do they generalize well to
+[21:50] these problems or are we benchmaxed on you know benchmarks of the past which
+[21:55] are more single GPU centric uh models right now are showing really
+[22:00] promising results on single GPU uh benchmarks. So it's a ripe time to to
+[22:05] extend it. In our benchmark parallel kernel bench,
+[22:10] each task presents the model with an unoptimized reference implementation
+[22:14] written in PyTorch with torch distributed um nickel operations and
+[22:19] then a system topology that specifies the number of ranks and intraode
+[22:24] hardware configuration. And the model needs to rewrite the reference into a
+[22:28] performance CUDA kernel that uh uses unified virtual addressing.
+[22:37] The um multiGPU problem space expands combinatorally beyond single GPU um
+[22:44] cases. So a standard transformer layer can be parallelized across data
+[22:49] sequence, tensor, context, layer, pipeline and expert dimensions. and each
+[22:53] composition um induces a different communication pass uh pattern. So to
+[22:58] make sure that our benchmark has high coverage over the representative types
+[23:03] of multiGPU problems um we created this taxonomy um that you can read more about
+[23:09] in our paper and then picked representative problems for each part of
+[23:12] the taxonomy. Um these are all patterns that arise in
+[23:18] real AI workloads from inference to RL to post-training.
+[23:23] There are 87 problems overall um drawn from GitHub repositories that we found
+[23:29] to be very informative. Um and we uh and like optimized library implementations
+[23:36] and DSLs that people have written multiGPU kernels in.
+[23:40] Um, we wanted to really make sure that solving PK this parallel kernel bench
+[23:45] would lead to net new useful production kernels rather than artificial or
+[23:49] useless kernels. Okay, so that's parallel kernel bench.
+[23:54] How do models perform?
+[23:58] So we measured to sorry that this is a bit small. We measured two main metrics.
+[24:03] Um pass at K which is the number of correct kernels generated after K
+[24:08] attempts and then fast um one at K which counts solutions that are both correct
+[24:16] and outperform the speed of the pi torch plus nickel baseline.
+[24:21] Um so pass K just correctness fast one at K is whether you're getting a 1x or
+[24:28] higher speed up over the reference. So performanceoriented
+[24:32] um we found that in the zeroot setting the best of the frontier models we tried
+[24:37] solves 28 out of 87 problems and 22 of those problems are faster than the
+[24:42] pietorch plus nickel baseline. If we make multiple samples, you know,
+[24:47] standard uh scaling up test time compute, we can uh get that number from
+[24:54] say like to to 36 correct solutions, but the fast uh one performance still
+[25:01] plateaus out at roughly 31%. So we don't see much room from continuing to scale
+[25:07] there as we increase the number of parallel generations.
+[25:12] Um we find that the correct once correctness is established um speedups
+[25:16] naturally come from eliminating nickel staging overhead in favor of direct
+[25:20] NVLink loads in stores. Um the success patterns here are really
+[25:27] concentrated into familiar patterns. So collective primitives, tensor parallel
+[25:32] gems and Ulyses style context parallelism. So in other words, patterns
+[25:37] that we see heavily represented um on the internet rather than necessarily
+[25:43] patterns that the model has used its reasoning abilities to think through.
+[25:50] Okay, even the best available model that we benchmarked here GPT 5.5 drops off
+[25:56] very quickly as the speed up threshold increases. So on the x-axis here, we're
+[26:02] increasing the speed up threshold over that pietor torch plus nickel baseline.
+[26:07] And then we're showing the number of correct kernels that are faster than
+[26:11] that baseline or this much faster than the baseline on the y-axis.
+[26:16] So GPT 5.5 is this orange line here and then DeepSeek V4 Pro is the aqua line at
+[26:24] the bottom.
+[26:28] um we found that there's deeper issues than CUDA syntax. So we found that if
+[26:34] you do multiple sampling or have the model kind of look at its errors and
+[26:38] correct them, it can often compile the kernels. But the models really struggle
+[26:44] to reason through the tradeoffs that we talked about in the prior section. um
+[26:48] collective ordering, data partitioning, thinking about intra versus interm
+[26:53] scheduling or deciding between the different transfer mechanisms. Um we
+[26:58] find that they often do not use things like the register transfer instructions
+[27:02] or tensor memory acceleration when writing the kernels.
+[27:07] Um we wanted to try a pretty simple instantiation of something like a clawed
+[27:12] code um coding agent. So, we took uh the mini sui agent multi-turn harness and
+[27:20] one of the best performing models, Gemini 3 Pro, and gave it access to a
+[27:24] local bash environment to sort of mimic the standard claude code setup. We found
+[27:29] that this could help the agent um go from solving 24 problems to 35 of 87
+[27:36] problems um with um 26 achieving over a 1x speed up over the reference. But we
+[27:44] found that as we scaled the amount of time um the performance plateaued as uh
+[27:50] and we find that additional techniques would be required to continue seeing the
+[27:54] scaling there. Again these results are discussed in more detail in our paper.
+[28:00] Um we think this is a really exciting you know just to wrap up here we hope
+[28:04] that people out here can use both parallel kittens and parallel kernel
+[28:07] bench. We think that the kernels generated from solving parallel kernel
+[28:11] bench will lead to net new production kernels that are important bottlenecks
+[28:16] for inference in RL right now. um they're you know we tried our best to
+[28:21] make them you know non-artificial and we can already see signs of life and
+[28:25] exciting results where people have not invested a bunch of time to handw write
+[28:29] a multiGPU kernel and we've gotten some net new interesting ones like this Nemo
+[28:34] vocab parallel um you know filtering kernel um a hyena architecture context
+[28:41] parallelism kernel and uh the SAM 3 video segmentation
+[28:48] model um IOU suppression kernel. Just to conclude here um we're really
+[28:54] excited about um how uh well just talking about the lessons. First off, we
+[29:00] think there aren't that many patterns that are involved in writing intragpu
+[29:05] effective kernels again encapsulated by our small set of programming primitives.
+[29:11] Um, but unfortunately models do not currently understand how to reason
+[29:15] through these trade-offs even when we provide them in context. Um, we're
+[29:19] really excited about methods that can help attack this benchmark. We're
+[29:23] excited about architectures that can grow with the trends of how networking
+[29:27] stacks are evolving. Um, you know, larger scale up domains shift away from
+[29:32] scale out um and massive onchip memory structures. And we hope that uh you know
+[29:38] we can also extend and you you can feel free to reach out to me at my email.
+[29:42] Thanks.

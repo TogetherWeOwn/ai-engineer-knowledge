@@ -1,0 +1,192 @@
+# title: CI in the Era of AI: From Unit Tests to Stochastic Evals — Nathan Sobo, Zed
+# source: https://www.youtube.com/watch?v=WXy8Yy9xGss
+# speaker: Nathan Sobo, Zed
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T12:36:16Z
+# sha256: be1d2f95adf4defaba6599fb03aa7a02dc9a30f6eb6b81634b23ad0a79b09e89
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:00] [Music]
+[00:14] Hey everybody, thanks for coming to my talk. Uh, I am Nathan Sobo. I'm the
+[00:20] co-founder of Zed. We are an AI enabled code editor. And what sets us apart is
+[00:25] we are not a fork of VS Code. We are implemented from scratch.
+[00:31] [Applause] uh implemented from scratch in Rust. We
+[00:35] literally engineered the entire system like a video game around about 1,200
+[00:39] lines of shader program that run on the GPU and the rest of the system is
+[00:42] organized to deliver frames at 120 frames per second really quickly. And
+[00:47] recently I recorded a video because time is short and I this is obviously sped up
+[00:52] massively but we launched Agentic Editing in Zed and I wanted to talk
+[00:56] about the approach that we took to test this uh and be empirical and deliver a
+[01:02] reliable product that does this effectively. So here's what we're going
+[01:05] to be talking about. The rest of the talk is going to be looking at code and
+[01:08] just talking about our experience. Um so testing evaluation what's the
+[01:16] difference? Um first I just want to start by saying like without an
+[01:20] empirical approach to the software that we've been building since 2018 2021
+[01:25] depends on how long you measure it zed would crash every 8 seconds like uh we
+[01:30] have probably tens of thousands of tests at this point. And here's an example of
+[01:34] the extreme to which we take empirical software development. We literally are
+[01:38] starting a server, creating two clients, and we have a simulated scheduler that
+[01:43] gets passed in here and we run 50 different iterations of this with every
+[01:47] random interle of anything that could possibly be concurrent. Um, so that if
+[01:52] the 375th, thousandth, and this is only 50, but uh iteration of this particular
+[01:58] interle of network packets um goes wrong, we can replay that over and over
+[02:03] again, freeze it, and have full control. So we're very hardcore about testing and
+[02:08] being empirical at Zed. But up until very recently until shipping some of
+[02:12] these AI related features, we've been able to be fully deterministic. Even
+[02:17] with sort of non-deterministic things, we've been able to really lock things
+[02:20] down and never have flaky tests on CI. But as soon as an LLM enters the
+[02:25] picture, that's all out the window, right? because we could like you know
+[02:31] assuming that we're using you know uh frontier models but even if we were to
+[02:36] use our own model and to like control the sampling off the lojits you change
+[02:40] one token in the input and you're going to get a completely different output. So
+[02:44] it's just a fundamentally different problem where we have to embrace
+[02:47] stochastic behavior. And so as we built this system, our first eval that we
+[02:52] really hammered on was something that if you've seen something like SWE probably
+[02:56] looks pretty familiar. It's very datadriven. And it seems like in the
+[03:00] machine learning world like this is what an AVAL is. Input output. But in the
+[03:05] programmatic software world, an eval is more like a test that passes or fails.
+[03:11] like we come from this very different perspective of automated testing and so
+[03:16] right away you know we had this traditional datadriven eval and then
+[03:19] backing that you know in the same program we al uh that runs all these
+[03:23] eval basically compiles a headless copy of zed checks out a repo runs the agent
+[03:29] tries to make it do things um we right away got into like making the eval more
+[03:34] programmatic you can see here the conversation is literally a function and
+[03:38] then our ability to sort of come in here and write code that performs assertions
+[03:44] about what the agent did. Even, you know, getting a quite a bit more
+[03:49] granular because the problem is when that big aval fails, it's like what do
+[03:52] we do? There's a million ways that that thing could go wrong. And so when we
+[03:57] wrote this eval, we were able to drive out uh one really simple failure mode,
+[04:01] which is when we run the GP tool, this is what our original like dumb
+[04:06] implementation of the GP tool looked like. So you can see in this case we're
+[04:09] saying we want to add uh a window argument to this tool run trait method
+[04:15] in this particular file name right but if this is what the model sees then
+[04:20] we're in trouble right and so what we ended up you know driving from this
+[04:26] stochastic test here is a more deterministic test right where I'm going
+[04:32] to go ahead and set up the project uh perform this search for fn run and Then
+[04:38] uh we use tree sitter which is um Max's parsing uh parser generator framework to
+[04:43] actually expand out the match to the syntactic boundaries. Um and so that was
+[04:49] able to you know drive a a substantial improvement in the behavior of the
+[04:54] agent. So right there like that was an interesting discovery of just being
+[04:58] empirical and driving out what was ultimately an algorithmic problem with a
+[05:03] stochastic test. But then we moved on to the editing. And when we first
+[05:06] implemented editing, it was just done with tool calls. But the problem with
+[05:10] tool calls, if anybody's worked with them, is they don't really stream very
+[05:14] well. Like you get p value key P key P
+[05:17] key P key P key P key P key P key P key P key P key P key P key P key P key P
+[05:17] key P key P key P key P key P value and it all comes back at once. So we what we
+[05:21] ended up doing is deciding instead we perform a small tool call that just
+[05:25] describes the edits. Then we loop back around for the moment to just the same
+[05:30] model because it has everything already loaded in its cache and ask it to emit
+[05:34] these old text new text blocks. Um, but there's some challenges there like now
+[05:39] we have to parse that data is coming back and all kinds of weird stuff that
+[05:43] the model's going to be doing. So I'll just dive in and show you um some of the
+[05:48] examples. So here's like uh there were a bunch of different uh
+[05:53] tests like these are part of our main regular old test suite and we just added
+[05:58] this eval function and we say I want to run this eval 200 times and in this
+[06:03] particular case didn't start this way but eventually we got this way we want
+[06:08] 100% of these 200 examples to pass or this test should like literally fail the
+[06:13] build. So we kind of set a watermark that way. And then here you can see I'm
+[06:18] just like loading in a conversation with the LLM. Um and then ultimately uh in
+[06:24] this case I'm using uh eval as judge but there are some cases you saw earlier
+[06:28] where we do things more programmatically. This case we're just
+[06:31] like verifying that this thing worked correctly. Um and so we go from a test
+[06:36] like this a stochastic test into the particular problems um that drive this.
+[06:42] So I mean but it's funny a lot of the things that went wrong here were really
+[06:46] just like basic things right like and so again these are things that we can
+[06:51] they're non-deterministic but the non-determinism is non-determinism
+[06:55] is sort of bounded. So in this case, we're going to run a 100 iterations of
+[07:00] this very simple parsing test where we're randomly
+[07:04] chunking up the input into arbitrary boundaries and just making sure that the
+[07:09] parser for this data u you know can handle arbitrary chunking of of the
+[07:14] text. Similarly here fuzzy matching algorithm that's a critical piece of you
+[07:21] know if the model's fuzzy or generates something slightly wrong. Being able to
+[07:26] do this dynamic programming that gets us an approximate match really saved a lot
+[07:32] of the tool calling failures for us. But again something that could be
+[07:36] deterministically tested. And then finally, there's this idea of a
+[07:39] streaming diff that as the model is emitting new text, we need to be care
+[07:44] comparing the new text it's emitting with the old text and then making a
+[07:48] dynamic decision of if I don't see some text is that in that was present in the
+[07:54] old text, is that because it was deleted or it just hasn't been streamed out yet?
+[07:58] So that's another, you know, completely uh deterministic thing that still was
+[08:04] critical to making the system work correctly. So yet another like
+[08:08] deterministic test. Um but then we get into some of the fun stuff with uh uh
+[08:15] the behavior of the model itself. So one thing that we noticed right away was um
+[08:21] the model when it was trying to insert at the top or the end of the document in
+[08:25] some cases would just have an empty old text tag which like if you're doing old
+[08:29] text new text matching is not very useful. And so we found that we were
+[08:33] able to just add this you know simple thing to the prompt and improve the eval
+[08:39] but again it would still do it you know one or two% of the time and so just
+[08:45] being able to test that uh you know we can handle that case robustly um you
+[08:51] know ended up being really helpful and this is just like again I'm in this case
+[08:54] simulating the output of the LLM. Um, uh, another case that we encountered a
+[09:01] lot was that it would mismatch the XML tags. And so we would have old text and
+[09:07] then it would end like this with new text. Um, and so again, we were able to
+[09:13] get a certain distance with the prompt. We initially were sort of 40% of the
+[09:17] time we were getting this mismatch and blowing up. We were able to move that by
+[09:21] saying always close all tags properly to like 95%.
+[09:26] But we still have that last like 5%. What do we do with that? And so again,
+[09:31] it's just like driving it into a deterministic test
+[09:35] where we have old text, new text, you know, and we need to just assert that
+[09:40] even though we got, you know, we just need to be robust and accept crazy stuff
+[09:44] from the LLM like uh in its output. Um, another interesting case was
+[09:51] indentation. So here's a naval that uh that we wrote which was this idea of
+[09:57] having an outer function and then inside here there's an inner function and we
+[10:00] have this to-do macro here and we want to say replace this to-do with return 42
+[10:06] and we would see the model doing things like this right where the indentation
+[10:10] level was completely flattened out right it says replace fn
+[10:14] inner but fn inner has like all this leading indentation on the front of it
+[10:19] um but otherwise like it's perfectly fine
+[10:22] And so in this case what we did is this strategy of like detecting this indent
+[10:28] delta. So we figure out basically we sort of renormalize the indent if
+[10:34] that makes sense. So if the text in the buffer is indented by a certain amount
+[10:38] but we otherwise match then we also detect the text in the that the LLM
+[10:43] emitted and compute this delta. And then again driving it back to a deterministic
+[10:49] test of um here we build a buffer with Lauram ipsum doler sit with this very
+[10:56] interesting indentation pattern and then you can see here we want to replace
+[11:01] ipsom dollar sit with ipsom dollar derit a met where it's outded right and you
+[11:08] can see that when we actually do our uh indentation normalization we're able to
+[11:13] handle that correctly Um, another tricky thing that we ran into was this weird
+[11:18] escaping behavior where in these certain cases where we have weird constructs
+[11:22] like this is a Rust um sort of a raw string basically that can include uh
+[11:29] things like quotes inside of it due to this interesting escaping syntax and
+[11:34] doing something as simple as saying just like tweak this. We would notice this is
+[11:38] the behavior we want. we would notice especially Gemini doing all kinds of
+[11:43] crazy stuff like doing HTML escape codes um doing this sort of backslashes
+[11:49] escaping yeah with new lines and stuff we would
+[11:52] see like you know uh crazy escaping that it would do uh double escaping the new
+[11:58] lines um and so in this case like we that was just a pure prompt fix and
+[12:04] didn't really we didn't try yet at least to kind of detect any of this escaping
+[12:10] any further although obviously like that's an opportunity yeah to keep going
+[12:14] even further. Um so yeah I mean from from my perspective like the lessons we
+[12:21] learned from this entire experience is that like
+[12:24] rigorous testing is fundamental to building reliable software period. uh we
+[12:30] have this new fancy parlance of like an eval which comes I think out of the
+[12:34] machine learning field of kind of input output and having lots of examples of
+[12:37] that but I think a lot of the techniques of just traditional good old-fashioned
+[12:42] software engineering are still really applicable but we have to embrace this
+[12:46] more statistical approach where we're running it 100 times 200 times and
+[12:51] asserting a threshold of pass versus fail um but I think I mean this is a
+[12:58] real world example of just the stuff that we saw trying to implement
+[13:01] streaming edits or an agent that can go search and edit. A lot of those problems
+[13:05] are not I don't know they're not advanced machine learning problems or
+[13:09] anything. It's just stupid things that the model will try to do that we need to
+[13:14] account for. Um, and so this I I think this motion of sort of starting with the
+[13:18] zoomed out eval then zooming into a sort of stochastic unit test that's still
+[13:24] random and interacting with the model but is more focused in on a particular
+[13:28] aspect of the experience and then finally that driving that even further
+[13:31] to an actual good oldfashioned test. That's been the process that we've
+[13:37] discovered, but we so far haven't needed to use like special external tools um or
+[13:44] eval frameworks or anything of like that. It's just in our test suite so far
+[13:49] and kind of using the same underlying infrastructure that's used to do any
+[13:53] other kind of software testing and honestly using just a lot of those same
+[13:57] skills. Um, so for us it was like just be empirical just like we've always
+[14:02] been, but it's this new X factor of the LLM doing all these crazy things. Um,
+[14:10] yeah. So that's that's a little story of how we and this is all open source, so
+[14:14] you can check it out. Uh, Zed is under the GPL license. I'd love help improving
+[14:19] it all actually. Um, maybe some of you are like, what are you doing? You could
+[14:23] do better in the following five ways. I'd love uh contributions if that's
+[14:26] interesting to folks. And um yeah, it's working. I'm uh with the Claude 4
+[14:33] models, I'm finally able to write Rust agentically really efficiently and I'm
+[14:39] just loving it. So um that's how we got there. I appreciate your attention.
+[14:48] [Music]

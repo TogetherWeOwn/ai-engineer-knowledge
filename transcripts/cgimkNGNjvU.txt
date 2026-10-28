@@ -1,0 +1,413 @@
+# title: Agentic Development Security — Ezra Tanzer, Snyk
+# source: https://www.youtube.com/watch?v=cgimkNGNjvU
+# speaker: Ezra Tanzer, Snyk
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T07:15:48Z
+# sha256: f8394e02455f8374bd6e50a05519adc7a551588709ed476b1e5ec8bb69cf06ec
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:01] [music]
+[00:12] >> I'm a product director here at Sneak and going to be talking to you about agent
+[00:16] development security and specifically talking about how we can gain confidence
+[00:20] when we use agents especially as we give them more autonomy. It's a very common
+[00:24] theme I've heard in this track and a number of the other tracks
+[00:27] today. Um
+[00:30] I'm not going to go through the full history of LLMs but the model context
+[00:33] protocol release was really big moment. Until then, I don't know what you guys
+[00:37] are doing but I was very often copying pasting between uh agent clients and
+[00:41] some other services and with MCP I think people really started to connect this
+[00:45] and have a much more really connected AI system. Um and I'm not saying that MCP
+[00:49] is the end-all-be-all and I may or may not may not have been amongst the people
+[00:53] who were saying that MCP would die at some point last year. Um but it has been
+[00:58] a game-changer in the sense that developers started to connect agents to
+[01:01] external tools and services. Um and at that time there really wasn't any
+[01:05] security to speak of. Like most companies we released an MCP
+[01:11] server almost immediately. Um
+[01:14] ours specifically enabled local directories to be scanned by our
+[01:17] security scanning engines. Uh developers could ask questions in natural language
+[01:21] about the security issues that were identified. They could learn why
+[01:25] specific vulnerabilities were important or how they might be exploited and then
+[01:28] work iteratively towards a fix. Um shortly thereafter we decided to pair
+[01:33] our MCP server with rules. Um and the rules basically ensured that
+[01:38] any AI generated code would be tested and if there were security issues
+[01:41] identified that they would be automatically fixed. It was simple, was
+[01:44] fast to deploy and it did solve a meaningful pain point for our customers.
+[01:48] Uh so that really was our original position secure agent generated code at
+[01:52] the moment of inception. Oops.
+[01:55] Uh Uh, but over the last year learned that this framing was really incomplete.
+[02:00] Um, our customers started telling us that they were not only worried about
+[02:03] the code that was being generated, they're also worried about what the
+[02:06] agent had access to, and then also the actions the agent might be taking.
+[02:11] Uh, so I'm going to just mention like briefly a few incidents that have come
+[02:14] up over the last last year or so. I think we've talked about them um in in
+[02:18] the keynote that Manoj gave earlier today, but also I think we've seen some
+[02:22] of these in other presentations, but just as a quick refresher, um about a
+[02:25] year ago, we saw um Replit's agent um ignore a code freeze instruction and
+[02:31] ultimately deleted a production database. It tried to cover up that it
+[02:35] did this, fabricated records uh to basically say like, "No, there was there
+[02:38] was no issue whatsoever." Um, and finally it said that there was no way to
+[02:42] recover. Fortunately, it turned out that that was wrong. They they were able to
+[02:45] recover, but the damage was still done. Then in April, I know we just we talked
+[02:49] about this just a couple hours ago, but uh there's the Packet OS incident. An
+[02:54] agent again found an an over-privileged API token, and that resulted in a
+[02:59] production database being deleted. The backups were also deleted, and so a
+[03:03] 3-month-old backup is what was could be used to ultimately uh you know, try to
+[03:08] get back to recovery. What's really interesting here is that the agent
+[03:11] wasn't acting maliciously, it was actually trying to solve a problem. It
+[03:14] was trying to solve what it perceived to be a credential mismatch, uh but there
+[03:17] was nothing in place to stop it. Those two examples were really about the
+[03:21] agent actions that might be taken, but that's not always the case. That's not
+[03:25] always what the attack surface is. Just last month, Team PCP was able to
+[03:29] exfiltrate uh almost 4,000 of GitHub's internal repositories using a malicious
+[03:34] VS Code extension. So, all of this and kind of us being in
+[03:39] the security space for the last 10 years and talking to our customers, um it's
+[03:43] really shaped how we think about what uh agentic development security and what
+[03:47] that really means. And our our belief is that in order to confidently use agents
+[03:52] for software development at scale and to start letting them operate more
+[03:56] autonomously in long-running tasks, whether it's just getting up to make a
+[03:59] cup of coffee or letting them run overnight, uh it's really critical to
+[04:03] secure what agents generate, what they use, and what they do. Um and I'll spend
+[04:08] a couple minutes talking about our journey in each of these pillars over
+[04:11] the last year, what we've learned, and uh and our current perspective.
+[04:16] As I mentioned at the top, um this has been our longest area of
+[04:19] experimentation and investment. It's securing the code that the agents
+[04:23] generate. Um and the reason for that is we don't want issues to make it to
+[04:26] production. We don't want to kind of increase that backlog, which has been so
+[04:30] challenging to manage and is now uh a luxury that companies just cannot
+[04:33] afford. Uh most companies do have security checks in their deployment
+[04:38] pipelines. Um and so even if they don't make it to production, we want to ensure
+[04:41] that bottlenecks are not getting in uh created at at those stages.
+[04:45] Um I mentioned our original approach, MCP server plus rules. Um it was really
+[04:50] easy to paste a an MCP configuration um and a rule definition. And and over time
+[04:55] we added shortcuts to make that even easier, and the agent clients actually
+[05:00] uh made it like simple commands to enable these configurations through
+[05:03] plugins or just simple simple CLI tools. Uh but the approach did have real
+[05:07] limitations. Agents sometimes ignored the rule files. Uh scan execution did
+[05:11] add latency at the end of its run. Um and every time that we ran scans through
+[05:15] the context window, that consumed tokens.
+[05:19] And so we were not the only ones dealing with these challenges, fortunately. Um
+[05:24] outside of security, these same pain points existed.
+[05:27] Um and the good news is that the agent client providers, they provided new
+[05:31] mechanisms for how to direct agents. Um primarily this has been in the form of
+[05:35] skills and hooks. I think everybody might have their own opinion on which
+[05:38] one you want to use uh for which, but they they really solve a lot of these
+[05:41] problems. Uh our current recommendation um is to
+[05:45] use Python-based hooks for this use case that can fire asynchronously on agent
+[05:48] tool calls. And so immediately after an agent writes a new file or modifies a
+[05:53] file, we can kick off a scan using our CLI, not even using the MCP server,
+[05:58] asynchronously. And that will write write any newly identified or newly
+[06:02] introduced issues to a temporary file. And finally, on the session stop event,
+[06:06] that's when a hook triggers the agent and it will check that temp file to see
+[06:09] if there were new newly introduced issues, and only then will it kick off a
+[06:13] fix and validate loop. So, now the workflow is deterministic. Latency is
+[06:18] removed because all that testing happens asynchronously. And again, because newly
+[06:22] introduced issues are the only thing that's being surfaced to that agent
+[06:25] context, the context window doesn't get any unnecessarily unnecessary bloat.
+[06:31] When we talk about agent supply chain, we're really thinking about the things
+[06:34] that help you build more connected agentic workflows. But like everyone's
+[06:38] been saying today, this is this also presents a new attack surface.
+[06:43] Last year, we acquired a company called Invariant Labs.
+[06:47] Um and following that, we produced a report
+[06:51] uh which you can access if you want with this QR code. You can also come and talk
+[06:54] to us um at our booth uh if you want to see this here. Uh there's many
+[06:57] similarities between package ecosystem risk, which is where kind of sneak got
+[07:01] its got its start, um and that of agent skills, but we really think that skills
+[07:05] are more problematic. Um they have higher privilege by default.
+[07:10] Natural language prompt injection cannot be detected through uh through through
+[07:14] typical code detection. Um and malicious skills can modify agent
+[07:18] memory. So, even if you remove a malicious skill, they can still persist.
+[07:22] That risk can still persist after the fact. Um and in an audit that we did of
+[07:26] nearly 4,000 skills on ClawHub, uh over one in eight had a critical severity
+[07:29] issue, and we actually found 76 malicious payloads uh in in that subset.
+[07:35] So, the solution that we built here auto-discovers all the agent components
+[07:39] on your machine. Um it if you have MCP servers
+[07:43] configured, it will connect to them, retrieve the tool descriptions, analyze
+[07:47] them to see what security risks are present. It will do the same thing for
+[07:50] skill files. We'll look at your skill.amdl files, see the dependent
+[07:53] files that are associated with that skill, and look to see what threats
+[07:57] might exist. I demoed this or I tried to demo this during Manisha's keynote
+[08:01] earlier. The internet didn't play super nice, so we showed a little video, but
+[08:04] we can show this in action afterwards as well.
+[08:08] Um, just in the last month we produced a report based on some anonymized data
+[08:13] following the release of the capabilities that I just mentioned.
+[08:16] Um, and I think these numbers are probably
+[08:18] going to be uh pretty low based on the expectations of
+[08:21] the group that we see here, but I think it's worth reminding you that not
+[08:24] everyone is as kind of AI forward as the folks that are attending uh
+[08:29] this this conference here. Uh, but kind of from the average developer we saw
+[08:33] that um more than half were using MCP servers and a fifth were leveraging
+[08:37] skills. Um
+[08:39] Beyond this adoption, one in 12 developers in this group had an MCP
+[08:44] server where there is either a high or critical severity finding identified in
+[08:48] that MCP server itself.
+[08:53] I realize this is probably pretty small, but just want to highlight that these
+[08:56] are some of the categories of risk that we look for when we analyze MCP servers.
+[09:01] And similarly for skills, there's a number of different risks that we can
+[09:05] also also look for. This happens to be one of the one of the
+[09:09] skill skills that I did an assessment of
+[09:12] during that recorded demo that we showed earlier. Very very risky,
+[09:16] malicious in some cases, but also just kind of maybe some negligent negligent
+[09:20] behavior that that could cause problems for me.
+[09:24] Um, the last leg of this stool for agent development security is govern governing
+[09:30] agent behavior. This is currently in open preview, and it's really focused on
+[09:33] how we ensure that an agent is not taking exfiltrated, destructive, or
+[09:37] otherwise malicious or risky actions. Um I'm choosing to show here the policy
+[09:43] configuration view because I want to highlight the actions that we are trying
+[09:46] to intercept today. Depending on how you use agents, the
+[09:49] types of policies that you set might ultimately be different. Um I think in
+[09:53] an ideal world, you're always able to steer an agent towards the right action
+[09:58] um and kind of making it's making so that the human does not have to be in
+[10:01] the loop. A really good example of that is redacting PII or secret before a
+[10:05] command executes. Um but in other cases, you actually may want that agent to ask
+[10:09] you uh because there's not a clear-cut answer.
+[10:12] Um and so if there is a potentially destructive shell command um or maybe if
+[10:18] the agent wants to access a directory that's kind of outside of the scope of
+[10:21] the permissions you initially gave, that's a good reason to ask.
+[10:25] But I think as we move towards more background agents and cloud agents being
+[10:28] ran where you're kind of trying to step away and trying to not be sitting at
+[10:32] your desk babysitting the agent entirely, um asks are much much less
+[10:37] viable option. Um and so this is an area that we're
+[10:40] going to continue to invest, but I think you know this is going to mean more
+[10:43] fine-grained policies, may also mean that we need some sort of auto
+[10:47] didacticism in the product, kind of a self-learning capability based on the
+[10:50] decisions that you make over time to help you become more autonomous.
+[10:53] Um but the short of it is that like today
+[10:56] we we are accountable for the actions that our agents take. Um and even in the
+[11:00] future if that accountability model becomes a little bit more shared, I
+[11:02] don't think any of us want to work at companies where um we are doing a
+[11:06] disservice to our customers and potentially letting our agents take
+[11:09] risky actions. Um and and nobody really wants to be the reason for one of those
+[11:13] incidents that gets widely publicized to to to occur.
+[11:18] Um so far I've been doing a lot of telling rather than showing and I think
+[11:21] for this conference we really want to focus more on more on showing where we
+[11:25] can. Uh so I'm going to invite my colleague Dan Arpino uh to come up and
+[11:29] and take over um and really show you some of the areas that we're exploring
+[11:33] for solving these problems. Um I want to be clear that what we're
+[11:36] showing is not committed roadmap things that are definitely going to be
+[11:40] available here, but we really want to show it to you so that you can give
+[11:45] some feedback to us and like is are we heading in the right direction? Like is
+[11:47] this the better way to solve these problems?
+[11:50] And hopefully this will ultimately mature into some of the solutions that
+[11:53] we can deliver to you to you all here.
+[11:58] And up here, any happy to take a question or two cuz we got to do the
+[12:02] laptop transfer which is always fun. Yeah.
+[12:15] Yes, so the question is what's the difference between steer and ask? There
+[12:17] in steer is the idea that there can be a policy that is defined that doesn't need
+[12:21] a human in the loop that it can basically guide an agent to say, nope,
+[12:24] instead of doing that let's do something different. So the the classic example
+[12:27] that I think is easiest for folks to understand is like what if I just redact
+[12:30] the PII or a secret replace it with asterisks and let the the kind of agent
+[12:34] proceed, but that's not going to work in all cases. Ask is going to be an
+[12:37] explicit prompt to the user either through the agent interface whether
+[12:41] you're using Codex or Claude or Cursor what whatever tool
+[12:45] or potentially through some other mechanism that that we're exploring now
+[12:48] as well.
+[13:02] Yeah, happy to talk kind of after here, but the the short of it is that we're
+[13:07] relying right now from an implementation perspective on hooks that can intercept
+[13:11] kind of a pre-tool execution in near real time, assess is this
+[13:16] actually potentially problematic, and then before the agent kind of invokes
+[13:20] the next thing provide that feedback to it. But happy to talk after here.
+[13:25] You in good shape? >> Yeah, cool. Hopefully guys can all hear
+[13:29] me. Um like Ezra said, my name's Dan Arpino.
+[13:32] Uh I am a software engineer at Snyk. Uh I'm one of the developers on the ADS
+[13:38] platform. Um and so I started out specifically
+[13:42] from that insured trusted output section. Basically like how do we ensure
+[13:45] that code is secure? Um and and as Ezra said, like we were
+[13:49] doing a whole bunch of hooks and and and integrating with the agents themselves.
+[13:54] And I was getting frustrated with all those integrations and so I decided to
+[13:57] try to build a little bit of a pair programmer right here. And so this is a
+[14:01] local electron app that I have running on my machine that's watching everything
+[14:05] that's going on on on my machine. You can literally see it's trying to fix
+[14:09] some vulnerabilities right now. It's watching the files. It's running these
+[14:12] scans in the background and it's automatically trying to kick off agents
+[14:16] to keep this secure. Um and so this is ideas like how can we
+[14:19] actually use the agents to help us? Um and then I decided to take this a
+[14:23] little bit further because like as Ezra said, insured trusted output was just
+[14:28] one of the three pillars of agentic development security. Um we still want
+[14:32] to know like what the agent is doing and what is the agent and what tools the
+[14:35] agents are are using themselves. And so yes, we can have like
+[14:41] we have some of our tools today that Snyk offers on the Evo platform and I I
+[14:45] suggest that you all go to evo.snyk.io and see this agent guard in action and
+[14:49] see all the skills and that that your and MCPs that your
+[14:53] organization is using. But what I really wanted to do is I
+[14:56] wanted to give local visibility into what's running on my machine. As a
+[15:00] developer who cares about security, I want to see this. And there's no really
+[15:03] good way to see this. And so like here in this tool, I can see all of my
+[15:08] running LLMs right here. Um I can see all of my running AI
+[15:14] components. I can see and this this is the MCP servers. These are the skills.
+[15:18] These are the CLIs and the and the models that that that are running right
+[15:22] here Um that Ezra talked about that with like these different risk scores. So you
+[15:26] can actually see like all the different things that I have willingly or
+[15:30] unwillingly installed and running on my machine.
+[15:35] Um similar we talked about like what is the
+[15:39] agent allowed to do? And so like yes, my organization can set
+[15:44] a policy for me, but I might want to set my own policy.
+[15:48] Or more often, I actually may want to set a policy depending on what project I
+[15:53] am actually working on. So I can actually set up based on my
+[15:57] different workspace what I want to apply to each one of those.
+[16:01] Um for example, I actually turned this off.
+[16:04] I'm building out a bowler scanner broken object layer
+[16:08] authentication big issue that we have we could that could be a whole another
+[16:12] presentation. I was doing some benchmarking and snappy was
+[16:15] automatically fixing my vulnerable tools for the benchmarking in the in the first
+[16:19] place. So I have to actually turn that off.
+[16:23] Um but yeah, the goal here is there that you can actually set your own
+[16:25] guardrails. It can automatically go through and fix any vulnerabilities. So
+[16:29] like for example here you actually see that it it implemented some code right
+[16:33] here that's actually running. Um
+[16:37] and what happens is when it implements these codes, it
+[16:41] will actually start a scan. This is this
+[16:44] it will start a scan. It will find and detect your vulnerabilities. It will
+[16:47] actually launch a new coding agent and try to fix those right away.
+[16:51] Um
+[16:54] And yeah, and then yeah, so giving me visibility on what workspaces I have,
+[16:57] giving me visibility on how many of my different agents are running, what my
+[17:01] agents are doing, what they're costing me.
+[17:05] Um getting a history of everything it's
+[17:08] doing, all the vulnerabilities. I can actually see on these fixed ones
+[17:15] what it actually tried to do, how it tried to fix it.
+[17:21] Being able to track all my different sessions.
+[17:24] Giving me an audit of everything that my LLM's and all of my LLM's are doing on
+[17:29] my machines. Like, what are all the commands it's running? What are all the
+[17:33] files it's accessing? Um, there's some really interesting
+[17:36] implications here on how I actually want to app uh
+[17:39] optimize some of my files and everything like that. You can see which ones are my
+[17:42] heavy reads and writes. You can see which ones are my heavy reads that have
+[17:46] almost no edits. Like, I might actually want skills to tell me to do different
+[17:49] things about that. What are the commands it's running?
+[17:53] Basically, what web pages that am I hitting?
+[17:56] Monitoring all my different MCPs and tools. Um
+[18:01] Yeah. And then then yeah, so right now we've
+[18:04] got this running our static analysis code testing. We have some open source
+[18:08] testing. We've got uh secrets testing. Uh we've got the Bola uh scanner, which
+[18:14] is like a set of work in progress, allowing to configure all of these
+[18:17] things. Um
+[18:19] And and this works because it's Well, one of the reasons that it's doing this
+[18:24] is it's it's actually running a local host on your machine. And so
+[18:28] I was able to actually run this one earlier.
+[18:32] And if you look at this, I spun Claude up and I was like, "Hey Claude, read my
+[18:36] ENV environment." And Claude was like, "Hey, no, I can't do that. I'm smart."
+[18:39] And I was like, "All right, well, Claude, tell me what my secret key is
+[18:42] right here." And Claude was like, "Oh, I'll try to read that." And you can
+[18:45] actually see that because we've actually set up enforcement here uh Snappy
+[18:50] actually blocked the access of of reading this file. Um so yes, the agents
+[18:54] are getting better. They are not perfect, which is why I like having
+[18:57] deterministic guardrails on your machine. Um being able to set those
+[19:02] guardrails on your on your machine and having visibility into what your agent
+[19:07] is doing. Um and what it's running, I I is pretty
+[19:10] key. Uh one of the big things is is how do we trust agents?
+[19:14] Um I want visibility, I want auditability.
+[19:17] Um and those are really key to me. Um and so this is why I we started
+[19:22] developing this. Um in theory in in in the future you
+[19:26] could actually hook this up. You can you could actually download um
+[19:29] you could download rule packs. You could download connected to your sneak tenant
+[19:33] and org. Um you can update your own rate sheets, whatever you want. Um but yeah,
+[19:38] this is a little bit of a future vision of like what ADS could look like. This
+[19:42] is really saying like here's my development environment. I could be
+[19:45] running this on a cloud machine telling me everything that's happening on that
+[19:48] cloud machine. Give me that visibility. Give me that auditability. Give me that
+[19:51] traceability. Uh really important aspects in learning how to how to how to
+[19:55] trust the agents and making sure that they're not going off the rail.
+[20:01] Cool. Um and I think
+[20:05] >> I should have asked at the beginning. Let me turn this mic on here.
+[20:10] That was awesome, Dan. Thanks. Uh should have asked at the beginning. Of the
+[20:13] folks are here, are you guys who who's on the security side of the house today
+[20:17] as opposed to engineering? Awesome. Hands down. And who who's an
+[20:21] engineer uh in the room? Cool.
+[20:24] So I think we're like this is a good acknowledgement of like
+[20:28] the different audiences that I think these solutions are really trying to
+[20:31] address. I think if you ask the security folks in the room, they'd be like
+[20:34] restrict everything. Just like please do not let anything bad happen. If you ask
+[20:38] developers, you'd say any any false positive that causes kind of more noise
+[20:42] in my workflow is just kind of hell on earth. And so that's the that's the
+[20:46] needle that we're ultimately looking to thread here um and why we're trying to
+[20:49] come at this from kind of both sides. Um and I think what Dan was really showing
+[20:53] is how do we really really lean into the developer experience in this new agentic
+[20:57] world um in a way that is going to make uh it still possible to achieve like all
+[21:02] the productivity gains that I think everybody wants out of AI for software
+[21:05] development while still being able to trust and kind of sleep at night uh like
+[21:09] the last presentation was talking about.
+[21:15] Yeah.
+[21:21] >> Uh we have talked about possibly throwing it up on our our Sneak Labs. Uh
+[21:25] it's still in development. Uh come talk to me. Come come by the Sneak booth
+[21:28] afterwards. I'll be there from uh till close this afternoon.
+[21:33] >> We'll at least get names and if it's if it's not today, which is probably not
+[21:36] today, then we can at least see like once it's there we we'd love we'd love
+[21:39] to get feedback once we can get something out there like that.
+[21:43] >> Do you expect Snappy
+[21:46] >> Can you repeat the question on the mic please?
+[21:47] >> Uh the question is do I expect Snappy to support things like Pi?
+[21:55] Um it's actually really well. We will This is a tool that I have
+[22:01] developed for my own personal use and I think it has a lot of value. It will go
+[22:05] where the market takes it. And and that was kind of the idea. Like it doesn't
+[22:09] all have to be up in the cloud. I want local visibility. Um
+[22:12] wherever the market takes it is where I expect it to go and and
+[22:16] yeah.
+[22:18] >> Sounds like you might have a use case, so we'd love to love to connect after.
+[22:35] Yeah.
+[22:40] Yeah, so the question started with a lot of praise for what what we've done and
+[22:42] then uh asked about the false positive rate um
+[22:45] here. Um and so far the the feedback overall has been has been good. I like
+[22:51] it's it's certainly not zero. Like I don't think anybody who's playing in the
+[22:53] space is claiming that it's zero. Um I anecdotally like when I am using it
+[22:59] cuz I have it installed on my machine like it does not I do not find it
+[23:02] cumbersome and and bothersome. I think I probably have one instance that I can
+[23:06] remember like in the last month where I was like, "Oh, that that really was not
+[23:09] a particular problem." Uh but, we're a pretty aggressively right now working
+[23:12] with design partners that include sometimes
+[23:15] hundreds of developers within companies who might be doing a variety of
+[23:18] different things to try to refine this. So, I think it's going to continue to
+[23:22] get better and better and hopefully like asymptotically approach approach zero.
+[23:26] But, I'd be shocked if we ever lived in a world where it was like absolute zero
+[23:29] false positives for for for for any of the companies out there. And if anybody
+[23:32] here is working on solutions that are similar and you've got ideas on how
+[23:35] you're solving that, would love to learn cuz I think like there's plenty for us
+[23:39] to learn here, too. Thank you.
+[23:53] I think the the question was, does this only work on on
+[23:57] Does it only work on on cloud on quick code stored in the cloud or can it work
+[24:02] on your local machine? Is that the question?
+[24:18] >> Yeah, so different type types of of products that we have right there. And I
+[24:22] think Manosh mentioned in the first one that like burning down a backlog in a
+[24:26] remediation agent, um currently not in the the tool that we showed today. And
+[24:31] Agility Development Security is more that that forward-facing stop the bleed
+[24:34] going forward. Um but, some of the things that we're releasing in Agility
+[24:38] Development Security is a set of of skills, commands, hooks, and stuff like
+[24:42] that. And so, like we have a a sneak fix skill that you can pass in a known
+[24:46] vulnerability to and it will actually use some of that sneak logic to actually
+[24:51] like try to understand the breakability, understand
+[24:54] what changed, know what the good recommended fixes are, and guide the
+[24:57] agent to a more effective uh fix. >> So, what I didn't have time to demo in
+[25:02] Manoj's keynote earlier was basically how we leverage that breakability as
+[25:06] part of an input into is this something that I can fix
+[25:10] quickly and generally it's really easy to generate fixes, getting the approval
+[25:14] of the code changes and merging them in like that's still the human loop kind of
+[25:18] time time expensive type of a thing. And so that is kind of that that that's
+[25:22] a whole other area that we're working on under kind of the remediation
+[25:26] umbrella. Really cool stuff just didn't fit into
+[25:29] this particular talk. Thank you.
+[25:36] Yeah, sorry. I can't see cuz of the lights.
+[25:38] >> we are blinded, yeah.
+[25:58] >> That is a fascinating question. The question was how how would this
+[26:01] potentially work any solution around guarding agent behavior when you're not
+[26:05] talking about text-based exchanges but more sensor type data or
+[26:09] other other things. I don't I don't know.
+[26:13] Um Okay. I mean if I think it's probably
+[26:16] you know it's still it's it's a form of language that's being communicated right
+[26:21] rather because just cuz it's not natural language doesn't mean it's not it's not
+[26:24] language. there might even be some advantages around kind of like a known
+[26:28] structured schema for some of that data. I don't know if schema is necessarily
+[26:31] the right word but like schema adjacent. Uh
+[26:35] That's cool. I've nobody's ever brought something up like that. I would love I
+[26:38] would love to talk. I know I'm making a lot of meeting plans right after this
+[26:41] but like I'll I'll be hanging out right outside.
+[26:43] >> And a lot of guardrails are still the same. You still want you still may want
+[26:46] to control access like what one sensor can affect or what one sensor can
+[26:50] affect. Um like so you're just talking about the
+[26:53] input of data but there's a whole bunch of outputs of data and what the model
+[26:57] can do and what else it can access. Uh, so a lot of those guardrails um, and the
+[27:01] format of those guardrails stay the same even if like that input language changes
+[27:06] to sensor reading as opposed to natural language.
+[27:11] >> Cool. I know we're holding you guys from lunch so thank you so much for the time.
+[27:14] We really appreciate it.
+[27:29] >> [music]

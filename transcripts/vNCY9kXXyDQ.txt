@@ -1,0 +1,402 @@
+# title: Skill issue: Lessons from skilling up coding agents to use Langfuse - Marc Klingen, Clickhouse
+# source: https://www.youtube.com/watch?v=vNCY9kXXyDQ
+# speaker: Marc Klingen, Clickhouse
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T09:02:18Z
+# sha256: 841faf4407e5f1ca80fc25e62ded295badf7b1e418fbac792ecb607e3676a390
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:15] Okay, that was great. Hi everyone, super excited to be here. I'm Mark, one of the
+[00:19] founders of LangFuse. We started LangFuse like 3 years ago
+[00:23] when everything was felt quite early. Building agents that didn't work and
+[00:27] then realized, "Okay, there needs to be like some evaluation tracing." Built
+[00:30] like LangFuse is the open-source project in the space by now. And with the
+[00:33] metrics that we track, we seem to be the largest one in the space. We do our
+[00:36] product engineering out of Europe. Thus, I'm very excited this conference is
+[00:39] coming to Europe because there are so many great people here.
+[00:41] And we always need to resist the urge to like ship the whole team to another
+[00:44] continent because actually being here is very nice.
+[00:48] And you can just travel and hang with people on Discord and Zoom. So, yeah,
+[00:51] very excited to be here in person. And what I want to talk about today is how
+[00:56] what the lessons we made from scaling up coding agents actually adding LangFuse
+[01:00] to an application because like back in the days when you had like observability
+[01:03] or evals, you needed to read like hundreds of pages of docs, like figure
+[01:06] out your own mental model. And now you kind of expect like to be hand-holded by
+[01:09] a custom agent to do this. And we've come a long way in achieving this kind
+[01:13] of vision. And I just want to explain what we learned on the way. First of
+[01:17] all, like I'll start very conceptual, very easy, then a bit more conceptual
+[01:20] deeper, and then I'll do go to the learnings. So, my mental model for
+[01:23] skills is just like I get this Rubik's Cube. When I was a kid, I didn't have no
+[01:26] idea what to actually do, but I mean, I basically have a bash tool. I can do
+[01:29] whatever I want with this Rubik's Cube, but it just looks colorful in different
+[01:32] ways. I had no idea how to solve it. So, skills was like a great way once you get
+[01:36] the manual, it's easy. You just need to follow the manual, and you can you can
+[01:38] solve a Rubik's Cube. And I feel like the same thing now applies to to agents
+[01:41] where like there was this whole debate of like workflow versus fully autonomous
+[01:46] agent. It was like huge fight on X of like what is the best way to build an
+[01:50] application. Everyone was kind of like, "Yes, you kind of both." And I think
+[01:53] Mars this morning had like a good note where like the surface area of deploying
+[01:57] agents is so broad that like for some you don't need like a coding agent even
+[02:01] if it's like the best way you can build agents at the frontier today. Like you
+[02:04] don't need this for every application. It makes things slow, expensive, and
+[02:08] like there's this kind of like balance between workflow being very reliable and
+[02:11] agent now having kind of like unlimited capabilities. And I think what's very
+[02:15] exciting is that then skills are kind of like a formalized shortcut to make
+[02:19] things more reliable where you historically would have built a
+[02:21] workflow. Like I don't know. Like you have a customer like customer support
+[02:25] agent and someone asked for like a password reset. Then historically you
+[02:28] would have built like a workflow that's very reliable of like you have a router
+[02:31] that routes to like an agent that can only do password resets and that agent
+[02:34] has like the context to do password resets well.
+[02:36] That was great, but also if the user then wants to do password reset but also
+[02:40] change the email address at the same time, then like the router is kind of
+[02:43] like, "Okay, I have this email router. I have this password reset router. What
+[02:46] what do I even do?" And I think what's very exciting now is that an agent can
+[02:49] just like progressively get the context needed to then solve like a problem
+[02:53] that's multi-domain. Like that would have historically been in multiple
+[02:56] workflows. So that's very exciting. However, it has always been hard to kind
+[03:00] of like how to how to build an agent, what kind of use cases even exist
+[03:03] because you have like this open-ended text input box often or like open-world
+[03:07] context. So you didn't really know. So what we now see is what many teams do is
+[03:11] they have the agent runtime, they trace everything. I mean, I'm building
+[03:14] LangFuse this I put my logo here but you can also use whatever you want. In the
+[03:18] end it's more about like the concept of tracing is what you need to like
+[03:21] identify what happens at runtime when a trace when like an agent executed
+[03:25] because then it helps you two things. One, like new kind of like use cases
+[03:29] that you didn't expect a user to do because you might have expected that
+[03:32] nobody ever wants to change a password but now they want to change the
+[03:35] password. This you need to see the execution trace of someone being upset
+[03:38] by like a production email to then derive that you need to add a skill for
+[03:42] handling password resets well. And two, once you have these skills they
+[03:46] can get out of date or you can realize they're not the most efficient way of
+[03:49] actually solving for this use case. So it's like the second thing of like
+[03:53] helping you improve skills that you already have in your agent.
+[03:56] So, this is very conceptual, but this is what we what we now see see most teams
+[03:59] do uh that you use LangFuse now more towards like the learnings uh we made uh
+[04:04] when building a skill to help uh customers add LangFuse to their project.
+[04:08] So, what was the lay of the land before we got started with this? Um like 478
+[04:13] pages of documentation. Whenever I see like the thing deploying, I'm like, "Who
+[04:17] wrote all of this?" So, apparently, if you build a project over 3 years, it
+[04:20] just grows in complexity. People can do all of these different things, but then
+[04:23] you need to read all of these things, and nobody has the time across like five
+[04:26] different feature areas, and a lot of implementation flexibility because
+[04:30] they've always been like projects in like the eval space that were very, I'd
+[04:33] say, opinionated. So, they were like, "Oh,
+[04:36] you have a chatbot? Then add this project, and it'll just solve this for
+[04:39] you opinionated end-to-end." We always were like, "No, no, we are
+[04:42] infrastructure. We do like tracing well. Like, if you ingest like billions of
+[04:45] traces, we'll still work. If you want to customize your evals, it'll still work."
+[04:48] So, we always take more on the opinionated side. Uh which was always,
+[04:51] I'd say, uh a weakness compared to uh projects that are more opinionated, but
+[04:55] now I think it's a strength because in the end, what what what what do you need
+[04:58] uh when agents do all of this? You only need the infrastructure piece if agents
+[05:01] can then customize for different workflows. Um so, uh but there's the
+[05:05] problem if people want to add LangFuse to a project, how to do it correctly for
+[05:09] a project is to be figured out by an agent. Um and uh interestingly, uh when
+[05:14] we first got into model pretraining context as a project, and you can just
+[05:17] ask an agent how to add LangFuse, and it'll spit out like LangFuse SDK logic.
+[05:22] The first time this happens, it's amazing. But then, if you're like 2
+[05:25] years in, like the project evolves, like interfaces change, uh and now being in
+[05:29] pretraining context might even be like a disadvantage if uh you don't fetch
+[05:33] up-to-date information. So, we're just like, "Oh, we get like all of these
+[05:35] hallucinations of methods that have been uh available in the past, but they're
+[05:39] not uh available there today." So, yeah, we we felt like when skills launched,
+[05:43] this is like the exact pattern that we need in order to help teams achieve
+[05:46] this. So, I'll use an example uh when you just
+[05:51] ask Cloud Code to add a language to a project, it just worked, but it was not
+[05:56] working in the best way possible. So, for example, user ask add tracing to my
+[06:00] agent and then Cloud Code kind of like implements the instrumentation based on
+[06:05] the outdated pre-training context, then tries to verify whether tracing works,
+[06:09] then realize, "Oh, it doesn't work." And then only in a second step fetches
+[06:12] up-to-date information to then correct the issue. At the same time, how you add
+[06:16] tracing or evaluation to a project, they can evaluate in like like gazillion
+[06:20] different ways. Like online evals, offline evals, human in the loop. There
+[06:24] are so many different things. And often the question is like, "What even is
+[06:27] relevant for your application?" So, human agent kind of need to figure it
+[06:30] out on the way, but agent is not tasked to help you like figure out what's the
+[06:35] best thing for your for your application. So, main problems are
+[06:38] outdated training data, the non-optimal setup because the agent wasn't really
+[06:41] like primed to help you discover what to do for your for your app. And it's very
+[06:45] slow because you first add instrumentation the wrong way, then you
+[06:48] figure out it's wrong, and then you need to fetch more documentation to to fix
+[06:51] the the issues. So, what did we do? Ah, yeah, this how
+[06:55] the this how I just mental mental note, this how the trace look like when we
+[06:59] just tried with Cloud Code to like just trace two LM calls in an agent, but like
+[07:02] you still don't know what the agent is actually doing.
+[07:05] So, what was the goal of our skill? Like give every LangChain user, like there
+[07:09] are thousand of teams in the community, thousand of customers on our cloud
+[07:12] product, give them all like a LangChain expert to help them quickly set up
+[07:15] observability, for mentionment, evals in line with like best practices and
+[07:18] up-to-date docs and like references. Because all of you, I mean, there's
+[07:22] Anabel from the team here as well. Like if you have questions regarding
+[07:25] observability evals, you can talk to us, but in the end that doesn't scale to a
+[07:28] thousand of people to basically talk through your problems and figure out
+[07:31] what the best strategy is for you. So, we are like, "Okay, skills is the is the
+[07:35] way to go." And this is like very conceptual how our skill works where
+[07:40] like user comes in, ask coding engine to do something, and then the skill kind of
+[07:43] has like a reference of like the skill MD is more like well, what kind of style
+[07:47] do we want in order to implement LangFuse? So, for example, ask follow-up
+[07:51] questions before making decision because there's so much you can be doing, and
+[07:54] then references for the different product modules to kind of like
+[07:56] progressively disclose additional hints that the agent might need to have. And
+[08:00] then it can call the documentation, and interesting enough, as we start open
+[08:05] source and like saw ourselves as like an opinionated infrastructure, we always
+[08:09] had like APIs for everything because teams built their own, I don't know, on
+[08:12] labeling UIs on top of it, on evaluation execution logic on top of our our back
+[08:17] end. And we had APIs for everything. Now we wrapped it in a CLI, and now an agent
+[08:21] can just do everything humans needed to do in the UI in the past.
+[08:24] Which is very cool because like so many teams spent so many hours every week in
+[08:28] clicking around in our UI to evaluate and improve the application. And in the
+[08:31] end, how will this look like end of year? It'll probably just be like like
+[08:35] connect repository to LangFuse, and then agent just does the whole thing like
+[08:39] auto-regressively. I mean, that's what we're building towards. Everyone's
+[08:41] building towards. I think that's a cool step in the right direction.
+[08:44] So, to to shortcut to the end result, okay,
+[08:48] after like conversing with the agent now for the for similar thing, it looks way
+[08:52] more detailed like like detailed evals that are relevant
+[08:55] and detailed steps are regarding tool execution.
+[08:58] So so just like there's there's a stark difference. And yeah, what did we learn
+[09:02] on the way? Six main things. I'll go through every single one of them
+[09:06] of what were basically our realizations when when building the skill. And like
+[09:11] one, looking at traces still like gets you to like 80% of the detail. This was
+[09:15] always what we kind of like tried to preach regarding like evals where many
+[09:18] people try to complicate things right away while they haven't dig through
+[09:22] through like just like what did the agent actually do at runtime themselves
+[09:25] a couple of times. So so what did we do? We have instrumentation for cloud code
+[09:30] and just ourselves interactively like tried to use LangFuse with cloud
+[09:34] code and then look through traces in length use to understand whether there
+[09:39] is an error, how can we improve the skill to make it like straight shooting
+[09:45] at the goal instead of like wandering in different ways to the to the target. And
+[09:49] that was really helpful, too. There were like some of the interesting
+[09:52] learnings here. For example, for humans, we tried to cut
+[09:55] down on the number of environment variables that you need to set in order
+[09:57] to set up length use. So, for example, we just auto assumed a data region.
+[10:01] Like, length use is available in Europe, it's available in the US. Funny
+[10:04] anecdote, we assumed that only Europeans like care about data regions, so we made
+[10:08] Europe the default. Then we learned some US enterprises also care about data
+[10:11] regionality. Now we have a US data region, so many different other data
+[10:14] regions. So, we always defaulted to Europe, and
+[10:17] now we kind of like for an agent like adding another environment variable,
+[10:19] like they don't care. Like, it's not effort for them. Thus, we always prompt
+[10:23] for figure out what data region the user is actually in and don't assume Europe,
+[10:26] for example. Two, hallucinated CLI parameters because it just oh, this like
+[10:33] includes the word trace. I've seen trace things in CLIs before. I just assume
+[10:36] what what we could be doing here. And we just advertise the the help flag more
+[10:40] aggressively. It takes another turn, but it's fast,
+[10:43] and thereby like it directly knows what the CLI can do.
+[10:46] Two, we try to help the agent understand how
+[10:49] to navigate available information because like I mean, 500 documentation
+[10:52] pages, how to find the right one instead of like looping through, I don't know,
+[10:56] fetching one, then learning something, then fetching another one, always with
+[10:58] like thought process in the meantime. So, what did we do? We always had this
+[11:02] LLM stakes see, which was very hyped when it launched, but never actually
+[11:05] used. I think what's now cool is we have this agent sitemap kind of that we just
+[11:09] expose to like a coding agent by the skill of like
+[11:12] go there first in order to learn what kind of like documentation is available.
+[11:16] And two, I mean, there's like this whole content negotiation that if you send
+[11:20] like an a request header that you want markdown that you get markdown back from
+[11:23] the docs, but some coding agents don't do this by default. So, we just
+[11:26] advertise this because otherwise some coding agents might try to pass the
+[11:29] HTML, which just adds additional tokens. So, like for length use, for example,
+[11:32] you can just add like a dot MD to any documentation page or you can request
+[11:35] markdown and you'll get a markdown page. Uh three,
+[11:39] um I think that was uh like one of the things I was most excited about. Uh we
+[11:43] always had this uh like docs Q&A agent that was able to answer questions about
+[11:47] LangFuse more like interactively. Therefore, we built like a rec stack and
+[11:50] now we just surface this uh rec stack again via like a search endpoint. So,
+[11:55] like a coding agent can just ask whatever natural language query about
+[11:58] LangFuse and we'll get back documentation chunks for this query. Why
+[12:02] is this exciting? One, you don't need to fetch five different docs page where you
+[12:05] can just ask a question, get something back that's relevant directly. It solved
+[12:08] for the problem and two, we get to track these search parameters
+[12:11] um because uh like if a coding agent fetches documentation, it's very
+[12:14] difficult to understand what did like cloud code and our user laptop do. But
+[12:18] if they um ask questions about LangFuse to our search endpoint, we can track the
+[12:22] searches and thereby understand what problems do they run into, where do we
+[12:25] need to add more documentation pages because maybe we didn't expect this kind
+[12:28] of problem to happen. So, yeah. So, adding a search endpoint was like was
+[12:31] really cool to um capture more data. Um then uh basic eval setup is better
+[12:36] than none because we initially struggled to get this done because it's like so
+[12:40] broad. Some LangFuse users built like chat applications, real-time voice,
+[12:44] video generation, like batch processing of like invoices in the background of
+[12:48] some kind of like text uh software. Like so many different use cases where then
+[12:52] the question is, what's even like a good evaluation uh like setup? And we just
+[12:56] created like five uh different ones and this was already helpful. Um because
+[13:00] otherwise uh it's really hard to uh to kind of like measure measure anything.
+[13:04] And what we did here, um I don't know, can I zoom in? No.
+[13:07] Um so, basically we have this uh like just like a prompt instrument
+[13:10] application with LangFuse and then like a sample uh repository folder. So, for
+[13:13] example, like an OpenAI custom function rec, whatever, application. And our
+[13:17] checks are just natural language statements that we then via LLM as a
+[13:20] judge try to um like evaluate on top of the file system and diff state
+[13:25] before and after um running the skill. Uh so, for example, we uh we expect that
+[13:29] our open eye instrumentation was added because they can open the eye example.
+[13:32] And we, because it's rag, we expect like some retrieval spans to show
+[13:36] up in our trace. Because if they if they're no retrieval spans, then
+[13:39] probably we only capture, for example, LM calls.
+[13:43] This was already helpful because there we were able to make changes and see
+[13:46] that we didn't break anything. The whole thing that why why we even built
+[13:49] LangFuse for like building AI agents now also applies here.
+[13:52] Five, dynamic content should be referenced because there's a huge, I'd
+[13:56] say, incentive for like developers on the team, but also for users in the
+[13:59] community to just contribute a lot of context to the skill because then you're
+[14:03] like, "Ah, it's kind of like a local cache of the documentation that's
+[14:05] immediately available." However, then the same thing applies that applies to
+[14:09] pre-training context. It's kind of like it goes out of date. And now we have the
+[14:13] documentation and now we have yet another representation of what LangFuse
+[14:17] is. So, you rather try to point us to straight to the reference of
+[14:20] documentation and because otherwise you just duplicate all our content. And six,
+[14:25] we applied I'm more of like auto research to the scale of, "Okay, if we
+[14:29] have a target function, how can like agents help us improve the agent?"
+[14:33] Because there are so many like different patterns that we can explore.
+[14:36] So, we set up a target function mostly geared towards like our experiment here
+[14:39] was help teams move prompts from their local Git repository into LangFuse
+[14:43] prompt management, which is used by like larger teams to collaborate on prompts
+[14:46] with their non-engineering counterparts because then like PMs can make changes
+[14:49] to prompts and try it on a playground like all this kind of like collaborative
+[14:52] stuff. And the task was, "Okay, how do we improve the skill to migrate prompts
+[14:56] out of any kind of like code base into our managed prompt system?" And
+[15:01] in the end, we accepted three out of the six improvements that were suggested,
+[15:04] which I think is a success. But it allowed us to experiment much
+[15:08] more than we could have explored manually with the time that we have as
+[15:12] we are like a very small team. Learnings,
+[15:14] like the target function really matters. Like I think it's it sounds obvious, but
+[15:19] for us defining like the right target function was very hard for this. Um this
+[15:23] we we assumed like a trunk migration should be fast. Fast we measured in like
+[15:26] the number of turns, but if we uh basically asked to minimize the number
+[15:29] of turns, then like our uh like the agent that tried to optimize the scale
+[15:33] just took out all of the notes that we had to um like fetch documentation
+[15:37] because it was like, "I know how to how lengthy this prompt management works. I
+[15:40] don't need this. I'll just try it myself." Uh which then negates the whole
+[15:43] thing of we want to fetch up-to-date context because otherwise if you use the
+[15:46] skill install the skill once, wait 3 months, then you'll have like wrong
+[15:50] context um because uh we duplicate information. Two, um like we had like an
+[15:54] approval gate usually uh where we want to suggest a plan or ask for a question
+[15:58] suggest plan to a user before doing anything because we kind of like push
+[16:02] the prompts to like a central repository and it's kind of like their data leaving
+[16:05] their laptop somewhere else. Um but the sandbox didn't have this, so
+[16:08] we didn't really we weren't really able to uh to to try for this. And um like
+[16:13] LangChain like the the sole feature like usually we try to make it easy to get
+[16:16] going with something, but then it's very deep of how to do it in a good way. And
+[16:19] we want agents to directly go for the good way like figure out with the user
+[16:22] what they want to achieve and then have like a very full implementation not to
+[16:26] start with something and then like 2 months later go deeper.
+[16:28] However, if the target function does not include uh like we want like uh linking
+[16:33] prompt versions to prod traces, so then you can see how like different prompt
+[16:36] versions impact like for example production results. Um like we didn't
+[16:40] have this in the target function. This uh like uh everything that like nudged
+[16:44] towards this was kind of like removed because it's kind of like it's just like
+[16:47] like garbage on the way that we don't need to achieve the goal. So again, the
+[16:50] target function really matters. High level, these were like the the six
+[16:54] uh main takeaways. Looking at traces gets you 80% of the way. The uh
+[16:57] production signals really helps, so the search endpoint uh was really helpful
+[17:00] for our documentation. Um help agents to navigate uh the
+[17:05] information because otherwise it just searches with like Google, Brave,
+[17:08] whatever search and finds all sorts of different things on the internet. Um
+[17:11] even a basic even setup helped. It wasn't that hard to set up. Dynamic
+[17:14] content should be referenced, otherwise you have just duplicates, and the auto
+[17:17] research was uh very helpful to explore things, but um it's bound by the target
+[17:21] function. Um topics basically on our minds here
+[17:25] are uh it's so powerful, but at the same time, you kind of then duplicate stuff
+[17:29] into like user space kind of like somewhere on on like a machine.
+[17:33] Um like there's no like package management for this, which then like a
+[17:37] year like tells the user this is outdated. Um like we could uh we we we
+[17:42] thought about just adding like a timestamp of uh this is the current date
+[17:44] where it was fetched uh the skill, uh and then just uh oh, if this like older
+[17:48] than a month, then try to update. But then we go to second problem of skill
+[17:52] distribution and like installing into like the agent environment. Usually,
+[17:55] this is kind of like gated or not possible for the agent like depending on
+[17:59] uh what you use. Um this user needs to do something to
+[18:01] install the skill. This also upgrading doesn't uh auto upgrading doesn't really
+[18:05] uh really work, but it really depends on the coding agent that you use. And uh
+[18:09] like the target function is interesting for us because like we can either go for
+[18:13] user needs to get to like an initial aha of like oh, this works, or do we want to
+[18:17] directly straight shoot for this is the perfect setup of how you would do evals
+[18:21] for this use case? But this is I mean, without a skill, it takes like usually
+[18:24] like an AI engineering team, it takes like months to get to a perfect setup.
+[18:28] Do we now aim for an agent to do this in a single shot and overload the user with
+[18:31] lots and lots of questions, or do we just try to get to something and then
+[18:35] you can still invoke it again of like improve my setup, ask and then it it can
+[18:38] ask questions to improve it. So, it's kind of like well, what's what's the
+[18:41] target for the skill? That was uh very interesting for us.
+[18:44] Uh yep, I would invite you to try it and give us feedback um because that would
+[18:48] be really interesting. Um and uh like uh we do lots of lots of calls with
+[18:53] people from the community every week, and uh like like uh I think it's not a
+[18:57] surprise that I think nobody reads documentation themselves, and everyone
+[19:01] is just like, "Yeah, just add this to my like I just want this to work. Like just
+[19:04] add it." Um so, yeah, the skill is the primary way of how things get done. This
+[19:08] is also like now the advertised way across all of our documentation um that
+[19:11] you just should ask your coding agent to do whatever you try to do right now. Um
+[19:16] I'm very excited that works really well, uh but also I'm I'm excited to see what
+[19:19] what comes next. Um for us as a project roadmap-wise, we see the skill right now
+[19:23] like our users use this when getting started with the project, but also um uh
+[19:27] to drive a lot of automation around the like evaluation life cycle of oh I now
+[19:31] want to create like an element as a judge that's aligned with user
+[19:34] preferences or um like I got user feedback on 100 different executions,
+[19:38] what do they have in common? And you just then fetch this via the CLI. So
+[19:41] many of these workflows that people needed to do manually now coding agents
+[19:44] do for them. Um we'll bring this in product via like
+[19:47] we will help automate this via skills one, bring this in product two, and then
+[19:50] three I I feel like we just need this orchestration agent that does what the
+[19:53] team is doing right now. So yeah, I'm very excited for our roadmap to to
+[19:56] automate all of this, but yeah if you have any feedback, uh I'm around,
+[19:59] Anabel's around. I would love to talk to you. Uh and yeah, thanks so much FOR
+[20:03] YOUR TIME.
+[20:09] I DON'T KNOW DO WE HAVE TIME FOR A QUESTION? OKAY.
+[20:13] YEP.
+[20:32] UH YEAH, it was kind of um like I mean you kind of want to be out of the loop
+[20:35] for the experimentation and then just review the suggested changes. Uh so it
+[20:40] was kind of um like experimental things uh give us like all sorts of different
+[20:44] recommendations and then human review the suggestions. Like we didn't accept
+[20:48] all because many didn't make sense because our target function wasn't
+[20:50] perfect. It was really difficult to get to like a very perfect target function,
+[20:53] but it's good at just creating ideas and then uh we human reviewed all of the
+[20:57] ideas to make the changes to the skill. >> But so at the end the skill might not be
+[21:02] optimizing for
+[21:19] >> Yeah, that's what we had tried to kind of like you need to try it yourself to
+[21:22] just get a sense of how it feels to use the skill to then
+[21:25] like like add slightly student application. So we just use it ourselves
+[21:28] to get a sense for the feeling because it should like where where you want to
+[21:32] go is it should feel like an expert user
+[21:35] trying to guide you through what you need for your problem where usually
+[21:39] someone comes in with just like I need eval because I read about it online but
+[21:43] I don't know what actually I need for my application and I kind of like it needs
+[21:46] guidance of where you want to go like what is your problem? I don't know what
+[21:50] you what you worry about. You probably don't need like a I don't know
+[21:53] hallucination eval but probably need something that's very specific to your
+[21:55] application and yeah, that's what we want to achieve
+[21:58] with the skill that you get like some some like professional guidance.
+[22:03] Yep.
+[22:05] >> I really resonated with your last point about
+[22:09] skills distribution seems practically insane right now or just
+[22:13] like you just install it whatever you get
+[22:17] what are your thoughts on sort of like the
+[22:19] treating skills as packages like a big C skills kind of approach or like going to
+[22:23] pull all in on and you know plug in marketplaces instead like what
+[22:26] what do you think is able to be adopted by the community
+[22:30] versus being stable long term and you have like
+[22:33] prominent set of things. >> Mhm.
+[22:36] As a small team I'm not that excited about plug-in marketplaces because then
+[22:39] you need now need to kind of like maintain all of these proprietary
+[22:43] integrations, update them and I don't know tell Anthropic, tell OpenAI, tell
+[22:46] Cursor whenever you make them.
+[22:51] Yeah, still I mean like for the skill
+[22:54] I think it would be cool if we just had like a well-known skill or something and
+[22:57] like whenever someone is like oh I want to for example use LangFuse like the
+[23:00] agent can just auto discover that exists. Uh like we have it across all of
+[23:04] our docs, so I think it would be enough if agent can kind of like ask user I
+[23:07] want to install skill. Question is do you even need to ask? Like I think you
+[23:11] only need to ask if the skill is kind of like more trusted than the public web.
+[23:14] If it's like same trust level, then why even bother asking? Um and then two is
+[23:18] kind of like if I have this installed, there's kind of like a cache of
+[23:21] something that was up-to-date when it when I install it. But then the question
+[23:25] is how do I know whether it's out of date? So I think so just like time
+[23:28] stamping it is enough. So when you use the skill, that agent can be like, "Oh,
+[23:31] this seems old. I should probably like fetch a new one."
+[23:35] Um I think this would already go a long way. Um
+[23:38] but yeah, I'm excited to see like we are going more the time stamp fetch a route
+[23:42] or alert user of this might be out of date. Uh that's at least like what we
+[23:45] discussed now. Um but yeah, I'm excited to see what
+[23:48] everyone's shipping in this space. Yeah, I'm around. Uh thanks so much.
+[23:51] Bye-bye.

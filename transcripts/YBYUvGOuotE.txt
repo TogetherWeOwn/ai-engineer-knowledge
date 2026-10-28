@@ -1,0 +1,372 @@
+# title: MCP = Mega Context Problem - Matt Carey
+# source: https://www.youtube.com/watch?v=YBYUvGOuotE
+# speaker: Matt Carey
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T09:40:21Z
+# sha256: 061ab2831582cb5e1a081f75cbb2339d13d3876e95f0155ce8d9852ed7b2b288
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:07] [music]
+[00:16] >> Hello everyone. Welcome.
+[00:19] Quiet down. Quiet down. All right. Awesome.
+[00:27] How is everyone? Yeah, good?
+[00:30] >> [applause] >> Ooh, thanks. Um
+[00:33] Want to hear some MCP versus CLI debates?
+[00:36] Yeah, is that why you all came? Anyway, um
+[00:39] Hello, my name is Matt. Uh I work on MCP and agents at Cloudflare. And welcome to
+[00:44] my talk. It's all about how we can make every API a tool for agents. APIs exist
+[00:48] in the wild. How can we connect them to agents and make them do things?
+[00:54] So, I I really love my job because every day I get to decide like
+[00:58] uh if an agent looked like this, would he do this or would he do this? And I
+[01:02] think it's kind of fun. Um and we often fluctuate weight between
+[01:05] the two of them. Uh someone does something slightly you think is slightly
+[01:08] funny and then 6 months later we're all doing it and claiming it was the best
+[01:11] thing in the world. So, yeah, it's really good crack. But,
+[01:15] the main part of the the role I guess and like what I end up doing day-to-day
+[01:19] is like how do we give agents hands? How do we let them
+[01:22] interact with the outside world? And you're probably familiar with something
+[01:25] like this. This is tool calling, function calling.
+[01:28] Uh it's been around for a while now. The LLM writes a function, you execute the
+[01:31] function. Bash bash bash, weather in London is
+[01:34] 18°. It's not, it's like eight and it's freezing.
+[01:37] Um sad times.
+[01:40] And then from there we went from uh bundled tools to something like shared
+[01:43] tools. Like people made tools in their agents. And the you probably This is
+[01:48] like all like recent history, so everyone's probably aware of this, but
+[01:51] before MCP we had like uh people would bundle all their tools in their agents
+[01:54] and then they would keep them bundled in their agents and then if I was like
+[01:57] trying to interact with Gmail or something, I would make loads of tools
+[02:00] for Gmail, bundle them with my agents, and that would be it. And the next
+[02:04] person would have to do exactly the same thing. And then we ended up with this
+[02:06] like big explosion of uh MCP and remote MCP about April last year. And the
+[02:12] service providers were like, "Oh, we can we can like uh
+[02:16] give everyone MCP tools and then everyone can use the same standardized
+[02:19] tools and we just make it once and we provide it as another surface for people
+[02:23] to consume our API. Maybe there's a CLI, there's an API, maybe there's like I
+[02:28] don't know, GraphQL API, um and there's now MCP as like another
+[02:32] surface. But, this got a little bit fun because it was okay with like eight
+[02:37] tools. But, then what happens if you added like
+[02:40] a few more? Or a few more?
+[02:43] Or a few more? Or a few more?
+[02:47] Or a few more? And now you you you're like, "I want to give an agent access to
+[02:51] our whole API surface." And
+[02:54] well, that ain't going to that ain't going to happen. Why is it not going to
+[02:56] happen? You've exploded a context window of the agent.
+[02:59] You've like completely annihilated it. This is 1.something million tokens. Uh
+[03:04] And this was the problem that we like came across a few
+[03:08] uh well, around a year ago now. We were trying to give access to the
+[03:11] whole of the Cloudflare API to agents. You put all of the the You try and make
+[03:16] naive tools that have every single API endpoint and you fully explode a context
+[03:20] window. Uh open API spec is 2.3 million tokens. Into tools, that's something
+[03:24] like 1.1 million tokens. And that's like never going to fly even with like the
+[03:30] biggest foundational models. Uh uh And in that time we were like,
+[03:35] "We know this is not necessarily an MCP problem, but it's how everyone else is
+[03:40] doing it. So, we're we're we're going to we're going to adapt. We're going to
+[03:43] adapt. We're going to improvise." Um and we're going to split up our API
+[03:47] into lots of different product-based MCP services. So, you've probably seen this
+[03:50] like uh a company that publishes 16 MCP service potentially and then users have
+[03:55] to uh interact with the one that they want to use when they want to use it. Um
+[04:00] there's much less context, but the user has to select. And most of the time
+[04:03] there's kind of incomplete coverage. So, like
+[04:07] for instance like uh one of our one of our product suites, we might have like
+[04:11] six tools in our MCP server, but the total API maybe has like 30 endpoints.
+[04:16] Like you've completely missed some coverage there.
+[04:19] Uh And this is not like fulfilling the goal of like how do we make every API a
+[04:23] tool for agents. It's actually kind of kind of annoying.
+[04:27] Uh so so I think we did all a little bit wrong.
+[04:30] Um well, in Cloudflare we had 16 servers very very quickly. We were hovering
+[04:35] around 2 and 1/2 thousand endpoints. I think we're actually at like 2,600 API
+[04:39] endpoints now. Um but we basically couldn't split up all of
+[04:43] these into all of our servers and the users had to pick the ones that we
+[04:45] wanted. What we really needed was progressive discovery of tools. Who's
+[04:48] heard of progressive discovery? Anyone heard? Yeah, cool.
+[04:52] And that brings us to the crux of the debates that everyone has on the on
+[04:56] online. Um and that is like how do we do progressive discovery? And
+[05:00] and like is MCP dead? Like is Was MCP like a really bad idea? Um
+[05:05] uh And I'm going to say like I I don't think it was. MCP's a protocol. All of
+[05:09] these can be exposed over MCP. We just shouldn't be dumping loads of tools into
+[05:13] context. That's like the main thing. We shouldn't be dumping tools in context.
+[05:16] Um and all capabilities like in the future we might have prompts and
+[05:19] resources more. Skills are basically resources.
+[05:22] Um And we just shouldn't be like loading
+[05:24] all of those at once. So, there's like sort of three ways you can get around
+[05:27] that problem. Uh there's a CLI which uh people really like. Uh there's tool
+[05:31] search. Or there's a third one that we're going to come to a little bit
+[05:34] later. Um
+[05:38] But, like how does how would a CLI work for agents? So, this is a a sandbox in
+[05:42] the background. And if I use our our CLI
+[05:46] and I do something like uh I just call Wrangler.
+[05:50] We get a bunch of commands. The agent can like read these commands, pass these
+[05:53] commands and be like, "Oh, I want to interact with the database. Let's Let's
+[05:56] do Wrangler D1." And maybe we want to list
+[06:01] list our databases, whatever. And then after some period of time
+[06:07] and some interactive process apparently, uh we get uh we get like the databases I
+[06:12] have on my account. And like an agent can kind of do this um
+[06:15] mostly. Uh and it and it can call {dash} {dash}
+[06:18] help to get like uh introspection on like which parameters
+[06:21] it needs and th- this this mostly works. It mostly works.
+[06:25] Uh it's used very popular by things like open claw and like people generally
+[06:29] really like CLIs. But, you need shell access. This is like the main thing.
+[06:32] This is I guess the crux of it. Like you have to have shell access and that's
+[06:35] kind of annoying. So,
+[06:37] for things like Cloud Code, they wanted a bit more of a structured way of doing
+[06:40] things. So, they have uh like tool search. They have a uh search tool which
+[06:43] loads the tools that they need when they need them into context. So, say I want
+[06:47] to like create a worker. Uh what it would do is you it would take
+[06:52] the user the user question, it would do some sort of keyword matching, and then
+[06:56] it would add K equals say eight tools to context. And then at some point the LLM
+[07:01] is going to look at, "Oh, actually workers create, this is the one we
+[07:04] need." And so we're going to use that one. But, the rest of them stay in
+[07:06] context. Maybe it's not eight, maybe it's six. They change it changes, but um
+[07:10] yeah, you end up with like two 2,100 tokens and only 500 of them are being
+[07:13] used. But, like it works. It it it's it works quite well. Um you only load the
+[07:18] tools that are relevant. Uh And then this last thing is a blog
+[07:23] post that uh Cloudflare published in the summer of well, last summer. And it's
+[07:27] like how can we instead of doing like a um
+[07:30] a static search tool or instead of like enforcing an agent to need a CLI, how
+[07:35] can we do something where we just let the agent write code? And we let the
+[07:40] agent write code against our API. And it turns out that TypeScript is
+[07:43] actually well, types are a very concise way of representing inputs and outputs
+[07:50] um in in a way that an agent can reason about. So, say you have all of these
+[07:54] endpoints. Have like a get worker scripts or a create a worker or
+[07:58] something like that. We generate these types.
+[08:01] Uh and then we let the model given these types, write some code
+[08:05] against these types. So, here we're doing code mode list workers. I hope you
+[08:07] guys can see that. Uh And we're going to try and list some
+[08:10] workers. So, this might be like a user request to list workers. The model
+[08:13] generates this code um against a typed SDK that we generate from our API. You
+[08:18] can generate them from open API specs. Uh
+[08:21] And then we can run that and we can like list the workers that we have on our
+[08:23] account. Um we could deploy a worker.
+[08:27] That would be fun. Hello world. And we could put it behind one of the
+[08:31] hardest things to do at Cloudflare, which is so weird because it's such a
+[08:35] powerful product, but we can add access, which is like our our managed IDP. And
+[08:39] now this worker is secure behind access. Kind of cool. With like a access policy
+[08:44] to only allow me into it and all of this sort of good stuff. Super super easy.
+[08:47] And an agent can generate all of this code given our types.
+[08:51] So, this feels like a step in the right direction.
+[08:54] We just let the model write code. We benefit from the model getting better.
+[08:57] We benefit from I don't know, or like our improving our
+[09:01] open API spec. It's like that should be the source of truth.
+[09:06] But, we had this like kind of weird thing where we thought this was awesome
+[09:10] and we were pretty stoked about it. Uh but the clients didn't implement it.
+[09:14] And then I'm when I mean clients, I've gotten to like MCP terms now. So, the
+[09:17] client is the agent. So, we'll be referring to the agent as a client from
+[09:21] now on. Um but it So, the clients didn't really implement it.
+[09:25] And we're like a little bit confused about why this is the case. Like this
+[09:28] was sort of eight, nine months ago now and it's a better way of interacting
+[09:33] with uh with APIs. Just let the model write
+[09:36] code against the API, but they didn't implement it. And why not?
+[09:40] Uh And that's because like running untrusted code is mega mega scary. Like
+[09:44] i- if I had said to you a few years ago, "Oh, we're just going to let
+[09:49] a language model write some code that we're going to gen- we're going to
+[09:52] execute for our users without looking at it, without reading it, without seeing
+[09:55] what it does, that might have potentially like secrets access.
+[09:59] Ideally, it has some secret access. You'd be like, "That's crazy. That's a
+[10:02] CV, right?" It's a CV. Like, it's a vulnerability.
+[10:06] That's a problem. And now we're proposing you to do this.
+[10:10] So, it is quite scary. What loads of things
+[10:13] can go wrong. We could It could read a file system, read some secrets that you
+[10:16] don't want it to read. It could exfiltrate those secrets into a network
+[10:19] request, run infinite loops, consume all your resources, do like really scary
+[10:23] stuff, run a crypto miner, you know? That would be That would be bad.
+[10:26] And in the past, people have tried loads of things to let people run code-like
+[10:31] solutions. So, if anyone's ever written a DSL,
+[10:35] some sort of like JSON spec about how to and to interpret that as code, that is
+[10:39] basically this. If you ever used one of those
+[10:41] integration softwares where you have to do that, that is this. They just don't
+[10:44] trust you to write code on their servers.
+[10:47] VMs also, people spinning up sandboxes to run code,
+[10:50] big sandboxes, big VMs, that's this. And also code review.
+[10:56] But, it's kind of lucky cuz we have like a
+[10:59] pretty cool primitive that solves this. And there will be other primitives that
+[11:02] solve this. I just think this is the first and so it's worth like worth
+[11:06] shouting about, really. And this is like how do you run untrusted code in a way
+[11:10] that's super safe for you and your infrastructure?
+[11:15] And it's kind of like this. So, we can execute a worker
+[11:19] from a string. And a worker is just a like a little is like an isolat
+[11:23] in V8. There's many blogs about how all this works. I'm not going to go into it
+[11:26] super deeply. I'm just going to show you what it can do.
+[11:29] So, for instance, we have this like
+[11:33] this piece of code that was generated and we're going to run this piece of
+[11:37] code that was generated. And this ran on the back end. It didn't run in my
+[11:39] browser. It ran in a dynamic worker that's fully isolated. And how how I
+[11:44] guess how can I prove that to you? If we do this one,
+[11:47] we are trying to get some secrets here, process.env.
+[11:51] And if we print them, there are no secrets.
+[11:54] And we also have this weird Cloudflare global. Ooh, interesting.
+[11:58] Um if we turn That was with node compat on.
+[12:01] If we turn node compatibility off, we don't even have We don't even have
+[12:04] process.env there and it all errors out. So,
+[12:09] we can like influent We have this like programmable sandbox. It's not quite a
+[12:13] sandbox. It's like a very lightweight thing that you can put load code into it
+[12:17] and then run it. And I'll show you some other options later. Like, it's not just
+[12:20] us that has this, but we have one that we host for you and goes to like
+[12:23] Cloudflare level scale. If you want to do billions of requests, knock yourself
+[12:26] out. And now like here's one where
+[12:30] the agent's written some code that accesses like an external API. And if we
+[12:34] run this one, it's like this worker is not permitted to access the internet via
+[12:37] global functions. Or maybe we want it to access the
+[12:40] internet. And now we can give it access. So, it's a programmable sandbox with got
+[12:45] with programmable guardrails. And all we're doing here is like
+[12:48] flicking a boolean in the server. That's like all that's happening here. But you
+[12:52] can provide like a more in-depth function to be like, "Only access things
+[12:56] to these domains." And that's what we do on the Cloudflare MCP.
+[13:01] Um if we go to next. Oh, speaking of the Cloudflare MCP,
+[13:05] this is where I really hope the demo works.
+[13:09] So, this is an MCP client in this slide. And if we
+[13:14] ask it a question, we're going to get some We're going to get like a auth
+[13:17] screen pop-up.
+[13:21] And then hopefully all this works.
+[13:28] Oh, insane. So, now we have like complete Well, we
+[13:32] have read-only access to the whole of the Cloudflare API. All of my Cloudflare
+[13:35] infrastructure, I have read-only access to.
+[13:38] Um which is pretty cool. These account IDs,
+[13:41] don't worry about them. They're not secrets in in Cloudflare world.
+[13:46] Uh cool. So, so we just listed a worker, but you
+[13:50] could do many more things here. Like, you can deploy workers from your command
+[13:53] line. You can do what we did earlier and add access to something. You could
+[13:57] [snorts] inspect your DNS. You could send emails soon.
+[14:01] You can do loads and loads of other stuff. Like, it's very very cool what
+[14:05] you can do here because you have access to the whole of the Cloudflare API, all
+[14:07] 2,000 and something endpoints.
+[14:13] And I guess like
+[14:16] it kind of brings up the question like where where are we going with letting
+[14:19] agents access external tools? Like, what does this look like? Like, you have
+[14:22] people installing CLIs for everything and running it on their own running it
+[14:25] on their own machine. Maybe running it on a VM. That's kind of cool.
+[14:29] Um You have us being like, "Oh, you could
+[14:32] just run untrusted code in this like other in this other place that's like
+[14:36] really isolated." You have people doing tool search.
+[14:40] You have people rendering UI's JSON.
+[14:44] I don't know. Um
+[14:47] And I guess my main thought is that like we're going to have so many isolated
+[14:52] environments on the on the web. And there's going to be loads of
+[14:56] infrastructure primitives that allow you to run this type of untrusted code on
+[15:00] the web because code is actually a very compact compact plan. Instead of doing
+[15:05] tool calls, you can have one tool called code where the model generates the code
+[15:10] of your choice and then you run it. And that code has so many more degrees of
+[15:13] freedom than like an individual tool call. So, it makes sense to me that as
+[15:16] the models get smarter, this is what this is what we will do.
+[15:20] And people will adapt their infrastructure primitives to do this.
+[15:22] So, there'll be so many more of this. And you see this starting with like
+[15:25] Pydantic Monty, Deno also, and like we also have it with
+[15:29] WorkerD, the dynamic workers I showed earlier. Like, people more people are
+[15:33] going to build these primitives because they're going to become more and more
+[15:35] useful. So, just like a little explanation.
+[15:39] Um this is WorkerD like spawning a dynamic worker in this
+[15:43] sandbox and running some code to get a fib sequence.
+[15:47] You can do the same thing with Deno with Deno run with some
+[15:52] questionable checking. I have no idea what that does.
+[15:55] And then you can also kind of do the same thing with Pydantic. Monty, their
+[15:59] new their new code interpreter for running untrusted Python.
+[16:03] Because it's Python, we have to download Python.
+[16:06] Sucks.
+[16:09] This might never work. I actually have no idea.
+[16:11] Oh, there we go. Great. Uh So, maybe you can see like where we're
+[16:16] trying to go with this. That there is there was a previous time where no one
+[16:20] would ever run untrusted code. That was a CV. Like, you would just immediately
+[16:23] like you have to like stop allowing that.
+[16:26] Uh And then it seems that LLMs it's
+[16:29] actually really good for them to run for them to write code that you can run.
+[16:33] And so now we're building the primitives to actually enable us to do that. And it
+[16:36] feels like we missed out on this whole part of the the
+[16:39] the tech scene that like we've never tried before. Like, in the 1950s, when
+[16:42] you wanted to run something on a computer in your local town, you printed
+[16:45] out some punch cards and you stamped them and you gave them to the guy.
+[16:49] And that was kind of like running untrusted code, right? Like,
+[16:52] that was kind of it. And then when we went to the cloud, we got away from
+[16:55] that. And now I think we're going to go much more back to that where
+[16:59] your users can write code cuz your users are AI.
+[17:03] And AI is very good at writing code. And that is how they're going to interact
+[17:06] with your platform, whether through MCP, whether even through like bash and CLI.
+[17:11] Like, I don't mind. I think they're just going to write code
+[17:13] against your services. And your services have to be ready for this. Like, your
+[17:16] APIs have to be ready to take a beating because they have to have good rate
+[17:20] limiting. Cuz I can run this in a for loop on multiple sandboxes at once and
+[17:24] just hammer your API. Like, you have to have some way of protecting against
+[17:27] that. Like, this is the new world that we're that we're now going to be living
+[17:31] in.
+[17:33] And that's like on the server side on the on the services side. Now, what's
+[17:36] going to happen on the client side?
+[17:40] So, I think that's almost even more interesting because that's the
+[17:43] user-facing side of things. Like, the user's not going to see the server. The
+[17:46] user doesn't care. The user just What Why is my agent not
+[17:49] getting my Gmail emails? Or why has it deleted my whole inbox? They're
+[17:53] not going to like They're not going to see that.
+[17:55] But on the client side, like there's a lot of innovation that's going to happen
+[17:58] here. And I think we've stalled a little bit recently
+[18:01] because actually building an MCP client in particular got really really hard.
+[18:06] Like, to to to actually build a client that was performative, that worked, you
+[18:10] needed to manage stateful connections, you needed to manage resumability
+[18:13] between those connections. There's
+[18:16] There's plenty of other reasons why building an MCP client was hard, but
+[18:19] like it was a pain, an absolute pain. And so people had like the most
+[18:23] stripped-down clients they possibly could. They mostly offloaded to the MCP
+[18:27] SDKs, which are quite bare-bones. And
+[18:31] no one was building these like more unique UI experiences on top of that.
+[18:36] And I think that that is going to come like very very soon. So,
+[18:39] the most the most obvious thing is we're going to have programmatic tool calling
+[18:42] in the clients. The the previous slide we just did showing those showing those
+[18:46] sandboxes with WorkerD, Deno, and Pydantic, that is like just running
+[18:49] untrusted code in a client. People are going to do that. If your client is
+[18:52] remote, you're going to do it like that. If your client is locally, well, just
+[18:55] YOLO it, whatever. Just eval it, you know? It's
+[18:58] going to be fine. But more people are going to do this programmatic tool
+[19:01] calling. It's going to happen. And because you're generating code,
+[19:06] people are going to save this code. And they're going to save it in these like
+[19:09] mini scripts. And users might be able to decide, "Oh,
+[19:13] this action that I just did, that the LLM generated for me, I want to keep
+[19:16] that for later." And then it will be a much faster. So, you can see things for
+[19:20] things like cron jobs. A user might set up some web scraping job like without
+[19:25] any knowledge of how web scraping works. And then it generates a script and that
+[19:30] script is run like every day, every 2 days. And whenever it breaks because web
+[19:34] scraping's like pretty brittle, the agent will fix it and resave the script.
+[19:37] Like, this stuff is how is going to happen. And I think like these saved
+[19:40] mini scripts, they only work when you embrace like programmatic tool calling,
+[19:44] but they really do work. And then and then the the last thing
+[19:49] is we're probably going to have many many more clients because they've been
+[19:52] so hard to make up until now, and it is going to get easier.
+[19:55] There's actually only There's not There's not a huge amount of really
+[19:58] well-used MCP clients.
+[20:02] That's going to change. And with that change, like
+[20:06] more people are going to be able to make them, more people are going to deploy
+[20:08] agents to the cloud that end up being an MCP client. And I think more people are
+[20:12] going to try and do this like stateless agent loop thing. Like it it was fine to
+[20:16] have sandboxes for every agent like running code code locally if
+[20:21] if there were a million agents in this world. I think when there are like 100
+[20:26] agents for each person Oh, hello. Let's not do that.
+[20:30] That's going to be That's going to start getting really tough. And you're going
+[20:32] to have to like embrace a cloud-native way of doing things, which means that
+[20:36] state has to be something you can turn on or off.
+[20:40] And this is I think we're we're nearing the
+[20:43] end, but this is my last thing. It's like I work a lot on MCP servers and on
+[20:47] the SDK. And this is where I think that bit's
+[20:50] going. I think we're going to see MCP as a
+[20:53] middleware in an when you build an MCP server. When
+[20:56] you build an API, and you build an API service, it will be a flag that you can
+[21:00] flag on in your favorite framework. The
+[21:04] the SDK itself is getting super, super lightweight. And I think by the end of
+[21:07] this year, we'll be like natively in every single at least TypeScript big
+[21:13] full stack framework. It will just be there natively. Because it will be so
+[21:16] small, it will literally just express the protocol in itself. And it will be
+[21:20] silly for them not to have it. They'll just have a native integration.
+[21:23] And they'll be able to do MCP is true on all of your APIs. And because all of the
+[21:27] clients will be doing programmatic tool calling, you can express like your
+[21:30] thousand APIs from one Next.js app and just do MCP equals true, and expose it
+[21:36] over at the MS tools over MCP as well. And I think that I think that will
+[21:40] happen. I've been thinking that's going to
+[21:42] happen for a while, but I think we're pretty, really close there. And the last
+[21:46] blocker is like fixing the SDK really, so that it's capable of doing that. It's
+[21:50] capable of fitting in every single front every single bundle really.
+[21:54] And that's the plan. Um
+[21:58] You can find out more the We have a Code Mode blog post that came out pretty
+[22:01] recently. It's how we gave agents an entire API in a thousand tokens.
+[22:06] If you have a big API, you should probably do this.
+[22:09] Any accessibility providers, please just do this, cuz it's really, really good
+[22:12] for people to access your data. Um
+[22:15] and thank you. Try out NPMI agents. Thank you very
+[22:19] much. Woo! >> [applause]
+[22:25] [applause]
+[22:34] [music]

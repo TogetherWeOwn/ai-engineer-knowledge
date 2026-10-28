@@ -1,0 +1,206 @@
+# title: Serving 2 Million Models Without Melting: Scaling the Hugging Face Hub — Arek Borucki, Hugging Face
+# source: https://www.youtube.com/watch?v=lyL5QhgIOxc
+# speaker: Arek Borucki, Hugging Face
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T06:53:13Z
+# sha256: ec24dfc0cb359971a08d0dc98f1af1e569bc8e82f819590d1336b890b552e708
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:01] [music]
+[00:13] Good afternoon everyone. I have a question.
+[00:19] How many of you knows hugging face?
+[00:25] Nice. How many of you already use hugging
+[00:31] face? Amazing. Almost everyone.
+[00:36] But I think we still have opportunity to grow our usage. My name is Ar Borutki. I
+[00:43] work as machine learning platform and database engineer at hugging face.
+[00:49] Today I would like to walk you through how
+[00:54] hugging faced scaled infrastructure
+[00:59] and how we ended up serving 3 million models
+[01:04] to developers around the world. I would like to share architectural
+[01:12] decisions we made, challenges we faced, and lessons we learned while scaling one
+[01:22] of the fastest growing open-source AI communities in the world.
+[01:29] I hope you will enjoy it and let's get started.
+[01:37] Before I dive into technical details, let's talk about scale.
+[01:44] Today, Hugging Face serves more than 14 million users and this number is growing
+[01:52] very fast, especially in the last couple of months.
+[01:57] We host three million public models, 1 million data sets,
+[02:07] 50,000 organizations, and not only hobbyists or scientists.
+[02:16] More than 30% of Fortune 500 use hugging face as a
+[02:23] part of AI workflows. Just to give you some perspective,
+[02:31] few years ago we had 20,000 models. Today 3 million.
+[02:39] It is around 150x
+[02:43] increase in just last couple of years. And this grow is exactly why I'm here
+[02:51] today talking about infrastructural decisions that keep the hub healthy at
+[02:59] scale.
+[03:03] This is how fast the number of public models is growing on the hub. Every big
+[03:10] release like llama or deepseek generated thousands of new models on top
+[03:20] and our infrastructure needs to handle that
+[03:25] and it is not only models also data sets.
+[03:31] In 2022, we had 10K. In 2024,
+[03:38] 100K. Less than a year ago, we had 500K.
+[03:45] Today, 1 million. All this data
+[03:51] must be stored, indexed, and also must be searchable.
+[03:57] And that's the hardest part.
+[04:02] And this is also the reason why we had to rethink our search.
+[04:09] At 20,000 models, any query is fast. Even without an index, trust me, no one
+[04:17] would notice. At 3 million, same approach breaks.
+[04:23] Imagine what would you do if the hub search would be slow.
+[04:30] you would just leave and go somewhere else. And this is also what user are
+[04:34] doing. They expect fast instant results. With 14 million users,
+[04:42] even 1% is a not small number. It is 140,000
+[04:50] of people hitting slow search
+[04:56] at scale. P99 is much more important than P50 and
+[05:04] we are paying a lots of attention to P99 and that's the reason why we invest
+[05:13] in premputee tokens denormalize optimize for read collection
+[05:20] in MongoDB full text search based on Apache lucine
+[05:27] Kubernetes autoscaling and soon in database sharding.
+[05:34] The next slides will show you how
+[05:41] high level architecture when user interact with the hugging face
+[05:46] hub his request flows from the front end to the hub API.
+[05:54] The hub is running on Kubernetes. Currently we are using horizontal pot
+[06:01] autoscaler. During spikes new ports scale up
+[06:07] automatically to handle the load and scale back down when traffic drops.
+[06:14] This help us to keep the hub healthy without manual intervention.
+[06:22] Next the request goes to MongoDB Atlas
+[06:29] which is source of true for our metadata.
+[06:34] And there is one point that sometimes surprise people.
+[06:39] MongoDB does not store the models themselves.
+[06:44] It stores everything about the models. What doesn't mean in practice
+[06:52] in MongoDB we hold all the metadata
+[06:59] users repositories
+[07:02] models data sets buckets
+[07:07] spaces information configuration data billing data access
+[07:14] control and more. The actual models artifacts,
+[07:21] tokenizer files, cart assets and configuration files are stored
+[07:28] separately in cloud object storage such as AWSS3.
+[07:34] This separation of concern let us scale metadata
+[07:39] independently from binary storage and compute independently from both.
+[07:46] We can optimize each component individually
+[07:50] for specific workload.
+[07:55] Now let's check how search works in details.
+[07:59] For example, someone wants to search the model on the hub and let's say that's
+[08:07] llama. So someone type llama into hugging face search bar. His request
+[08:13] flows through the hub to an optimized read collection on MongoDB. And this is
+[08:20] not our main repo collection when we keep all the data. It's a separate
+[08:27] denormalized copy only for reads and listings.
+[08:35] The key information is on the left. We tokenize model names on insert time,
+[08:45] not at query time. For example, someone wants to publish
+[08:51] model meta minus llama/ llama 3.18b.
+[08:58] We split the long model name into small tokens like meta lama 3.18b and we store
+[09:07] them in an array in MongoDB document. Next, Atlas search which is using Apache
+[09:16] Lucin under the hood use autocomplete to find matching models instantly.
+[09:27] This is example of single document from our model collection.
+[09:34] In this example, I'm using find one method. I want to find model ID meta
+[09:40] minus llama/lama 3.1. So that's the model from the previous slide.
+[09:47] And I'm projecting only search token array.
+[09:53] And we see that all those premputee tokens are part of this array. So we
+[09:58] have metal lama 3.1 metal lama etc. Next
+[10:05] there must be a query. In the past we were using classical
+[10:11] MongoDB find method on models collection with reax operator
+[10:20] and this reax operator we're searching in search tokens arrays models which are
+[10:26] equal to llama
+[10:30] and then we were s sorting results by trending score which is calculated every
+[10:37] five minutes. This is number of downloads and number of likes
+[10:43] is as far as I remember from the last seven days.
+[10:48] This solution was working well as long as data set was small.
+[10:55] Reax doesn't scale well. So when our data set started to grow very quickly,
+[11:03] we started to having problems with latency.
+[11:06] So we decided to switch to Atlas search that's a feature which is using Apache
+[11:15] lucine under the hood. So MongoDB doesn't provide in core
+[11:22] MongoDB server full text search there is additional process MongoD
+[11:29] uh this MongoDBT process is a wrapper around Apache lucine
+[11:37] for end user users this is transparent you are just using Unifi MongoDB query
+[11:42] API and
+[11:46] when You use aggregation pip pipeline together
+[11:52] with dollar search operator. MongoDB will know that you would like to search
+[11:59] Apache Lucin index. Obviously you need to put the name of
+[12:05] this index which is in this scenario model search
+[12:11] autocomplete
+[12:14] model equal to llama path search tokens and we still sort results by trending
+[12:23] score and this solution is much more efficient
+[12:27] and is so far scale Well, so we don't have any more latency issues in our
+[12:35] search bar.
+[12:41] First two results returned by previous query. First metal lama has trending
+[12:47] score 33. Second one 14.
+[12:56] But hugging face hub is not only search. We have hundreds of different services
+[13:03] in hugging face which are utilizing which are using MongoDB
+[13:08] to handle million of queries. We use seven nodes MongoDB clusters cluster
+[13:17] with multiple machines. We can distribute queries across multiple
+[13:24] nodes. So no single node become read bottleneck.
+[13:29] This is how it works. Application talk to the MongoDB cluster. All inserts,
+[13:35] deletions or updates goes to single primary because only primary can handle
+[13:41] them. However,
+[13:45] we are distributing reads across multiple machines.
+[13:51] We also have one analytic hidden node. What does it mean? This
+[13:59] mean this node is invisible from application. MongoDB driver is not
+[14:05] routing any queries to this hidden node. This node is still replicating data from
+[14:12] primary but is not interacting with interacting
+[14:17] with production traffic. We are connecting directly to this node
+[14:22] and we use him for any kind of reporting
+[14:30] traffic on or any kind of really heavy queries.
+[14:35] All secondaries continuously tail the oplog from primary keeping
+[14:42] cluster in sync. Now let's have a look what actually is
+[14:48] running on secondaries. First all queries which doesn't require
+[14:53] the latest data goes to secondaries. Only queries that must
+[15:02] have strong consistency stay on primary and we are paying a lots
+[15:07] of attention to this. We are paying lots of attention to the queries which must
+[15:12] run on primary. Second, complex aggregations.
+[15:18] Aggregations pipelines that scan large amount of data, sort, group or transform
+[15:29] the data should not go on primary. They are
+[15:32] heavy. Secondaries are better placed for them.
+[15:38] Third, change streams. We react to data changes in real time
+[15:45] for several reasons. For example, caching validation, sync to different
+[15:51] data store technologies like for example AWS, Red Shift or for eventdriven
+[15:57] workloads. Those kind of operations are also not
+[16:03] very light and they should stay impossible on secondaries.
+[16:08] Fourth, all ad hoc queries, reporting queries,
+[16:13] maybe some experimental queries go to hidden MongoDB replicas set member which
+[16:19] is isolated from production traffic. The pattern is simple. Primary should
+[16:26] focus on what only primary can do. Anything else can be pushed to different
+[16:35] machines.
+[16:38] However, with 14 million users, 3 million models and our grow soon single
+[16:48] MongoDB replica set will not be enough. The next step is sharding.
+[16:56] Sharding means scaling your database horizontally.
+[17:00] Instead of putting full data set on one replic on one replica set cluster, we
+[17:08] are going to cut data into pieces and put each piece on separate chart.
+[17:16] Each shard will have his own replication primary and secondary. So we will keep
+[17:23] replication just multiplied. The key difference between replica set
+[17:28] cluster and sharded cluster is replica set keep full data set on each node.
+[17:35] Sharded cluster keep only part of the data on each shard. And then if you want
+[17:40] to scale horizontally more you are just adding more shards and then MongoDB
+[17:45] balancer will balance data across all those shards. There is also shard key
+[17:51] which must be selected. This is not trivial operation but this talk is not
+[17:56] about choosing short key. This way we are going to scale
+[18:02] everything CPU
+[18:05] memory storage
+[18:09] reads and writes.
+[18:14] Now let's have a look what is going on the hub level.
+[18:19] DHA is running on Kubernetes. Currently we are using horizontal pot
+[18:25] autoscaler. When CPU or memory threshold go above target, Kubernetes adds new pot
+[18:34] automatically to handle this spike and scale them back down when traffic drops.
+[18:40] Our deployment hub deployment can scale from 10 to 500 bots depends of on the
+[18:48] traffic. This is how we keep the hub healthy without manual interventions
+[18:55] and without infrastructure overprovisioning.
+[18:58] So this is also cost effective solution. However,
+[19:05] what happens if horizontal pot autoscaler
+[19:09] want to add new ports but kubernetes does not have free nodes anymore.
+[19:17] This is where second layer comes in. We are using cast AI for Kubernetes note
+[19:23] autoscaling when pods are pending because there is
+[19:28] no capacity and Kubernetes scheduler is not able to schedule them. Cast AAI is
+[19:36] adding new nodes and then scheduler is able to schedule
+[19:41] those spots. So we have two layers of scaling. First one is at deployment
+[19:47] level. Second one is at infrastructure level via castai.
+[19:54] But we are going to migrate horizontal port autoscaler to keta kubernetes
+[20:01] eventdriven autoscaling. The difference HPA scale only based on CPU and memory.
+[20:11] KDA scale on real application metrics like request per second or
+[20:19] event loop utilization. It means scaling is driven by actual workload
+[20:26] not by resource utilization only. For example, pot can have low CPU but high
+[20:35] request Q. KDA can see it. HPA not
+[20:43] the best part of this architecture. You never have to think about it. When
+[20:49] you pop when you push the model, search the hub or download the model, it just
+[20:57] works. This is what scaling medium models is really about. Keeping the user
+[21:04] experience simple no matter how complex it gets under the hood.
+[21:10] Thank you very much. It was pleasure for me to be here today and I wish nice day
+[21:16] for all of you.
+[21:21] Thank [applause] you.

@@ -1,0 +1,289 @@
+# title: Morgan Stanley's ALPHALAB: Multi-Agent Research Across Optimization Domains — Brendan Rappazzo
+# source: https://www.youtube.com/watch?v=kiqubc5b5Yo
+# speaker: Brendan Rappazzo
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T06:47:51Z
+# sha256: eb0ead1fa60cea637120ad0b6c8aa84a4eabc7fe0f1038637d90301469024719
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:01] [music]
+[00:12] >> Well, thank you everyone for coming. Um
+[00:15] today I'll be presenting what we've been building at Morgan Stanley, uh sort of
+[00:19] auto research agent to try and automate quant research.
+[00:24] Um and I wanted to just take the the first couple minutes to sort of explain,
+[00:28] you know, give some context on our team and also um you know, why we're even
+[00:33] pursuing trying to build this this auto research agent. And so, our group are
+[00:38] relatively small. We're about 30 uh PhD AI researchers, and we kind of
+[00:44] operate both like kind of half academic, so we're encouraged to um you know,
+[00:48] publish papers, open-source code, share our research. And then the other half is
+[00:53] sort of more applied internal work. And you know, I think a lot of our
+[00:57] problems or or yeah, at least some of them are are can be fairly well-posed.
+[01:02] They kind of have a similar shape to Kaggle where we have you know, an input
+[01:07] time series data set, and our task is to just, you know, predict future values
+[01:11] and maybe with some other constraints of wanting the model to be well-calibrated.
+[01:16] Um and so, I think, you know, being on the sell side, we kind of have maybe
+[01:20] less sort of adversarial selection, and so it it kind of lends itself naturally
+[01:25] to this auto research framework. Um
+[01:29] and you know, also I think there's we have a lot of sort of algorithms in
+[01:32] production where we have a feeling if we could just put in more cycles, there
+[01:36] might be some improvements to kind of squeeze out, whether it's
+[01:39] just better hyperparameter tuning or exploring a lot of different kind of
+[01:43] ensembling these different methods together.
+[01:47] Also, you know, we have We work with a lot of different desks, and there's a
+[01:51] feeling that like something we have built for say credit
+[01:54] bonds could really transfer well to like muni bonds, and that kind of translation
+[01:58] process should be something that can be automatable with with agents.
+[02:03] And even like going to new trading desks and trying to build them new algorithms,
+[02:07] there's sort of a lot of low-hanging fruit where uh they're not really using
+[02:11] a lot of machine learning or or AI automation. And so,
+[02:15] you know, even like a reasonably trained model should be able to have a big
+[02:18] impact. And so, sort of in the last year and a half where these these agents
+[02:23] became, you know, able to do long-horizon tasks, we've been
+[02:26] interested in trying to do this automation. Um but it wasn't really
+[02:31] until December of 2025, and I think this is a pretty common sentiment now that
+[02:37] um it really felt possible for the first time with like with Opus 4.5 and with,
+[02:42] you know, these harnesses like Claude Code and Codex, where it really felt
+[02:45] like the models were at a point where they
+[02:47] could do these long-horizon tasks and also kind of the idea of
+[02:51] putting them in these harnesses that that allow them to do so.
+[02:55] And so, you know, really starting this year, we
+[02:57] kind of made it a big effort to build this this auto research agent. And of
+[03:02] course, sort of the the top-line goal is just maximizing P&L and maximizing the
+[03:07] the number of new algorithms we can put in production.
+[03:10] Um but, you know, we also had these design
+[03:12] concerns. Like, of course, we wanted to play nicely and integrate with
+[03:17] all of our data and sort of the pre-built scaffolding we have around
+[03:20] backtesting and evals. We also wanted it to be able to run the
+[03:24] full spectrum. So, like, you know, on one side, maybe it's a new
+[03:29] data set, and we just want to say like, here's the path to the data, a natural
+[03:34] language description of what we hope to predict, and the thing should go off and
+[03:38] do research and build its own eval and start doing experimentation.
+[03:43] And then sort of on the other side of the spectrum, maybe it's like,
+[03:46] no, we have our data scripts, we have our eval, we actually have have good
+[03:50] models we've already produced, and we just wanted to kind of churn and do more
+[03:54] cycles and see if we can find an improvement.
+[03:57] Um also, we wanted to build this to be really model agnostic, so we could use
+[04:02] any of the frontier providers or increasingly, uh you know, any
+[04:06] open-source model. And also, we wanted to build it in a way
+[04:10] that you know, as these models get better and better, it's not sort of
+[04:14] consuming what we built. Like, we kind of rise with the tide of the models.
+[04:18] And lastly, you know, really carefully think about um how do we encode sort of
+[04:23] like our enterprise knowledge as Morgan Stanley and then our human expertise as
+[04:27] as quant researchers. And so, for for the rest of the talk, I
+[04:32] want to start with sort of what I'm calling Alpha Lab 1.0, which is our
+[04:37] first version we released. I think it was early April, and we put out a full
+[04:43] like 40-page tech report going through all the details and results. We also
+[04:47] open-sourced all the code on GitHub. So, I I kind of want to cover that more at a
+[04:51] high level because all the details are so public, but I'm happy to talk
+[04:55] afterwards in depth about any part. Um
+[04:59] but then I really want to cover, you know, sort of what's happened since
+[05:03] then. So, what were the initial results? What were the kind of failure cases
+[05:07] since then because we we have encountered a lot of failures, and then
+[05:11] talk about how we're really addressing those by building
+[05:14] uh kind of our own rich set of evals and environments, and how [snorts] that's
+[05:18] sort of allowing us to improve the harness and climb towards
+[05:23] this sort of self-recursive improvement and sort of our grand vision now for
+[05:27] Alpha Lab 2.0. And so, to start, you know, Alpha Lab is
+[05:33] an agentic harness, and kind of going towards that that first side of the
+[05:37] spectrum, the the goal is you have some data set, you know, let's
+[05:42] say it's like a uh exchange rate data set or something, and you can just
+[05:46] provide the path to the file or maybe it lives on an API and you can just say
+[05:51] here's the API access and the API spec. And then just in
+[05:55] natural language say what you want to predict. So maybe it's as simple as, you
+[05:59] know, the simple exchange rate. I would just I'm curious in predicting one day
+[06:04] out what the the rate will be. And the harness then works in these
+[06:07] these three phases. So the first phase is research and I'll cover these all
+[06:12] more in depth. The second phase is then actually building its own evaluation or
+[06:16] backtesting and the third phase is sort of the mass experimentation, which is
+[06:21] really the heart of the the harness. And then as output you get a suite of
+[06:25] trained machine learning models that are trying to, you know, do the the
+[06:29] prediction you care about.
+[06:34] And one design choice we made, so the
+[06:37] harness is actually all our own code. So we decided not to use any off-the-shelf
+[06:43] agent framework. Um
+[06:45] we wrote it all and really Claude wrote it all and I think like in the era of of
+[06:50] Claude code, I I like this approach of kind of building your own from scratch
+[06:54] because you get sort of max freedom and max like,
+[06:59] you know, you're you're free to kind of tweak anything you care about. Um and
+[07:04] so, you know, all the tool calls are done with these like functional tool
+[07:07] calling and that also allows us to nicely really be provider agnostic. So
+[07:13] OpenAI Anthropic or open source providers, it's very easy to to adapt
+[07:18] the the harness to any any of those. As far as the actual tools, there's
+[07:23] there's several but the sort of three main ones are one full shell access, so
+[07:28] it can write any bash command. So this is how it's
+[07:32] writing code, setting up its Python environment, editing code, running code.
+[07:37] Um another important one is web search and this allows it to go read, you know,
+[07:41] archive or technical blogs or anything like that and get sort of up to speed at
+[07:47] um you know, at least in the public domain
+[07:49] like sort of what's the state of the art methods.
+[07:52] And then the third one is um
+[07:55] we use Slurm to manage our GPU cluster, but the the higher level idea is just a
+[07:59] a nice abstraction where the model can say like I'm training a
+[08:04] a fairly big model. I need 4 H100s and this many CPUs and just kind of write
+[08:09] the config config and submit the job and not have to worry about like doing
+[08:13] hardware orchestration.
+[08:17] Uh yeah, and so going to the the actual phases. So again, the first
+[08:21] phase is this this research phase. And the idea here is kind of like almost
+[08:26] like a super cloud MD file or a super init where we just want the system to go
+[08:31] off and kind of build enough context such that it can start meaningfully
+[08:36] uh you know, forming hypotheses and testing them.
+[08:39] Um and we built, you know, Alpha Lab is
+[08:42] kind of this server-side running thing, but we built this lightweight UI on top.
+[08:46] And so sort of how we've done this is build
+[08:50] this this scaffolding of the to-do list. So it's first, you know, prompted to to
+[08:54] build a to-do list such that if it completed every item, it'd be able to
+[08:58] start experimenting. And this allows us to kind of keep re-prompting should it
+[09:02] try to exit early. And so you can see, you know, it's talking about setting up
+[09:07] its Python environment, um doing different data loading, doing
+[09:11] different kinds of statistical testing. And each item of the list it's
+[09:15] instructed to build a like take notes in a markdown file. And this also allows
+[09:21] feature agents to smartly query that and kind of manage their context
+[09:25] dynamically. And and this is really where web search
+[09:29] is used most because it will go off and read archive and and get kind of good
+[09:34] context from the public domain as well. And so this can vary a lot, but um
+[09:39] it takes, you know, roughly around 3 to 4 hours.
+[09:43] The second phase and what um is most different in 2.0 is the eval
+[09:48] building, but just to say sort of our first implementation, you know, of
+[09:52] course the evaluation is the most important piece and LLMs aren't
+[09:56] malicious, but they can make, you know, very silly mistakes and if you're
+[10:00] optimizing against a bad a bad eval, the whole thing kind of falls apart. So our
+[10:05] attempt to be more robust is have this sort of
+[10:09] multi-agent framework. So one is tasked with first building the eval, like
+[10:13] actually writing all of the code, and then that goes off to two critic agents.
+[10:18] One that's told to be more high-level, like are there conceptual errors in our
+[10:23] evaluation or any kind of forward leakage of information, and then one
+[10:27] that's more programmatic. So it's like writing unit tests and integration
+[10:30] tests. Um and they write up any issues they
+[10:34] find of our issues, it goes back to the builder to fix, and this loop doesn't
+[10:38] end until sort of all of them are happy that the eval is good.
+[10:43] And then the third phase and really the heart of everything is this mass
+[10:46] experimentation. And so we've we've chosen, you know,
+[10:50] both in the code and in our UI, this is kind of
+[10:54] formulated as a Jira board or Kanban board. And so there's
+[10:58] this sort of strategist agent that gets to look and query all the context from
+[11:03] the previous steps, and it's just supposed to keep coming up with
+[11:06] experiments it wants to try, and it submits them to this like to implement
+[11:10] column. And then as new cards come in, those get
+[11:14] pawned off to worker agents that are tasked with actually writing the code to
+[11:18] implement the strategy, writing the Slurm config, you know, what
+[11:22] hardware does it need, submitting it to our cluster,
+[11:25] waiting for the job to finish, and then look at, you know, the the machine learn
+[11:29] learning training curves, like did it underfit, overfit, and then also looking
+[11:33] at the eval results. And then it sort of writes this postmortem analysis, which
+[11:38] goes back to the strategist as each job finishes. So, the strategist hopefully
+[11:43] can do this kind of self-evolution. So, it can see like I suggested, you know,
+[11:48] three variants of transformers that actually didn't work too well, but uh
+[11:52] XGBoost is is working really well. So, I want to explore more tree methods or
+[11:56] something like that. Um
+[12:00] And also in this step is where we as users can steer. So, you can, you know,
+[12:05] another reason we pick sort of this Jira formation is
+[12:08] uh you can cancel cards, you can add your own cards. There's also a chat
+[12:12] feature that's sort of cut off here, but you can chat with the strategist and
+[12:16] kind of steer it towards more creative or kind of give it intuition of
+[12:20] different methods that should try. Um and then we keep this, you know,
+[12:25] ever-growing leaderboard where you can see like given your eval and given a
+[12:29] held-out private validation set, like what are the best-performing models? And
+[12:34] you can click in and see like, you know, from inception of the idea to the code,
+[12:38] and you can pull it out and play with it.
+[12:41] And then this is just sort of our UI 2.0, which is really just optimized to
+[12:46] look cool, but you can see like, you know, it's suggesting experiments, and
+[12:49] this is really sped up, but how each worker kind of pulls it through,
+[12:54] um you know, building, deploying, and then analyzing the results.
+[12:59] And um you know, in our paper, we did more sort
+[13:03] of academic data sets. So, we looked at CUDA kernels, we looked at uh an
+[13:07] academic traffic time series data set, and we did the kind of classic like
+[13:13] Karpathy-style LM speed running. Um and it's sort of hard to benchmark AlphaLab,
+[13:19] but we compared to more of a Karpathy-style like single agent in a
+[13:23] loop going, and it did find a better uh training config for
+[13:28] training an LLM. We also put this on a Kaggle
+[13:32] competition, which was to It was, uh, hosted by Nvidia to fine-tune their NeMo
+[13:38] Tron model to be a reasoning model. Uh, and it got in the top 12% of
+[13:43] submissions. Which I think is decent, and also it
+[13:46] only had sort of 10 iterations to work with because we joined late, and I
+[13:50] think, you know, AlphaLab works best the more iterations it can explore. So,
+[13:55] presumably or hopefully it would have done better had it, uh, had more time.
+[13:59] And then I can say at a high level internally,
+[14:03] there's been a handful of of models, all sort of of the flavor where we had a
+[14:07] decent model already, but we just turn it over to AlphaLab to keep kind of
+[14:12] churning on it. Uh, where it's found meaningful improvements that are now
+[14:16] working their way through risk and going into production.
+[14:20] And so with the my last couple minutes, I I want to talk about, um,
+[14:25] you know, we we ran into some real issues and hard questions. Uh, I think
+[14:30] the first was, you know, okay, so we had some some good results, but we've also
+[14:34] had cases where it's really failed. And so it's kind of always in our head,
+[14:38] like, how real is is any of this, you know, if it if it's failing on these
+[14:42] hardest problems, how do we measure, how, you know, how real this is.
+[14:47] And the second was, and I'm sure a lot of you might be thinking, like, okay,
+[14:51] your research phase sounds reasonable, having a strategist and workers sounds
+[14:55] reasonable, but isn't it sort of arbitrary, you
+[14:58] know, like, how do you motivate these design choices? And how we feel now is
+[15:02] like, and I think a big theme of this conference is,
+[15:06] you know, should we be making these decisions at all? Like, this itself is a
+[15:10] verifiable loop. Like, an LLM should be doing this this meta-optimization
+[15:14] itself. And then lastly,
+[15:17] you know, in this this 1.0 formulation, it's sort of like
+[15:21] we give the data, we give the goal, and the LLM just goes off and does it. So,
+[15:25] like how does that exactly encode our, you know, Morgan Stanley's enterprise
+[15:30] knowledge, but just our expertise as as quants? Like it's sort of missing from
+[15:34] the picture. And so, the answer to all three we feel
+[15:38] is really in building our own evals and environments.
+[15:42] And so, to just sort of go one by one through the questions,
+[15:46] you know, to the first point, and this is a lesson I learned over and over,
+[15:50] like monthly, working with these models, you have to start with good eval. Like
+[15:54] it's such an obvious thing I think we were kind of overeager and wanted to
+[15:58] treat it more like a a human researcher, but you of course need like a very clear
+[16:03] way to measure. And so, the the biggest kind of change is now we're we're very
+[16:09] opinionated about the eval. It's very much like Kaggle. And so, you know, we
+[16:14] treat it as data and description in, the harness lives in the middle, and its
+[16:18] only job is to submit containerized models. And it gets sort of the the
+[16:23] feedback of like a public leaderboard score, but you as a user get to see a
+[16:27] private leaderboard, like held-out validation, how's the model performing.
+[16:31] And so, you know, in this case, you can measure like just for any given
+[16:36] task, how well does your model do? But of course, once you have this strict
+[16:41] kind of format, you can think, okay, you know, to me evals and environments
+[16:46] are the same thing. It's just you train in environments.
+[16:49] So, now what we've done is built on the order of like 10 to 20 really careful
+[16:54] environments, and that becomes a reinforcement learning signal. And so,
+[16:57] we're you know, quote-unquote AlphaLab meaning
+[17:00] AlphaLab. So, once you have that way to measure, you
+[17:03] know, you can do human tuning of the the harness. So, like maybe there should be
+[17:07] two strategists, and maybe they should debate, or maybe there, you know,
+[17:10] whatever kind of ideas you have, you at least have a way to measure and kind of
+[17:15] manually hill climb. But what we're doing now is really this meta harness
+[17:19] optimization, where the LLM is looking at the trace, is
+[17:23] looking at the about, you know, the results, and improving the harness
+[17:26] itself. And also sort of a a tangential axis is
+[17:30] we're now collecting good traces from open source model and really touching
+[17:34] weights and doing like GRPL or or other, you know, on policy distillation
+[17:39] methods. And so, we see like the the best performing thing might be an
+[17:43] orchestration of open source and close source models, but we're kind of
+[17:47] optimizing the whole thing together. And to the last point, you know, how do
+[17:52] we as as experts encode our expertise, we again think it's
+[17:57] through environments. Like building environments, at least good
+[18:00] environments, is really really hard work. You know, it's you have to be
+[18:04] there's of course like the data that goes in that's proprietary, but you
+[18:08] know, designing the the verifiable metrics is maybe the easy part, but then
+[18:12] we're also doing this qualitative rubrics, where we kind of
+[18:16] look at the traces and say, you know, what makes a good researcher, what's the
+[18:21] thought process, and we can grade each roll out on, you know, how well it's
+[18:25] following our research process. And so, having these good rubrics that become
+[18:29] the signal for the model to learn, we feel is really how we're we're building
+[18:33] our own expertise into the system. And so, just to kind of conclude the the
+[18:39] 2.0 version is really having this strict environment and eval
+[18:43] setup, and you know, whatever lives in the middle, we almost
+[18:47] in the limit kind of don't care about. We can initialize it to Alpha Lab 1.0,
+[18:51] but this it should really be this self-improving system.
+[18:55] Um and just to leave kind of the the bigger
+[18:59] picture headline result, and my feeling is you know, this ability to do general
+[19:04] auto research, I think will kind of become a commodity. Like I think we're
+[19:07] already seeing it with GLM 5.2, and so I really think
+[19:13] all of your value as like an enterprise or human expert comes from building
+[19:16] environments. And so like, you know, temporarily for us that we're still
+[19:21] doing like manual tuning against the environment, but I think in the limit
+[19:26] the the auto research can research itself and just be the self-improving
+[19:30] um process. And so, um
+[19:34] my site's on there and then also the the project page again the 1.0 version we
+[19:39] released everything and our plan is to keep just releasing because again, we
+[19:43] think the environments encode all of the the value. Uh so, thank you.
+[20:04] >> [music]

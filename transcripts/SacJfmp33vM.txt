@@ -1,0 +1,190 @@
+# title: Your GPU Neighbor Can Hear Your Model — Branislav Brzak, Stealthium
+# source: https://www.youtube.com/watch?v=SacJfmp33vM
+# speaker: Branislav Brzak, Stealthium
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: dub-auto:es (YouTube auto-dubbed Spanish captions; not the original English)
+# retrieved_at: 2026-10-22T03:53:48Z
+# sha256: 663c8cbcffd306cf67a097248349fb2d6978a97c1876eee8ce25123dde03337e
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:01] Hola a todos. Esta charla trata sobre los riesgos de que la información de
+[00:04] su LLM se filtre a través de hardware GPU compartido. Si ejecuta un modelo en
+[00:08] la nube en una GPU compartida con otros inquilinos, alguien a su lado puede
+[00:11] aprender cosas al respecto. Pueden saber qué modelo ejecuta, qué tan
+[00:15] rápido responde e incluso qué tipo de trabajo realiza, sin tocar datos, solo
+[00:19] observando tiempos. De eso trata esta charla. Lo que un co-inquilino en el
+[00:24] mismo hardware puede aprender de su LLM solo por los tiempos, y qué puede
+[00:27] hacer al respecto. Para empezar, soy Branislav Brzak, investigador de
+[00:32] ciberseguridad empleado en Stelthium. En Stelthium, nos especializamos en
+[00:36] asegurar y brindar observabilidad en los entornos donde operan los sistemas
+[00:40] de IA. Mi área de enfoque es la investigación de seguridad de bajo
+[00:43] nivel relacionada con GPUs. Eso es algo que esta charla cubre. Al compartir una
+[00:49] GPU entre inquilinos, se espera aislamiento total, pero el aislamiento
+[00:52] provisto podría no ser suficiente. En este caso de ataque, el atacante ni
+[00:57] siquiera necesita permisos especiales como acceso root. Tampoco necesita
+[01:01] ningún exploit tradicional. Lo único que hace es medir los tiempos de las
+[01:04] partes del hardware que aún se comparten entre los inquilinos. Este es
+[01:09] un video de demostración de cómo se ven los paneles de la víctima y del
+[01:13] atacante. A la izquierda, tenemos un modelo Quant 3 realizando inferencia. A
+[01:17] la derecha, el atacante usa un canal lateral que Quant 3 filtra mientras se
+[01:21] ejecuta. A partir de eso, determina exactamente qué modelo es y qué tipo
+[01:25] de texto produce en ese momento. Estos son solo los titulares, pero no toda la
+[01:32] historia. Podemos identificar qué modelo es, su arquitectura y
+[01:35] profundidad, con un 97%de precisión. Podemos determinar qué tan rápido
+[01:40] decodifica con un 99.3%de precisión. Podemos saber cuándo y cuánto, los
+[01:43] períodos de actividad, recuento de tokens y la longitud de la respuesta.
+[01:47] Lo que no podemos saber es qué tipo de trabajo realiza: código, prosa, JSON o
+[01:52] recuperación. Lo que no podemos saber, sin embargo, son los prompts,
+[01:56] respuestas o contenidos reales. Solo los tiempos. Y todo esto en H100s
+[02:01] reales sirviendo LLMs reales. Estamos usando hardware de Nvidia. El
+[02:06] aislamiento de GPU se logra usando Multi-Instance GPU, o MIG para abreviar
+[02:11] . Cada segmento MIG aislado tiene sus propias unidades de cómputo físicas y
+[02:15] VRAM dedicada. Eso proporciona aislamiento de hardware en esas partes.
+[02:20] En nuestro ejemplo, el LLM que servimos corre en un segmento con tres unidades
+[02:24] de cómputo y 48 GB de VRAM. El atacante corre solo en una unidad de
+[02:28] cómputo y 10 GB de VRAM. Lo que está aislado son unidades de cómputo,
+[02:35] capacidad de memoria, cuotas de ancho de banda y tolerancia a fallas. El
+[02:38] caché L2 también está particionado por instancia. No existe el desalojo
+[02:42] entre instancias. Por lo tanto, no se comparte en ese sentido. Las fugas
+[02:46] reales son barreras de memoria, o miembros, que abarcan toda la GPU. La
+[02:50] barrera de una instancia aún afecta a todas las particiones L2 de la tarjeta.
+[02:54] El tiempo es lo único que no está aislado. Entonces, cuando un inquilino
+[02:59] está ocupado, los demás solo se ralentizan un poco. El punto clave es
+[03:05] que una barrera de memoria en toda la GPU afecta a cada partición L2. La
+[03:11] siguiente diapositiva construye todo el ataque sobre ese hecho. El vector es
+[03:17] que el atacante solo lee su propia memoria. Solo mide el tiempo de sus
+[03:21] propias lecturas. Nunca toca la memoria de la víctima. Hay tres pasos. Cargar
+[03:25] desde su propio búfer pequeño, medir la carga y repetir cada 5 microsegundos
+[03:29] . Esta primitiva y la propia fuga del miembro MIG no son nuestro
+[03:33] descubrimiento. El crédito es para los investigadores detrás de "Behind Bars"
+[03:38] en Usenix Security. Un gran agradecimiento por su trabajo. Ahora,
+[03:44] intente observar las diferencias de tiempo. A simple vista, al comparar su
+[03:48] inquilino inactivo frente a uno que sirve un LLM, ni siquiera podría
+[03:51] distinguirlos. La latencia mediana es solo 3 microsegundos mayor. Sin embargo
+[03:56] , para el atacante, esos 3 microsegundos son todo lo que necesita.
+[04:00] Eso es suficiente para recopilar toda la información de la que ya hablamos.
+[04:06] Quantri con 8 mil millones de parámetros se ejecuta en la porción
+[04:09] de la víctima durante esto. Todos los datos capturados se obtuvieron de un
+[04:12] modelo en vivo. Arriba está la actividad de la GPU a lo largo del
+[04:16] tiempo, una ráfaga por token. Abajo está el espectro de frecuencia del
+[04:19] propio registro de latencia del atacante. Hay una frecuencia
+[04:22] fundamental de 881 hercios, que son tokens por segundo, más armónicos, ya
+[04:27] que cada token es una mezcla de frecuencias distintas. Este es un
+[04:34] registro real, un token en el dominio del tiempo. El token muestra un total
+[04:38] de 39 picos. Los picos con marcas verdes son las invocaciones de capa,
+[04:43] mientras que los naranjas son procesamientos adicionales entre capas.
+[04:48] En las siguientes diapositivas, demostraremos cómo determinamos el
+[04:51] número real de capas a pesar de esos picos extra. Aquí observamos la
+[04:56] velocidad de decodificación en sí. Solo midiendo el tiempo, encontramos la
+[04:59] tasa de tokens sin ver nada. Entonces, la velocidad por sí sola es algo que
+[05:03] un atacante puede recuperar con precisión. Pero la velocidad por sí
+[05:07] misma no es una huella digital clara. Quantri de 8 mil millones y Llama 3 de
+[05:11] 8 mil millones difieren solo un 1.6%en su tasa de tokens. Entonces, solo por
+[05:16] la velocidad, uno pensaría que son el mismo modelo. Reduce las posibilidades,
+[05:19] pero no lo confirma. Necesitamos algo más preciso: el conteo de capas. Eso
+[05:23] es lo que tratan las siguientes diapositivas. Usamos la misma técnica
+[05:28] de plegado y promedio anterior. Esta vez lo ejecutamos una vez por modelo en
+[05:32] lugar de una vez por token. El resultado es un conteo de bits que cae
+[05:36] casi exactamente en un número entero.
+[05:40] La distancia media respecto a un número entero en 22 rastreos es de
+[05:44] solo 0.028. Esa es la clave. Si esto fuera solo un artefacto de hardware
+[05:49] fijo dividido por diferentes tasas de tokens, esperaríamos fracciones, no
+[05:52] números enteros. Cada conteo resulta en el número de capas del modelo más
+[05:58] uno a tres picos adicionales. Cada modelo mantiene sus propias huellas
+[06:04] dactilares de señal, una mezcla de tempo y estructura armónica. Para ser
+[06:08] claros, esto no es un clasificador de aprendizaje automático entrenado. No
+[06:11] hay conjunto de entrenamiento, ni etiquetas, ni configuración. Tiene
+[06:14] menos de 30 líneas de código. El método verifica la profundidad de cada
+[06:18] candidato desde 16 hasta 48. Mide qué tan fuerte aparece la firma esperada de
+[06:23] esa profundidad en el rastreo real. Luego elige cuál de estos es el mejor.
+[06:28] Para cuantización 3, 8 mil millones y 36 capas gana claramente por 4.5 veces
+[06:32] sobre el siguiente candidato. Debido a que esta es una prueba de mejor ajuste,
+[06:36] no una tabla de consulta, también funciona en modelos que nunca ha visto
+[06:39] antes. Eso incluye modelos propietarios o no lanzados. Dado que no hay nada que
+[06:45] necesite haber visto en primer lugar. Y esto funciona sorprendentemente bien.
+[06:54] El clasificador de flujo de capas también genera el nivel de confianza.
+[06:57] En nuestras pruebas, solo las dos respuestas menos seguras terminaron
+[07:01] siendo incorrectas. Este mismo método también detecta ajustes y versiones
+[07:09] que comparten el mismo modelo base. Eso es porque la arquitectura y el conteo
+[07:14] de capas se mantienen sin cambios. Tomemos tres modelos relacionados como
+[07:18] ejemplo. Llama 3 de 8 mil millones de Meta tiene 32 capas. Llama 3.1 de 8 mil
+[07:23] millones, también de Meta, usa esa misma base de 32 capas con mejoras
+[07:28] menores. Y R1, que sigue siendo Llama de 8 mil millones de DeepSeek, es una
+[07:33] mejora sobre eso. La sincronización por capa resulta en cambios de latencia
+[07:39] media de solo 1.6 nanosegundos entre sí. El resto de la señal se ve igual.
+[07:45] Independientemente de esto, nuestro clasificador todavía puede
+[07:48] distinguirlos. Ahora, hacemos una pregunta más profunda en el mismo
+[07:52] canal. No qué modelo, sino qué está haciendo en este momento. Observamos
+[07:56] cuatro tipos de carga de trabajo: prosa , código, JSON y recuperación. Damos
+[08:01] un veredicto cada medio segundo basado en los últimos 5 segundos de
+[08:04] temporización. De 40 veredictos de medio segundo, 31 fueron correctos y
+[08:08] cuatro respuestas completas fueron identificadas correctamente por
+[08:12] mayoría de votos. Este es el mismo clasificador del video anterior,
+[08:17] errores incluidos. Vale la pena mencionar una condición. Esto se
+[08:22] midió con la decodificación especulativa activada. Eso es una
+[08:25] opción en VLLM, no es el valor predeterminado. Aquí está el
+[08:28] mecanismo. Qué tan predecible sea el texto cambia cuántos tokens redactados
+[08:32] se aceptan en cada paso. Eso cambia el tiempo del paso, y esa es la señal que
+[08:37] estamos detectando. Probamos 11 configuraciones, densas y de mezcla de
+[08:42] expertos, BF16 y FP8. La misma figura de página apareció siempre, solo que
+[08:47] con intensidades muy distintas. Una diferencia del 70.2%en GPT de 20 mil
+[08:52] millones frente al 0.9%en GLM de 49 mil millones. Luego, de 11 ejecuciones, la
+[08:57] más rápida ocurre cuando el azar solo daría una de cada cuatro. Así que,
+[09:01] supongamos que el atacante ya conoce el modelo de diapositivas previas y la
+[09:05] decodificación especulativa está activa. También puede saber qué tipo
+[09:10] de texto está saliendo. Ahora, eliminamos el chip compartido por
+[09:14] completo de la ecuación. MLG requiere que el atacante esté en el mismo chip
+[09:18] físico. Este ataque no lo necesita. La configuración aquí es un servidor con
+[09:23] ocho H100 conectado mediante una red NVLink. La víctima ejecuta paralelismo
+[09:28] de tensores entre la GPU cero y la uno. El atacante solo necesita cualquier
+[09:33] otra GPU en ese mismo servidor, la GPU dos en este caso. El acceso entre pares
+[09:37] por NVLink es una función legítima y prevista. Es como funcionan normalmente
+[09:41] los trabajos multi-GPU, no un error que se explota. El paralelismo de tensores
+[09:46] MIG tampoco puede coexistir en el mismo dispositivo. Por tanto, es realmente
+[09:51] una población de despliegues distinta, no solo el mismo ataque repetido. El
+[09:58] problema está en la GPU 2. Esta rastrea memoria que realmente está en
+[10:02] la GPU 0 a través de NVLink. Cronometrando cada salto a lo largo del
+[10:06] camino. Un salto inactivo toma alrededor de 890 nanosegundos. Una vez
+[10:12] que la víctima comienza a trabajar, eso aumenta hasta los 300 microsegundos
+[10:15] . Estas son tres capturas de medio segundo. Y realmente se pueden contar
+[10:22] los tokens a simple vista. Lo que perdemos en comparación con MIG son
+[10:27] los bits de capa. Están por debajo del ruido a esta distancia. Así que, por
+[10:32] NVLink, las huellas digitales que nos quedan son principalmente temporales,
+[10:36] no conteos de capas. Aquí, probamos cinco modelos en una configuración de
+[10:41] servicio idéntica. Solo el modelo en sí revela cuál es. Este método
+[10:47] ofrece una precisión del 79.2%. Ahora, falla exactamente donde esperarías que
+[10:52] lo temporal falle. Llama 3.5 de 8 mil millones y R1 distill son modelos de 8
+[10:57] mil millones que decodifican a 3 Hz de diferencia. Entonces, se confunden
+[11:01] donde los conteos de capas de MIG los habrían separado fácilmente. La
+[11:06] conclusión es que la relación señal-ruido de NVLink es peor que la
+[11:10] de MIG, ya que pierde los bits de capa. Pero una peor relación señal-ruido no
+[11:15] es lo mismo que seguridad. Un 79%frente a una base del 20%sigue siendo una
+[11:20] huella real, no ruido. Primero, algunas buenas noticias. Nuestro propio
+[11:25] producto detectó el ataque de inmediato sin configuración adicional.
+[11:29] Stealthy monitorea cada lanzamiento de kernel en cada GPU, analiza las cargas
+[11:33] de trabajo sospechosas y las procesa mediante un flujo completo de alertas,
+[11:37] algo que no todos los proveedores pueden hacer. Esto es lo que hizo que
+[11:41] este caso destacara. Un solo kernel se relanzó unas 3,000 veces accediendo
+[11:45] exactamente a los mismos 40 kilobytes de memoria una y otra vez en lugar de
+[11:49] pasar a datos nuevos. Solo se envió 1 kilobyte de datos de vuelta a la CPU
+[11:54] durante todo el tiempo, porque la sincronización en sí era la carga
+[11:58] útil, no el resultado. En términos reales, eso es menos de 600
+[12:03] milisegundos de principio a fin con menos de 50 tokens de respuesta. Lo
+[12:07] detectamos antes de que la respuesta estuviera siquiera a la mitad de
+[12:10] escribirse. Entonces, tres conclusiones . Primero, la ubicación es algo que
+[12:17] los operadores realmente controlan, así que no coloquen los segmentos MIG
+[12:21] de un inquilino no confiable junto a un modelo sensible. Segundo, conozcan el
+[12:25] equilibrio. MIG descarta la comunicación entre pares, lo que
+[12:29] significa que no hay paralelismo de tensores en MIG. Dividir a través de
+[12:33] NVLink, en cambio, limita las filtraciones solo a la sincronización,
+[12:37] en lugar de a los recuentos de capas. Tercero, vigilen la propia GPU.
+[12:42] Asegúrense de que la infraestructura anfitriona verifique activamente que no
+[12:46] se ejecuten cargas de trabajo maliciosas en el hardware. Eso es
+[12:49] exactamente lo que hace Stealthy al detectar estos sondeos directamente
+[12:52] desde el comportamiento del kernel.
+[12:56] Compartir una GPU significa que la sincronización por sí sola puede
+[12:59] revelar el modelo, la velocidad y la carga de trabajo. Eso es cierto incluso
+[13:03] a través de NVLink sin necesidad de ningún exploit. Stealthy ve que esto
+[13:07] ocurre en tiempo real. La mayoría de las organizaciones aún no tienen ese
+[13:11] tipo de visibilidad. Gracias de nuevo a los investigadores de Behind Bars. Toda
+[13:16] esta charla se basa en su trabajo. Gracias a todos por su atención.

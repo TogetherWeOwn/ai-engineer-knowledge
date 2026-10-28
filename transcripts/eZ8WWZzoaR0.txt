@@ -1,0 +1,283 @@
+# title: Homa: The End of TCP for AI Clusters — John Ousterhout, Stanford
+# source: https://www.youtube.com/watch?v=eZ8WWZzoaR0
+# speaker: John Ousterhout, Stanford
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T05:02:27Z
+# sha256: 32f93525503d3aa90258f2f05b88f8dbb45404bee3e84487f445715a85856fb4
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:01] [music]
+[00:12] >> Please welcome to the stage the Professor Emeritus at Stanford
+[00:16] University, John Ousterhout.
+[00:37] >> Good morning. It's really great to be here to talk about the network side of
+[00:41] AI applications and in particular to make the case that latency matters and
+[00:46] is probably going to be mattering more in the future. But I just want to say
+[00:49] this is a talk is unusual for me. I've never before given a talk where there
+[00:52] are fog generators in the auditorium. Just a really San Francisco experience,
+[00:57] I guess.
+[01:01] So it's it's well known that AI workloads depend on really great
+[01:04] networking performance in order to achieve their own performance. Of
+[01:07] course, that's because the workloads are so large that they have to be
+[01:10] distributed across machines and then you have to communicate between the
+[01:13] machines. But what I want to talk about today is
+[01:16] it it seems that those workloads are changing.
+[01:19] And so I hope to do three things over the next 15 or 20 minutes. First, to
+[01:23] convince you that in fact the workloads are changing
+[01:26] and that whereas the workloads used to be completely dominated by large
+[01:30] transfers where throughput is the key metric that matters, that we're seeing
+[01:34] more and more smaller transfers where the latency is crucial.
+[01:40] The second thing I hope to do is to convince you that legacy protocols like
+[01:44] TCP and RDMA are poorly suited to this environment. They weren't designed for
+[01:48] this environment and unfortunately they suffer from very high tail latency when
+[01:53] you mix small messages with large ones. And talk a little bit about why that's
+[01:57] the case. Then third, I'd like to introduce Homa,
+[02:01] which is a new protocol we've developed at Stanford that actually was designed
+[02:04] in a clean slate redesign to handle data center workloads like these. And in
+[02:09] fact, it does quite well on those workloads and can reduce tail latency by
+[02:13] an order of magnitude or more. So, I'll tell you a little bit about Homa.
+[02:16] So, let's dive in. First, workloads.
+[02:20] Historically, AI workloads have consisted of enormous
+[02:24] transfers between machines. And that's all that really mattered. Gigabytes of
+[02:28] data for things like weight gradients and and so on.
+[02:32] In these workloads, what you really care about is throughput. How many gigabits
+[02:36] per second you can pump through the pipes.
+[02:39] And these are relatively easy workloads for networks because if it takes a while
+[02:45] to set up the connection and start the transfer, it doesn't matter. The
+[02:48] transfers go on for so long that all that really matters is the throughput.
+[02:53] And so, in these environments, TCP and RDMA perform pretty well. Uh by the way,
+[02:57] when I say RDMA, what I really mean is Rocky RDMA over converged Ethernet,
+[03:02] which is the underlying transport that's used by RDMA for most purposes today.
+[03:08] So, anyhow, the old workloads, big transfers, throughput matters, uh the
+[03:13] legacy protocols work pretty well. However, it appears that the workloads
+[03:18] are changing. They're becoming more granular with smaller chunks of
+[03:21] computation and smaller exchanges of data. And this seems to be particularly
+[03:26] true in the world of inference and also in agentic workloads. Not so much for
+[03:31] training workloads are still massive transfers.
+[03:34] And so, what's happening is that more and more there are small message
+[03:37] exchanges, typically for things like metadata and coordination, such as
+[03:41] checking to see if a particular entry is present in a KV cache that's
+[03:44] distributed, or doing barrier synchronization at the end of
+[03:48] periods of compute. And for these workloads,
+[03:51] what really matters is latency. That is, what's the round trip time to send some
+[03:56] small piece of data across the network, do a little bit of computation, and get
+[04:00] a small result back again? And in fact, it isn't just just latency
+[04:05] or average latency that matters. What really matters is tail latency. That is,
+[04:10] you'd like to know that if we send a whole lot of small messages, all of them
+[04:13] will complete quickly. So, for example, we typically measure
+[04:17] things like 99th percentile latency. And if we have high tail latency, that
+[04:22] can limit the overall throughput of the system. So, here's an example.
+[04:26] Suppose common thing is to take a workload and split it up across several
+[04:29] nodes, which do intensive computation using their GPUs for some period of
+[04:33] time. And then once they've all finished their computation, you do some small
+[04:38] exchange between the nodes to exchange data and metadata, and then they'll go
+[04:42] on to the next round of computation. And while that exchange is happening,
+[04:47] that synchronization is happening, the GPUs are sitting idle.
+[04:51] So, if even one of those exchanges takes a
+[04:55] long time, it turns out the whole process stalls. You need all of those
+[04:59] exchanges to complete before you can go on to the next phase of computation.
+[05:04] Now, if the computation phase is, say, 5 seconds, and it takes a few milliseconds
+[05:08] for the exchange, you know, not a not a problem. And that's historically what
+[05:12] it's been. But now with the agentic workloads,
+[05:15] where you're trying to pump out tokens relatively rapidly at a regular rate,
+[05:20] the periods of computation are getting down into sort of the millisecond time
+[05:23] scale. And if it also takes milliseconds to do that synchronization,
+[05:28] then you're wasting a significant fraction of your GPU's resources waiting
+[05:33] for the the synchronization to occur. So, I'm curious. I'd like to just do a
+[05:37] quick audience poll here. Is there anybody here where you have reason to
+[05:41] believe that the latency of small messages is impacting the overall
+[05:45] throughput of your applications? If so, can you just raise your hand? See if
+[05:49] there's anybody out there today. Actually, more hands than I expected.
+[05:53] So, quite a few people out there are raising their hands. I think this
+[05:56] problem is likely to get worse as the trends continue.
+[06:01] So, what's going on? Why is tail latency bad?
+[06:05] Well, typically the cause is congestion resulting from incast.
+[06:10] So, incast is when several nodes all decide simultaneously to transfer data
+[06:16] to some destination node. And if they all send large messages, well, the links
+[06:22] are the same everywhere in the network. So, three nodes can transfer three times
+[06:25] as fast as one node can possibly receive. And so, what happens is that
+[06:30] packets accumulate at the last hop going to that destination in the top of your
+[06:35] access switch at its egress port for the destination node.
+[06:40] Then, if some other node decides it wants to send a short message to that
+[06:43] same destination, the short message gets stuck behind the long ones in the queue
+[06:48] there. And actually, as that causes delay, and
+[06:51] in the worst case, so many packets arrive that the switch runs out of
+[06:55] buffer space that it has to drop packets, and then there are there
+[06:59] timeouts and retransmissions that make everything even worse.
+[07:03] So, somehow we need some way to reduce the congestion in those queues. Somehow
+[07:10] we have to get the sending nodes to stop sending so fast so the queues don't just
+[07:15] build up without limit. So, the way this is done historically
+[07:19] virtually all network protocols before Homa, including TCP and RDMA,
+[07:26] congestion control is the responsibility of the sender. So, senders somehow have
+[07:30] to figure out that congestion is happening, and then they have to slow
+[07:33] down their rate of transmission. Now, you you might wonder, why are senders
+[07:36] doing it? Cuz the congestion is way over at the other end of the data center
+[07:39] network. How does the the sender find out?
+[07:43] Well, in the in the old really old days, the way they would find out is the
+[07:46] queues would overflow and packets would get dropped. The sender would detect the
+[07:50] packets got lost cuz it wouldn't get acknowledgements back, and it would
+[07:53] assume that means there's congestion and then slow down its rate of transfer.
+[07:57] That's really expensive. So, today there are better techniques that mostly
+[08:01] involve the switches providing information.
+[08:04] So, a top of rack switch, when it sees that the queue length for an egress port
+[08:08] has reached some threshold or starting to fill
+[08:11] long before the queue overflows, it starts marking all of the packets to
+[08:15] pass through with what's called early congestion
+[08:18] notification, ECN marking. And so, when those packets pass through
+[08:22] to the receiver, the receiver sees the marking in the packets, and then when it
+[08:26] communicates back to the sender next, for example, to send an acknowledgement,
+[08:31] then it includes that marking that goes back to the sender. And now the sender
+[08:35] sees the sender realize, "Oh, there's congestion someplace. I've got to slow
+[08:38] down my rate of transmission." So, that's the basic idea.
+[08:42] Unfortunately, getting this right is really hard, really hard. It's very hard
+[08:47] for the congestion to figure out exactly how to set its rates cuz it gets one bit
+[08:50] of information. There's congestion someplace.
+[08:54] And there are multiple senders all sending to the same destination. They're
+[08:57] all trying to make adjustments simultaneously. How much do you cut
+[09:00] back? And how do I know when I can ramp up again?
+[09:04] And even worse, it's really hard to do this in a way that's stable because
+[09:07] there's control lag. That is, it takes time before the sender finds out that
+[09:12] there's congestion. And in fact, using this process, it
+[09:15] typically takes several round trips for the sender to gradually adjust its rate
+[09:20] to get just the right rate to match the available bandwidth. But by the time you
+[09:25] do that, in a network that things have changed. New transmissions have started
+[09:29] or old ones have finished. And so, these systems tend to never stabilize. They're
+[09:33] constantly oscillating between sending too too and and too little.
+[09:37] And this problem's been around for a long time. It's been known in the
+[09:40] research community for more than 20 years now. There've been tons of papers
+[09:43] published on it. There have been some improvements made,
+[09:46] that's undeniable, but we're still a long ways from anything that works well.
+[09:50] And the problem is with the fundamental nature of it doing the the congestion
+[09:54] control at the sender side. It just doesn't work very well.
+[09:57] So, you end up with a lot of queue build-up. And in fact, you can see the
+[10:00] only way to find out that there's congestion is if there's queues.
+[10:03] And so, by that point we're already experiencing delays.
+[10:07] So, that's a problem. Oops. There's one other problem with TCP
+[10:11] and RDMA also is that their their basic data model is a byte stream. Just a
+[10:15] stream of bytes with no differentiation in it. So, if you send a series of
+[10:20] messages say through a TCP socket, they get serialized into that
+[10:24] stream. And on this slide, I've you know, I've shown the messages appear
+[10:29] like they have different colors in the stream. Well, there are no colors in
+[10:31] real life. TCP has no idea where the message boundaries are. And that also
+[10:36] makes life hard. For example, you don't know how much more data is coming. If
+[10:40] you knew how big the message was, you'd know how much more is coming.
+[10:43] And you can't prioritize short messages, which we'd really like to do, get the
+[10:47] short messages through faster. And you can end up with what's called
+[10:50] head-of-line blocking, where somebody sends a series of messages to
+[10:54] the same destination and they send two really large ones and then a small one
+[10:58] after that, they get stuck behind them in that stream. And so, it gets delayed.
+[11:02] And again, you have tail latency issues. So, all in all, TCP and RDMA are just
+[11:08] not well suited to this environment. So, what do we do?
+[11:13] Well, what I'd like to do next is tell you about a new protocol called Homa
+[11:17] that we've developed at Stanford, which was based on a completely clean slate
+[11:20] redesign for network transport. If you could start from scratch and rethink how
+[11:24] you do transport for data centers, how would you do it? And it turns out in
+[11:28] Homa, virtually every major design decision is different from TCP and RDMA.
+[11:34] TCP for all the amazing things it's done is just not a good match to today's data
+[11:39] centers, nor RDMA. So, what Homa does particularly well is
+[11:43] to manage a combination of large and small messages and to make sure that the
+[11:47] messages have rich short messages have really low latency.
+[11:51] So, this started off as a PhD dissertation for one of my students, Ben
+[11:54] Moazeni, and then the results were so great that
+[11:57] I decided to make it my personal project to see if we can get it out of the lab
+[12:02] and into production. Uh as you may know, I'm I'm not like
+[12:05] most professors in that I love to code, and so I turned this into my my own
+[12:08] programming project. I created a kernel module for Linux. I'm currently working
+[12:13] through the process of getting that upstreamed into the kernel. It's
+[12:15] available on GitHub for download. So, let me tell you just a little bit about
+[12:20] how Homa works. I want to mention three things.
+[12:23] First, it's message-based, not stream-based.
+[12:27] >> [clears throat] >> In fact, the fundamental unit at Homa is
+[12:29] a remote procedure call, which consists of two things: a request message sent
+[12:35] from a client to a server, and then a response message returned back from the
+[12:40] server to the client. So, the key thing here is that Homa
+[12:44] knows about message lengths. They're buried in the transport all the way down
+[12:48] to the bottom, and this has a bunch of advantages.
+[12:51] First, it allows us to predict the future.
+[12:54] As soon as a receiver gets the first packet of a message, it knows exactly
+[12:58] how much more data the sender wants to send, and that's so much so much more
+[13:02] information for doing congestion control.
+[13:05] Second, Homa prioritizes shorter messages. It uses SRPT, shortest
+[13:10] remaining processing time first, to try and prioritize shorter messages.
+[13:15] And third, because messages are all independent, they're not
+[13:20] serialized into a stream, every message is independent. Shorter messages can
+[13:24] bypass long ones, so they don't get queued behind long messages.
+[13:29] The second thing about Homa that's different is that it controls congestion
+[13:33] from the receiver. Now, when you think about it, this makes
+[13:36] sense because the congestion happens primarily at that last down link to the
+[13:41] receiver. And so, the receiver has way more
+[13:43] information. In fact, with Homa, as soon as it gets the first packet of a
+[13:47] message, it knows exactly how much more is coming. So, it has essentially
+[13:51] complete information about congestion
+[13:54] and it can therefore respond to congestion much more quickly and much
+[13:58] more precisely. The way things work with Homa is that
+[14:02] when a sender has a message to send, it breaks it up into packets, but it only
+[14:07] transmits the first few packets, those are called unscheduled packets, to the
+[14:11] receiver. Packets after that are called scheduled
+[14:14] packets, and they only get transmitted when the
+[14:17] receiver asks for them. So, the receiver will send grant packets back.
+[14:22] They'll paste them out and send those back to the sender over time, telling
+[14:25] the sender, "It's now time for you to send me the next chunk of data."
+[14:29] And the receiver can delay those grants. So, for example, if the receiver has 10
+[14:34] messages that are incoming, there's no point in sending grants to all 10 of
+[14:38] them because then you'll just get congestion in the in the top of rack
+[14:41] queues. So, we can use the grants to reduce
+[14:44] congestion, and then it can also use the grants to
+[14:47] give preference to its most favored messages, which would be the shorter
+[14:50] ones. So, it's a way of of implementing SRPT by favoring short messages.
+[14:57] The third aspect of Homa is that it takes advantage of the priority queues
+[15:01] in modern switches. So, modern data center switches have more than one queue
+[15:05] at each egress port, typically eight, and they can be used in a priority
+[15:10] mechanism where packets get transmitted preferentially from the highest priority
+[15:14] queue. So, I've shown only two queues on the slide here, but typically there's
+[15:17] more than that. You can specify in a packets, using the
+[15:22] various fields of the packet, you can specify which queue it should go into.
+[15:24] And so, Homa dynamically makes those choices
+[15:28] in a way to give priority to shorter messages. So, if we go back to the
+[15:32] incast example from a few slides ago, all of those long messages will pile up
+[15:36] in the lowest priority queue. But, if there's a short message coming, it will
+[15:39] use a higher priority queue. And so, it will immediately bypass
+[15:44] all of the queued packets from the short from the the longer messages and get
+[15:49] through to the destination more quickly. So, how much of a difference does this
+[15:53] make? Uh here's a uh this slide I've got one
+[15:57] sample benchmark that I use as part of my tuning and evaluation of Homa.
+[16:02] It consists of a workload of a bunch of machines on a network that are
+[16:04] exchanging messages back and forth of different sizes, ranging from very small
+[16:09] to very large. And on this graph, you can see on the x-axis is the message
+[16:13] length, so from about 50 bytes up to a megabyte. The y-axis shows you the
+[16:18] round-trip time for messages of that length. So, this request this uses
+[16:21] request and response messages that are the same length. You can see TCP in
+[16:25] green, Homa in blue. And the y-axis is is round-trip time, so lower is better.
+[16:31] And for each protocol, I've got two curves. One curve is the P50 curve,
+[16:36] that's the median latency for messages of this length. And then P99 is the 99th
+[16:42] percentile, i.e. tail latency for messages of this length.
+[16:46] So, I want to point out two things. First,
+[16:49] the P99 for short messages is dramatically better for Homa. So, with
+[16:52] TCP, it's more than a millisecond tail latency, Homa is less than 100
+[16:56] microseconds, about 13 times faster. Second, interestingly, you might think
+[17:02] that because Homa favors shorter messages,
+[17:06] that long messages suffer and get worse performance.
+[17:09] It turns out that's actually not the case. Even on the longest messages, Homa
+[17:13] is almost a factor of two better than TCP.
+[17:16] I don't have time to explain that today, but it has to do with the fact that Homa
+[17:20] uses run-to-completion approaches, which are much more effective than fair than
+[17:23] the fair scheduling used by TCP.
+[17:27] So, just to wrap up, the role of short messages in AI appears
+[17:33] to be increasing. I think I think it's likely that it's going to continue to
+[17:36] increase. We'll see over the next year or two if that happens.
+[17:39] And I just want to pose a question to you, you know, as you're running your
+[17:42] applications and measuring performance and seeing what the bottlenecks are, ask
+[17:46] yourself, is high latency for short messages
+[17:49] affecting your throughput? If the answer is yes, then just know
+[17:54] there is a solution available. You should give Homa a try. You can probably
+[17:57] reduce your tail latency by an order of magnitude or more. And by the way, this
+[18:01] is Homa is basically my life mission right now. I've sort of semi-retired
+[18:05] from Stanford, and the reason I did that is so I can spend 100% of my time
+[18:08] hacking on Homa. So, I'd be delighted to work with you
+[18:12] and help you if you decide you want to experiment with Homa. If you need help
+[18:15] getting started, answer questions, bug fixes, whatever, you know, I'd be happy
+[18:19] to work with you to try and make you successful with it. So, if that is
+[18:22] interesting, feel free to contact me. My email's on the slide, or you can Google
+[18:26] me, too, and find me over the internet. So, thanks very much for listening, and
+[18:30] I hope to hear from some of you.
+[18:45] >> [music]

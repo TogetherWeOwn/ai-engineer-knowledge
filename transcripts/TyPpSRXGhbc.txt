@@ -1,0 +1,234 @@
+# title: Small Models, Big Results: Training a Finance Agent for Under $500 — Charles Dickens, Snorkel AI
+# source: https://www.youtube.com/watch?v=TyPpSRXGhbc
+# speaker: Charles Dickens, Snorkel AI
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T03:44:04Z
+# sha256: 7e6c12a688aaa09dae5573882f7c7068c17ddc641e8a0c71e43cf8ba492a6138
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:01] [music]
+[00:12] >> Everyone, thanks for joining. I'm Charles and I'm
+[00:16] a research scientist at Snorkel AI. And today I'm going to be talking about
+[00:20] how we got a 4 billion parameter model to outsmart its 235 billion parameter
+[00:28] variant. And this is a specific result in a simulated financial environment,
+[00:34] but I think there are general takeaways that I want to make sure taken home. And
+[00:38] the first is for enterprise AI workloads,
+[00:41] reliability and specialization uh
+[00:45] can actually outweigh raw parameter scale. And this is possible with
+[00:50] high-quality data that actually represents the domain
+[00:54] and task distribution that you're targeting.
+[00:56] And uh
+[00:58] this can result in smaller models that can achieve parity with frontier models
+[01:02] at just a fraction of the cost. So,
+[01:06] before I get to it, I'm going to take this opportunity to introduce ourselves
+[01:09] a little bit. This is our team. We're a frontier AI data lab and our team, we
+[01:14] have founders from labs at University of Washington, Wisconsin, Stanford, and an
+[01:19] internal team of really talented FTEs, researchers, and we're in a fortunate
+[01:23] position to play in, by that I mean build and deploy data sets and
+[01:28] environments uh for frontier AI. And that's at the intersection of academia
+[01:34] and industry research, but also grounded in enterprise deployments.
+[01:39] Um and this is all to say that we have a team that's built to focus on
+[01:44] building the best data possible to define in advanced AI.
+[01:49] And the way we do this is threefold. First is open research and benchmarks,
+[01:54] so we're constantly contributing to open-source benchmarking, and the
+[01:59] project I'll be talking about today actually falls under this pillar. Um but
+[02:04] I also want to acknowledge frontier live data and environments, as well as
+[02:08] enterprise uh deployments are the things we work
+[02:11] on. And under open research and benchmarks, we support research through
+[02:16] grants, and I'll talk about opportunities here at the end of this
+[02:20] talk, so um
+[02:23] get ready for that. And then co-authoring with academic
+[02:26] uh or industry partners um and leading independent research and publishing open
+[02:31] artifacts. So,
+[02:34] what I'm talking about today is uh a partnership with UC Berkeley Sky
+[02:39] Computing Lab, and we built, like I said, a 4 billion parameter Qwen model
+[02:43] to outperform its 235 billion model variant on financial tasks.
+[02:49] We saw the 4 billion parameter model, spoiler alert, uh achieve almost a 60%
+[02:54] pass at one, while the 235 billion model uh achieved 51%.
+[02:59] So, exciting results, and this is all uh in collaboration with I got to give
+[03:03] credit where credit's due, Manon Rupta, Shujian Tang from the Sky Computing Lab,
+[03:07] as well as Bhavishya and Chris Glaze and myself uh from Snorkel. And you can find
+[03:12] all the assets, the uh training scripts, synthetic data
+[03:17] uh on our GitHub, so check those out, and this is all open-source and
+[03:21] available to you. So, I'll cover today what uh we see
+[03:26] financial institutions need um from AI, and this is from our
+[03:30] enterprise deployments uh learnings, as well as the FinQA open-source benchmark.
+[03:36] And this is expert-validated financial question-answering data that we trained
+[03:39] our uh and evaluated our model on. And
+[03:42] finally, uh the training process for the RLLM FinQA 4B model.
+[03:49] So, let's get started. This is uh
+[03:52] the one and only slide with the Charles Dickens reference, I promise, but this
+[03:56] is a tale of two models, I'd say. First, the large generalist versus small
+[04:00] specialist. And the point is here, when financial
+[04:04] institutions ask us how well does the model or the agent reason, what they
+[04:08] typically mean is can it operate in my stack of complex schemas, legacy APIs,
+[04:13] and tech debt? And can we trust it in realistic uh and long workflows without
+[04:18] compounding errors? And can we reliably audit the agent? That's important in
+[04:21] financial and legal domains, for example.
+[04:24] Which brings us to the question is uh
+[04:26] how can we evaluate and improve agents to make them reliable in these uh
+[04:30] real-world environments? So,
+[04:34] um the reflex may be to scale.
+[04:38] We've all seen scaling law results, uh but today I'm going to argue that
+[04:41] specialized workflows don't actually need generalists. We don't need
+[04:44] polymaths. You know, you wouldn't call Terence Tao for a tax audit, um if
+[04:49] you're lucky enough to have him in your contacts. You'd call the specialist that
+[04:52] knows the forms, the tools, and the rules.
+[04:55] So, that's why we built FinQA. This is expert-validated financial
+[04:58] question-answering data. And I'll walk through the multi-stage pipeline of how
+[05:02] we built this benchmark and training data.
+[05:06] So, first is schema and data extraction. This is coming from 10-K reports. Uh
+[05:13] these are annual reports required by the SEC for all public companies, and
+[05:17] they're used uh by analysts for identifying risks and
+[05:22] informing investment decisions. Uh we pull these from the Edgar system
+[05:26] and use the Qwen 3 30 billion model to produce tables, SQL tables,
+[05:31] approximately 6,900 of those. And
+[05:36] we use each table to generate a single question-answer pair.
+[05:41] And this is uh produced along with the question taxonomy that was developed
+[05:46] with financial experts that work with these documents. And these are used as
+[05:50] context uh for the model to generate a question-answer pair along with metadata
+[05:55] that we'll see uh what that's used for later. And finally, the third step is
+[06:00] verification. And this is a three-layer verification process. First is
+[06:05] programmatic consistency checks. That's where we use um the metadata,
+[06:10] uh which includes lineage and table names and columns to make sure we're not
+[06:14] hallucinating those. The second is automated reviews from
+[06:17] independent agents. And finally, expert manual review. So, humans actually going
+[06:22] through these and making sure the questions and answers are realistic and
+[06:26] verified.
+[06:29] And the outcome is Snorkel's FinQA data. And this is our first pass at this.
+[06:35] Uh realistic queries requiring planning, tool use,
+[06:38] uh tool calling, and reasoning. And um
+[06:42] answers are single, verifiable, final answers.
+[06:46] And from this, um we get from the uh original set of
+[06:52] roughly 7,000 tables, 4,000 in train, 500 in val, and 290 in
+[06:59] the held-out benchmark. And the data is split so that no company in the
+[07:03] benchmark overlaps um in any split. And on this data, we
+[07:11] identified um
+[07:13] even with frontier models, uh reoccurring discipline gaps, uh
+[07:18] failure modes. And the first is schema hallucination. So, a model will actually
+[07:22] assume that tables exist, column names exist, and um this can be an artifact of
+[07:28] pre-training data, something it's seen um
+[07:31] in its past. The next is context flooding. So, actually flooding its own
+[07:34] context um with poorly playing queries. For example, just calling select star,
+[07:40] um and this could overwhelm its context
+[07:43] limits if successful. And finally, poor recovery
+[07:47] um from errors. So, when 3235 would actually repeat the same failed strategy
+[07:53] um instead of considering the error messages and adapting. And these failure
+[07:58] modes are not actually just seen in the financial environment that I'm talking
+[08:02] about today, but also what we saw in insurance underwriting. And this is a
+[08:07] work that I'm calling out that was presented at the CAIS conference um
+[08:13] few weeks ago. So, now I'll get into actually training
+[08:17] the R LLM FinQA 4 billion model. Uh for this we used the R LLM
+[08:25] uh framework and this was developed by the R Sky Computing Lab collaborators.
+[08:31] And if you haven't used this yet, um this is a really user-friendly tool and
+[08:36] a few core features um I want to call out is it really works with any agent
+[08:40] framework, requires near zero code changes just using uh a decorator
+[08:45] pattern, CLI first workflow, battle-tested results. So, um we've seen
+[08:49] R LLM actually improve not just on this finance um case study, but also in math
+[08:55] reasoning for example. Um
+[08:57] multiple RL algorithms are built in, GRPO, reinforce RL, OOO for example, and
+[09:04] you can customize those and then supports multiple uh training backends.
+[09:10] All right, now for our training environment, um this is the uh training
+[09:16] environment we used for our model. The agent runs in a react loop and has
+[09:21] access to tools uh to interact with the tables we generated. The environment
+[09:25] includes the roughly 7,000 tables we created and finally reward is binary
+[09:31] correctness uh determined by a language model as
+[09:33] judge. In this case, GPT 5 nano using reference-based evaluation.
+[09:41] Training details are listed here. This is uh
+[09:45] I guess would be interesting to folks. We have the Qwen 3 4 billion model is
+[09:49] our base model, GRPO and binary reward uh
+[09:54] for optimization and the RL and framework.
+[09:58] Um we ran roughly 1,000 concurrent
+[10:01] environments to generate trajectories and this all was
+[10:06] a cost under $500 to get the results that we saw. Um
+[10:10] broken down between compute roughly 420 and $40 for a judge uh the judge API.
+[10:17] And this was on eight H100s. The first result um
+[10:23] is the central question, can a 4 billion model
+[10:27] uh armed with the specialized tools and
+[10:31] training actually compete with its larger variant? And the answer is yes.
+[10:34] So, what we saw was actually the base model's accuracy
+[10:38] um more than doubled and it outperforms its
+[10:42] larger variant, the 235 parameter model. And this is uh despite being a fraction
+[10:46] of the size. And we evaluate all models shown here
+[10:50] um on the expert curated held out 290
+[10:54] samples.
+[10:56] So, a natural concern is whether this actually transfers to harder problems.
+[11:01] So, this is just single question answer pairs on a single table. Um and to
+[11:06] investigate this, we uh looked at our FinQA reasoning data.
+[11:10] So, this is a development on the FinQA um data I presented earlier. And the
+[11:16] difference here is that now we're having a
+[11:20] dependencies on multiple tables, two to five tables, and requires sequential um
+[11:24] decision-making and planning. And we evaluated on this data set. You
+[11:29] can see the breakdown um as well. We have roughly 1,000 in train, 120 in
+[11:34] validation, 80 in benchmarks.
+[11:38] And what we see is the tool use discipline actually
+[11:42] generalized directly from training on the simple data. And no explicit
+[11:48] training on multi-table examples was needed actually to see lift in
+[11:52] this multi-table variant of the data set. And we'll
+[11:57] investigate why with the ablation studies.
+[11:59] But the next concern we had was whether this
+[12:03] result would generalize to more general use cases. So for this we
+[12:07] use the BFCL benchmark and this measures general tool calling
+[12:12] capability. And overall accuracy was
+[12:16] actually slightly improved and then um we had also minor gains on multi-turn
+[12:23] and memory. So specialization didn't actually erode the model's broader tool
+[12:29] use competence when we did RL fine-tuning for this model.
+[12:34] So to isolate what drove this performance, we ran ablation study on
+[12:38] data mixtures, so different ways we can combine the training data we had. The
+[12:42] first is just training on FinQA data and the second single and multi-table and
+[12:47] finally a curriculum where we start with single and then move to multi. And
+[12:51] surprisingly, just training on the simpler set resulted in the most lift.
+[12:56] And this partially explains why the generalization result we saw
+[13:00] earlier. The bottleneck was never reasoning depth, it was just tool use,
+[13:04] meaning the model where it was actually failing and improving the reliability of
+[13:08] that. And once you master the fundamentals, it could compose those
+[13:11] skills.
+[13:18] Yeah, so oops, let me go back. The next natural question is whether
+[13:24] more informative reward signals, Um, for example, rewarding intermediate
+[13:28] steps, uh, table access, query completeness, things like that could
+[13:32] actually accelerate learning. Uh, so this is different from curriculum, for
+[13:36] example. And the most sophisticated variant we came up with was, uh, a
+[13:40] rubric. And this uses fine-grained scoring with, uh, multiple weighted
+[13:45] components. And this is actually coming came up with with experts. Um, and
+[13:49] despite this investment in reward engineering, we actually again saw, um,
+[13:53] simpler was better. A single binary reward signal, um,
+[13:57] was what got us the most lift on this data.
+[14:02] Which led us to a blueprint, um, that we've been developing for enterprise
+[14:06] agents. Um, and generally, I'd say this study showed us that small models uh,
+[14:11] can successfully be trained uh, with RL um,
+[14:15] when you have quality data to uh, represent the target um,
+[14:20] outcomes and tasks. And
+[14:22] this can result in better deployment economics uh, for specialized tasks and
+[14:27] domains. And um, we've seen this and repeated this result in other areas
+[14:31] including health care, law, and insurance, um, which I pointed to
+[14:35] earlier. So, check that out. Um, and
+[14:40] our point of view as far as building um, axes for evaluating agents is this is
+[14:47] environment complexity is um, one of the most important axes. How
+[14:52] complex, how realistic and dynamic are the environments uh, the agents
+[14:56] operating in. The next is autonomy horizon. Um, are agents being tested and
+[15:01] evaluated at the lengths and the horizon lengths in the way people actually want
+[15:05] to use agents? Um,
+[15:07] are they making safe and good decisions by themselves? And can they actually
+[15:10] improve um, their judgment as a co-pilot over time?
+[15:16] And finally, output complexity. We want to capture the wide range of outputs in
+[15:20] our day-to-day work. Um, and I would say that this is currently under explored.
+[15:26] New benchmarks are coming up in this direction, but uh
+[15:29] still I see a big primary focus on um text artifacts and
+[15:36] creating more rigorous evaluations and these settings is a big opportunity.
+[15:42] Progress is being made here. So, on that note, um
+[15:48] I'm going to advertise our open benchmarks grants, which funded this
+[15:51] project. And this is a multi-million dollar commitment to producing open
+[15:56] benchmarks like this. We've had a lot of success agent, last
+[16:01] exam, judgment bench, um
+[16:06] others are coming out and this is um really accelerating our ability to
+[16:11] measure the frontier and shape the frontier.
+[16:14] So, to apply uh check out our website. Um you'll go
+[16:19] through a submission selection review process, develop, and
+[16:22] then finally publication, launch, um and promotion.
+[16:27] And I also want to call out that we're
+[16:31] hiring in professional research, um you name it, engineers, and um yeah,
+[16:39] check that out. You can check out our website and finally, thank
+[16:44] you so much for attending. Um you can use this QR code to see the blog
+[16:49] as well as pointers to all the artifacts that released
+[16:53] on GitHub, Hugging Face. Yeah, thank you all.

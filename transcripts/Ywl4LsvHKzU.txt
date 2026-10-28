@@ -1,0 +1,127 @@
+# title: RAG Evaluation Is Broken! Here's Why (And How to Fix It) - Yuval Belfer and Niv Granot
+# source: https://www.youtube.com/watch?v=Ywl4LsvHKzU
+# speaker: Yuval Belfer and Niv Granot
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T12:58:12Z
+# sha256: dd821d82bbd5708dda443f5a671d70a1cb050a8f5291a7265940ca42e5a83f8b
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:00] It seems that rag is so 2023 and everywhere you go you see my first rag
+[00:05] and rag pipelines and everything is rag related as if it's already solved but
+[00:11] actually not really well I'm Ival with me is Niv we both work at A21 labs and
+[00:19] today we're going to talk about why rag evaluation is broken and how to fix it
+[00:24] and the reason that rag evaluation is broken comes from a lot of things but
+[00:28] mostly because how easy it is to build benchmarks the way humans are regular to
+[00:34] think. And what I mean by that is that most benchmarks comprise from local
+[00:39] questions that has local answers. There is some sort of assumption that the
+[00:44] answer lies in a certain chunk in the data. Makes sense, right? What is the
+[00:48] most natural way to build such a benchmark? to go read some long
+[00:52] document, find a question that the answer lies somewhere inside and then
+[00:58] this is the golden answer and there are a lot of benchmarks who try to overcome
+[01:02] that a lot of multiple hope questions famously frames by Google but those
+[01:09] questions are not really realistic right something like if my future wife have
+[01:14] the same name of the 15 first lady of the United States mother and her surname
+[01:19] like what is this does Does it even mean something? Does it represent something
+[01:23] real? Not really. This is all very manufactured and not really
+[01:28] representative of the real world. There's also not a holistic way to test
+[01:33] the entire system. Most of the benchmarks are either retrieval only
+[01:37] benchmark, meaning that we try to retrieve the best segments or the best
+[01:42] chunks for our database and we assume that again the answer is in one or two
+[01:48] or several of them. or it's generation only benchmarks which is essentially
+[01:53] just grounding benchmark right just to see that we can answer a question based
+[01:57] on the context that are already in the prompt. But what about chunking? What
+[02:03] about parsing? What about specific cases that do not actually have this effect of
+[02:11] the question uh directs us to a certain place in the data. The answer is not as
+[02:18] simple and really that's the main problem here that benchmarks do not
+[02:22] correlate with real world data that real world data is messier. Each data is
+[02:27] different and this thing is not really generalized as well. We have some sort
+[02:33] of a vicious cycle when we are developing a rug system where we're
+[02:37] building a rug system for flawed benchmarks because you have to optimize
+[02:40] for something and then when we get high scores we celebrate about it. We write a
+[02:45] nice post whether on Slack, on LinkedIn, on Twitter and then look at us, we're so
+[02:51] good. But then when we actually give it to users or we test it on customer data,
+[02:55] we see that they struggle. It's not as good as we hoped. So we create new
+[03:00] benchmarks, optimize for them, and we're showing that we're the best. But those
+[03:05] benchmarks probably have the same problems. And this goes over and over
+[03:10] and over. rag pipelines with local questions and local answers. That's what
+[03:16] we have in most of the cases. So how do we fix
+[03:20] it? Um so we will not uh say uh how we will fix everything but we'll try to fix
+[03:27] some things. Uh so for example if you take like a f financial data like
+[03:33] finance bench or others uh like SEC filings or any other financial data you
+[03:40] may imagine that someone would ask aggregative questions such as which
+[03:44] company has reported the highest quarterly revenue the most times or in
+[03:49] how many fiscal years did Apple exceed hundred billion in annual revenue? Um or
+[03:55] at least all of something. Uh so so you may imagine how rag systems uh currently
+[04:02] do on such questions because they are so limited and they just grab the top k
+[04:08] chunks that they get and try to compile an answer by that. that uh when you
+[04:13] encounter a questions like all Fortune 500 companies so imagine that you bring
+[04:19] 10 chunks uh then maybe you will get another Fortune 500 company in the 11th
+[04:25] one and the 12th one and uh for every n you can consider the n plus one. Uh so
+[04:32] these problems really make uh rag systems
+[04:37] struggle. Um so we try to to estimate how uh how do a current system do with
+[04:43] such questions. So we built an a corpus a small corpus of uh like 22 uh 22
+[04:50] documents uh from the historical pages of FIFA World Cup uh in Wikipedia. Uh so
+[04:57] this is our corpus and uh we asked uh many questions about this corpus such as
+[05:02] which team has won the FIFA World Cup the most times in how many FIFA World
+[05:06] Cup did Brazil participate and uh we used the we used the knowledge base the
+[05:12] wiki data and kegle knowledge bases to answer these
+[05:17] questions and uh as you can see a common rag pipeline like the the first one
+[05:23] you'll see on lang chain or lama index and open responses both fail
+[05:30] miserably. It's 5% and 11% of the questions answered correctly and these
+[05:37] are questions that you can find the answer to in very local segments as you
+[05:42] all mentioned.
+[05:45] Um so our idea to handle such corpuses um is take this unstructured corpus and
+[05:52] convert it into a data structure and then ask the question on top of this
+[05:56] data structure because essentially the questions we talked about are questions
+[06:02] SQL questions right it's just like how many times or it's counting questions or
+[06:08] max and min questions or um calculation questions and you just it does it just
+[06:15] doesn't doesn't make sense to try to answer these questions by going over the
+[06:19] pages uh or or specific chunks of the pages. Um so how do we do it? Uh we
+[06:27] split it in two uh similarly to how a regular rag flow is done and where you
+[06:33] invest the compute in the ingestion and you try to do things quickly in the
+[06:37] inference. So in the ingesttor phase uh we first cluster the document into
+[06:43] subcorpuses. For example, we may have financial corpus and FIFA World Cup
+[06:47] corpus that we uh do this clustering. Then per each subc corpus we identify
+[06:53] the schema that I that uh represents this corpus. uh we populate the schema
+[07:00] according to each and every document and finally we upload the results into an
+[07:06] SQLB. Uh so for example if you have the C the FIFA corpus and you have a schema
+[07:12] which is compiled of a year the winner the top three teams the top scorer and
+[07:18] many other attributes and then um you use an LLM we
+[07:24] it's not just an LLM it's like a pipeline but um its goal is to populate
+[07:29] the schema for every document at the inference flow uh whenever we have a
+[07:34] query we identify the schema that is relevant for this query, for example, is
+[07:39] it a financial question or a FIFA World Cup question? And then we just do a
+[07:44] regular text to ask you over our data and we return the final
+[07:50] answer. Um, so here for the FIFA World Cup, which team has won the most the
+[07:54] FIFA World Cup the most times? It's just a simple SQL
+[07:59] query. Um, this approach does not come to solve everything. H not at all. uh
+[08:06] first and foremost not every corpus or query is a relational DB material and
+[08:12] not every corpus is homogeneous in terms of the uh the attributes. H it doesn't
+[08:19] necessarily contain a schema underlying it. Um but we do see many such corpuses
+[08:28] with our clients. um normalization even with a toy example
+[08:34] such as the FIFA World Cup, we see the struggle with building the correct
+[08:39] schema. H because um for example in the host country you have West Germany but
+[08:45] then if I want to ask how many times did Germany won does West Germany count or
+[08:50] doesn't it? A host country is it a singular attribute or is it a list
+[08:54] because South Korea and Japan hosted together the World Cup? Um so the
+[09:00] normalization is an issue both during the ingestion and
+[09:03] inference and abstinence or ambiguity. Um what happens if a user asks me did
+[09:10] Real Madrid win the 2006 final? It's not a World Cup but I do see some things
+[09:17] that I can try to do with my schema and as you probably know LLM's
+[09:23] try tend to try to please the users. um the the points in the ingestion where
+[09:31] we try to cluster and they infer the schema. Uh there's some tradeoff here on
+[09:36] the complexity and how fine grained we are and how much compute uh we would
+[09:43] like to invest during the ingestion time. Um and finally the text to SQL
+[09:48] where whenever the schemas become complex is just a complex issue uh which
+[09:53] is very known and studied. Um so the main takeaways uh are just
+[10:01] that rag is not a one-sizefits-all system and you have to account for every
+[10:06] client separately. Um the there are of course clusters but we should um we
+[10:12] should note that the uh regular pipeline of chunking embedding uh retrieving
+[10:19] reranking is not good enough for many questions.
+[10:23] um existing benchmarks fail to capture this uh these uh use cases. Uh as you
+[10:30] mentioned, they are very limited. Um and in order to solve the problems, we may
+[10:37] need to go beyond standard rug for specific
+[10:40] settings. If you thought this is interesting and you want to learn more
+[10:44] about structure drag and the problems with rugg evaluation, please check out
+[10:48] our full episode of YAP podcast by A21. Thank you.

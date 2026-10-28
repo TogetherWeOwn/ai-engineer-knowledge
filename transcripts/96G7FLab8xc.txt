@@ -1,0 +1,775 @@
+# title: Your MCP Server is Bad (and you should feel bad) - Jeremiah Lowin, Prefect
+# source: https://www.youtube.com/watch?v=96G7FLab8xc
+# speaker: Jeremiah Lowin, Prefect
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T10:01:38Z
+# sha256: a28153c66ebe070dbe58f8b1f780888d97b5f70dff8cf2596aad3fb8b4270f9a
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:20] I really do appreciate that you're all here. I'm going to try and make this as
+[00:23] painless as possible. We're not going to do an interactive part. We're going to
+[00:27] talk through stuff. I'm happy to go off script. I'm happy to take questions if
+[00:31] there's stuff we want to explore at any moment in this. My goal is I'd like to
+[00:35] share with you a lot of things that I've learned. Um I'm going to try and make
+[00:38] them as actionable as possible. So there is real stuff to do here. Um more than
+[00:43] we might in like a more high level talk. But let's be very honest, it is late. It
+[00:49] is a lot. It is long. Let's uh let's talk about MCP. I'm hoping that folks
+[00:54] here are interested in MCP and that's why you came to this talk. If you're
+[00:56] here to learn about MCP, this might be a little bit of a of a different bent.
+[01:00] Just show of hands, heard of MCP,
+[01:05] used MCP, written in MCP server.
+[01:10] Okay. Uh, anyone feel uncomfortable with MCP, which is 100% fine. We can tailor.
+[01:16] Okay, then I would say let's let's just go let's dive in. Um, this is who I am.
+[01:22] Uh, I'm the founder and CEO of a company called Prefect Technologies. For the
+[01:25] last seven or eight years, we've been building um data automation software and
+[01:29] orchestration software. Before that, I was a member of the Apache Airflow PMC.
+[01:33] Um I originally started Prefect to graduate those same orchestration ideas
+[01:37] into data science. Today, we operate the full stack. And then um a few years ago,
+[01:42] I I developed an agent framework called Marvin, which I would not describe as
+[01:47] wildly popular, but it was my leg into the world of AI, at least from a
+[01:51] developer experience standpoint, and learned a lot from that. And then more
+[01:54] recently, I introduced a piece of software called fastmcp, which has is is
+[01:57] wildly wildly popular, maybe even too popular. And um hence my status today.
+[02:04] I'm a little overwhelmed. Uh I find myself back in an open source
+[02:07] maintenance seat, which I haven't been in in a few years, which has been a hell
+[02:09] of a lot of fun. Um but the most important thing is that fastmcp has
+[02:15] given me a very specific vantage point that is really the basis for this talk
+[02:18] today. This is our downloads. I've never seen anything like this. I've never
+[02:22] worked on a project like this. It was downloaded a million and a half times
+[02:24] yesterday. Um there's a lot of MVP servers out there and um fastp is just
+[02:30] it's it's it's become the de facto standard way to build MCP servers. Um I
+[02:35] introduced it almost exactly a year ago. As many of you are probably aware, MCP
+[02:38] itself was introduced almost exactly a year ago and a few days later I
+[02:41] introduced the first version of fast MCP. Uh David atropic uh called me up
+[02:45] said I think this is great. I think this is how people should build servers. We
+[02:48] put a version of it into the official SDK which was amazing. And then as um as
+[02:54] MCP has gone crazy in the last year, we found it actually to be constructive to
+[02:59] position fast MCP uh as I'm maintaining it as the highle interface to the MCP
+[03:04] ecosystem while the SDK SDK focuses on the low-level primitives and actually
+[03:09] we're going to remove the fastm vocabulary from the low-level SDK um in
+[03:14] a couple of months. It's become a little bit of it's it's too confusing that
+[03:18] there are these two things called fast MCP. So fast MTP will be a highle
+[03:22] interface to the world and um as a result we see a lot of um not great MCP
+[03:30] servers. I I named the talk after this meme and then it occurred to me like do
+[03:34] people even know what this meme is anymore? Like this this to me is very
+[03:37] funny and very topical and then it's from like a 1999 episode of Futurama. So
+[03:43] if you haven't seen this, my talk's title is not meant to be mean. I'm sort
+[03:48] of an optimist. I choose to interpret this as but you can do better. And so
+[03:52] we're going to find ways to do better. That is the goal of today's talk. In
+[03:55] fact, to be more precise, what I want to do today is I would really like to build
+[03:58] an intuition for a gentic product design. Um I don't see this talked about
+[04:03] nearly as much as it should be given how many agents are using how many products
+[04:07] today. And what I mean by this is the exact analog of what it would be if I
+[04:12] were if I were giving a talk on how to just build a good product for a user,
+[04:16] for a human. And we would talk about human interface guidelines and we talk
+[04:19] about user experience and we talk about stories. And I found it really
+[04:22] instructive to start talking about those things from an agentic perspective
+[04:26] because what else is an MCP server but an interface um for an agent and we
+[04:31] should design it for the strengths and weaknesses of those agents in the same
+[04:35] way that we do everything else. Now when I put this thought in the world I very
+[04:41] very very frequently get this push back which is but if a human can use an API
+[04:46] why can't an AI and there are so many things wrong with this question and the
+[04:49] number one thing that's wrong with this question is that it has a assumption
+[04:53] that I see in so much of AI product design and it drives me nuts which is
+[04:57] that AIs are perfect or they're oracles or they're good at everything and they
+[05:02] are very very very powerful tools but I'm assuming based on your responses
+[05:07] before. I think everyone in this room has some scars of the fact that they are
+[05:10] fallible or they are limited or you know they're imperfect. And so I don't like
+[05:15] this question because it presumes that they're like magically amazing at
+[05:18] everything. But I really don't like this question. This is a literal question
+[05:21] I've got and I didn't paraphrase it. I really don't like this question because
+[05:24] humans don't use APIs. Very very rarely do humans use APIs. Humans use products.
+[05:31] We do anything we can to put something between us and an API. We put a website.
+[05:35] we put an SDK, we put a client, we put a mobile app. We we do not like to use
+[05:40] APIs unless we have to or we are the person responsible for building um that
+[05:45] interface. And so one of my core arguments um and why I love MCP so much
+[05:49] is that I believe that agents deserve their own interface that is optimized
+[05:53] for them and uh their own use case. And in order to design that interface, which
+[05:59] is what I want to motivate today, uh we have to think a little bit about what is
+[06:04] the difference between a human and an AI. And it's one of these questions
+[06:07] that's like sounds really stupid when you say it out loud, but it's
+[06:09] instructive to actually go through. And I'd like to make the argument to you
+[06:12] that it exists on these three um dimensions of discovery, iteration, and
+[06:18] context. And so just to begin, humans, we find discovery really cheap. We tend
+[06:23] to do it once. If you think if if any of you have had to implement something
+[06:27] against a REST API, what do you do? You call up the docs or you go in Swagger,
+[06:31] whatever it is, you call it up, you look at it one time, you figure out what you
+[06:34] need, you're never going to do that again. And so, while it may take you
+[06:37] some time to do the discovery, it is cheap in the lifetime of the application
+[06:41] you are building. AIS, not so much. Every single time that thing turns on,
+[06:46] it shakes hands with the server. It learns about the server. It enumerates
+[06:50] every single tool and every single description on that server. So discovery
+[06:54] is actually really expensive for agents. It consumes a lot of tokens. Um, next,
+[06:59] iteration. Same idea. If you're a human developer and you're writing code
+[07:03] against an API, you can iterate really quickly. Why? Because you do your
+[07:07] one-time discovery. You figure out the three routes you're going to call and
+[07:11] then you write a script that calls them one after another as fast as your
+[07:15] language allows. So iteration is really cheap. And if that doesn't work, you
+[07:19] just run it again until it does. Iteration is cheap. is fast. Um for
+[07:23] agents, I think we all know iteration is slow. Iteration is the enemy. Every
+[07:27] additional call um subject to your caching setup also sends the entire
+[07:33] history of all previous co calls over the wire. Like it is just you do not
+[07:36] want to iterate if you can avoid it. And so that's going to be an important thing
+[07:39] that we take into consideration. And the last thing is on context. And this is a
+[07:42] little bit handwavy, but it is important as humans in this conversation. I'm
+[07:47] talking, you're hearing me, and you're comparing this to different memories you
+[07:50] have and different experiences you have on different time scales, and it's all
+[07:53] doing wonderful, amazing things in your brain. And when you plug an LLM uh into
+[07:58] any um given use case, it remembers the last 200,000 tokens it saw. And that's
+[08:02] the extent of its um memory plus whatever is, you know, embedded
+[08:06] somewhere in its in its weights and that's it. And so we need to be very
+[08:10] very conscious of the fact that it has a very small brain at this moment. I I
+[08:15] think it is a lot closer to when people talk about sending, you know, Apollo 11
+[08:19] to the moon and and with like 1 kilobyte of RAM, whatever it was. I think that's
+[08:24] actually how we need to think about these things that frankly feel quite
+[08:27] magical because they go and uh open my PRs for me or whatever it is that they
+[08:31] do. Um, so these are the three key dimensions in my mind of what is
+[08:36] different and we should not build APIs that are good for humans on any of these
+[08:42] dimensions and pretend that they are also good for agents. And one way that
+[08:46] I've kind of started talking about this is this idea which is an agent can find
+[08:50] a needle in a hay stack. The problem is it's going to look at every piece of hay
+[08:53] and decide if it's a needle. And that's like not literally true, but it is in an
+[08:58] intuitive sense how we should think about what we're putting in front of the
+[09:01] agents and how we're posing a problem. And an MCP server is nothing but an
+[09:05] interface to that problem andor solution. And so finally to go back to
+[09:09] our product intuition statement, I argued to you that the most important
+[09:14] word in the universe for MCP developers is curate. How do you curate from a huge
+[09:20] amount of information which might be amenable for a human developer a
+[09:25] interface that is appropriate for one of these extremely limited AI agents at
+[09:30] least on the dimensions that we just went through. Um, and that sort of
+[09:34] brings us to this slide, YMCP. And I almost made this like the Derek
+[09:38] Zoolander slide like but why MCP? Like but I just told you why MCP Derek. It's
+[09:43] because it does all of these things. It gives us a standard way of communicating
+[09:47] uh information to agents in a way that's controllable where we can control not
+[09:50] only how it's discovered but also how it is acted on. There's a big asterisk on
+[09:54] that because client implementations in the MCP space right now are not amazing
+[09:58] and they do some things that are themselves not compliant with the MCP
+[10:01] spec. Maybe at the end we'll get into that.
+[10:05] It's not directly relevant to now except that all we can do is try to build the
+[10:09] best servers we can subject to the limitations of the clients that will use
+[10:12] them. And again, I put this in here. I think we don't need to go through uh
+[10:16] what MCP is for this audience. So, we're going to move quickly through this. But
+[10:20] it is, of course, for the for the for the sake of the transcript, the cliche
+[10:23] is that it's USBC uh for the internet. It is a standard way to connect LLMs and
+[10:29] either tools or um data. And if you haven't seen fast MCP, this is what it
+[10:34] looks like to build a fully fully functional MCP server. This one, I live
+[10:39] in Washington DC. the subway is often on fire there and so this checks whether or
+[10:44] not the subway is on fire and um indeed it is. Now the question we are here to
+[10:51] actually explore is why are there so many bad MCP servers?
+[10:57] Maybe a better question is do you all agree with me that there are many bad
+[11:00] MCP servers? I sort of declare this as if it's true. I I'm not trying to make a
+[11:04] controversial statement. There are many bad MCP servers in the world. I see a
+[11:08] lot of them because people are using my framework to build them. It does that
+[11:13] surprise anyone that I'm sort of declaring that I'm genuinely I'm I'm
+[11:16] curious if that's a if I'm made an assumption. I don't
+[11:19] >> in my experience I I won't say every every MCB I I came
+[11:26] up to is like that but a lot of them are like AI rubbers. They just put a like
+[11:32] stringify the content of the API and that's and that's it.
+[11:35] >> They call it an NCB. >> Yeah. And I and I think even I'll I'll
+[11:39] make the argument going a little off script here, but I'll make the argument
+[11:41] that a lot of them even when they're not rappers are just bad products because no
+[11:45] thought was put into them. And I mean, uh, one comparison that that I talk
+[11:51] about sometimes with my team is if you go to a a bad website, you know it's a
+[11:55] bad website. We don't need to sit there and figure out why it's it's ugly or
+[11:58] it's hard to use or it's hard to find what you're looking for or it's all
+[12:02] flash. I don't know. I don't know what makes a bad website exactly, but you
+[12:05] know what a bad website is when you go to one. Um, we don't like to point out
+[12:09] all the things because there's an infinite number of them. Instead, we try
+[12:11] to find great examples of good websites. And so, what I think we need more than
+[12:16] anything else are MCP best practices. And so, a big push of mine right now and
+[12:20] part of where this talk came from is I want to make sure that we have as many
+[12:23] best practices in the world and documented. And I do want to applaud
+[12:26] there are a few firms um these are screenshots from uh Block has an amazing
+[12:31] playbook which if you hate this talk read their read their blog post it's
+[12:34] it's like a better version of what I'm doing right now and GitHub recently put
+[12:38] out one and many other companies have done as well. I I could have I could
+[12:41] have put a lot here but um these are two that I've referred to uh quite
+[12:46] frequently and so I I recommend them to you. Um the block team in particular is
+[12:49] just phenomenal what they're doing on MCP.
+[12:52] By coincidence, the same team has been my customer for six years on the data
+[12:56] side and they're I really love the work that they do and um the blog posts they
+[13:00] put out are very thoughtful and I highly highly recommend them to you. Um I want
+[13:03] to see more of this and today is sort of one of my humble efforts to try and put
+[13:08] some of that in the world. And so what I thought we would do today because I did
+[13:12] not want to ask you to open your laptops up and set up environments and actually
+[13:15] write code with me because it's 4:25 on Saturday. Um, I thought
+[13:21] that we would fix a server together sort of through slides um to make this again
+[13:25] as I said hopefully actionable but um but a gentle a gentle approach to this.
+[13:30] And so here is here is the server that you were describing a moment ago. Right.
+[13:33] So someone wrote this server um I hope that the notation is is clear enough to
+[13:38] folks. We have we have a decorator that says that a function is a tool and then
+[13:42] we have the tool itself. And forgive me I didn't bore you with the with the
+[13:45] details because we think this is a bad server to begin with. Um I think in this
+[13:49] server what's our example here right we want to we want to check an order status
+[13:53] and so in order to check an order status we need to learn a lot of things about
+[13:55] the user and uh what their orders are we need to filter it we need to actually
+[13:59] check the status and if this were a REST API which presumably it is we know
+[14:05] exactly what we would do here we would make one call to each of the functions
+[14:09] in a sequence and return that as some userfacing output and it would be easy
+[14:14] and it would be observable and it would be fast uh and it would be testable
+[14:18] everything would be good. And instead, if we expose this to an agent,
+[14:22] what order is it going to call these in? Does it know what the format of the
+[14:26] arguments are? How long is it going to take for the minimum three round trips
+[14:30] this is going to require? These are all the problems that we're exposing just
+[14:33] just by looking at this. We're not I mean solve them, but that's the problems
+[14:36] I see if I were reviewing this as a product facing um effort. And so the
+[14:41] first thing that we are going to think about and I think this is probably the
+[14:46] most important thing when we think about an effective MCP server because it is
+[14:49] product thinking is outcomes not operations. What do we want to achieve?
+[14:55] And this is a little bit annoying for engineers sometimes because it's forced
+[15:01] product thinking. It's not someone coming along with a user story and and
+[15:05] mapping it all out and saying this is what we need to implement. We cannot put
+[15:08] something in this server unless we know for a fact it's going to be useful and
+[15:12] have a good outcome. We have to start there. There's just not enough context
+[15:15] for us to uh be frivolous. And so here's kind of what this feels like so that we
+[15:21] can get a sense for it. Um the trap when you're falling into the trap, you have a
+[15:27] whole bunch of atomic operations. This is amazing if you're building a REST
+[15:31] API. It is best practice if you're building a REST API. It is bad if you're
+[15:35] building an MCP server. Instead, we want things like track latest order and give
+[15:39] an email. It's hard to screw up and you know what the outcome is when you call
+[15:43] it. Um, the other version of the trap is agent as glue or agent as orchestrator.
+[15:48] Um, please believe me since I've spent my career building orchestration
+[15:52] software and automation software that there are things that are really good at
+[15:55] doing orchestration and there are things that are really bad at orchestration and
+[15:58] agents are right in the middle because they can do it but it's expensive and
+[16:02] slow and annoying and hard to debug and stochastic. And so if you can avoid
+[16:05] that, please do. If you can't, there are times when you don't know the algorithm
+[16:09] and you don't know how to write the code and it's not programmatic, that's a
+[16:12] perfect time to use an LLM as an orchestrator. Finding out an order
+[16:15] status, really bad time, really expensive time to choose to use an LLM
+[16:19] as your orchestration service. So don't um instead focus on this sort of one
+[16:24] tool equals one agent story. And again, even here, we're trying to introduce a
+[16:27] new vocabulary. It's not a user story because user stories everyone thinks
+[16:31] human even though it is a user. It's an agent story. It's something that a
+[16:35] programmatic autonomous agent with an objective and a limited context window
+[16:38] is trying to achieve and we need to satisfy that as much as we can. And then
+[16:42] this is one of those like little tips that feels obvious but I think is
+[16:45] important. Name the tool for the agent. Don't name it for you. It's not a REST
+[16:49] API. It's not supposed to be clear to future developers who need to write, you
+[16:54] know, you're not writing an API for change. You're writing an API so that
+[16:56] the agent picks the right tool at the right time. Don't be afraid about using
+[17:00] silly but um explanatory names for your tools. I shouldn't say silly. Um they
+[17:06] might feel a little silly, but they're very userf facing in this moment, even
+[17:10] though it feels like a deep a deep d a deep API. Um this uh just in case any of
+[17:15] you didn't go read the block blog post. Uh I just found this section of it so uh
+[17:21] important where they essentially say something very similar. designed top
+[17:25] down from the workflow, not bottom up from the API endpoints. Two different
+[17:30] ways to get to the same place, but they will result in very different forms of
+[17:33] product thinking and very different MCP server. So again, I just I really
+[17:37] encourage you to go and take a look at that at that blog post. And if we were
+[17:40] to go back to that bad code example I showed you a moment ago and start
+[17:44] rewriting this and if we had our laptops, you're welcome to have your
+[17:47] laptops out and follow along. The code will essentially run, but there's no
+[17:50] need. Um, here's what that could look like. We did the thing that you would do
+[17:55] as a human. We made three calls in sequence that are configured that are to
+[17:59] our API, but we buried them in one agentf facing tool. And that's how we
+[18:04] went from operations to outcomes. The the API calls still have to happen.
+[18:09] There's no magic happening here. But the question is, are we going to ask an
+[18:13] agent to figure out the outcome and how to stitch them together to achieve it or
+[18:17] are we going to just do it because we know how to how to do it on its behalf.
+[18:21] So thing number one is outcomes over operations. Thing number two, another
+[18:25] thing, a lot of these frankly are going to seem kind of silly actually when I
+[18:28] say them out loud. Please just trust me from the download
+[18:32] graph that these are the most important things that I could offer as advice. And
+[18:35] uh if and if none of them apply to you, think of yourself as in the top 1% of
+[18:39] MCP developers. Flatten your arguments. Um
+[18:44] I see this so often where I do this myself. I'll confess to you where you
+[18:48] say uh here's my tool and one of the inputs is a configuration dictionary
+[18:53] hopefully presumably it's documented somewhere in maybe in the agents
+[18:57] instructions maybe it's in the doc string um you have a real problem when
+[19:02] by the way I I don't remember if I have a point for this later so I'll say it
+[19:06] now uh a very frequent trap that you can fall into with arguments that are
+[19:10] complex is you'll put the explanation of how to use them in something like a
+[19:13] system prompt or a sub aent definition or something like that and then you'll
+[19:18] change the tool in the server and now you it's almost worse than a poorly
+[19:24] documented tool. You have a doubly documented tool and and one is wrong and
+[19:28] one is right and only error messages will save you. Um that's really bad.
+[19:32] We're not This is a more gentle version of that. Just don't ask your um LLM to
+[19:38] invent complex arguments. Now you could ask what if it's a pyantic model with
+[19:43] every field annotated and fine that's better than the dictionary but it's
+[19:49] still going to be hard. There was until very recently there may still be a bug
+[19:54] in maybe it's not a bug because no one seems to fix it but in cloud desktop all
+[19:59] um all structured arguments like object arguments would be sent as a string and
+[20:06] this created a real problem um because we do not want to support automatic
+[20:12] string conversion to object but clog desktop is one of the most popular MCP
+[20:16] clients and so we actually bowed to this in as a matter of like necessity and So
+[20:21] fastmcp will now try if you are supplying a string argument to something
+[20:25] that is very clearly a structured object, it will try to des serialize it.
+[20:28] It will try to do the right thing. I really hate that we have to do that.
+[20:31] That feels very deeply wrong to me that we have a a type schema that said I need
+[20:36] an object and yet we're doing clutchy stuff like that. And so this is an
+[20:39] example of where this is an evolving ecosystem. It's a little um it's a
+[20:44] little messy, but what does it look like when you do it right? Top level
+[20:47] primitives. These are the arguments into the function. What's the limit? What is
+[20:50] the status? What is the email? Clearly defined. Just like naming your tool for
+[20:54] the agent, name the arguments for the agent. Um, and here's sort of what that
+[20:59] looks like when we get that into code. Instead of having config colon dict, we
+[21:04] have an email, which is a string. We have include cancelled, which is a a
+[21:08] flag. And then I highly highly recommend literals or enums whenever you can. Um,
+[21:14] much better than a string if you know what the options are. uh at this time
+[21:19] very few LLMs know that this kind of syntax is supported and so they would
+[21:23] typically write this if you had claude code or something write this. It would
+[21:27] usually write format colon string equals basic which works. It just doesn't know
+[21:32] to do this. And so it's one of those little little actionable tips. Use
+[21:36] literal or use enum equivalently. When you have a a constrained choice um your
+[21:42] your agent will thank you. And I do have instructions or context. So, I did get
+[21:47] ahead of myself. I'm sorry everybody. It is 4:35 on a Saturday. Um, the next
+[21:52] thing though I want to talk about is the instructions that you give to the agent.
+[21:55] Um, this cuts both ways. Um, the most obvious way is when you have none. Uh,
+[22:02] we mentioned that a moment ago. If you don't tell your agent how to use your
+[22:06] MCP server, it will guess. It will try. Um, it will probably confuse itself and
+[22:12] all of those guesses will show up in its history and that's not a great outcome.
+[22:15] Um, please document your MCP server. Document the server itself. Document all
+[22:20] the tools on it. Um, uh, give examples. Examples are a little bit of a
+[22:26] double-edged sword. Um, on the one hand, they're extremely helpful for showing
+[22:30] the agent how it should use a tool. On the other hand, it will almost always do
+[22:35] whatever is in the example. Um, this is just one of those quirks. Perhaps as
+[22:39] models improve, it will stop doing that. But uh in my experience, if you have an
+[22:43] example, let's say you have a field for tags. You want to you want to collect
+[22:46] tags for something. If your example has two tags, you will never get 10 tags.
+[22:50] You will get two tags pretty much every time. They'll be accurate. It's not
+[22:54] going to do a bad job, but it really uses those examples um for a lot more
+[22:59] dimensions than just the fact that they work if that makes sense. So, so use
+[23:02] examples, but be careful with your examples. Yes, sir.
+[23:06] >> Giving out of distribution examples as a way to solve for that. Have you seen
+[23:09] that >> by out of distribution? Do you mean
+[23:13] >> that are not would not be representative of bacter?
+[23:17] >> It's so interesting. So um I don't have a strong opinion on that. That seems
+[23:20] super reasonable to me. I don't have an opinion on it. I in my experience the
+[23:25] fact that an example has some implicit pattern like the number of objects in
+[23:29] array is becomes such a strong signal that I almost gave this its own bullet
+[23:33] point called examples are contracts. like if you give one expect to get
+[23:36] something like it out of distribution is a really interesting way to sort of
+[23:39] fight against I guess that inertia I would imagine it is better to do it that
+[23:44] way I would just be careful of falling into
+[23:47] this sort of more base layer trap I think so that's completely reasonable
+[23:50] and I would endorse it I think this is just a more broad whatever example you
+[23:55] put out there weird quirks of it will show up I I on an MCP server that I'm
+[24:00] building I encountered this tag thing just uh yesterday and it really confused
+[24:04] me no matter how much I was like, "Use at least 10 tags." It always was two.
+[24:07] And I finally figured it was because one of my examples had had two tags. Um, so
+[24:11] yes, good strategy. May or may not be enough to overcome these basic these
+[24:16] basic caveats. Um, oh, I do have examples of contracts. I'm
+[24:20] sorry. It's We're 37. Um, this one I think is one of the most interesting
+[24:25] things on this slide. Uh, errors are prompts. So, um,
+[24:32] every response that comes out of the tool,
+[24:35] your your LLM doesn't know that it's it's like bad. It's not like it gets a
+[24:39] 400 or a 500 or something like that. It gets what it sees as information about
+[24:44] the fact that it didn't uh succeed in what it was attempting to do. And so if
+[24:49] you just allow Python in in fastmcp's case or whatever your tool of choice is
+[24:54] to raise for example an empty value error or a cryptic MCP error with an
+[24:58] integer code that's the information that goes back to your LLM and does it know
+[25:02] what to do with it or not probably it knows at least to retry because it knows
+[25:06] it was an error but you actually have an opportunity to document your API through
+[25:11] errors and this leads to some interesting strategies that I don't want
+[25:14] to wholeheartedly endorse but I will mention where for example if you do have
+[25:18] a complex API because you can't get away from that. Then instead of documenting
+[25:22] every possibility in the dock string that that documents the entire tool, you
+[25:28] might actually document how to recover from the most common failures. And so
+[25:33] it's a very weird form of progressive disclosure of information where you are
+[25:37] acknowledging that it is likely that this agent will get its first call
+[25:40] wrong, but based on how it gets it wrong, you actually have an opportunity
+[25:44] to send more information back in an error message. Um, as I said, this is a
+[25:49] kind of a not an amazing way to think about building software, but it is the
+[25:53] ultimate version of what I'm recommending, which is be as helpful as
+[25:56] possible in your error messages. Do go overboard. They become part of, as far
+[26:00] as the agent is concerned, its next prompt. And so, they do matter. Um, if
+[26:04] they are too aggressive or too scary, it may avoid the tool permanently. It may
+[26:08] decide the tool is inoperable. Um, so errors really matter. And I don't think
+[26:14] this needs too much of an explanation, but this is what it looks like when you
+[26:17] have a full dock string and an example, etc. Um, uh, block uh, in their blog
+[26:22] post makes a point which I haven't seen used too widely, although chatbt does
+[26:27] take advantage of this in their developer mode, which is this readonly
+[26:30] hint. So the MCP spec has support for um, annotations, which is a restricted
+[26:35] subset of annotations that you can place on various components. One of them for
+[26:39] tools is whether or not it's readon. And if you supply this optionally, clients
+[26:45] can choose to treat that tool a little bit differently. And so the uh
+[26:49] motivation behind the readonly hint was uh basically to help with setting
+[26:54] permissions. And uh I don't know who here is a fan of d- yolo or d-dangerous
+[26:59] disable permissions or whatever whatever they're called in different in different
+[27:02] terminals, but then you don't care about this. But for example, chat GBT will ask
+[27:06] you for extra permission if a tool does not have this annotation set because it
+[27:10] presumes that it can take a side effect and can um have an adverse effect. So
+[27:17] use those to your advantage. It is one other form of design that the client can
+[27:20] choose to provide a better experience with.
+[27:24] I've talked about this a bit now. Respects the token budget. Um,
+[27:30] I think the meme right now is that the GitHub server ships like 200,000 tokens
+[27:35] when you handshake with it, something like that. Um, this is a real thing. And
+[27:40] I don't think it makes the GitHub server automatically bad. I think it's actually
+[27:43] makes it endemic on folks like myself who build frameworks and folks who build
+[27:47] clients to find ways to actually solve this problem because the answer can't
+[27:49] always be do less. In fact, right now we want to do more. We want an abundance of
+[27:53] functionality. And so we'll talk about that maybe a little bit later. Um, but
+[27:57] respect for the token budget really matters. It is a very scarce resource
+[28:01] and your server is not the only one that the agent is going to talk to. So, uh, I
+[28:06] was on a call with a customer of mine recently who is so excited that they're
+[28:10] rolling out MCP and I met with the engineering team and and just to be
+[28:13] clear, this is an incredibly forward-thinking, high-erforming um,
+[28:19] massive company that I incredibly respect. I won't say who they are, but I
+[28:23] really respect them. and they got on the call and they were so excited and they
+[28:26] were like, "We're in the process of converting our stuff to MCP so that we
+[28:29] can use it." And they had a a strong argument why it actually had to be their
+[28:33] API. So that's not even the punch line of the story, which is a whole other
+[28:36] story in in and of itself, but it fundamentally came down to this. They
+[28:39] had 800 endpoints that had to be exposed to which I had this thought, which if by
+[28:45] the time you finish reading this, this is the token budget for each of those
+[28:49] 800 tools. if you assume 200,000 um um tokens in the context window. So if each
+[28:56] of those 800 tools had only this much space to document itself, not even
+[29:00] document itself, share its schema, share its name plus documentation, this is the
+[29:05] amount of space you would get. And when you were done taking up this space
+[29:08] because you were so careful and each tool really fit in this, you would
+[29:10] lobomize the agent on handshake because it would have no room for anything else.
+[29:15] So the token budget really matters. um if this agent connected to a server with
+[29:20] one more tool that had a one-word dock string, it would just fail. It would
+[29:24] just have a over effectively an overflow, right? So, the token budget
+[29:28] matters. Um there is probably a budget that's appropriate for whatever work
+[29:32] you're doing. You may know what it is, you may not know what it is. Pretend you
+[29:36] know what it is and be mindful of it. Um in a worst case scenario, try to be
+[29:39] parsimmonious. Try to be as efficient as possible. That's why we do experiments
+[29:44] like sending additional instructions in the error message. It's one way to save
+[29:48] on the token budget on handshake. And the handshake is painful. Um I'm not
+[29:52] sure folks know that uh when an when an LLM connects to an NCP server, it
+[29:57] typically does download all the descriptions in one go so that it knows
+[30:01] what's available to it. And it's usually not done in like a progressively
+[30:04] disclosed way. That is done outright. Yes.
+[30:09] >> Uh absolutely. facive
+[30:30] disclosure mechanisms where when it first initializ
+[30:41] describe step for each one. So it's 95% less context window
+[30:49] and then whatever service it doesn't actually
+[30:54] expose that to the unless it needs >> that's okay. So that's that's awesome.
+[30:59] Let's let's talk about this idea for one second because it's a really interesting
+[31:02] design. Um, there's a debate right now about what
+[31:06] you can do that's compliant with the spec versus what you do that's not
+[31:10] compliant with the spec. And as long as you do things that are compliant with
+[31:13] the spec, then then by all means do them. Who cares? One of the problems is
+[31:17] that there are clients that are not compliant with a spec. Cloud Desktop is
+[31:21] one of them. I've mentioned it a few times. I have a history with Cloud
+[31:23] Desktop. Um, Cloud Desktop hashes all of the tools it receives on the first
+[31:29] contact and puts them in a SQLite database and it doesn't care what you
+[31:32] do. It doesn't care about the fact that the spec allows you to send more
+[31:35] information. I think your solution would get around this because it's a tool
+[31:37] call. But um many of the first attempts that people use to use spec compliant
+[31:43] techniques for getting around this problem such as notifications fail in
+[31:46] cloud desktop. Usually you failed before this in cloud
+[31:51] desktop. I'm not a fan of cloud desktop from MCP server. I think it's a real
+[31:53] missed opportunity because it is such a flagship product of the company that has
+[31:57] introduced MCP. I think it's a real missed opportunity. Cloud code is great.
+[32:00] um uh it it caches everything in SQLite database so it like doesn't matter uh
+[32:05] what you do um techniques similar to what you've described where you provide
+[32:09] mechanisms for learning more about a tool that's a great idea I really like
+[32:13] that um there is a challenge where now you are back in a sort of flatten
+[32:18] arguments world because you have met tools now where I need to use tools to
+[32:22] learn about tools and use to tools to call tools in some extreme cases or
+[32:25] beyond so you need to design this very carefully that's why it usually does
+[32:29] show up as a dedicated ated product. So thank you for sharing that. Um uh there
+[32:33] are many really interesting techniques for trying to solve this problem. Yes.
+[32:38] >> So you talk about um progressive disclosure. Do you use um masking? So
+[32:44] for example, I connect to my Kubernetes server and my credentials only give me
+[32:48] certain rights. So therefore there are 28 tools that I don't have access to. So
+[32:54] therefore, you don't need to do that. So when you say do I do I support that? Do
+[33:01] you mean does MCP support that or do I in my product support that?
+[33:03] >> Yeah, I was just asking something I've read
+[33:07] about.
+[33:10] >> Okay. So so the spec makes no claim about this. The spec says when you call
+[33:15] list tools you get tools back and how that happens is is up to up to
+[33:20] implementation. Um, fast MCP makes that an overridable hook through middleware,
+[33:25] but again makes no claim on how that is. Prefix commercial products, which I'm
+[33:30] not here to pitch, allow per tool masking on any basis. And we see that as
+[33:35] like a place to have an opinionated in the commercial landscape as opposed to
+[33:38] an opinion in the open source landscape as opposed to the protocol which should
+[33:41] have no opinion at all. So if that's interesting, we can chat about this. You
+[33:45] might be getting into this but if you take this problem the example J might
+[33:49] have mentioned kind of table of contents approach guess approach is what split
+[33:54] over the four different chunks or maybe the 800 don't all justify having their
+[33:58] own server like what was the solution >> for them they can't do it they there's
+[34:04] no solution that allowed them to have as much information as they wanted on the
+[34:07] on the contact center window they have they didn't need it they didn't need it
+[34:11] um and and it became a design question and and frankly it was this call was
+[34:14] probably four months ago now and it was just call after call after call after
+[34:18] call like this. Um, which made me realize we need to have talks more like
+[34:22] this and just talk about what it is to design a product for an agent. My worry
+[34:27] is MCP is viewed as infrastructure or a transport technology and it is and I'm
+[34:33] very excited. I think by a year from now we will be talking about context
+[34:36] products as opposed to MCP servers. I'm very excited about that. We'll move past
+[34:39] the transport. Um but we need to figure out how to use it and so so I think
+[34:43] that's how we talk about it. Um the only other alternative that I have discussed
+[34:48] with a few folks a few companies when you have a problem like this is if you
+[34:51] control the client much more interesting things become
+[34:55] available to you. Um if you can instruct your client to do things a certain way
+[35:00] for example if you have a mobile app that presents an agentic interface to an
+[35:02] end user you control the client is what I mean by that. um or if it's internal
+[35:06] and you can dictate what what client or what custom client a team uses. Now you
+[35:11] can do much more interesting things because you actually do know a lot more
+[35:16] about that token budget and how to optimize it. But for an external facing
+[35:18] server, there's not a good there's not a good solution.
+[35:25] I think by now we have talked through all of this. So I'll leave it for uh
+[35:30] posterity uh in the interest of time. Um, we talked about curate as a key verb
+[35:36] earlier in this talk. Um, it is, I would argue, what we have been doing in each
+[35:41] of these little vignettes that we've been working through with the code. We
+[35:44] are curating the same information set down to one that is more amendable and
+[35:48] more recognizable for an agent. Um, 50 tools is where I draw the line where
+[35:54] you're going to have performance problems. I think it seems really low to
+[35:58] a lot of people. Some people will talk about it even lower than that. Some
+[36:01] people might talk about it higher. If you have more than 50 tools on a server
+[36:04] without knowing anything else about it, I'm going to start to think that it's
+[36:07] not a great server. Um, the GitHub server has, I think, 170 tools. Does
+[36:12] that mean it's not a great server? No. There's a good argument there. And the
+[36:15] GitHub team has put out a lot of really interesting blog posts on semantic
+[36:19] routing that they're doing. They had one just yesterday actually on like some
+[36:21] interesting techniques they're using. Um, uh, there's software like, um, like
+[36:26] the one you mentioned a moment ago, sir, which which helps with this problem. So
+[36:29] having a lot of tools like that does not automatically make it a bad server, but
+[36:33] it is a smell and it does make me wonder, can we split them up? Do you
+[36:37] have admin tools mixed in with user tools? Could we name space these tools
+[36:40] differently? Would it be worthwhile having two servers instead of one? Um,
+[36:45] that is a little bit of a smell. If you can get down to 515, that would be
+[36:48] ideal. I know that's not achievable for most people. So it's one of those
+[36:52] actionable but maybe not so actionable little tips. It's an aspiration that you
+[36:56] should have and just be careful unless you are prepared to invest in a lot of
+[37:00] care and evaluation. 50 tools per agent. I should have said per agent. If I have
+[37:05] a 50 tool server and you have a 50 tool server, that's 100 tools to the agent.
+[37:08] That's where the performance bottleneck is, not on the server. Sorry, the slides
+[37:11] should be corrected. It's 50 tools to the agent is where you start to see
+[37:14] performance degradation. Um, I love this. Um, Kelly KFl is someone who I've
+[37:19] known a long time. He's at Fiverr now. And while I was putting this talk
+[37:22] together, I happened to come across these two blog posts of his, which are a
+[37:26] little bit of like a shot and a chaser. They're written almost exactly a month
+[37:29] apart. One's from October, one's from November. In the first one, he talks
+[37:32] about building up a Fiverr server, and he goes from a couple of basic tools to
+[37:36] uh I think 155 188. And in the second blog post, he talks about how he curated
+[37:43] that server from 188 down to five. You could read either of these blog posts.
+[37:46] You could view them independently as a success story on what his adventure was
+[37:50] in learning MCP. I think taken together they tell a really interesting story
+[37:54] about making something work and then making something work well which is of
+[37:58] course the product journey in some sense. Um and so where this where this
+[38:03] takes us is sort of the thing that I sorry do you have a question? Oh sorry
+[38:09] um where this takes us is sort of the thing that I have found is the most like
+[38:13] obvious version of this. I wrote a blog post that went a little bit viral on
+[38:16] this, which is why I talk about it a lot, which is please, please just, if
+[38:20] nothing else, stop converting REST APIs into MCP servers. It is the fastest way
+[38:24] to violate every single thing we've talked about today, every single one of
+[38:27] the heristics that we laid out about agents. Um, it really doesn't work. And,
+[38:32] it's really complicated because this is the fastm documentation. That's a blog
+[38:36] post I had to write. And the blog post basically says, I know I introduced the
+[38:39] capability to do this. Please stop. That's a really complicated thing.
+[38:43] That's that could be a workshop in and of itself. Um, I do bear a little bit of
+[38:48] responsibility here. This is not just a feature of FastMPP. It's one of the most
+[38:52] popular features of FastMPP, which is why candidly it's not going anywhere.
+[38:56] And instead, we're going to document around that fact. Um, but here's the
+[38:59] problem, right? Uh, you just you can't you just can't you just can't convert
+[39:05] I'm not going to explain it. you just can't convert rests into dev speed
+[39:07] server but it is an amazing way to bootstrap.
+[39:14] Um when you are trying to figure out if something is working do not write a lot
+[39:18] of code where you introduce new ways to figure out if you have failed. Do start
+[39:22] by picking a couple of key endpoints mirroring them out with fastmcp's
+[39:27] autoconverter or any other tool you like or even just write that code yourself.
+[39:31] Make sure you solve one problem at a time and make the first problem being
+[39:34] can you get an agent to use your tool at all. Once it's using it, by all means,
+[39:38] strip out the the part of it that just regurgitates the REST API and start to
+[39:42] curate it and start to apply some of what we've talked about today. Um, this
+[39:46] this is just one of those candid things, right? It is the fastest way to get
+[39:49] started. You don't have to do it this way. I start this way. Um, just don't
+[39:55] end up ship the REST API to prod as an MCP server. You will regret it. You will
+[39:59] pay for it. um a little bit later even though there's a dopamine hit up front.
+[40:03] So um these are the five major things that we talked about today in our pseudo
+[40:11] workshop workshop that wasn't really a workshop actionable talk. Um outcomes,
+[40:16] not operations. Focus on the workflow. Focus on the top down. Don't get caught
+[40:19] up in all the little operations. Don't ask your agent to be an orchestrator
+[40:22] unless you absolutely have to. Um flatten your arguments. Try not to ship
+[40:26] large payloads. Try not to confuse the agent. Try not to give it too much
+[40:29] choice. I don't think I said out loud when we talked about that, but try not
+[40:32] to have tightly coupled arguments. That really confuses the agent. Um, see if
+[40:36] you can uh design around that. Uh, if possible, it's not always possible, but
+[40:40] if you can, um, instructions are context.
+[40:43] Seems obvious to say out loud. Of course they are. They're information for it.
+[40:47] Use them as context. Design them as context. Really put thought into your
+[40:50] instructions the same way as you would into your tool signature and schema.
+[40:54] Respect the token budget. Have to do it. It it's this is the only one on this
+[40:58] list where if you don't actually do it, you will simply not have a usable
+[41:01] server. The other ones you can get away with and frankly the art of this
+[41:04] intuition is start with these rules and then work backwards into practicality.
+[41:07] But this is the only one where I think you can't actually cross the line and
+[41:10] then curate ruthlessly if you do nothing else. Start with what works and then
+[41:14] just tear it down to the essentials. Um I I have been writing MCP servers about
+[41:19] as long as anyone at this point. um a year and I still find myself starting by
+[41:26] putting too many tools in the world sometimes because I'm not sure which one
+[41:30] it will use or or I'm experimenting and I have to I have to remind myself to go
+[41:34] back and get rid of them and it and it's hard I think as an engineer especially
+[41:37] designing normal APIs you're like okay like here's my tool here's v2 is
+[41:41] backwards compatible right like and you keep it you keep adding stuff and that's
+[41:44] a really natural way to work and it can be a best practice and uh it doesn't
+[41:49] work here you are It would be like using a UI that just showed a REST API to a to
+[41:54] a user. Um, this is this is a criticism I have offered of my own products at
+[41:58] times when I'm like this looks a little bit too much like our REST API docs,
+[42:01] right? We're not doing our job to actually give this to our users in a in
+[42:05] a consumable way. Um, so if I can leave you with just one with just one thought,
+[42:11] it's this. Um, you are not building a tool. you are building a user interface
+[42:15] and treat it like a user interface because it is the interface that your
+[42:19] agent is going to use and you can do a better job or you can do a worse job and
+[42:23] either you or your users will will benefit from that. Um
+[42:28] I think I think we are at our time so I'm going
+[42:32] to just open it up for questions or what's next or what what other
+[42:36] challenges we can solve. Um, I hope that I hope I found the I hope I walked the
+[42:40] tight rope between uh things that are useful to you all but don't require you
+[42:44] to write any code at 454 on a Saturday. Now, um, but I I hope I hope I hope I
+[42:52] had some useful nuggets in there for you more than you more than you came in
+[42:54] with. And happy to take any question if there are any.
+[43:01] >> What are typically? Um that would be where you have one
+[43:05] argument that's like um what is the file type and another argument that's like
+[43:10] how should we process the file and your input to the file type argument
+[43:14] determines the valid inputs for the other argument. So they're they're now
+[43:17] tightly coupled. Some some arguments on the second thing are invalid depending
+[43:21] on what you said for the first thing. It's just one extra thing to keep track
+[43:24] of. That's a good question. Sorry I didn't define that.
+[43:28] Do you have a question? >> I have to I will start with the first
+[43:31] one. uh when you are giving like an agent an
+[43:36] entity server you have to like document the tools or or the the capabilities of
+[43:41] the server in the server and in the agent and that is like uh not ideal. So
+[43:49] what what would you recommend that or only in the server?
+[43:53] >> So this this comes down to do you control the client or not? If you
+[43:56] control the client then this is a real choice and there are uh there are
+[44:00] different ways to think about it. So, um, for example, in some of my stuff
+[44:04] that I write that I know I'm using, for example, cloud code to access, um, I
+[44:08] might actually document my MCP server as, um, files or cloud skills because I
+[44:15] know what the workflows are going to be. I know that some of my workflows are
+[44:18] infrequent and I don't want to pollute the context space with them. So, if you
+[44:23] if you control the client, you you have a real choice to make there. If you
+[44:26] don't control the client, then you don't have so much of a choice. have to
+[44:29] document it here because you have to assume you're you're working with the
+[44:32] worst possible client. Um, honestly, many of the answers in MCP
+[44:37] space boil down to do you control the client? Then you can do really
+[44:40] interesting things on both sides of the protocol. From a server author
+[44:43] perspective, you really do need to document everything in its dock string.
+[44:47] The one escape hatch is that you can document a server itself. So every
+[44:51] server has an instructions field. Um, it is not respected by every client.
+[44:57] I believe my team has filed bugs where we have determined that to be the case.
+[45:02] Um, so hopefully that's not a permanent thing, but most clients will on
+[45:07] handshake download not only the tools and resources and everything, but a
+[45:10] instructions blob for the server itself. How much information you can put in
+[45:15] there, I' i'd be careful. I don't think it wants to read a novel. But you do
+[45:19] have this one other opportunity to document maybe the high level of your
+[45:24] server. >> Another one, but
+[45:26] >> Oh, yeah. Well, why don't we let's mix it up and we'll come back. Did you have
+[45:29] a question? >> Yeah.
+[45:35] >> I'm pretty I'm not a member of the core committee, but I'm in very close contact
+[45:38] with them. So, maybe I can answer your question.
+[45:43] >> I'm so excited about this. >> Yes, this I know a lot about.
+[45:50] >> It's going to it's it's it's going to expand. It's not actually going to
+[45:53] change so much because of the way it's implemented. Um uh what question could I
+[45:57] answer like what is it? >> Am I excited about it? I am excited
+[45:59] about it. >> Um so
+[46:05] all the rules still apply. That's a that is a fantastic question. Let's talk
+[46:08] about this for one second. Um some of you I don't know if any of you were at a
+[46:11] meetup we hosted last night where my colleague actually gave a presentation
+[46:14] on Oh, you were. Yes, that's right. I was like I know at least somebody's
+[46:18] coming. Um uh my colleague Adam gave a very good talk on this which I can we'll
+[46:25] chat after this. I'll I'll send you a link to um to a recording of it. Um but
+[46:29] the nutshell version is this is this is uh SEP 1686
+[46:33] uh is the name of the proposal and it adds asynchronous background tasks to
+[46:36] the MCP protocol not just for tools but for every operation. Um and we don't
+[46:42] need to talk about too much about what that is. The reason it doesn't involve
+[46:45] changes to any of these rules is um this is essentially an optin mode of
+[46:50] operating in which the client is saying I want this to be run asynchronously and
+[46:56] therefore the client takes on new responsibilities about checking in on it
+[46:59] and and and polling for the result and actually collecting the result but the
+[47:03] actual interface of learning about the tool or calling the tool etc is exactly
+[47:08] the same as it is today. So this is fully opt-in on the client side. Um and
+[47:13] that's why from a design standpoint, nothing changes. The only question from
+[47:17] a server designer um standpoint is is this an appropriate thing to be
+[47:23] backgrounded as opposed to be done, you know, synchronously on the server. Um or
+[47:28] sorry, let me take that back. You can background anything because it's a
+[47:31] Python framework. So you can chuck anything in a Python framework. The
+[47:34] question is should the client wait for it or not? Should it be a blocking task
+[47:37] is really the is really the the right vocabulary for this? Um, and that's a
+[47:41] that's just a design question for the server maintainer.
+[47:45] Is that am I in the the the zone of what you were looking for?
+[47:55] >> Oh, no kidding.
+[48:05] >> L Very. Yes, this happens a lot actually and
+[48:10] >> but until you said this, I didn't think of it as like a pattern, but I've seen
+[48:13] this a lot. It's a real problem. >> Maybe we'll write a write a blog post on
+[48:17] it. That would be fun. Um, >> yes,
+[48:22] the rules still apply. But as far as elicitation is concerned, how do you do
+[48:26] that in terms of >> uh elicitation is really interesting.
+[48:30] So, um, now we're in advanced MCP elicitation. Anyone not familiar with
+[48:36] what that is? Yes. So elicitation is basically a way to ask the client for
+[48:42] more input halfway through a tool execution. So you take your initial
+[48:46] arguments for the tool, you do an elicitation. It's a formal NCP request
+[48:49] and you say, "I need more information." And it's uh structured is what's kind of
+[48:52] cool about it. So the most common use case of this in clients that support it
+[48:56] is for approvals where you say I need a yes or no of whether I can proceed on
+[49:01] maybe it's some irreversible side effect or something like that. Um when it works
+[49:06] it works amazingly. Again it's one of those things that doesn't have amazing
+[49:09] client support and therefore a lot of people don't put in their servers
+[49:13] because it'll break your server if you send out this thing and the client
+[49:16] doesn't know how what to do with it. So you got to be a little bit careful. Does
+[49:19] it change the design is a fantastic question. I wish it were used more so I
+[49:25] could say yes and you should depend on it. If all clients supported it and it
+[49:28] was widely used and the reason all clients don't support this one, by the
+[49:30] way, I'm not trying to it's not like a meme that clients are bad. It's
+[49:34] complicated to know how to handle elicitation because some clients are
+[49:37] userfacing. Then it's super easy. Just ask the user and give them a form. Some
+[49:40] clients are automated, some are backgrounded, some and so what you do
+[49:44] with an elicitation is actually kind of complicated. if you just fill it in as
+[49:47] an LLM,
+[49:50] maybe you satisfied it, maybe you didn't. It's it's a little tough to
+[49:54] know. So, if it were widely used, I would say absolutely. It gives you an
+[49:57] opportunity to put in particular tightly coupled arguments into an elicitation
+[50:01] prompt. Um, or confirmations. Um, a lot of times you'll see for destructive
+[50:06] tools, you'll see confirm and it'll default to false and you're forcing the
+[50:10] LLM to acknowledge at least as a way of, you know, hopefully tipping it into a
+[50:14] more sane operating mode. Elicitation is a better way to design for that. I
+[50:18] didn't I don't think that made it into this in any of these examples. So, great
+[50:21] question. Wish I could say yes. I hope to say yes. How about that? You had a
+[50:27] second question. >> Yeah.
+[50:28] So, so in my in my job the main thing I do is is build agents and I do like
+[50:35] Dangra open SDK or something like that and I usually just like write the the
+[50:41] tools and the tools calling the APIs and I don't like really see the the need for
+[50:46] the MCPS in in that that space. Do you agree that the MCPS are like
+[50:52] >> I do >> not needed there or do you have like a
+[50:55] >> I do I I think um
+[51:00] >> I would not I would not tell you to write an MCP server. I think that within
+[51:04] a year the reason you would choose to write MCP server is because you'll get
+[51:07] better observability and uh understanding of what failed whereas the
+[51:13] agent frameworks are not great because part of the whole agent framework's job
+[51:17] is to not fail on tool call and actually surface it back to the LLM similar to
+[51:20] what we were talking about a moment ago. So you often don't get good
+[51:23] observability into tool call failures. Um some do but not all. Uh and so one of
+[51:30] the reasons to use an MCP server even for a local case like that is just
+[51:33] because now you have an automatic infrastructure so you can actually de
+[51:35] debug and and diagnose and stuff. I don't think that's the strongest reason
+[51:38] to do it. I think that's going to be in a year when the ecosystem is more
+[51:41] mature. I think if you are if you fully control the client and you're doing
+[51:44] client orchestration and you are writing if you are writing the agentic loop and
+[51:49] you're the only one do whatever you want.
+[51:50] >> I think that all all of the advice you gave today also applies when you're
+[51:53] building tools. >> It absolutely does. This is this is Yes.
+[51:57] Everything we said today applies to Py like a Python tool. Absolutely. And
+[52:01] that's I mean that's how fastm treats it. It's a good question. Any last
+[52:05] questions? I'm happy to. Yes.
+[52:17] >> Yes.
+[52:22] excited.
+[52:25] >> Yes. Um, so code mode is something that Entropic uh, Cloudflare actually blogged
+[52:30] about uh, first and then Entropic followed up where you actually ask you
+[52:35] you solve some of the problems I just described here. You ask the LLM to write
+[52:38] code that calls MCP tools in sequence. And it's a really interesting sidestep
+[52:43] of a lot of what I just uh, talked through here. Um, the reason that I
+[52:49] don't recommend it wholeheartedly is because it brings into other other
+[52:52] sandboxing and codeex. Like there's there's other problems with it, but if
+[52:55] you're in a position to do it, it can be super cool. Um, I actually have a
+[52:58] colleague who wrote the day that came out, he wrote a fastmcp extension that
+[53:03] supports it,
+[53:06] which we put in a package somewhere. We didn't we at first didn't want to put it
+[53:10] in fastmcp main because we weren't sure fastcp tries to be opinionated and we
+[53:15] weren't sure how to fit that in and then actually it was so successful that we
+[53:18] decided we're going to add an experiments
+[53:22] flag to the CLI and have it but I don't know if it's in yet
+[53:34] h
+[53:45] Yeah, this will go into this new I forget if we called it experiments or
+[53:49] optimize is it's on our road map right now and this would this would go in
+[53:53] there. Um, and then there's like a whole world right now of optimizing tool calls
+[53:56] and stuff. But I I would like to be respectful of your time and allow you
+[54:00] all to go back to your your lives. You're very kind to spend an hour
+[54:03] talking about MCPS with me. I'm more than happy to keep talking if anybody
+[54:06] has has questions, but I I would like to free you all from the conference. I hope
+[54:12] you all enjoyed the talk and thank you very much for attending.

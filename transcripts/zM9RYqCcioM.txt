@@ -1,0 +1,285 @@
+# title: Finetuning: 500m AI agents in production with 2 engineers — Mustafa Ali & Kyle Corbitt
+# source: https://www.youtube.com/watch?v=zM9RYqCcioM
+# speaker: Mustafa Ali & Kyle Corbitt
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T13:20:14Z
+# sha256: a57d4411413fc9e41f09f4e7be4267bd78e4f9097a8dcfdd56c3902795dc33d8
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:00] [Music] hey everybody uh yep I'm Kyle Corbett
+[00:19] from open pipe and I'm here with Mustafa Ali from method we're going to be
+[00:22] talking about how method has scaled in production to over 500 million agents uh
+[00:28] and basically all the the tricks they use to make that actually work so a
+[00:31] little bit about method is that we essentially collect and centralize
+[00:35] liability data from across hundreds of different data sources this includes
+[00:39] tapping into the credit bureaus uh connecting with the card networks like
+[00:42] visa and MasterCard um and just direct connections with the financial
+[00:45] institutions and various other third party sources and you know we uh sort of
+[00:50] aggregate and enhance this data and serve it to our customers who are
+[00:54] typically other fintechs Banks or lenders and they use this enhanced data
+[00:58] to um anything really to do with debt management so refinancing loan
+[01:03] consolidation liability payments or just Personal Finance Management
+[01:08] um yeah and at open pipe what we do is we help you build uh train and deploy
+[01:14] open source models um for actual usage we also let you use in production your
+[01:19] signals you get from users from the environment to improve your model
+[01:23] continuously over time and that's some of the things we'll be talking about uh
+[01:26] what we did with method nice
+[01:31] so one of the early challenges that we faced at method while coming up with
+[01:35] this you know aggregation pipeline uh was that some of our customers basically
+[01:39] came to us and said you know it's really nice that you can give us the balance
+[01:42] and payment information on a specific liability for their end consumers but
+[01:46] you know what would be really nice is if you could also give us some of these
+[01:50] liability specific data points like the payoff amount on an auto loan or the
+[01:54] escrow balance for a mortgage and you know we said okay let's do some research
+[01:59] so we go back to to some of our data partners and basically ask them you know
+[02:02] is there anything you know we can plug into to get these kinds of data points
+[02:05] and what we found was there's really no Central API that we could get access to
+[02:10] that would allow us to get some of these data points and of course ideally we
+[02:14] would want to work with uh directly with the banks but you know having already
+[02:17] worked with banks before and just from initial conversations we realized that
+[02:21] it would easily take up to at least a couple of years before getting anything
+[02:24] solid done and you know we we're an early stage company so we want to build
+[02:27] for the customer fast um and so that's really what we're trying to come up with
+[02:31] a solution that we can just you know uh push into production
+[02:36] tomorrow and so just to get better understanding of how some of these
+[02:40] companies are operating today uh the services that they're providing today
+[02:43] how are they doing that in the first place right like they must be getting
+[02:45] that data somehow so we go back to some of these customers and basically ask
+[02:49] them you know how are you guys operating and what they tell us is is kind of
+[02:53] interesting so a lot of these companies they basically hire offshore teams of
+[02:57] contractors and you know they uh these teams are basically responsible for
+[03:02] calling these Banks um on behalf of the company and the end consumer they
+[03:06] authenticate with the banks gather the necessary information somebody has to
+[03:10] proof check it it gets sent back um and then it gets integrated into the
+[03:14] financial platforms um and it get surfac to the user is used for underwriting
+[03:18] stuff like that and so that's the status quo that we're dealing with here and
+[03:23] when you think about it that's a very inefficient manual process right it's
+[03:27] it's when you try to think about scaling it does doesn't really scale it's a very
+[03:31] um it has a lot of problems you know it's expensive because one person can
+[03:35] only do one thing at a time right so if you want to scale uh you basically have
+[03:39] to hire more people and for the same reason because it's so synchronous it's
+[03:43] also really slow um and the main I guess the the biggest problem with that is
+[03:48] also that it's there's a lot of human error involved and um you you need to
+[03:51] hire a team to fact check it uh to proof check it and um it's the the the the
+[03:58] worst thing that you can end up with is to surface basically inaccurate
+[04:01] financial information and so conceptually though
+[04:04] if you think about it it's kind of like an API right you have the request
+[04:07] component you have the authentication component you have the response
+[04:10] validation all that stuff uh so essentially when you drill this problem
+[04:15] down into the core problem that's really just trying to make sense of um
+[04:19] unstructured data right so if only there was this magic tool or software that we
+[04:24] could use that was really good at parsing unstructured
+[04:28] data and and you know lucky for us around the time that we were trying to
+[04:32] solve this problem open aai announced gbd4 and you know as people like to call
+[04:37] it there was this Cambrian explosion of AI or llm enabled applications all
+[04:42] around us and the results were just mind-blowing um and we thought to
+[04:46] ourselves you know this this this is the perfect thing for us this is like a
+[04:49] godsend uh so we tried to like you know we tried to see if there's anything
+[04:53] there that we could use and if there's one thing that we all know in this room
+[04:56] is that advanced llms especially post gbd4 are really good with um with
+[05:02] parsing unstructured data so tasks like summarization or classification they're
+[05:07] really good with that kind of thing so we want to test that theory out and see
+[05:10] what that can get
+[05:13] us and so we put our heads down hack together this agentic workflow using GPD
+[05:18] 4 and as expected you know it worked really well so we tried to like expand
+[05:23] some of our use cases because you know the API costs are high so we wanted to
+[05:27] get as much as we could from a single API call and you know it turned out to
+[05:31] be really good at that so we tried to obviously this was in a very controlled
+[05:35] manner um but this was in production and so we were testing out uh different uh
+[05:40] extractions basically and um you know everything was going really good uh but
+[05:45] as soon as we started to increase a little bit of uh traffic uh what we
+[05:50] found was you know the bill had to come do and um it was a lot so $70,000 for
+[05:57] our first month in production with gbd4 and you know this was this made
+[06:01] leadership really unhappy and you know but um but it was something it was
+[06:05] something they were they were fine with because the value that we were getting
+[06:08] out of gp4 was so immense um and so we actually kept this thing in production
+[06:13] for at least a couple more months as we tried to work around this kind of cost
+[06:17] problem and you know cost wasn't the only thing that we were concerned with
+[06:21] um as we started to scale some of these use cases we quickly ran into a wall
+[06:25] with prompt engineering it only takes you so far um one thing we realized that
+[06:29] even though gbd is really smart it's not a financial expert so you had to give it
+[06:34] really detailed instructions and examples uh to really make it work with
+[06:38] all kinds of use cases that we were trying to Target um so it's hard to
+[06:41] generalize those kinds of prompts they become really long convoluted it's
+[06:44] always a cat and mouse Chase with you fix it for a certain scenario and it
+[06:48] breaks for another one you fix it for that one it breaks for the previous one
+[06:51] and so you're all this going back and forth we didn't have any prompt
+[06:53] versioning so we had to figure out a better way to make this work for all of
+[06:57] our use cases
+[07:02] and so the tldr here is that you know we we didn't want to adopt that initial
+[07:06] solution that I just talked about earlier in the slides because of its
+[07:09] scaling challenges and just because it was so inefficient but we kind of ran
+[07:13] into the same scaling challenges with GPT where it was expensive because we
+[07:18] couldn't really optimize for caching because of the variability and responses
+[07:22] and the prompt tweaks we were making all the time and the Baseline latency that
+[07:26] we were finding was actually really slow so we couldn't you know it was overall
+[07:29] we couldn't scale concurrently and similar to human errors that were kind
+[07:34] of uh in a different nature we had AI errors which were just hallucinations
+[07:38] that were hard to catch um and we just couldn't scale with this kind of system
+[07:43] but we still kept it in production because for a specific use cases was
+[07:46] actually really really good and so now the problem shifted from
+[07:51] solving that core problem of trying to make sense of unstructured data that was
+[07:55] solved with GPT now the problem shifted to how do we scale this system how do we
+[07:59] build a robust uh you know agentic workflow
+[08:02] that can handle this kind of volume reliably and so some of the ballpark
+[08:07] figures that we came up with you know is that we we're going to be at least
+[08:10] making 16 million requests per day uh we're going to have at least 100K
+[08:14] concurrent load and you know we need minimal latency to um handle this kind
+[08:19] of real-time agentic workflow so sub 200 milliseconds and you know so the natural
+[08:23] next step for us was like we thought to ourselves do we buy more gpus do we host
+[08:27] our own model like what do we do at this point
+[08:30] um so that at that point open pipe comes in yeah so about a year ago we started
+[08:35] working with method on solving these issues that Mustafa just listed and we
+[08:40] actually found that the those three issues he listed right which are quality
+[08:44] cost um and latency are very common um these are things that you know across
+[08:48] almost everyone we work with uh at least some subset of those are really top of
+[08:52] mind um and so with uh method specifically we were working on okay how
+[08:57] do we how do we solve those problems in a way that that makes this uh you know a
+[09:01] viable business for you so uh the first thing we did was start measuring error
+[09:05] rates um you know like like he mentioned uh even AI models are not perfect uh
+[09:10] these are all probabilistic systems getting to a 0% error rate was not
+[09:14] really feasible but we were able to see different models had different uh had
+[09:18] different performance characteristics there so on Modern models on the task
+[09:22] they're doing these are the rates we're seeing on gbd4 um we're at about an 11%
+[09:26] error rate uh and with 03 mini it's much better it's a 4% error rate um the way
+[09:32] you measure that is going to be specific to your business and that that's
+[09:34] actually true to some extent for all three of these things we'll talk about
+[09:38] uh in the case of method this is actually relatively easy to measure
+[09:41] luckily because they have this agentic workflow but like ultimately what the
+[09:44] agent is trying to do is is fill out um you know extract all this information he
+[09:48] was talking about Bank balances things like that and so you can you can have a
+[09:51] human go through the flow and figure out what the real number should be and then
+[09:54] you can compare an agentic systems final outputs to that and see if it was
+[09:58] successful or not um which which made this part relatively
+[10:01] easy to calculate uh so these are kind of the error rates we're getting um on
+[10:05] the latency point of view uh we see that gp40 is around a second uh to respond uh
+[10:12] and then o03 mini takes about 5 seconds for their specific task again this is
+[10:15] somewhat task dependent uh depending on how much you know for example O3 has to
+[10:19] think as you're measuring this you also want to make sure that you're using real
+[10:22] production conditions that you're actually doing um you know like a real
+[10:25] diversity of tasks uh that that match what you're actually doing and at a
+[10:28] reasonable and currency level that matches your production um and we also
+[10:32] measured the cost um so again cost uh this is something that is going to
+[10:36] obviously be specific and how much it matters is also very specific to your
+[10:39] use case as well um interestingly 03 mini even though it has a much lower per
+[10:44] token cost than GPD 40 if you just look at like the pricing page on the API for
+[10:49] their specific use case uh we found it was a little bit more expensive because
+[10:52] it has it generates many more reasoning tokens so it has much longer outputs um
+[10:56] again though this is somewhat Tas dependent so I just recommend
+[11:00] um actually just just as an aside I would recommend once you get to the
+[11:04] point that you're trying to optimize that you have sort of that initial proof
+[11:06] of concept with with some model something that works I think it's really
+[11:10] worthwhile to it can be as simple as like literally just writing like you
+[11:13] know three different Python scripts that like are able to categorize each of
+[11:16] these for a different model um and then as new models come out you'll be able to
+[11:19] quickly tell how they're doing um okay once you've done or in this case once
+[11:25] we've done this this sort of um benchmarking of where the models are
+[11:29] next question is all right what is where do we need these models to be where do
+[11:32] we need to get to um and so again this is very task dependent uh in the case of
+[11:37] method uh they do have special like they have um extra checks that happen after
+[11:42] this where they look and see okay are the numbers that came out plausible do
+[11:45] they match you know the types of things we're seeing before all the all these
+[11:47] different kinds of checks they're doing and so they didn't need to get all the
+[11:50] way down to a 0% error rate but of course those checks are still followable
+[11:53] and so um if it's over a certain point then then some fraction of those errors
+[11:57] are going to get through and that's going to be bad so we found around a 9%
+[12:00] error rate was was able to get them what they needed um from a latency point of
+[12:04] view so the way their agent works is a realtime system uh it it needs to be
+[12:09] able to respond quickly to to move uh through the the basically like through
+[12:14] the whole flow to get the information it needs and so they did have a hard
+[12:17] latency cut off um we see a wide variety in this for what it's worth we have some
+[12:21] customers that I talked to who it's like hey if I get a result back at some point
+[12:24] in the next few days like that's totally fine this is a background bash process
+[12:27] um we have other customers who are doing real-time voice with the human on the
+[12:30] other end of the line and it's like hey you know if I'm over 500 milliseconds
+[12:33] that's not going to work for me and so again you just have to know for your
+[12:36] specific case how much this matters same with cost um in their case because of
+[12:40] that very high volume as mustaf was mentioning cost is pretty important to
+[12:44] them um again depending on your use case usually mostly dependent on how high
+[12:48] volume it is um will determine how much cost matters to you but but it's
+[12:52] something you you you should know these numbers for your specific task as you're
+[12:55] comparing different models okay so um we're looking here at this uh of course
+[13:02] as you're looking at this this slide you can you may see there's a problem here
+[13:05] which is um of the two models we're comparing at least none of them actually
+[13:09] meet all three of the requirements we need to be able to deploy this in
+[13:12] production and uh you know gbd4 on both the error rate as well as the cost we're
+[13:18] not quite there um and then 03 mini uh on the cost but especially on the
+[13:22] latency it's just not going to work for what we need so this is the point at
+[13:26] which uh method came and they talked to us we're like hey we're not able to hit
+[13:29] what we need here um because again we're not uh yeah we're these these models
+[13:35] aren't getting us where we need to be so what we work on in open pipe is fine
+[13:39] tuning we work on building custom models for your specific use case and so I'm
+[13:43] going to talk about why you would want to do that and how that helps in this
+[13:46] case um first I would say fine-tuning is a power tool uh it does take more time
+[13:51] it takes more um engineering investment than just prompting a model uh so you
+[13:56] don't really want to do that until you have actually benchmarked the production
+[14:01] models just prompting them and seen whether they work or not um so in this
+[14:04] case in meth's case and and in all of our customers cases uh they found that
+[14:07] they were not able to hit the numbers they needed um and so that's the time
+[14:10] you want to bring in fine tuning um so let's look at we were able
+[14:15] to find tuna model and see uh how that was able to help uh because it can
+[14:18] actually really bend that price performance curve a lot um so on the the
+[14:24] error rate uh which is basically just the inverse of of accuracy if you want
+[14:26] to measure it that way um we were able to get to a place where we were doing
+[14:30] significantly better than GPD 4 and importantly better than that threshold
+[14:33] they needed uh this used to actually be much harder to achieve it required a lot
+[14:37] of manual uh labeling of data and things like that it's actually become much
+[14:40] easier over time because of the existence of models like now o03 mini um
+[14:45] which allows you to just use your production data you can you can use your
+[14:50] uh basically the inputs you're using production you can uh generate outputs
+[14:54] for them using a model like O3 mini and train on them we find like in this case
+[14:58] that often you're not able to quite get uh to the the performance of the the
+[15:02] teacher model the model o03 mini in this case that you're using but you can get
+[15:06] quite close to it and usually do much better than you know uh a slightly less
+[15:10] good but much much larger model um you know in this case uh the model we ended
+[15:14] up deploying with them is just an 8 billion parameter LL 3.1 model and and
+[15:18] we find that actually for the majority of our customers a model that large or
+[15:20] smaller is is good enough and is able to hit the numbers you need from quality um
+[15:25] but uh yeah the important thing is to be able to Benchmark that and to answer
+[15:28] that question for yourself um on the latency point of view because
+[15:34] actually this this is sort of the magic of being able to move to that much
+[15:36] smaller model because we've got this AP billion parameter model it is way easier
+[15:40] to deploy in a low latency way um there's just many few fewer calculations
+[15:45] for your sequential calculations with the number of layers and so you can get
+[15:47] just a much lower latency you can even and we we didn't actually have to do
+[15:50] this in method's case but something you can do is you can train this model you
+[15:53] can deploy it within your own infrastructure collocate it with the
+[15:55] application code that's using it um and even completely eliminate the the
+[15:59] network latency uh and then finally uh on the
+[16:02] cost front again just because this is such a smaller model um you end up with
+[16:06] a much much lower cost uh and so that for many of our customers is a big is
+[16:12] incredibly important is to be able to get that performance number you need um
+[16:15] while still maintaining a relatively low cost um in in method's case we were
+[16:20] actually able to far exceed the sort of cost thresholds that they were looking
+[16:23] for to make this viable um which means that they don't have to worry about this
+[16:26] from sort of a unit economics point of view uh in in in the way that they did
+[16:30] when they were using the larger models um so just um to sort of
+[16:36] reiterate what I started with before um this is a power tool uh the fine tuning
+[16:41] uh is it does take a fair amount of work um not an extreme amount of work but
+[16:45] significantly more work than you do for prompt
+[16:48] engineering however if you're not able to get to the reliability numbers you
+[16:52] need uh through just prompt engineering with the models that exist out there
+[16:55] without tuning it is a viable way to very strong bend that price performance
+[17:00] curve and get to a much better place uh which uh which which can help you get to
+[17:04] a very large scale in production just like method
+[17:09] did nice um so yeah just to wrap up here uh one thing that or at least a couple
+[17:15] couple points that we want to highlight is that you know the reason we put two
+[17:19] engineers in the title is also because it's not that it's not that complicated
+[17:23] right you can get away with using we identified a specific use case and we
+[17:28] got away with just using the cheapest model that was out there uh we
+[17:30] fine-tuned it we already had the data from GPT in production so we already had
+[17:34] the data we didn't have to go digging around for the data in the first place
+[17:37] uh so we already used that and we used the cheapest model that gave us the
+[17:40] fastest performance and you know you don't need to buy your own gpus um and
+[17:46] the the other thing that we realize is that productionizing AI agents actually
+[17:49] requires a little bit of uh some level of openness uh and patience from the
+[17:53] engineering team from the leadership team is because when you write code
+[17:57] we're all used to writing code that just work works you push out a feature and
+[17:59] never breaks because you're not changing anything but with AI agents you it takes
+[18:03] some time to get to a point where it's like production ready and actually gives
+[18:07] you the responses that you're looking for um and you know I I feel compelled
+[18:12] to say something about as to Mark the top of the traditional software
+[18:15] engineering job so I'll leave you with these last few words if you're Inu pivot
+[18:19] to
+[18:21] AE thank you thanks everyone [Music]

@@ -1,0 +1,520 @@
+# title: Building Self-Learning Loops for Your Agent — Fuad Ali, Arize AI
+# source: https://www.youtube.com/watch?v=fnuNVFgLjHA
+# speaker: Fuad Ali, Arize AI
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T03:28:44Z
+# sha256: 03b818b58284a0fd65009ef261653944d743de1fb54fe663d34a4aca608c806c
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:12] My name's Fuad Ali. I work in product at Arise AI, and I've been working on agent
+[00:18] experimentation and generally agent tooling across the stack at Arise. Uh,
+[00:23] you just heard from Lori, uh, who's also part of our team here at Arise. He's
+[00:26] going to be flitting around the room. Aparna, our co-founder and CPO, will
+[00:30] also be flitting around the room to help you guys out if you require during this
+[00:33] workshop. Uh, what we're going to be talking about today is building
+[00:37] self-learning loops for your agent. Um, and just to give you a bit of background
+[00:42] on myself and and how I got into the space. I think this concept of
+[00:46] self-learning loops is really new to this idea of AI engineering, uh, and
+[00:51] there's a lot of features in Arise that kind of help you support it. But, to
+[00:54] kind of frame this, um, I actually worked in back in
+[00:57] distributed systems at SpaceX. And it is actually quite interesting how
+[01:02] we're kind of coming full circle in this world of telemetry where, you know, if
+[01:06] you think about it, uh, a rocket system that is continuously course correcting
+[01:10] every millisecond is actually consuming its own telemetry and then actioning
+[01:15] that telemetry in order to self-correct. And basically what I'm going to explain
+[01:19] is how we've sort of built this idea of self-learning loops for your agent in
+[01:23] Arise, and how you can use that to self-correct.
+[01:29] Cool. So, to give you a bit of history on
+[01:32] Arise, we made a few big bets. Uh, we were first to the market with LLM as a
+[01:36] judge back in 2023. Uh, we created the first set of semantic
+[01:40] inventions for LLM applications with open inference open sourced. Uh, we
+[01:45] created the first real-time AI data store, ADB. Uh, in 2025 we released
+[01:50] agent evals and Alex, which is our in-house agent, uh, to kind of help you
+[01:54] with AI engineering. Think of cursor for AI engineering. And in 2026, the next
+[01:59] big bet really want to make is how you can create self-correcting agents with a
+[02:05] feedback loop. Um, and I think everyone understands sort of like how
+[02:10] that is going to be extremely powerful to this idea of of agents generally. Um,
+[02:16] and so I really think the the industry is evolving quite a bit um when it comes
+[02:21] to software engineering. Uh, you sort of have the classic, you know, software 1.0
+[02:26] where there's an app and it's traced to Datadog and there's some sort of
+[02:30] observability platform that human beings read, a human dev then writes code to
+[02:35] actually correct it. I think 2.0 was really humans interacting with this in
+[02:39] prompts. Um, so same thing but instead of you writing the code, you write a
+[02:44] prompt that then corrects the behavior that you're seeing in your app. Uh, what
+[02:48] we're moving to really is phase three, which is the fully autonomous loop.
+[02:53] In this loop, your application produces telemetry events, observability, and
+[02:58] then what is actually reading that is your coding agent. It's not just a human
+[03:03] reading it and then putting a prompt in. Um, if any of you guys are using things
+[03:07] like Cursor, Claude Code, the Datadog CLI, you're already seeing some of this.
+[03:12] Uh, the gap is you're still probably prompting that to go read that
+[03:16] information from a back end like Datadog or whatever it is. Um, and I think when
+[03:21] you evolve to the to the needs of like, you know, thousands of agents across the
+[03:25] stack, it starts to become pretty much impossible for a human being to actually
+[03:29] read those things. And so um going to be talking a little bit about
+[03:33] some of the new features in Arize that we've released that kind of support this
+[03:36] uh flow. But what I want you guys to center on is that observability has to
+[03:42] evolve from humans reading dashboards to really programmatic interfaces that
+[03:48] agents consume, agents can operate on, and agents can self-reflect on as well.
+[03:57] So, just some proof in the market, uh Arize has processed over 1 trillion
+[04:03] spans. Uh, we've run over 60 million
+[04:07] evaluations per month. Uh, we have over 3 million downloads per
+[04:10] month. Uh, trusted by a ton of different cool teams, uh, whether it's Spotify,
+[04:15] Reddit, Uber, Trip Advisor. So, just to, you know, build some confidence that I'm
+[04:19] not just here vibe coding something and telling you guys how it should work. Um,
+[04:25] And I think if you look at the industry, um, the industry is really kind of
+[04:30] moving towards this as well. It's not just, you know, these teams, but it's
+[04:33] also teams that aren't even Arise customers, like Ramp Labs, and how
+[04:38] they've kind of moved to this idea of making
+[04:42] software self-improving and self-healing. Um, and I just point this
+[04:45] out to say the industry is really moving in this direction. It's not just us. You
+[04:50] want agents that can detect a problem, investigate it, ship a fix in the same
+[04:55] loop. Uh, and that's sort of the loop I'm going to show you guys how to build
+[04:58] today.
+[05:02] Cool. So, um, I think the the big problem I want to outline
+[05:07] here is the failures that cost you are invisible at launch. And that's sort of
+[05:12] by definition, because if you had caught them, they wouldn't
+[05:15] have cost you. You would have shipped a fix already.
+[05:18] Um, and I think like really what I'm trying
+[05:21] to center on here is, you know, your agent works in your experimentation
+[05:24] phase. It works with the evals that you set up. You don't really know all the
+[05:29] evals that you have to set up before you ship it, otherwise you would have
+[05:32] written it. Um, and something breaks an edge case that your team just wasn't
+[05:36] aware about. For example, in this in this example, a shopper's asking for a
+[05:40] birthday gift under 30 bucks, they get a list of items over 30, 50 dollars.
+[05:45] And then, what you'll see in production is the agent confidently purchases the
+[05:49] wrong item, always does so extremely confidently,
+[05:52] uh, because it never verifies the product.
+[05:55] And these don't Again, these don't show up in staging. They show up when users
+[05:58] complain. They show up when you get a support ticket. They show up when you
+[06:02] get paged on call at 3:00 a.m. Um, and that gap, it works in staging, didn't
+[06:07] work in production, something sees off, is what I'm trying to close here.
+[06:15] Cool. So, uh real quick, just to ground our kind of talk in an example, we have
+[06:21] this thing called the Wonder Toys Assistant. Um, it's a shopping
+[06:24] assistant, very simple application, has a few tools available to it to search
+[06:29] products, get product details, get the information required for one particular
+[06:34] product, purchase that product, uh check an order status, and cancel an order.
+[06:39] Um, we have the OpenAI Agents SDK running on
+[06:43] top of this, a fast API backend, uh search with a vector search and a text
+[06:48] fallback, and it's traced to Arise, so you can actually see the source of truth
+[06:53] for what that agent is doing in production.
+[06:56] And just to give you a little kind of like sneak preview of what that agent
+[06:59] is, very simple,
+[07:02] you know, you kind of have like a web interface for Wonder Toys, and I'll zoom
+[07:05] in a bit so you guys can see. Um,
+[07:09] I can click on ask about the product,
+[07:16] ask the agent to
+[07:21] purchase the product, and don't worry, no real credit cards involved in this
+[07:24] demo at all. Cool.
+[07:27] Um, so that just grounds us a little bit in the example we'll talk we'll be
+[07:30] talking about today.
+[07:34] Um, and I think the the key thing here is we're going to be going down a few
+[07:38] routes to explain some of the new features in Arise.
+[07:40] Um, but
+[07:43] really, it's going to be four commands, and then a bit of clicking around the UI
+[07:46] interface. You're going to get clone the repo, and don't worry, I'll I'll flash
+[07:50] back to the slide so you guys have enough time to walk through this.
+[07:53] You're really just going to get clone the repo,
+[07:56] navigate to it, add your API keys, npm run dev, and your tracing should be set
+[08:02] up after you've gotten an API key from Arise, uh and an Open AI Open AI API key
+[08:07] to run the open AI agents SDK. Um, and that's pretty much it. And then
+[08:11] once you start clicking around, you'll see that the traces automatically start
+[08:14] flowing uh, into Arise.
+[08:22] Cool. So,
+[08:25] um, we're going to get to kind of like how we can actually start breaking this
+[08:28] thing, but um, the specific bug I've put in this
+[08:32] repo is around this kind of idea of price gates. Um, so most of the most of
+[08:38] the kind of queries will work and you guys are welcome to play around with it
+[08:41] on your own. Uh, but if you ask for a birthday gift
+[08:45] under $30, you're going to be get getting items over $30. Very common edge
+[08:50] case, one where, you know, a specific gate wasn't triggered. Um, and without
+[08:55] the actual kind of context of the coding repo and the context of the traces, it's
+[09:00] very hard to find edge cases like this um, in, you know, sort of an opaque
+[09:05] system that's just emitting telemetry data. Um, the agent won't find it. It'll
+[09:09] return a confident list of completely wrong products. How do you actually
+[09:13] write an eval for an edge case you haven't seen yet?
+[09:16] And so, the first of the new features that we have in Arise to kind of talk
+[09:21] through this is called signal. Uh, signal is an out of the box agent that
+[09:26] lives on the Arise platform in a sandbox and it's really just one toggle to turn
+[09:31] on in project settings. And what signal does is it continuously
+[09:36] runs on your production traces um, in the background. And so what it'll
+[09:41] do is it'll read every trace that's coming in. It'll start to cluster
+[09:44] failures by root cause, dedupe those failures across runs if the same
+[09:48] failures are occurring. And because it is an agent with an entire harness, it
+[09:53] can actually call to external tools. So what you can do is you can connect
+[09:57] signal to your GitHub repo. You can connect signal to downstream data
+[10:02] sources like DataDog. And what signal will do is sitting on top of your trace
+[10:06] data, which is a the of truth for what your agents are actually doing in
+[10:10] production. It will then self-reflect and go look at the code for the agent
+[10:15] that you're running. Go look at downstream data sources like DataDog.
+[10:19] And can actually write an investigation, write a severity entity entity type and
+[10:25] and collect some evidence for that, and actually write a PR for you and open
+[10:29] that PR. Um so you're, you know, kind of flashing back to the beginning of this
+[10:32] presentation that I was talking about where
+[10:36] we have this evolution of software engineering. We're going really to that
+[10:40] phase three where the agent is consuming its own telemetry data off of the
+[10:45] Observe View platform. It's then looking at its own code and then trying to
+[10:49] propose a fix based on some evidence that it has.
+[10:57] Cool. So, that's That's the first part,
+[11:01] signal. Um the second part is really around this
+[11:04] idea of skills, and we'll be having a workshop later today that goes really in
+[11:07] depth to all the skills that we've released. Uh but maybe you don't want to
+[11:11] have that agent managed on a rise. Maybe you just want to be able to pull data
+[11:15] from some store that you have. Uh what we've also released is this concept of
+[11:19] rise skills. Um so rise skills allow your coding
+[11:23] agent that you're working in, whether you're using Cursor, Clockcode, uh
+[11:26] CodeX, or 40-plus other coding agents, OpenCode, Hermes, whatever it is. Um and
+[11:32] this can actually start to query the traces from rise. So, um a good example
+[11:36] of that I think is
+[11:42] Uh give me 1 sec.
+[11:50] I can actually ask my coding agents, this is just Clockcode, but I can ask my
+[11:54] coding agents to actually go read my traces once I'm in the repo. And so,
+[11:59] it'll be able to see what the agent's doing uh from the trace data as well as
+[12:03] the actual code for that agent at the same time and make some really impactful
+[12:07] fixes.
+[12:14] Cool. Uh so, variety of skills. We have skills
+[12:17] for creating data sets off of failures. We have skills for uh going in and
+[12:21] reading traces and doing some of that trace error analysis,
+[12:24] uh as well as skills for, you know, actually running evaluators and running
+[12:28] tasks on the platform as well. So,
+[12:32] the first part of this kind of skills workflow is that Clock can actually
+[12:35] write the fix for you because it's sitting in your coding repo. Similar to
+[12:38] Signal, Signal's running on top, it has access to your GitHub repo, it can go
+[12:43] push up a PR for you. Um and so,
+[12:48] so these two paths are sort of equivalent. Um you have Clock code with
+[12:52] the Arize trace skills. That's kind of like an on-demand method. Let's say
+[12:56] you're an engineer working on your product continuously and you're actually
+[12:59] sitting there and trying to improve it versus Signal, which is the always-on
+[13:03] sort of continuous method. It's continuously serving up, uh you know,
+[13:07] new insights, new analysis for you based on your trace data.
+[13:12] Um and Signal, like I mentioned before, can actually kind of root cause that
+[13:16] because it has access to your coding repo. It can write an investigation
+[13:20] report, um and it can actually try to uh put up a PR based on that. And it's not
+[13:26] just, you know, individual traces that they're looking at, it's looking at the
+[13:29] entire context of what your agent is actually doing in production.
+[13:34] So, um
+[13:35] real quick cuz I want to get to the meat of this presentation, I'm going to pause
+[13:40] here and keep this slide up. Like I mentioned before, we have Laurie in the
+[13:44] room and Aparna in the room um to help out and run around and kind of help you
+[13:48] guys set up. Aparna's right here. I think Laurie is
+[13:52] somewhere else in the room, but he'll he'll be running around. And we got Dat
+[13:55] as well from our team. Uh so, real quick,
+[13:59] these are literally the only four commands you have to run. I would
+[14:03] recommend signing up for a free account at arize.com to just get your Arize API
+[14:08] key to start seeing some of the traces flowing in. And you will need an OpenAI
+[14:12] API key as well for this presentation. So, I'll pause here, leave this slide
+[14:16] on, and then we can start walking through getting the traces for the
+[14:19] Wonder Toy signal, and then what I'll do is we'll walk through how that loop
+[14:24] actually starts to get into production. Um so, yeah.
+[14:30] And if anyone needs a key, uh Dad is more than willing to give give you guys
+[14:34] a key.
+[14:53] All right, how's progress going so far, guys?
+[14:58] And if you don't have your laptop, don't worry. I'll be walking through sort of
+[15:00] what this flow looks like uh if you were to have done it yourself, as well.
+[15:07] I'll give you guys maybe 2 to 3 more minutes to set up your API keys and to
+[15:11] run these commands and clone the repo. I know that the Wi-Fi has been a little
+[15:15] wonky today, so we won't fault you guys for that.
+[15:25] Uh no, you do.
+[15:28] You still get the access to evaluators. You don't get uh there's a few features
+[15:32] like code evals and things like that, yeah.
+[15:39] And for this flow, we'll mostly be showing how Cloud Code can do that
+[15:42] tracing analysis for you through the skills and through signal. Um so, it
+[15:45] won't be it won't be necessary for this one.
+[15:53] Anyone having any trouble? Anyone need some help? Feel free to raise your hand
+[15:56] and we'll flit around the room.
+[16:05] Sorry?
+[16:10] Here, I'll jump down.
+[16:14] Sorry.
+[16:17] >> The Git clone is not installing. >> Ah, okay.
+[16:20] Cool that's probably a Wi-Fi issue.
+[16:42] So if you guys are having Wi-Fi issues let me know when you can start to see
+[16:47] the repo pull up it might take a few seconds
+[16:51] but this is generally the structure of the repo
+[16:55] we have kind of the agent all the scripts that it needs
+[16:59] and a bunch of other things there so I'll give you guys a few more seconds
+[17:02] cuz I know the Wi-Fi is a little slow once we get folks starting to get into
+[17:07] the repo please make sure to sign up for an API
+[17:10] key as well and get your open AI API key as well so
+[17:13] we can get started.
+[17:33] Should I just keep going?
+[17:50] And just a reminder all you have to do is run those few commands so you get
+[17:54] clone the repo then you'll CD into that repo
+[17:59] so I'm already in there. Then you'll NPM install.
+[18:06] And then make sure that you have your M file loaded this is where you're going
+[18:11] to be putting your three keys.
+[18:16] No doubt at the end here.
+[18:22] Wait sorry. Which one?
+[18:37] Oh, the doc get at the end.
+[18:50] For example, got it.
+[19:11] Can't change it right now, but uh well, we'll get it going.
+[19:24] Cool. All right, I'll start I'll I'll leave this up for for maybe 10 more
+[19:28] seconds. Um very simple, make sure you put your M values in. Uh there may be a
+[19:33] bug there as well, um but just make sure you look for the dot M file and put your
+[19:38] own keys. Um just to show you an example,
+[19:43] uh I will take this off so you don't see my keys, but there are there are some
+[19:46] keys in there as well. Um and then you NPM install and NPM run
+[19:50] dev. So, what you'll then see is that your
+[19:55] Wonder Toys interactions, so your interactions with this chatbot, are
+[20:00] being traced to a rise. Uh and in your rise traces, you'll actually be able to
+[20:03] see um
+[20:05] the things that are coming in through this chatbot, right? So, I can see that
+[20:08] I started an agent workflow, the Wonder Toys agent then um responded, it
+[20:14] searched products, uh took another turn, and actually found the products and
+[20:18] returned them to me, uh and I can kind of see the output of what that agent is
+[20:22] doing. So, this is like kind of like baseline value prop. Can I trace? Can I
+[20:26] understand what's going on? Uh and then the second part of this that I wanted to
+[20:29] show is sort of like some things that Signal can do on top of this. So, you
+[20:34] have all this trace data uh coming in through a rise.
+[20:37] And what you actually want to start doing is you want to enable Signal to
+[20:41] actually run on top of your agents.
+[20:45] And I'll show you an example of Signal uh in a repo.
+[20:50] So, Signal runs continuously in the background. It takes a few minutes to
+[20:53] actually get started once your traces start flowing in. Uh so, I'll show you
+[20:58] we're getting hit with a little slow Wi-Fi, but I'll show you an example of
+[21:01] Signal already set up and ready to go and sort of how it's it's sort of doing
+[21:05] that loop of self-improvement.
+[21:29] So, kind of like I mentioned earlier, traces are flowing in through a rise.
+[21:33] Every interaction you do with the app comes in.
+[21:36] Um and then this is sort of what Signal looks like. Um
+[21:40] so, Signal has kind of this clustering
+[21:43] analysis of different issues that it's seeing across your application. Uh
+[21:47] you'll see sort of this table of uh categorization of what those issues are.
+[21:52] Uh you can see those issues trending over time. Um and then you can actually
+[21:56] go read examples of what that are, right? So, in this example, uh we can
+[22:02] see some serialization issues with Python. Um and that that is corrupting
+[22:07] the agent um input. And you'll see that it actually opened a PR for me already.
+[22:13] Um and so, I can just one click go into that PR and start viewing it. Um
+[22:18] there's also this idea of like writing at least the ticket out of that
+[22:22] investigation. So, you'll see this overview of what um this stock agent is
+[22:27] doing, fabricating results for example, a hypothesis of why that's happening,
+[22:32] evidence for that within an individual trace,
+[22:36] and then a proposed fix for you to go and and then do yourself.
+[22:40] So, kind of going back to this concept of like agents consuming the telemetry
+[22:44] data, this agent is sitting in the back
+[22:47] consuming the telemetry data, actually writing out the evidence and proposing a
+[22:50] fix for you. In this example, we've still, you know,
+[22:54] left the code review to a human. Your mind's a limit on how far you want to
+[22:57] take these things. We do recommend you do that as well.
+[23:00] But, kind of this idea of like the self-healing software, you can see in
+[23:04] action.
+[23:07] How are we feeling on setup? Is Was the Wi-Fi able to get up
+[23:11] and running for people? Did they Were you able to No? Okay, cool. I will
+[23:15] continue kind of through the presentation, and maybe we can take some
+[23:18] time at the end as well to kind of float around the room and help you out.
+[23:24] So, kind of the four steps that I wanted to walk through you guys were one,
+[23:29] detect. So, surface the fallback failure before a user had reported it.
+[23:34] Two, based on that failure and Evals running
+[23:37] in your platform, actually investigate what's happening with real traces.
+[23:44] And so, in our example, there was a bug with the price check. And so, what
+[23:48] Signal and your skills via Cloud Code was able to do was look at the traces,
+[23:54] look at what a user is asking within the trace around, you know, the price being
+[23:58] under $30, actually marry that to an investigation of the code path that
+[24:03] checks the price filter, and then propose a fix for you. So,
+[24:07] in my code, there was a bug with how it was actually doing that price filter,
+[24:12] and using Signal, using the trace data that's in a rise, and using the skills
+[24:16] via Cloud Code, I was able to see that interaction happen with a real user, and
+[24:21] then fix that, you know, kind of wrong filter in my code for the agent. And
+[24:26] then finally, we have this verify path. Wasn't planning to get to it today cuz
+[24:30] it is a little bit of setup, uh, but happy to kind of talk through that and
+[24:33] then we'll make sure to, uh, kind of return when the Wi-Fi is good as well.
+[24:38] So, again, just a just a quick recap on the basics here.
+[24:42] Uh, we have this idea of, you know, the core loop running on a real agent which
+[24:48] detects the issue around the H filtering bug, investigates, uh, using the arise
+[24:54] trace goal or through signal, uh, fixes
+[24:57] that issue cloud actually patching the fall back, uh, and then verify it, uh,
+[25:03] which I'll kind of walk through how that works in arise as well, uh, with
+[25:06] harnesses as a judge and agent experiments. Um,
+[25:10] and then signal it'll kind of do this in parallel as well for when you don't want
+[25:14] to be hands-on with the keyboard and want to run this in the background. Uh,
+[25:17] signal will be tuned to your own taxonomy, your own traces. Um, it you
+[25:22] can also configure it to be set off alerts. Um, so for example, if you have
+[25:26] an alert on a specific eval that needs to stay below, um, you know, 1% trigger
+[25:31] rate, you can configure signal to be triggered off of an alert, um, or, you
+[25:36] know, a latency spike or a cost spike or anything like that. Um, you can then
+[25:40] have custom harness judges running in CI on those PRs. Um, you can experiment
+[25:45] with those and then you can kind of optimize things from there.
+[25:49] Uh, and quick quick shout-out as well at 2:00 p.m. Lori will be doing a workshop.
+[25:54] Hopefully the Wi-Fi is a little bit better as well where we dive deep deep
+[25:57] into some of these workflows as well. Um,
+[26:01] so, kind of centering us, I talked about this loop. I think we all kind of get
+[26:05] the picture of I have an app, it's traced, this traces flow in, and then in
+[26:11] addition to the trace data, uh, whether it's signal, whether it's your own
+[26:15] coding agents, having trace data which is the source of truth for what your
+[26:18] agent is doing, as well as your actual repo data which is the code that defines
+[26:23] what your agent should be doing, uh, you get some really, really interesting
+[26:27] analysis, um, and the ability to actually make improvements at scale.
+[26:31] Um I think one thing that we didn't talk
+[26:34] about yet that I want to get into is sort of how do we evaluate agents using
+[26:38] agents? So, this is kind of like an example of pull the traces,
+[26:42] you know, look at my code, figure out what's wrong. When you want to have sort
+[26:46] of this more adaptive analysis, we tend to think of it as Harness as a Judge.
+[26:50] So, I think raise your hands if you guys are familiar with LLM as a Judge,
+[26:54] loosely speaking. Cool. Awesome. I think pretty much
+[26:58] everyone in the room should be familiar with that at this point. Um you know,
+[27:01] very common pattern, you feed in an input, your LLM as a Judge reads the
+[27:05] input, uh whether it's uh summarization task or a hallucination eval, whatever
+[27:10] it is, it then responds with a set of rails
+[27:13] um on how well uh the sort of the agent did on the response. What we're really
+[27:18] moving to is Harness as a Judge, and this is for a few different reasons. I
+[27:22] think firstly, LLM as a Judge is really a fixed rubric.
+[27:26] So, when you have a use case in mind, and when you have an eval that you know
+[27:30] you want to score on, it works really well at catching those known issues.
+[27:35] However, like I just kind of explained with the price filter,
+[27:38] you don't always know what those issues are going to be like before you hit
+[27:42] production. And so, Harness as a Judge is a way to do that adaptive analysis.
+[27:47] Um so, observe what the agent is actually doing, and adjust what you
+[27:53] actually test as the agent goes. So, the criteria kind of emerges from the
+[27:57] trajectory. Um was this the right tool to pick? Were the arguments valid? Was
+[28:02] this grounded in the right context that was handed off by another agent, for
+[28:06] example? This idea of that unknown unknown. So, that price filter was an
+[28:09] example where I wouldn't have written maybe a test case for that, um
+[28:15] but an Harness as a Judge is able to kind of do that adaptive analysis for me
+[28:20] with the trace analysis that it has in it.
+[28:23] Um so, this is sort of like verifying in plain
+[28:26] language. You're not column mapping, you're not writing
+[28:30] boilerplate, you know, sort of eval templates and and text. The rubric is
+[28:35] really just a sentence and it reads the actual trace tree directly,
+[28:39] um, then runs in a sandbox against those real traces,
+[28:43] um, and so I think it gives you a bunch of,
+[28:46] you know, tools on top of that because it also runs in an environment. So, one
+[28:51] example that I see from a lot of customers is around this idea of access
+[28:54] checks. Um, an LLM as a judge might be able to read an input and read an
+[28:59] output, but because it has no data outside of that unless you paste in
+[29:03] every user in the system into the system prompt, it doesn't actually know or have
+[29:07] context on what that user should be doing or should have access to. Whereas
+[29:11] a harness as a judge, because you can connect it to external systems, it can
+[29:15] then go make a call to actually say, "Hey, is this user allowed to do this?
+[29:20] Does the trace reflect the access that they had?"
+[29:24] Um, and so harness as a judge is essentially moving from just a
+[29:27] foundational model call that scores an input and that comes out with an output
+[29:31] rail to a more agentic flow where you can actually call tools,
+[29:36] um, and and sort of do that unknown unknown catching as well.
+[29:47] Cool. Um,
+[29:48] so I think we we kind of talked about, uh, harness
+[29:52] as a judge, um, how that would have worked in this scenario is
+[29:57] scoring the fixed to fail and and actually deciding whether to pass the
+[30:01] example or not. So, for example, "Pass if every return product's price is
+[30:06] within the requested min price max price range. Fail if any result exceeds the
+[30:11] budget." Um, and it's actually able to go into the code and check that those
+[30:15] filters are working correctly, um, and this rubric now will catch this
+[30:19] on every subsequent run and not just, uh, you know, an individual test case
+[30:23] that you've coded for before. Um, so quickly checking in, we talked
+[30:30] about the detect, investigate, and ship the fix.
+[30:34] Um, shipping the fix part is kind of what I
+[30:36] want to talk about now with agent experiments. So, maybe we've found an
+[30:41] issue, we've grounded that in real trace data, we've investigated that, we know
+[30:46] why it's wrong, and we've decided that we have a fix worth shipping.
+[30:50] Before you ship the fix, you probably want to test this on a set of results.
+[30:55] And I'm not sure how you guys are doing this today, maybe you're deploying to a
+[30:58] dev environment and then manually testing.
+[31:00] Um, what Arize has come out with is agent
+[31:03] experiments that allow you to test that in an automated way via CI as well. And
+[31:07] so, uh, I don't think any of us are
+[31:09] strangers to the concept of, you know, data sets of failure cases that we
+[31:13] collect over time. Um,
+[31:16] what you can do with agent experiments is you can actually stand up that dev
+[31:20] agent behind an endpoint and hit that with a data set directly from Arize. And
+[31:25] that data set will be actual traces that your agent has failed on. So, in the
+[31:30] previous example, I kind of showed you, uh, the Wonder Toys where maybe I have a
+[31:34] few traces asking for, um,
+[31:38] birthday gifts under $30 that actually failed. Uh, what I can use Arize skills
+[31:43] to do is actually go create that data set. So, I'll I'll have like, call it 25
+[31:47] examples of budget constraint searches that failed, right? And then I ran the
+[31:52] workflow with cloud code, uh, I did some trace analysis, I
+[31:56] identified the bug in my code, and I have a fix ready as a PR. Or maybe
+[32:00] Signal did that all for me in the background. How do I actually go hit my
+[32:04] agent with that data set to make sure that the proposed fix is actually
+[32:08] validated? And that's sort of what agent experiments allow you to do.
+[32:12] With agent experiments and the agent playground in the product, uh, you can
+[32:16] actually run against that fixed version. So, you deploy it to dev, it stands up
+[32:21] behind an endpoint, uh, you stream sort of the, uh, data set inputs into that
+[32:26] agent, and the agent actually responds. And then you can score it with the same
+[32:30] judge rubric that you have in production. Uh, so then you can compare
+[32:34] kind of side-by-side what the agent in dev mode is doing with the fix versus
+[32:38] what the agent of production did and look at whether you're actually catching
+[32:43] uh any of those edge cases or not. So, similar to kind of like other data
+[32:49] set experimentation workflows, what you want to do is you want to look before
+[32:53] the fix and after the fix, look at your judge, which is in this
+[32:56] case the price correctness judge, um look at your examples and queries, look
+[33:01] at whether, you know, maybe latency is increasing, cost is increasing, so you
+[33:04] have sort of a view of those operational metrics as well,
+[33:08] um and then quantify the results of your experiment. Um and then, you know, maybe
+[33:13] alluding a little bit back to this idea of the self-correcting loop,
+[33:17] it as a full storyline, you now have, you know, agent that's operating
+[33:21] autonomously on your traces, looking to see if issues are arising. So, you know,
+[33:26] I can see that the user asked for under $30, the response was clearly over $30,
+[33:32] investigating why that's happening with reference to a code base,
+[33:36] putting up a fix in the form of a PR for what how it thinks it can improve that.
+[33:41] In this case, it was a filtering error. And then,
+[33:45] because our experiments are actually exposed via skills and APIs well, the
+[33:49] agent can actually redeploy itself on the new PR
+[33:54] and verify itself against a data set of actual failure cases
+[33:59] before it even notifies you or decides that it's worth your human review. So,
+[34:04] you know, this full loop happens completely autonomously. The agent will
+[34:08] actually go collect the failures, create a data set for itself, run it against
+[34:12] the new version of itself, and prepare a response back to you that says, "Hey, I
+[34:17] think I found this issue. I investigated it. I know why it might be happening. I
+[34:22] pushed a PR. I then ran that PR in dev against the data set of failures I
+[34:28] found, and I saw, you know, um in this case a 36% increase in
+[34:34] performance on this specific evaluator." And all that information to you is
+[34:38] available to you in the PR itself for you to then just go read, validate the
+[34:42] code, do some code review, and ship. Um so, I think this makes it like, you
+[34:47] know, kind of coming back to this idea of the loop.
+[34:51] Um I think it makes it really, really
+[34:53] powerful to go, you know, full circle where you have the detect, investigate,
+[34:59] hypothesize, and fix loop, and then you also have the validation loop, right?
+[35:03] So, how do I actually know that this fix is correct, and it's not just uh you
+[35:07] know, an agent in a sandbox saying it's correct? How do I actually go test that
+[35:11] on real failures and real uh edge cases from my working example, um and how do I
+[35:16] actually, you know, start to stand that up and auto test that for me? Um And so,
+[35:22] I think, you know, we'll we'll come back. We'll we'll have some time as well
+[35:26] to kind of help you guys around uh in the rest of the workshop if the Wi-Fi's
+[35:29] doing a little bit better. Uh but
+[35:32] I'll I'll go back to the slide that was previous, um so that you guys can kind
+[35:35] of walk through this yourselves. One, getting the tracing started. If you're
+[35:40] not collecting tracing, nothing else works.
+[35:43] Um takes sub-second sub-10 minutes on your on your own agent. We have
+[35:47] instrumentation skills. We have support for all the big agent frameworks, all
+[35:51] the foundational model providers. Um enabling signal and going deep, uh or
+[35:56] using clock code to actually use the Arize skills to do that investigation
+[36:00] for you. Uh verifying it with a harness as a
+[36:03] judge, and then measuring that with agent experiments.
+[36:06] So, before we end, I will go back to this, and we'll we'll we'll walk around
+[36:10] the room and try to help you guys get this set up. Uh if you're having trouble
+[36:14] with the M files, um if you just search through the repo or
+[36:17] ask a coding agent where the M file is, um it will kind of help you do that. Uh
+[36:22] other than that, make sure you get clone the repo,
+[36:25] um and you get your API keys from the Arize platform, uh and then you can
+[36:29] actually start to see these traces coming together. Um
+[36:33] in the spirit of AIE workshops, I think this really works better when you guys
+[36:37] see it and touch it yourselves, and actually try to do it. So, hopefully the
+[36:41] Wi-Fi works, and I'll I'll come around hop around. If you do have questions or
+[36:45] you're blocked at any point, feel free to ask me. Odds are someone else in this
+[36:48] room is experiencing the same issue. Uh so, I'm happy to kind of shout out some
+[36:52] advice as we go. All righty, and if you're having trouble installing the
+[36:55] skills as well, uh I have it up on the slides here. Uh very simple NPX skills
+[37:01] add ariseai arise skills. This will give you access to an interactive mode where
+[37:06] you can choose what you want to install, or you can just choose to install all of
+[37:10] them as well. Uh and this includes skills for trace analysis, data set
+[37:15] curation, as well as evaluators.
+[37:20] So, as an example of like some of the skills you can run, uh I can ask Claude
+[37:24] code, "Hey, check my traces for any errors or anything I can fix. Acquire
+[37:28] circumference with the code for the agent in this repo and use the agent
+[37:32] skills." And uh we will be sending out kind of a recording of this as well as
+[37:36] all the resources you need to kind of get started with this. So, apologies for
+[37:40] the internet if it doesn't work out today, you guys will be able to get up
+[37:43] and running very quick as well. All righty, guys, we got to close up uh our
+[37:47] workshop for now. Thank you once again. I just want to leave you guys with sort
+[37:51] of this detect, investigate, fix, and
+[37:55] verify slide, uh which kind of covers the through line of how uh you can get
+[37:59] started with Arise and how to create yourself-improving agents. And then once
+[38:03] again, uh feel free to connect with me on Twitter or LinkedIn. Uh and if you
+[38:07] want a free year of Arise Pro as well, uh just use the code on the screen. Uh
+[38:12] we have a free tier that's always free, free to use. For this conference only,
+[38:15] we're also giving out Arise Pro for free, which gives you a bit more of the
+[38:19] usage limits. Uh if you guys are running agents with,
+[38:22] you know, thousands and thousands of traces. So, thank you guys so much.
+[38:25] We're running another workshop at 2:00 p.m. uh led by Lori that'll go into a
+[38:29] few more code examples. Hopefully, the Wi-Fi is also a little bit better then,
+[38:33] and yeah, we'll get going. Thank you guys. Appreciate you.
+[38:54] >> Mhm.

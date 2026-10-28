@@ -1,0 +1,2121 @@
+# title: Low Level Technicals of LLMs: Daniel Han
+# source: https://www.youtube.com/watch?v=pRM_P6UfdIc
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T14:41:15Z
+# sha256: 41aba22a3ca90a67c33fd3e509f9db0d051b8dda2843d0b14269c4aeb8507594
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:00] [Music] welcome to the AI Engineers worldair um
+[00:16] this is the first Workshop um there's a few other running but like thanks for
+[00:19] coming um we just arrived from like Australia with my brother um I think
+[00:24] it's over there somewhere but yes we just came here um yes we didn't know a
+[00:29] lot of stuff about SF and I think maybe the US is a bit different from Australia
+[00:33] um but yeah we're very excited to be here so like we're going to stay here
+[00:36] for like a few months so if you want to meet up you know you can just hit me off
+[00:40] email or Twitter or wherever um so today I'm going to be talking about lowlevel
+[00:44] technicals of language models um yes yes I'm Daniel um but so we do have a
+[00:49] website called un. if you want to look like look that up like um there's like
+[00:54] cute SLS and stuff so my brother designed that we'll be using two tiny
+[00:58] urls did it okay it's still working yeah so we'll be using two tiny URLs now so
+[01:04] the first one is oh wait I yeah so the slides are at tiny url.com
+[01:08] unof um hopefully that works um and there's also Q&A so like I'll be
+[01:13] monitoring Q&A you can type any question that you like and I will be answering
+[01:17] questions as we go um and that is at tiny.com unof QA um so if those two work
+[01:24] so there'll be like on the bottom if you know anyone doesn't get this like this
+[01:28] on the very bottom of the footer that we like we'll reshow these
+[01:33] links okay just just has it doesn't work yes okay good good good okay yes so you
+[01:42] might know me from my tweets um so GMA like kind of like released an open
+[01:49] source Model A few months ago and we just found a few like issues and bugs
+[01:53] for like different implementations um so like for example the first tweet that we
+[01:58] ever did was about some sort of like the approximate jelly um bug issue and so
+[02:05] like multiple implementations of Gemma they had different implementations some
+[02:09] of them use exact jell some of them use approximate and like so which one is
+[02:12] correct and so that's the question um and so like we just tweeted about this
+[02:16] and that was like our first issue that we found we thought this was just like
+[02:20] one issue but actually there were like many issues um and so like we found more
+[02:24] bugs um and so I'm assuming maybe you know me from this um we did get
+[02:30] partially recognizable through our Gemma B fixes so um yeah so today we'll be
+[02:35] showing you how you can actually find these bgs and issues in language models
+[02:40] and how you can actually like analyze and do this yourself um without you know
+[02:44] um us just doing it manually ourselves and hopefully this can be like an open
+[02:48] source project where everyone can find these issues automatically and help us
+[02:52] to solve these issues um I always thought about like can we like automate
+[02:55] this I don't think so it can be automated um there are actually many
+[02:58] issues with these implement a and it's not just JMA um for example like you
+[03:04] know we also analyed Gro um and there's like some weird things in their code
+[03:08] like they're scaled by um 30 * 10 h x over 30 it's just it's just a clamping
+[03:14] mechanism um you can see I also make mistakes sometimes um I like you know
+[03:19] said it's Division and not multiplication so sometimes I misread
+[03:22] the code um that's because like you know I spend when the code gets released I
+[03:26] quickly try to analyze them and sometimes I mistakenly say stuff um so I
+[03:30] have to like LGE you know showcase correction so yes I'm still human um but
+[03:35] yes like you know we analyze lots of models and stuff like this and hopefully
+[03:38] by the end of these workshops well actually this work okay it's actually
+[03:42] not one Workshop it's going to be like multiple things in one so like I decided
+[03:46] to like talk about three things but I I'll tell you about that later um
+[03:49] hopefully you guys can like analyze and learn about how to do like find bugs and
+[03:54] stuff like that by the end of today um so another one I did recently
+[03:58] was like nvidia's nron I don't know if you saw this but Nvidia released a 340
+[04:03] billion parameter model which is extremely large I'm assuming this is in
+[04:09] like you know in preparation like they have to release this earlier before
+[04:12] Llama 45 billion right so they have to do this quickly um and but there are
+[04:17] like some weird interesting things like you know they use the squared value and
+[04:21] not the normal Swig glue and the other types um so that was very interesting
+[04:25] they were actually the first well actually not the first but like the
+[04:27] first big model trained to be using these like other activation functions
+[04:32] and there's other like other weird quirks and stuff like that um and
+[04:35] hopefully you'll be also able to like analyze like you know whenever the code
+[04:39] comes out just read it and you'll get it um it does take some practice okay like
+[04:43] I take like okay the first time when I read this code like it took me like many
+[04:46] many days to read through like all these um architectures and understand exactly
+[04:51] what they are but now it takes like 10 minutes so like I'm sure you can like
+[04:55] just the code comes and just read it um that's the whole goal of today
+[05:00] and also language models if you don't know they're not just like issues and
+[05:04] bugs and Analysis of these architectures the tokenizer is a totally separate
+[05:08] beast from language models right tokenization is like extreme extremely
+[05:13] annoying um so like I also tweeted about like you know there's like different
+[05:17] types of tokenization issues like mistol llama mixol like all these different
+[05:21] types of like variants of mistol from the mistal team you know they have like
+[05:25] different tokenization if you didn't notice um like if you so the smiley face
+[05:29] the sun smiley face is a space and if you actually tokenize them um depending
+[05:35] on the model you'll have different results and the question is which one is
+[05:39] correct um unfortunately I do not know um I did asky team for this um and
+[05:45] according to them some of them are correct and some of them are just
+[05:48] because the mistro team forgot to update the model to the fast tokenization
+[05:52] variant um we will be talking about this later as well um but you can see even
+[05:57] before you can train or run the model the token Isa is broken so what are you
+[06:01] going to do um it's a multi-pronged problem so we don't just do language
+[06:08] models um you know like we don't you know our experience is you know a bit
+[06:12] broader than that so we actually like I I used to actually major in maths and
+[06:17] computer science so um yes very fun well actually I kind of did very badly in
+[06:21] maths but anyways um yes very very fun so like SVD I don't know if anyone has
+[06:25] anyone done normal machine learning here oh yeah yes very good there is a few
+[06:31] people um so like the SVD I'm assuming like most people know PCA yes principal
+[06:37] component analysis yeah okay very good data visualization it's a very powerful
+[06:40] technique more people should know about it um SVD okay I don't I don't know if
+[06:44] people know about SVD or like okay yes it's a bit less wellknown I'm actually a
+[06:49] bit confused why people don't know SVD it's actually the algorithm that's one
+[06:53] of the most important algorithms in all of like maths and computer science um it
+[06:57] literally underpins like many applications um and extremely important
+[07:03] um maybe we talk about that but yes I'm a huge proponent of like telling people
+[07:07] to learn more about SVD so please do the singular value decomposition that's like
+[07:11] the must must must must must okay like that's the most important algorithm it's
+[07:15] because it's like one algorithm it can like spawn many other algorithms and
+[07:19] it's like can be used for many purposes um there's also like the QR
+[07:22] decomposition okay prob okay probably no one knows the Lu tety like there's a lot
+[07:28] um randomize SVD yes that's extremely important as well um and yeah so we
+[07:33] don't just do language models you can ask me any questions about you know
+[07:38] stuff maths or computer science you have a question or real quick um so do you
+[07:43] think um so for the neotron 340b um is it a unique architecture for because you
+[07:51] can only use Nemo loader right now to load and train and you know do the I
+[07:57] think that dat is just the most valuable part but we are attempting to try to
+[08:00] convert it to a hugging face Transformer safe tensors so but we've had issues
+[08:06] because we don't have the modeling file so um I was wondering do you think that
+[08:10] it's similar to so at the same day they uploaded a 70b of llama 3 that's neotron
+[08:17] as well do you think that we can get some Clues to how to build a huging face
+[08:23] implementation yes so the question was for neotron the
+[08:27] Cod was not released for the actual inference and what training you have to
+[08:31] go through the Nemo training framework for MV yeah well what I mean is that I I
+[08:37] can dump the weight yes but the code yeah I was actually planning on doing
+[08:41] something like that but as you know we didn't have time to do that so I
+[08:45] probably I might I might take a crack of that if is there be a QA I don't want to
+[08:50] ask any questions oh yes then no there is so you can log questions on Q&A there
+[08:53] is there will be Q&A so we no no yeah no you can like anyone can like raise their
+[08:58] hands and like ask a question like I don't I'll just repeat the question um
+[09:01] and but there is like the slider if you want to random questions I will keep
+[09:05] monitoring um yeah and yeah so like oh yes the other one was like another paper
+[09:11] col Laura learns less and forgets less it shows that you know fine tuning via
+[09:14] Laura does not really work for learning new knowledge and um well it depends
+[09:20] like it depends on how you actually read the paper like some components were
+[09:24] incorrect they didn't actually train in all linear layers they kind of forgot a
+[09:27] few and they also you need to do some sort of black like you know special
+[09:30] parameters to make this work and we will also be talking about that as well but I
+[09:34] was just trying to show you that you know we don't just do language models so
+[09:37] we have like a whole wealth of knowledge across different Industries and stuff
+[09:41] well not not Industries topics um and you can ask me any question that you
+[09:45] like um so UNS slof yes um we launched this last December so I launched this my
+[09:50] brother um it's a bit outdated the St but anyways um I think we have 11.9
+[09:55] something k or something I don't even know now but anyways um we launched this
+[09:58] last December It generally makes fine tuning of um language models like llama
+[10:02] M or jamama faster to two times faster um generally speaking and we have like
+[10:07] 80% less memory usage now we have like some new methodologies which reduce
+[10:11] memory even further and the trick is there is no degradation and accuracy so
+[10:15] like you know we don't do any like approximations that's the whole purpose
+[10:18] of doing the optimizations is we don't want to lose any accuracy um and so we
+[10:23] do like Triton kernels so this is like from open AI then um it's a language to
+[10:28] do like Cuda programming um essentially it's like a intermediary between the
+[10:33] Cuda code and python itself and we'll be showing some Triton code um I don't know
+[10:39] if we have time for like programming Triton but that'll be another topic um
+[10:44] and yeah so like the whole purpose of unof is to make everyone be able to fine
+[10:49] tune their language models with very bad gpus right so like Tesla t4s the free
+[10:53] Google does anyone like people do know that Google C has free Tesla TS right
+[10:58] yes yes right 65 Tera flops right it's actually not that bad um if you use it
+[11:04] properly um just reminder there is a common misconception that the p100s and
+[11:07] kagle is faster that's actually not correct um p100s I think are five times
+[11:12] slower than Tesla TS um so although it's actually more expensive as a GPU I think
+[11:17] I think um but it's actually slower for um so please do not select the p100s on
+[11:23] kagle right so kagle has 30 hours for free per week gpus um and you get two
+[11:28] Tesla t4s so that's 130 teraflops per week um 30 hours and that is actually
+[11:34] very powerful I think that's the same as RTX 3070 or there I can't yeah I can't I
+[11:39] can't remember exactly but um yeah so that so kagle has 30 hours for free per
+[11:44] week Google collab it depends on how much you use normally you get four hours
+[11:49] per day I think um I guess the pro is not that bad it's like $10 per month you
+[11:53] can actually get like yeah it's pretty good um yeah so probably get Pro um I I
+[11:59] do not suggest I mean you could use like runpod and Lambda labs and stuff like
+[12:02] that I guess that's another option but we do actually share a pricing
+[12:06] comparison so what you need to like be careful when you use gpus there is a big
+[12:10] issue is like oh look this is the most I want to use a h100 um did you actually
+[12:15] check how much flops that h00 provides um be careful of nvidia's marketing it's
+[12:20] times two because it has sparcity um so just be careful of that and also you
+[12:25] have to be careful of the flops when it's like float 8 or float 16 so just be
+[12:28] careful of those um I do have a pricing comparison where we like normalize by
+[12:33] like the flops um with no sparcity and we'd like look through like Lambda Labs
+[12:37] runpod Google cab AWS um Google cloud and I think runp pod is mostly pretty
+[12:44] good uh yes question oh the
+[12:48] sparity so in okay so the question was why is times two for flops for the
+[12:53] sparity feature in Nvidia um GPU so sparity the sparity feature what it does
+[12:58] is you take 50% of the weights and make them go to zero and Nvidia essentially
+[13:03] allows you to train this two times faster by not doing Matrix
+[13:06] multiplications on the zeros right so you're like two * Z is just zero so like
+[13:10] you essentially don't fire the transistors and essentially this makes
+[13:13] it two times faster um well that's actually not that's just a higher level
+[13:17] overview but like essentially you like compress The Matrix into this special
+[13:20] format and then this Nvidia special format allows you to do make
+[13:24] multiplications two times faster um yeah so it's spity
+[13:29] so it's on h100s it's on it's on A1 100s as well so your RTX 3060 your RTX 30
+[13:36] series has that feature from r2x 30 the 30 series I think it has yes I think it
+[13:40] does
+[13:43] um so if you want to enable it the biggest issue is is that the language
+[13:48] models most companies do not train their language models with sparity enabled if
+[13:53] you set this like weights go to zero um you will actually ruin the behavior of
+[13:57] the model so there are like papers which show that you can actually do like turn
+[14:02] on the feature and then you can do fine tuning to make it work so there are
+[14:06] actually papers which do that um so in theory you could enable this um but you
+[14:12] know it it depends on like what models are released from the large companies um
+[14:15] yeah I'm assuming I I think I do know if so Facebook is like they did Implement
+[14:20] sparity in their pytorch and um X for's Library so I'm assuming they might be
+[14:25] focused on sparity because you get times two faster um and if you know like open
+[14:29] air you know like they keep saying oh it's two times faster hm I wonder why
+[14:33] why is it two times faster why is it the two times faster right so like could it
+[14:37] be sparity could it be float eight right float 8 is generally two times FAS okay
+[14:41] not not exactly but like approximately two times faster so you know all these
+[14:45] like things when you hear two times faster where does it come from could it
+[14:48] be these things although we don't know but like we're just guessing um
+[14:52] yeah any other questions okay just remember you can
+[14:57] raise your hand or you can just like wait are there any I'm assum me there's
+[14:59] no slided questions yet um yeah okay yeah just raise your hand um so we so
+[15:05] for unso we do benchmarking against hugging face plus flash attention 2 um
+[15:09] and we just show our Benchmark this is kind of old already the memory reduction
+[15:12] is much more now um so and we do a Blog we did a blog post with them so thanks
+[15:18] to hugging face for the collaboration um and essentially all you need to do is
+[15:22] you know from in from UNS slof import fast language model and we try to make
+[15:25] it as easy as possible for people to fine tun language model um and yes we'll
+[15:31] be talking about unof a bit later um oh there is a question is it a myth or
+[15:36] solid hypothesis that linear versus coine then short one to two EPO versus 3
+[15:41] to five EPO is the highly is oh is highly generalized um I think it depends
+[15:47] um so like for training
+[15:51] methodologies hthis that linear versus coine then of course short EPO versus
+[15:58] long is theed best way to train any
+[16:03] standarded model I think it depends so there are like some research papers
+[16:07] which show that cosign or linear schedules I mean it depends to tell the
+[16:11] truth I think it's a toss of a coin I don't think so is actually that
+[16:14] important for the learning rate schedule a lot I think it more depends on like
+[16:18] the data set the number of parameters um like research papers would show that if
+[16:23] you just simply change from tide weights from unti weights to tide weights you
+[16:26] can get like better accuracy for smaller models so I think it's so the learning
+[16:30] rate chedu is not that important you might get accuracy plus
+[16:33] 0.1% just train for more data there we go right get more data oh wait I press
+[16:38] back just train for more data and I'm I'm assuming it will be similar um but
+[16:41] to tell the truth I think it's best to like do small experiments and then like
+[16:44] test which schedule is the best but I don't think so it's that that important
+[16:48] um I think for the number of epo that's actually important um these like big
+[16:53] companies um to tell the I'm not sure what llama like 15 trillion tokens is it
+[16:57] actually 15 trillion tokens or is it like 5 trillion tokens EPO I do
+[17:02] not know right these these questions are very important if it's 5 trilon tokens 3
+[17:06] that's actually very different from actually 15 trillion tokens in total but
+[17:10] that's actually very very different but in general speaking like you know if you
+[17:12] train for more EPO three is generally the well you know good like approximate
+[17:18] three EPO one is actually the best for pre-training generally um you shouldn't
+[17:22] like retrain your data like multiple times um but yeah um did you have a
+[17:27] followup question or no well um so basically um learning rate is one was
+[17:34] one of the big issues you fixed with the Gemma implementation oh yes so that's
+[17:40] why I kind of that's where my Pitfall was when I was training my 2B for um
+[17:47] Gemma and um so I actually trained it pre your fix and somehow it turned out
+[17:53] the Benchmark and and after your fix is better than I don't know what Happ
+[17:59] but now like one of the highest ranking oh okay know like what what do
+[18:07] you have any theories about what could happen I trained on the Transformers
+[18:11] broken version and then subsequent using oxel and using a um a very hard we drew
+[18:19] forced a learning rate but it turned out surprisingly well and um we also Ed we
+[18:26] didn't use unslot but we used like H so um so this is after the fixes that we
+[18:32] did like it does before so before does better no well no before it was it was
+[18:37] usable everybody else was unusable right yeah but it was usable which was
+[18:42] surprised to me because because everybody else is was unusual but then
+[18:46] after your fixes we are now the top my company has on the open L on Le
+[18:53] board so you didn't even retrain you like you just no so after fixes somehow
+[18:58] it made a b okay do you have any theories on that to
+[19:01] be honest I do not know I think like because the fixes that we did for GMA
+[19:04] are like multi-pronged like it's not like one fix is like nine or something
+[19:08] so I don't know which fix caused the change there could be like all of them
+[19:12] maybe I don't know um it's it's kind of like um just for me when I when I when I
+[19:18] did the training right and it turned out good and then I heard from like every
+[19:22] all my friends oh I can't do this I can't do this it's like um it just
+[19:26] shocked me I guess okay yes that is quite shocking if like you didn't yeah
+[19:30] we change a code like we we kind of like fix all the issues and then you don't
+[19:35] need to retrain it and it does better okay that's okay that's a very
+[19:38] interesting phenomenon I do not know oh yeah
+[19:43] okay okay yeah great um yes to be honest like language models I mean these are
+[19:48] all active areas of research please someone do a research on
+[19:55] that yes I cannot say anything then I just read the code and fix the box I do
+[20:00] not know so Sor yeah yeah don't worry um okay we
+[20:06] also like do long context fine tuning so like we show that if you use a new
+[20:10] methodology which does gradient checkpointing and offload it to system
+[20:15] Ram you can randomly increase your contact size by four and your and the
+[20:20] weird part is if you offload correctly to system Ram from the GPU weirdly the
+[20:25] time of execution is just slower by 1 to 2% right so like this is very weird it's
+[20:32] like if you can do non-blocking course and offload the GPU like memory into
+[20:38] system Ram if you do it correctly it's not slower um some implementations
+[20:44] unfortunately offload incorrectly um I don't want to name anyone but they
+[20:48] offload incorrectly sometimes they offload to dis I don't know who came up
+[20:51] with the idea of offloading to dis but anyways please try to offload to memory
+[20:56] first and then disk right dis is extremely slow um and if you can offload
+[21:00] to memory system Ram you can actually get away with a lot of memory usage um
+[21:06] okay so I should have put this at the first side but anyways so today we'll be
+[21:10] having three approximate topics um and these I wanted to make them into like
+[21:15] three different separate topics but I guess I just mix them together whatever
+[21:18] um so you'll be learning about lowlevel technicals of language models for
+[21:22] example back propagation um why is why is Transformers not o of n squ o cubed
+[21:29] for training and rather o squ and there is a lot of maths but I will try my best
+[21:34] to reduce I think I already tried my best to reduce the maths but there are
+[21:37] still some maps so please handle the maths um I will try my best to explain
+[21:41] as simply as possible um that's the whole goal of the workshop so not that
+[21:46] bad maths you will actually understand the formulas very well um just reminder
+[21:50] I kind of nearly failed my maths in University so do not worry do not be
+[21:54] scared um it's very fine um we talking about
+[21:59] fast fine tuning the best tips and tricks for fine tuning how do we write
+[22:02] the fast kernels for fine tuning um you know how do we actually make it two
+[22:06] times faster use 70% list memory like how and with no accuracy degradation um
+[22:11] and we'll be talking like some you know Tron opening eyes Trent language and
+[22:15] stuff like that um and we'll be doing finding and fixing bugs um so this would
+[22:19] be a constant phenomenon and theme how do we find and fix bugs in llama M Jama
+[22:23] Fe um we'll be talking about mixture of experts as well oh wait maybe not but it
+[22:27] depends on time um and we'll be doing lots of bug hunting bug fixing and more
+[22:32] and everyone here will be a fantastic Bug Hunter and Bug fixer and we can like
+[22:36] essentially open source our effort to fix open source models to everyone here
+[22:40] um oh yes and we also have stickers um yes I I don't know where they are but
+[22:46] like oh yes yeah my brother has some stickers um and we bought a few of these
+[22:50] stickers which look pretty cute right so like you can wait my laptop has some
+[22:55] right I put them on my laptop um and they're pretty cute I really like them
+[22:59] my um so my brother has them we'll be handing them out um yeah as well at the
+[23:04] end um okay so let us start um so the
+[23:10] Transformer right so like what is the Transformer I'm assuming everyone knows
+[23:15] what the Transformer is um does anyone not know what the Transformer is yes or
+[23:20] no like you can simply okay yes okay so the Transformer
+[23:26] is just an architecture that is behind all language models um so like gbd4 gbd3
+[23:32] you know like llama mistro Jam all these open source models what are they like
+[23:37] what's the architecture behind them and all of them are rely on the like the
+[23:42] transformer and the Transformer is essentially a architecture which seems
+[23:47] to be very good for sequence modeling um so it's not just for languages it can be
+[23:50] for any sequence modeling right so like if you know like you know Sora is a
+[23:53] Transformer well not just a Transformer it's probably plus diffusion but like
+[23:57] it's generally a Transformer um and there's other different types of models
+[24:01] which doesn't have to be language modeling okay it's just sequence
+[24:03] modeling and I probably show some pictures later um I probably should have
+[24:08] explained a bit better but like just just just assume that Transformers are
+[24:11] the method behind all language models okay gbd4 gbd3 gb5 okay I don't know if
+[24:19] G who knows what gb5 is but like I'm assuming it's a Transformer um the
+[24:23] Transformers just seem to be very good at learning new knowledge injecting
+[24:27] knowledge into the model it seems to be very very good at changing the weights
+[24:31] to fit the training data um which is very interesting um and the gpd2
+[24:38] architecture was actually very popular for the like you know most deod style
+[24:42] Transformer that was very very popular it's still used to this day um and it
+[24:46] kind of got reincarnated by adding extra components to it and this new
+[24:51] architecture is called Transformer Plus+ um I don't know if people have heard of
+[24:55] this but Transformer Plus+ is the gbd two Transformer architecture plus rope
+[25:00] embeddings plus wigo plus RMS lay norm and with no bias um and I think it's
+[25:06] untied weights although I'm not sure if ju I can't remember that exactly but I
+[25:09] think it's plus untied weights and Transformer plus plus is the
+[25:13] architecture which most people think is the best you know transform architecture
+[25:18] for now um yes for now um there are probably like some other tweaks and
+[25:22] little small things that Transformers still can do but like in general this
+[25:26] would be considered the best architecture um and how does
+[25:30] architecture look like it is just a list of maps equations um so I just wrote
+[25:36] down the entire Transformer architecture um well this is llama 2 right so llama's
+[25:41] Transformer architecture in one slide um and all you need to do is get some
+[25:47] inputs like some sort of like inputs do some layer Norm do some rope embeddings
+[25:51] do some attention plus some residual do some Lon Norm Swig glue whatever
+[25:56] residual Leon norm and you get um and you essentially repeat this
+[26:00] middle section L times or many times um and that is the transform architecture
+[26:06] um okay then maybe the mass equations I'm not sure does the mass equation
+[26:09] scare anyone or I'll be explaining each one okay so like hopefully I try to make
+[26:15] the mass equations as like reasonable as possible um in theory if you write this
+[26:19] down on in py torch um oh yes if you write this down in in
+[26:25] pytor you actually have a working implementation of of a transformer
+[26:29] architecture um and yeah so like we'll be talking about each component
+[26:34] separately as well um yeah is anyone scared for the math no yes no no okay
+[26:40] very good okay let me just check questions does anyone have any
+[26:44] questions okay okay so did you have a question
+[26:48] okay well um so from my understanding from the layer level for
+[26:54] Transformers um so it's almost toico in a way is that I mean of course
+[27:02] the hard map behind it Cosmic sorry what Cosmic flinko like the drop you know
+[27:08] there 80 layers right in a grid right so like low energy something sorry I'm I'm
+[27:15] actually not familiar with that D you have to explain to me what did you
+[27:19] Cosmic what sorry cosmico Cosmic clanker do I know that
+[27:24] I'm not that smart so you have to like explain to me what that is should I
+[27:29] search that up Nota like the arcade game of and you
+[27:35] drop that oh yes it's a Windows XP output output you know on the bottom
+[27:41] right yes visualize it right yes like if you take this to visualize it yes and
+[27:47] then and then visualize the map for example let's take llama 3 88 right M
+[27:53] it's 32 layers right and then layer zero or I guess doesn't matter there's layer
+[27:59] zero and then layer 32 which out is the output layer yes now when you drop a
+[28:05] prompt into this Cosmic machine yes which it's not actually Cosmic we just
+[28:11] don't understand okay yes it's not Cosmic yes it's just Maps but so far
+[28:15] it's Cosmic to us I don't think we understand personally I don't think we
+[28:19] understand 50% at the like where I I think we exended a lot but okay yes okay
+[28:24] this is mat you're the expert not me you know so okay but um so you're just
+[28:30] trying to say an analogy like it's kind of like the game yeah so so people can
+[28:34] visualize the mapus like I think so oh yeah I talk about that in the slides but
+[28:40] like I think it's more like an
+[28:44] analogy I think it's more like you're going through like a ma like it's not a
+[28:48] maze I would say it's more like you have like a every single layer has like
+[28:52] someone trying to make you change clothes and then each layer does like a
+[28:58] fashion designer trying to get you to wear different clothes and each layer
+[29:03] the fashion designer doesn't like the previous fashion designer choices and
+[29:06] they will change your clothes something like that I think that's more like a
+[29:09] Transformer it's like each fashion designer has like views of their own so
+[29:13] it's actually quite simar okay yeah I guess you
+[29:17] could oh yes yes yes wait it is in Windows XP right is it that I'm I'm Mak
+[29:22] confused Windows XP like the game I think I played it before Oh okay anyways
+[29:26] okay yeah sorry yeah
+[29:32] question oh um so when I put subscript I It generally is well technically
+[29:40] everything is a matrix but if you see any summation signs um with sub subscrip
+[29:45] I then it generally means rowwise or columnwise um The W like if you see
+[29:50] small if it's small small like a small W that generally means Vector um but in
+[29:56] general everything that's capital is a Matrix um and why is it a matrix because
+[30:01] it's just faster um I mean in theory you could convert this all to vectors but
+[30:07] for Speed purposes this should be matrices um yeah any other
+[30:13] questions okay next um so why do they put this hello my name is Daniel hi my
+[30:20] brother's name is Michael I hope everyone to have tons of fun a Engineers
+[30:24] worlds is the best um why did I put this well
+[30:28] does anyone noticed any similarities between these sentences
+[30:33] um or
+[30:37] differences sorry exclamation the end ex okay yes okay yes okay except for the
+[30:43] first sentence okay anything else just say random
+[30:51] stuff interesting yes okay hello and high are the same thing but kind of
+[30:55] different words okay yes semantic embeddings basically this
+[31:00] isle okay okay somewhat okay are
+[31:07] simar okay yes okay okay well to turn the I didn't have any
+[31:12] intention the intention yes go on I mean it's the king plus Queen yes yes for
+[31:17] water back yeah yeah I know what you're talking about yeah so like you know it's
+[31:21] King minus man plus woman equals Queen that's the I think that's what you're
+[31:26] trying to show a little may I mean maybe you don't have that attention but this
+[31:30] kind of it shows that okay well Theory I guess you could have just seen the next
+[31:35] slide there are just five if you simply just look um the first one if you
+[31:41] consider punctuation as combined with the word right like hello comma treat
+[31:47] that as one separate component and if you do this ignore all spaces the first
+[31:52] one has just five components right what do you think the second one okay I guess
+[31:58] you can already have the slides but what do you think the second one has then
+[32:00] right anyone already were all the anwers there
+[32:06] okay yes I wrote all the answers right 68 seven right 1 2 3 4 5 6 7 eight right
+[32:11] 1 2 3 4 5 6 seven right so like if you do this um just assume all punctuation
+[32:17] from now on is combined with the word and ignore all spaces um and this we
+[32:24] just invented a tokenizer um right so this is very general a random tokenize
+[32:29] that we just invented um and each one is has an essentially the reason why we
+[32:34] want to do this is because computers doesn't they don't understand words they
+[32:39] only understand numbers right so like you have to essentially assign each of
+[32:42] these tokens as a number like an ID right so hello is ID zero right hello
+[32:48] comma actually is ID Z my is ID one name is id2 and so on right so like you have
+[32:54] you have to assign an ID to each of these components if you don't do that
+[32:58] then a computer doesn't know what you're actually doing right computers only know
+[33:02] numbers so we just invented a tokenizer um I would not suggest you to use this
+[33:07] tokenizer but in general it's actually not that bad um because can anyone see
+[33:12] any issues with this new tokenizer we just created um what are some
+[33:17] issues
+[33:23] yes without yes very good so what do you think we should do okay so the point was
+[33:29] we included the punctuation for the words and that is not helpful right so
+[33:33] like Michael explanation mark or Michael not explanation mark so what would you
+[33:37] suggest to fix
+[33:40] this interesting so hello and then hello will be one token and then comma itself
+[33:47] will be a okay interesting anyone have any other suggestions have yes so the
+[33:52] point of the to is to reduce the vocabulary but here you haven't reduced
+[33:56] the vocabul yes very good exactly so do you have any
+[34:01] suggestions for how to
+[34:06] improve oh yes very good yes I haven't heard that in a long time very good yes
+[34:11] all natural language stuff um so the idea was to stem the word so essentially
+[34:16] you can remove like you know for example like skipping can become skip right so
+[34:20] like skipped skipping skip like you know they all kind of the same well I
+[34:23] wouldn't say the same thing but like in theory they're the same thing um any
+[34:26] other suggestions
+[34:36] very good idea right if you lowercase the more then you can reduce a lot of
+[34:39] issues um is that a good idea Capital my and small my what do you think is the
+[34:46] difference if you do Capital my generally means it's the start of the
+[34:49] sentence if you do my with no lower case then it means it's the middle of the
+[34:53] sentence so good idea though um actually I think I think um so but is an old okay
+[34:59] people still use but um I think there is a lowercase version of but so they
+[35:04] essentially lowercase everything um and I think it does okay
+[35:07] for like semantics and stuff but it doesn't really do well for de decoder
+[35:11] type style so don't lowercase but good idea any other suggestions
+[35:21] yeah
+[35:26] tokens would yes start
+[35:31] build oh you just said the name of the algorithm it's called word piece or BP
+[35:37] tokenization um yes exactly so that's actually the correct well I wouldn't say
+[35:40] it's the correct way I actually don't like that approach but yes it's the most
+[35:44] recognizable and most industry standard approach is to do what you suggested
+[35:48] which is to start off with like small little individual characters and then
+[35:52] combine them together based on some sort of statistic right you you shouldn't
+[35:56] like you know hello like maybe hello is a word that we have to select right so
+[36:01] like but but like H like h e l l okay hell okay that might be a popular word
+[36:07] as well in like the dictionary but anyways or he right so he hell hello um
+[36:12] each of these might have assign different tokens but they might not be
+[36:15] right so like it depends um and the correct industry standard is to use
+[36:19] these methodologies to build up the component um which we won't be
+[36:25] discussing today but like that's for later research um yes
+[36:31] okay so let us just look at one sentence
+[36:36] right the first one is hello my name is Daniel assuming our tokenization is
+[36:40] useful okay let's just assume the tokenization which we created is helpful
+[36:44] okay so remember it is just put all the punctuation together um ignore spaces
+[36:50] and don't do lowercase or whatever just just you know tokenize it as as it as it
+[36:55] is it's not very useful but who cares we're just
+[36:58] say this is a good tokenizer um the question now is if I select the
+[37:03] first token hello right let's assume I don't know if okay the color is not very
+[37:06] good but like my name is Daniel is gray out I I think I'm not sure if you can
+[37:10] see that grade out pretend someone types in hello comma right a language model
+[37:15] should predict what's the next word right so how does it know to predict my
+[37:20] right you know when you type chat GPT it like it goes from left to right like you
+[37:23] type something you know you type some sort of instruction and then chbt will
+[37:26] like print the words from left to right right so like why is it printing words
+[37:31] canone tell me why is chb printing words from left to right why is it not doing
+[37:35] right to left or why does it not just spit out everything in one go
+[37:51] yes exactly correct so because it's a Transformer type decoder type
+[37:56] architecture it is predicting the next word based on the previous words so very
+[38:01] good um and so the point is is we only can have the language model see previous
+[38:08] words not future words right if you accidentally put the future data in oh
+[38:14] you know your accuracy might go to 100% if you use future data so please do not
+[38:17] do that this is actually a very common mistake like I'm not saying this
+[38:21] jokingly it's a very big issue in research so please read the paper before
+[38:25] you actually like if you read research papers please see how they do the
+[38:29] methodology um always read did they put the always ask the question did they put
+[38:34] future data in when they did the training or doing the research paper
+[38:38] okay this is a pervasive problem I'm not joking um you can see like weird
+[38:42] accuracy like if you see papers which have like 98% accuracy question question
+[38:46] question question question okay or 100% accuracy how's that even possible how
+[38:50] can something be 100% accurate question right and so the most likely scenario is
+[38:54] they use future data yes the paper itself will actually catch
+[39:00] this or I feel like I often find that the logic in the paper makes a lot of
+[39:11] sense
+[39:16] finder that is a very good question so that the question was like is it the
+[39:21] paper the research paper like the methodology itself using future data or
+[39:26] is it the code implementation the problem now that's actually very good
+[39:31] question because it depends so I think if the researchers I think normally in
+[39:35] research papers one person does the coding some some other people do like
+[39:38] secondary coding and in the main researcher makes the idea they don't
+[39:42] actually do the coding so the the the coder might have misinterpreted the
+[39:47] methodology to be honest I don't think so that's the case I think it's actually
+[39:51] methodology that's the problem I think if the researcher like the main
+[39:54] researcher if they find out that their method has 9 % 98% accuracy like why
+[40:00] didn't they question the results like I would like wouldn't that be very sketchy
+[40:04] like 98% accuracy 100% accuracy I'm not joking this is actually very serious
+[40:08] problem so if you read enough research papers you'll see this problem is always
+[40:13] the same problem it's always using future data um so yeah I think that yeah
+[40:18] I think like if you don't yeah okay w't comment in any papers anyways uh yes
+[40:23] okay does that kind of answer your question so it depends um I think in
+[40:26] general I would say it's the it is researchers the main resech the lead
+[40:29] researchers responsibility to correct these mistakes um then you shouldn't be
+[40:34] the re lead researcher so like that's my take on that um I think the coder I I
+[40:39] mean the programmer might have some issues but I don't know I I think I I
+[40:44] blame the lead researcher um any other
+[40:50] points yes if you see huge leap in performance question question question
+[40:55] it's probably future data actually I wouldn't say it's probably it's like 50%
+[40:59] sure it's future data um yes
+[41:12] question oh yes
+[41:32] um exactly so the point was um in the test and train split sometimes although
+[41:39] you might not be using future data you might like accidentally put different
+[41:43] components in the like the training set from the test set and it depending how
+[41:47] you split the data set you might actually mix the data sets is that kind
+[41:50] of correct basally yes the distribution itself yes
+[41:57] yes so that is why you should you have to be very careful to how you split the
+[42:00] data sets right for training and testing you have to use stratification you have
+[42:03] to inspect the data before you do it you must enable random shuffling right there
+[42:08] is actually a very very common question on pytorch how do you not enable random
+[42:13] for for hugging face how do you not enable random shuffling for hugging face
+[42:17] um they purposefully disabled this like think about like why because like people
+[42:21] might forget to randomly Shuffle um and actually this is a pervasive problem
+[42:25] with Calo competitions people like to like train on the tests like they give
+[42:29] you like 20 normally speaking you should have 20 test 0 train right so like but
+[42:33] people like to like the final submission they use even the test in the submission
+[42:38] so you know um it is a pervasive problem um any other points and
+[42:44] questions okay so what is a language model given the word hello can you
+[42:50] somehow predict my name is Daniel right so like given the word right so given
+[42:55] that token can you predict these extra tokens um
+[42:59] remember carefully I purposefully only went from left to right right so like
+[43:04] Hello can only predict my can only predict name is and Daniel right it
+[43:09] cannot predict right you can't use the word hello to predict previous words
+[43:13] right that's cheating so that is sequence modeling and the point is
+[43:21] when you chain them together let's assume that you predicted the word my as
+[43:24] the next word right so now you have two pieces of information
+[43:28] the text that you see is hello using these two pieces ofation you
+[43:32] want to predict name is Daniel and you keep doing this and that is a language
+[43:38] model right that is essentially a language model what is it doing is you
+[43:42] start from the first word you predict the words into the future um and you
+[43:47] keep doing this iteratively right and so that is what CHT is doing
+[43:52] um does does that kind of make sense um and remember the point is never use
+[43:57] future data okay I'm I'm I know I keep stressing this but like this is actually
+[44:00] a very big issue in machine learning and AI right this is actually the biggest
+[44:04] issues I find in my like opinion is using future data there's so many papers
+[44:08] which do this um yeah so the second point is you must
+[44:14] tokenize each component into numbers remember this so I'm just going to you
+[44:19] know cook up some numbers hello will be 0.11 minus 0.123 102 okay just made
+[44:24] those numbers up um Daniel is 0.11 123 minus 0.122 okay I just randomly made
+[44:31] them up um and remember you must each component must have the same number of
+[44:40] numbers right so like if Hollow has three Daniel must also have
+[44:44] three can someone tell me how many combinations of if you assign this case
+[44:50] that each number must have three um you know three numbers how many combinations
+[44:56] do you think there can be for each token or for each component how many
+[45:01] combinations what do you think the answer
+[45:04] is so remember you can choose any single number in the three numbers right 0.11
+[45:09] 0.112 0.111 1113 whatever number how many combinations are
+[45:16] possible dep okay let's assume it's infinite
+[45:20] Precision correct the answer is infinity you can do as many as you
+[45:25] like um but normally speaking you should use not three right now the question is
+[45:30] why should you use one number then right howo can be 0.11 if it's already
+[45:33] Infinity 0.11 if you use two numbers isn't also Infinity right so what's
+[45:37] what's the problem well please don't you should use as many numbers as possible
+[45:41] try your best to use more numbers it's because the computer you know it's not
+[45:45] an infinite machine so please use like more numbers so you can like learn which
+[45:49] numbers to like assign it to um and when you start training a language model
+[45:54] these numbers will be randomly initialized right so like all these
+[45:58] numbers will be randomly initialized and can someone notice my initialization
+[46:02] what is the issue with this there are like some there is a glaring issue quite
+[46:06] obvious um very big problematic
+[46:12] issue sorry sorry wait you want
+[46:18] number okay same number okay okay good point yes did someone say something what
+[46:23] was the other point yes the magnitude is most
+[46:27] important right 123 and 102 are terrible um when you randomly initialize please
+[46:33] do not initialize with random large components um this will destroy your
+[46:38] training that is why your training might have Infinities and sometimes the
+[46:43] training loss goes to zero okay that is not that does not mean your model
+[46:46] learned anything that just means it's some sort of error in your training data
+[46:50] or your initialization so be careful of that um don't worry Huggy face does this
+[46:55] automatically for you so you don't need wor um and now each component has a list
+[47:03] of numbers that is it It's associated with okay I just use the same number for
+[47:07] now it's easier for me to you know do the slides um but essentially hello
+[47:11] comma my name is Daniel each of them has numbers associated with them and this is
+[47:17] the thing that you're trying to learn for each of these
+[47:22] components and remember this can be converted into a table of numbers right
+[47:27] so like if you replace all the commas with just column columns right these are
+[47:30] just tables of numbers um and this table is what you need to
+[47:36] train and again remember given the word hello you want to predict my name is
+[47:41] Daniel right so like essentially given that you know Vector of numbers can you
+[47:46] predict the other vectors of numbers um
+[47:53] yes oh yeah you can do as many numbers so you have to select a option how many
+[47:58] numbers you want to select to represent these numbers so for example you can
+[48:02] select six numbers or you can select 1,24 numbers or 248 it depends on the
+[48:08] model Creator's Choice um yeah yes every single row must be well
+[48:14] it doesn't have to okay not it might not be the case that might be not but it
+[48:17] should be yeah with high probability it will be unique um
+[48:24] yeah wait is it like okay um and so when you do training of a
+[48:29] language model um there's a trick that you use and remember we want to predict
+[48:36] the next word right so hello you want to predict my right so can someone notice
+[48:40] any pattern with this like why did I do the arrow and what's the pattern that
+[48:46] can anyone see
+[48:49] this any special special like things with this no
+[48:57] what happens if you take hello my name is Daniel and just shift it up by one
+[49:00] place is it right if you shift it up by one
+[49:04] place hello is now aligned with my my is now aligned with name and so on right
+[49:10] and there'll be a gap at the very bottom right so we simply we just put EOS which
+[49:14] means end of sentence token that just means it's the end of the sentence and
+[49:17] we just you know put it there because it's a gap right so remember machines
+[49:20] machines do not like gaps and you must use all numbers so that's the reason why
+[49:25] we did that and this this is kind of the training mechanism right so we
+[49:30] essentially we have that list of you know list of words and we want to
+[49:34] predict the shifted
+[49:38] words and the Transformer all it does is there a function to predict that so
+[49:44] given hello can you predict my given my can you predict name and so on right
+[49:48] that's the transform architecture um it's kind of a bit wrong but like
+[49:51] something like that okay like the FX is like this gigantic model that can be
+[49:55] like you know there's lots of turning in it um okay let's check if there's any
+[49:59] questions okay and the point is remember remember
+[50:05] the point is we can only use predict the future words right so hello can only
+[50:10] predict my name is Daniel and so on right that's the
+[50:13] purple the purple component and the blue box is called the attention mechanism
+[50:18] the f ofx i factored it out and that is called the multi-layer perception or MLP
+[50:23] layer right so there is actually two components in a language model one does
+[50:26] the prediction of the next word and the FFX which is the MLP just does this you
+[50:31] know changing component um it just makes it like you know a bit better than just
+[50:37] simple predicting the next word the attention oh okay there is a question um
+[50:42] oh I didn't
+[50:44] see okay well um
+[50:50] yes I know we are focusing the most approach one but you've got now yes yes
+[50:59] the facebook com I
+[51:03] don't so the comment was normal Transformers predict only one token at a
+[51:08] time how about Transformers which predict multiple tokens at a time yes so
+[51:12] actually you can predict multiple tokens at a time it just depends on what is
+[51:15] your training objective at the very last layer you don't have to remember we
+[51:19] shifted by one place right why don't you shift by two places and three places
+[51:23] then you'll be predicting two tokens in the future three tokens in to the Future
+[51:28] exactly so before it's just one objective so like one column of the
+[51:31] output we just add more um and yes you could do multiple tokens um was it the
+[51:37] it was the Facebook Paper right I can't remember yeah it was a Facebook Paper um
+[51:41] I forgot the accuracy though um yeah but yeah you could do that um I guess like I
+[51:47] I don't see any I I guess it's just good for inference time like you can predict
+[51:51] you know you can make inference if you do four tokens in the future you can
+[51:54] predict four times faster um man
+[52:00] to okay yeah I think it's mainly for when you do inference you can do this if
+[52:05] you do two tokens in the future you can have like two tokens in one go um I
+[52:09] don't I I don't like that approach I think predicting one token is better um
+[52:14] because you're already forcing the language model to do so much you're
+[52:16] making even more problematic so I think predicting one to I may for inference
+[52:20] time it could work um yeah yes question um for the
+[52:40] so token yeah tokenizer converts to ID so like
+[52:48] yeah so so the token tokenizer when it has like when it says like it has 32,000
+[52:53] words in the tokenizer essentially it's an ID from zero to 31999 right so like
+[52:58] hello we have ID 2557 so then what you do is you take
+[53:02] 2557 go to the hash table which has this which has the um this table right I made
+[53:08] the table right so hello has an ID my has an ID name has an ID and so on and
+[53:13] you essentially you hash you go to that specific row and then you that is your
+[53:18] like sample in your training data and you do this like for the whole thing so
+[53:22] the tokenizer does you do get a number it's an integer um and you just have to
+[53:27] Hash it to the you know the embedding Matrix and you'll get like a vector of
+[53:31] numbers if that does that kind of answer your
+[53:37] question oh you're talking about the embedding Dimension so if you see 2,5 40
+[53:42] or whatever those numbers um that is just how many how many like columns how
+[53:47] many numbers you want to represent for each um
+[53:52] component yeah okay any other questions yeah
+[53:59] yes oh
+[54:03] okay okay okay yeah yeah you had
+[54:17] a 496 I guess it just depends like if you
+[54:22] make so the point so remember we said how many combinations can we do Infinity
+[54:27] because we can do right because floating representation um in theory if you have
+[54:31] infinite position it can be Infinity but someone mentioned how depending on the
+[54:34] Precision of your float it's actually limited Precision right so like the
+[54:38] point is you want your model you want the training objective to actually learn
+[54:42] give it as much Freedom as you like right so like if you're trying to
+[54:45] restrict the model when it learns it might actually not be helpful and that
+[54:49] is why normally people have like these large numbers like you know 6144
+[54:53] embedding Dimension or 8,192 embedding dimens
+[54:56] right the more numbers you give it to the model it just more freedom to move
+[55:02] um I in theory I I mean in theory it should have better accuracy um in theory
+[55:08] everything's in theory um I don't know if there are research papers would show
+[55:11] this I think someone should write a research paper on that you know each
+[55:15] embedding Dimension test you know do three trillion tokens okay that's
+[55:19] probably too many and then see which one has I'm assuming the more you add the
+[55:23] the higher accuracy yes I mean
+[55:39] I agree on that I think someone needs to do a research paper yes that should be a
+[55:43] new research top I I've never seen this paper before so like that would be very
+[55:47] interesting so yes question
+[56:00] yes the reason for that is it just makes training faster sometimes so depending
+[56:06] on so there is I think Andre was the one who tweeted about depending if you pad
+[56:10] the token if you pad the vocabulary to a specific number you can actually make
+[56:14] training faster because in the Nvidia gpus when you use tentacles if you pad
+[56:18] it correctly it can get the data and cach it more appropriately so like for
+[56:24] example the cach size is like 64 I think it's 64 okay maybe I'm making stuff up
+[56:28] but like essentially you have to pad it to a multiple of 64 something like that
+[56:31] and so sometimes that happens another one is like some people want to add when
+[56:34] you want to do more fine-tuning when you want to like train the model for more
+[56:37] you want to use one of those unused tokens for your own purpose and so they
+[56:41] left some holes in there um yeah does that kind of answer your
+[56:50] question so when you do tokenization assuming you don't
+[56:56] encounter these Hogans you won't have any problems but if you
+[56:59] do then there are problems yes um so for example if you do llama 3 fine tuning if
+[57:04] you use the base model for llama 3 and you accidentally use one of those tokens
+[57:10] you will get n for um for fine tuning right so you have to be very very
+[57:14] careful and so like I think what we did is for unso we actually we actually find
+[57:18] these untrained tokens first set them to the mean of all the embeddings and you
+[57:22] won't have these issues um so I think that's actually a model Creator problem
+[57:25] is like they probably should have not set it to zero um I don't know why they
+[57:30] did that but anyways um yeah they should have set it the like you know normal
+[57:33] distribution or like some you know just random initialization um yes kind of
+[57:38] yeah okay any other questions okay oh yes
+[57:56] oh yeah yeah you can put a beginning of sentence token I just didn't do that um
+[58:00] you should put a beginning of most language models would put a beginning s
+[58:03] like what is you know I put the end of sentence you should probably put a
+[58:07] beginning of sentence as well that actually very important as well um most
+[58:10] models do that now um they found that to be very helpful to be honest I don't
+[58:14] think so it's actually that effective I think the beginning of so the BOS token
+[58:18] came from the old style um um the old style the CLS token for um I think it
+[58:24] was the first token for like bir style um so like they had a classifier token
+[58:28] at the very start I think it was at the very start I'm not 100% sure but I think
+[58:31] that's where it came from the big I I don't think so the beginning of sentence
+[58:34] to can actually makes that much difference um but you should put it you
+[58:38] should put it you know giving the model more freedom to move is always better um
+[58:43] yes I probably should have put beginning of sentence but you know yeah for
+[58:46] demonstration I did not do that um yes okay we did that right so like the green
+[58:51] one um right so like the attention block is
+[58:56] kind of encoding the stuffff that we described right predicting the next word
+[59:01] based on the previous words right and so like the attention block is that first
+[59:05] part the MLP block is just the mixing pump component um and this is kind of
+[59:10] the transform architecture kind of like in visualized and you just repeat this L
+[59:13] times um that is a Transformer
+[59:19] um now the another question I always have is why is training language models
+[59:25] not over cubed because like aren't you like given the word hello you're
+[59:29] predicting predicting my right and now we have hello my you're predicting name
+[59:33] and then you have hello my name and you're predicting is and so on right
+[59:37] shouldn't this be the training data why is the training data just hello my my
+[59:43] name name is is Daniel Daniel right this is the training data that you actually
+[59:47] see why is it not this can does anyone know
+[59:54] why sorry the complexity
+[59:58] yeah yes the complex yeah very bad complexity right so like if the sentence
+[1:00:02] is like one okay if the sentence is like 100
+[1:00:06] words what do you think how many quite bad yes Bas of one yeah so like 1 plus
+[1:00:12] 2+ 3+ 4 plus 5 all the way to plus 100 right so like n ID two 1 + 100 I think I
+[1:00:20] can't remember my mths but yeah something like that so it ends very bad
+[1:00:24] um and that's if you have one sentence if you have if you have like 10
+[1:00:26] sentences oh my yeah but like do does anyone know why language models don't
+[1:00:30] need to do this like we don't actually need to do this right so like we can
+[1:00:34] skip essentially instead of instead of having this as the training data your
+[1:00:38] training data is simply my name is Daniel and and shift it by one up and
+[1:00:43] that's your training data why is it not
+[1:00:47] this oh yes we haven't talked about position in codies yet yeah okay but you
+[1:00:51] actually you don't need position en codings oh okay yeah attention what oh
+[1:00:56] yeah the attention mechanism yeah because of oh correct that's the answer
+[1:01:01] yes it's because of attention what actually specifically um mask attention
+[1:01:06] right so that's that's a trick okay we'll be talking about that um we'll be
+[1:01:09] talking about a few times um and I'll give you the code again well
+[1:01:14] actually the math formulas for Transformer architecture right so like a
+[1:01:17] attention block um we will be now talking about the attention block right
+[1:01:22] so like the Z is equal to the softmax of qk transpose over
+[1:01:26] root h plus m v um and as as you mentioned it is the attention mechanism
+[1:01:34] which allows us to skip the o n cubed complexity and make it o n squ why
+[1:01:40] because remember we want to mask out future tokens because we don't want to
+[1:01:44] predict on future data right so like by using this mask weirdly this mask allows
+[1:01:50] you to train more efficiently um you know it's funny because like attenion is
+[1:01:53] O squ so the longer your SE is the worse the complexity but actually there is a
+[1:01:59] special trick which you use a mask and this actually makes attention not that
+[1:02:04] bad um so instead of doing hello to predict
+[1:02:09] my and so on so on so on the attention mask acts as this methodology right so
+[1:02:14] the attention mask itself acts as um you don't need to do like all the
+[1:02:18] complicated you know all of the words predict the next
+[1:02:22] word um okay this is okay probably should have um so we'll be now talking
+[1:02:27] just about the attention itself right so like softmax qk transfers over root DV
+[1:02:31] um just a reminder that whenever you see qk transfers a query and keys um I do
+[1:02:36] not like to like there's actually explanations like what is a query what
+[1:02:39] is a key I do not like that actually approach I would like this to be a maths
+[1:02:42] approach um so my view is given the Matrix X which is your embeddings right
+[1:02:48] so remember hello is a vector of numbers right you multiply this by some weights
+[1:02:54] WQ WK and and WV and you get back qkv Q is query okay keys and values but
+[1:03:02] that's a very vague interpretation I don't really believe like I don't really
+[1:03:06] trust those interpretations it's not that clear um just assume it's just
+[1:03:09] maths okay just like get your X Matrix and multiply by weights and you get some
+[1:03:13] extra weights that's my view um and so that is kind of so like if you see why
+[1:03:19] stor like this does anyone know why stacked it like this like why did a
+[1:03:22] presenter like this specifically why is it like the presentation like this
+[1:03:28] any any points comp sorry what comp composition composition decomposition
+[1:03:36] interesting okay that's a very interesting point um but
+[1:03:41] no correct I just yes that's correct so I just lined it up such that it's easier
+[1:03:45] to see and if you take the Matrix X and you multiply by W WQ you will get Q
+[1:03:52] right and this is actually the correct maths um Di
+[1:03:56] and so I I like people visualize Transformers as maths it's in my view
+[1:04:02] it's EAS okay I'm not sure for other people but my view is easier I do not
+[1:04:07] like it when they say oh queries and like you're trying to do keys and values
+[1:04:11] I don't know what that even means anyways um and the yellow components are
+[1:04:15] the ones you want to train X is what you want to train WQ is what you want to
+[1:04:19] train WK and WV and qkv are just the components afterwards
+[1:04:27] when you have the so remember you have the Q you have the K all you need to do
+[1:04:31] is when you do K transpose you transpose The Matrix and you do Q times K
+[1:04:35] transpose and you get this big Square Matrix called qk transpose right hello
+[1:04:41] my name is Daniel and so on right so like that that's kind of what I want to
+[1:04:45] visualize is like you know it's actually a when you do Q times K transpose you
+[1:04:49] get a square Matrix um and all you need to do now is do the
+[1:04:54] soft Max divid by d right so soft Max essentially each row you normalize to
+[1:04:59] one right the sum of the exponentials must be right you need to like normalize
+[1:05:03] them do doesn't know why you should do that and why should you use
+[1:05:11] softmax any clues why do yes yes okay that's the answer yes but
+[1:05:18] like why like
+[1:05:24] why sorry when you multiply them you can get
+[1:05:29] nans oh yes very good oh that's okay do you know how to fix
+[1:05:35] that close you have to minus the maximum of
+[1:05:39] the row that's how you fix it um
+[1:05:44] yes oh yes very good okay yes we want to sample from that okay sample from that
+[1:05:49] distribution but what happens if you don't do the soft Max doesn't this still
+[1:05:52] work or not like what happens if you just do qk transpose over root D remove
+[1:05:57] the soft Max like why do I have to do soft Max
+[1:06:02] yes interesting that you can fix that with like minus Max of the Rope as well
+[1:06:08] with exploding anyone else okay what happens if you don't have
+[1:06:13] a nonlinearity then so it does it have to be softmax
+[1:06:17] can it be something else could something else yes it could
+[1:06:21] be yes that is another active era of research which people should focus on
+[1:06:26] which is like why do we need to use softmax um generally speaking research
+[1:06:29] papers show that is actually the most accurate um if you use other activation
+[1:06:33] functions it might actually not be that accurate right so like um but this also
+[1:06:37] is the bottleneck of Transformers is because it's a softmax it does the row
+[1:06:42] sum of the exponentials um this means that you can't actually decompose this
+[1:06:46] right you can't actually bring the Matrix Matrix multiplications out um and
+[1:06:51] so if someone can find ways to make this faster you know you get like millions of
+[1:06:56] um okay maybe like much more than that but um
+[1:06:59] yes and V is just remember the V comes from here right so we just take the V
+[1:07:06] multiply it up again and we get this Matrix at the very end and that is right
+[1:07:11] yeah that that is the final component right this this empty box is what you
+[1:07:15] get out from the attention mechanism for the layer Norms um I don't
+[1:07:21] really want to explain too much but the lorms essentially you take the um you
+[1:07:24] take you square all the element El per row you sum them you divide them by the
+[1:07:28] square root and you take the mean and they just do one divided by right all
+[1:07:32] this does is just normalizes the row to make it easier for the language model to
+[1:07:36] learn right so like why do people do lorm it just makes training easier um
+[1:07:40] it's more stable there's no other like there's no other like point there are
+[1:07:44] like some theories like you know batch normalization like you know um you out
+[1:07:48] of distribution you want to make like shift towards the distribution for out
+[1:07:52] of distribution data I just like to think of this as a optimization method
+[1:07:56] um LMS just make it training easier and more
+[1:08:01] stable um and lay Norm is simply remember as I said is you take the X
+[1:08:06] Matrix you do a row sum of all the squares and you take the mean and then
+[1:08:11] you just divide it and then you multiply by some weights it's a vector of weights
+[1:08:15] and that's just lorm um you don't worry too much about like what is lorm or what
+[1:08:19] it does it just does training better more stable um please add as many layer
+[1:08:23] Norms as possible um yes add everywhere lay Norms everywhere
+[1:08:28] and you'll make training much better um okay I probably okay I don't know if
+[1:08:34] you can see this but in Triton right in order to write Triton code for the Lor
+[1:08:39] this is the forward kernel um we will not be talking about Tron today but um
+[1:08:44] it's actually not that complicated if you read more intensely um ignore all of
+[1:08:49] the like components there was only very few lines for the Lor um it's actually
+[1:08:54] not that complicated um the rest is simply just how to load the data um it's
+[1:08:58] actually not that hard um yeah the backward kernel is when the problem
+[1:09:02] comes um how do we actually do the differentiation of the layer Norms right
+[1:09:06] remember you have to train the W right is yellow um you actually have to train
+[1:09:12] that um how do we find the derivatives of the W um it is very complicated um
+[1:09:20] and if you want to learn in your own time you can have fun learning the
+[1:09:24] derivatives um it is extremely complicated because there is like sums
+[1:09:29] there is like um you know row sums how do we do the derivative of a row sum um
+[1:09:34] it get can get quite complex I wanted to talk about back propagation today but I
+[1:09:38] thought like it's probably two heavy Maps um so no back propagation but we'll
+[1:09:44] be showing but I do have um tutorials on that so if you go to the Triton tutorial
+[1:09:48] um I followed that that's actually quite helpful um and the backward kernel is
+[1:09:53] just very very problem um now up to the Rope embeddings why do
+[1:09:59] we do rope embeddings does anybody know what is the Rope
+[1:10:03] embedding yes it's it's a way to
+[1:10:12] extend so you could use the rope embeddings to extend context yes do you
+[1:10:17] know how how does it extend context so well how does it work yarn or like or
+[1:10:24] how would you use rip edding to extend context how what would you do how would
+[1:10:27] I how would I do that I would create a basically what I would do is create kind
+[1:10:35] of a you just multiply the base by two and
+[1:10:40] then you get two times longer context you multiply the base by 10 problem is
+[1:10:43] looking for like one million cont right then the model a part of is trained at
+[1:10:48] like 4 correct 4K right yes so that's where yarn might kick in inad of like so
+[1:10:55] is that the dynamic dynamic well sta or Dynam either way so how would you solve
+[1:11:01] the problem if it's like you want to train if you want to have 1 million
+[1:11:03] context L but your data set is only 1,000 words how would you solve that
+[1:11:07] problem how would you think of solving that problem because like um some people
+[1:11:11] have said they do 10 million contact L is there any data sets which is 10
+[1:11:15] million tokens um how would you trillion tokens oh no no but that that that's 15
+[1:11:22] trillion tokens for like the data set I mean like how do we do long context
+[1:11:26] remember when you do long context training you have to have a document
+[1:11:29] which is at least 10 million words for to learn how to predict the 10 m million
+[1:11:33] plus one token so um how I would solve the problem would just be to gather
+[1:11:40] better and more diverse data set yes that's that's the that's the ideal so
+[1:11:45] what happens if there is a DAT there is no data set which is 100 million
+[1:11:48] tokens then what would you do if there is no million tokens I would C I would I
+[1:11:57] would synthesize I how would you synthesize if the model it's like a
+[1:12:01] chicken and egg problem huh how would you do synthesis so no no no I would I
+[1:12:06] would basically um just create I would basically use like CLA or like any of
+[1:12:13] the state of the art models with like Laura and then get and then basically
+[1:12:19] turate but are they trained on 10 million tokens huh if the model itself
+[1:12:23] wasn't trained on 10 million tokens does it do
+[1:12:26] so if I was to try to solve this problem for like client for example like let's
+[1:12:31] say they code bases in million tokens or you know and they want a 10 million
+[1:12:35] something contact or whatever right then I would um
+[1:12:40] basically like create a like synthetic data set not synthetic but a derived
+[1:12:47] data set from what we have okay interes assuming we do not have but I can't
+[1:12:53] assume that we have no data right so good point okay I don't know I I
+[1:12:58] think it remains to be seen like many claims by companies 10 million contacts
+[1:13:02] 100 million contacts I question question question question question well I've
+[1:13:05] only seen one million actually work so I mean yeah and that's bring
+[1:13:10] detention right okay okay now we're going into okay yes okay okay no no no
+[1:13:16] that's fine I was asking the questions but okay wait the question was like what
+[1:13:19] is a rope and betting um someone did mention like positions what does that
+[1:13:23] actually entail what do you think is a point of Reverb
+[1:13:27] embedding all it does is you want to tell the model to
+[1:13:31] learn what is the position of the words right so like hello my name is Daniel it
+[1:13:36] actually has a meaning like hello is like the first token right but then if
+[1:13:42] you put hello as a third token what's the difference there is a difference
+[1:13:46] right so like depending on where the word is in the sentence it matters so
+[1:13:51] the whole point of embeddings rope embeddings is it learn it tells your
+[1:13:54] model to learn where is the position of this component um and old style they use
+[1:14:01] um absolute like relative like you know absolute positions um rope eddings does
+[1:14:07] like some special tricks like you know times the cosine plus the um times a
+[1:14:11] sign and does some sort like special rotation and stuff like that um the
+[1:14:15] paper found that if you do rope embeddings it actually has high accuracy
+[1:14:19] um and you know everyone does rope embeddings now
+[1:14:23] um yeah
+[1:14:32] you mean lower sorry the position the very beginning mention is lower yes
+[1:14:38] there is I think bird did not I don't know did B use rope I don't think so B
+[1:14:42] use absolute yes that's the problem I think B use absolute I think um I don't
+[1:14:48] remember anymore but oh yes yes exactly so rope did not
+[1:14:52] exist yeah and so like this paper the r for paper shows so previously people use
+[1:14:57] absolute position encodings which simply just adds a position like you can
+[1:15:00] literally just add like if the position is one is zero just add zero if the
+[1:15:04] position is one add one if the position is two just add two that's that's
+[1:15:08] literally what they do well actually well not not exactly but like you know
+[1:15:12] what I mean right you have to divide it by some sort of normalizing factor right
+[1:15:15] if the position is 30,000 don't add 30,000 right you would like destroy
+[1:15:19] training but that's kind of what they do um and what they show is if you do rope
+[1:15:24] you can essentially increase accuracy somehow um and we just use this as R we
+[1:15:32] just treat this as true and everyone uses rope now um yeah yeah in that case
+[1:15:38] do you have an opinion on yarn versus Rus Yar so yarn is kind of rope so yarn
+[1:15:44] just does I I'm assuming yarn is is rope but it does it does like actually I I
+[1:15:50] don't think actually commment at this because I'm not an expert on that
+[1:15:52] doesn't it does like it does yeah not so I'm no expert on obviously I'm not
+[1:15:59] expert on one context r y but since BLM only supports
+[1:16:06] static yarn unless you're planning on trying to go to one million context it's
+[1:16:11] actually kind of terrible is Yan the one which it does
+[1:16:15] like the base like randomly changes like if you have position if you have like up
+[1:16:20] to 1 million context and you do 1 million and one context the Bas changes
+[1:16:25] with that like the factor changes is that y Dynamic changing yeah that's the
+[1:16:30] issue that shot right that's not a short P
+[1:16:35] shot right that's not anywhere close to one million conts in theory or maybe
+[1:16:41] like let's say a three shot or two shot um like so did and but obviously Dynamic
+[1:16:47] yarn in theory could fix this rope issue where like we just take this rope as
+[1:16:54] gospel
+[1:16:57] um but are you following kind of my question here yes I no I think Dynamic
+[1:17:02] ywn is just Rope though like okay that's weird can maybe I unplug and replug so
+[1:17:06] like the screen kind of went away let me just read this do this again is this
+[1:17:11] like is it is it is it not not working or is it like screen
+[1:17:18] or no screen that's weird can you answer question oh yes
+[1:17:25] okay yes I'll answer some questions um yeah anyone anyone else have questions
+[1:17:32] wait okay wait I need to refresh the oh if anyone has like take a break you can
+[1:17:37] take a break now if you want um and if you have like other questions yes okay
+[1:17:49] question sorry sorry Yan is
+[1:17:55] I
+[1:18:12] was so so the question is for contact
+[1:18:19] Windows oh okay what is the Improvement okay so so the point of Y like what we
+[1:18:23] were talking about is like how do we make a language model learn how do we
+[1:18:27] make it do long context without training on Long context kind of yeah and so like
+[1:18:33] what Yan does is you can essentially extend the context window automatically
+[1:18:38] by dividing the base of the Rope embeddings you change a scale factor um
+[1:18:43] I I don't actually have slides for this but um it's just a methodology which
+[1:18:47] allows you to scale the factor and you essentially magically make the model
+[1:18:51] learn new context long context um that's kind of what
+[1:18:59] Yas yes it's extremely if you do 1 million contacts L then your o squ is 1
+[1:19:03] million squ which is horrible um there are like some other methodologies like
+[1:19:08] you know they want to do like linear Transformers and like you know um yes I
+[1:19:12] guess you could try that but I don't suggest that um yeah so hope yeah yeah
+[1:19:16] sorry question very new comment U for time tuning versus in context learning
+[1:19:23] from low what is the difference between in
+[1:19:27] context learning and fine tuning or what's benefit how that is a good
+[1:19:32] question so fine tuning changes the grade uh you have gradients for fine
+[1:19:37] tuning so up yeah I'm interested explain how it
+[1:19:41] works my your opinion what what would you do when I think it depends I think I
+[1:19:47] would do in context learning first so if you have like few sh prompts you shove
+[1:19:51] it in to see if it works but I would still resort to fine tuning if want to
+[1:19:54] be more efficient and if your model doesn't seem to be learning then you
+[1:19:57] have to go to back to find tuning there was a page which was released yesterday
+[1:20:01] I think was it yesterday um it showed that in context learning is very useful
+[1:20:05] um and it like learns kind of like how to be like a random forest or like a
+[1:20:09] tree I I I think it was yesterday the PayPal that was quite useful um very
+[1:20:13] interesting um but I think fine tuning is still very important especially if
+[1:20:17] your model is not learning anything and it doesn't seem to be working then you
+[1:20:20] have to like use fine tuning to change your behavior um I don't really have a
+[1:20:24] comment on this like I just feel like you should do everything um and try
+[1:20:28] everything um yeah any other questions well I I have a couple app I
+[1:20:34] don't know oh did you okay I think my app kind of
+[1:20:39] glitched you want me to read the one one oh maybe I'll okay wait yeah wait I'm
+[1:20:45] sorry I okay maybe okay let's just I'll continue and then we will do the
+[1:20:50] questions yes yeah okay I probably have to okay I don't okay I did not time been
+[1:20:55] speaking to okay anyways that is the Rope kernel um and it might look
+[1:21:01] horrifying it's actually not that bad um it's literally just the formula that did
+[1:21:06] Q * cosine plus Q time a rotation Matrix Time s and that is just rope it's
+[1:21:12] actually not that hard um just the code is a bit more annoying but it's just
+[1:21:17] like moving the data it's just data moving and data moving data and stuff
+[1:21:21] like that all of the code is just related to data movement so not that
+[1:21:24] complicated um the most complicated part is the derivatives for rope um and you
+[1:21:32] have to use something called rotate half which essentially rotates half of the so
+[1:21:36] okay just read the code it's like minus X2 concatenated with X1 so you're like
+[1:21:41] you essentially take the Matrix X you divide it by two you take the first half
+[1:21:44] you put on the second half and you put you switch the ordering and you the
+[1:21:48] first half becomes minus and the code generally is reasonably well hopefully
+[1:21:53] um for Banning but the question is and so like this is hugging face code right
+[1:21:57] so like Q * cos plus rotate half q * the question is how do we actually take find
+[1:22:03] the derivatives of this um this was actually very a very complicated
+[1:22:06] phenomenon because I could see many implementations not doing this correctly
+[1:22:11] um and it is very special the derivative um simply if you notice is rotate half
+[1:22:18] the function is literally a matrix multiplication right it's Q * R where R
+[1:22:24] is is a rotation Matrix and the rotation Matrix is minus identity and identity um
+[1:22:29] and Zer is on the diagonal um and if you do this if because it's a matrix
+[1:22:34] notation now simply the derivative is the transpose and so if you do the
+[1:22:38] transpose the minus sign just flips um and if the minus sign flips it's
+[1:22:44] literally the same as your previous example just put the minus um okay
+[1:22:49] probably like explain this too quickly um but the point is if you do Matrix
+[1:22:54] multip application you can derive derivatives very simply my suggestion is
+[1:22:58] shove the derivatives in wolf from AFA or like you know your favorite tool you
+[1:23:02] can use chat GPT as well and you will get the derivatives back but you must
+[1:23:06] put it in the form that's useful for the computer to
+[1:23:10] see um now we talking about the MLP
+[1:23:14] component right so we completed the attention we completed the Rope the
+[1:23:17] layer Norms the MLP is just a mixing component right so it's an activation
+[1:23:23] function time time weights you know multiply some other
+[1:23:27] weights and stuff like that um all it does is it mixes the signals to make it
+[1:23:31] like you know more fancy um you do in theory you don't actually need the MLP
+[1:23:35] component um like most attention you don't actually need this part but you
+[1:23:39] must put it for the model to have more freedom to learn
+[1:23:43] um and you know the famous paper um glue variants improved Transformer um you
+[1:23:49] know very famous author I'm assuming most people know him um but he showed
+[1:23:54] that um if you add glue um SG glue and all these other variants um you can
+[1:24:01] actually increase accuracy um once again this is just treated as fact in the
+[1:24:05] machine Learning Community um we should be doing more experiments um than just
+[1:24:10] using this methodology but you we just treat it as fact and this is in
+[1:24:13] Transformer Plus+ um the architecture which everyone uses um there is a very
+[1:24:19] big difference though um in gbd 2 in gpd2 they don't use the glue variance um
+[1:24:26] they simply just use a normal MLP right so x times the weights up do some sort
+[1:24:31] of activation function and then you down project it so the weights down right so
+[1:24:35] that's but then if you do SG glue and these new variants the glue variants you
+[1:24:39] essentially add this component where you do element wise multiplication um and
+[1:24:44] then you do a gate a down projection so it's actually very similar to the gbt2
+[1:24:48] architecture you just add an extra component um and so I try to like
+[1:24:52] there's also like a naming change like up and down um up and gate and up like
+[1:24:56] you know changes and stuff like that but in general it's you can see it's very
+[1:24:59] similar um just the extra element wise multiplication component um
+[1:25:06] yeah but there is like a new um the newron paper for example oh sorry the
+[1:25:10] newron the new model by Nvidia did not use glue and instead they Ed squared
+[1:25:15] value right and they show that you don't actually have to do glue anymore you can
+[1:25:20] just use squared value and it seems to do okay um although it remains to be
+[1:25:25] seen if actually is good but yeah so like they showed that if you do squ
+[1:25:29] value you can remove this you can essentially go back to the gpd2
+[1:25:33] architecture right you don't need to use llama architecture anymore so llama and
+[1:25:36] mistal Gemma all used the second equation gpd2 use the first equation you
+[1:25:41] can go back to the first equation but the trick is the F must be very special
+[1:25:45] and that's called squar reg value and they show that if you do this
+[1:25:50] your accuracy does not degrade that much um and so yes the paypa and
+[1:25:55] interestingly if you see one of the offers it's the same offer one of the
+[1:25:58] office names is similar um you know the name is the same so you know they were
+[1:26:03] also the ones to Showcase a squar value you don't need to do glue anymore um and
+[1:26:09] you can simply just use squar value as
+[1:26:13] well there is a research paper which I highly suggest people to read and it's
+[1:26:18] called the physics of language bottles um it is extremely long though um but it
+[1:26:23] has many nuggets inside and I highly suggest people to read this um they show
+[1:26:28] example they actually did so many testing tests and experiments and they
+[1:26:33] showed that if you used glue variants or gated MLP it actually reduces the models
+[1:26:38] capacity to learn on small models okay so that's that's the point it's on small
+[1:26:42] models on small models on small models if you do gpd2 the first Formula it does
+[1:26:48] better than if you do llama M or Gemma the second formula only on small models
+[1:26:52] right that's the point only on small models um and there are other special
+[1:26:57] things inside the paper which I highly suggest um it's extremely useful for
+[1:27:01] example they say that if you do if you change if you don't if like for example
+[1:27:04] the activation function which activation function did you use um should you use S
+[1:27:09] with jell or r or whatever that's not that important right so like it's not
+[1:27:13] not that important if you use like biases oh it's not that important um so
+[1:27:17] like there's so many different things that you don't need to do um the paper
+[1:27:20] shows but you know people just treat it as gospel oh we have to use this
+[1:27:25] specific component um my suggestion is you know we should do more Tes in the AI
+[1:27:30] space like you know which Varan are the most important but I think this paper is
+[1:27:34] pretty useful um the code for like the you know the
+[1:27:39] swigle kernel is that's the forward kernels again it's not that complicated
+[1:27:44] to like the second part is actually useless it's the swigle kernel is
+[1:27:48] literally three lines it's just it's just the three lines which are commented
+[1:27:52] the rest is just data loading how do actually load the data into the GPU all
+[1:27:56] it's not that important um and you know if you use Tor to compile now you can
+[1:28:00] simply generate these kernels automatically um and this makes your
+[1:28:03] training much faster so that's what I suggest people to do um just use Tor to
+[1:28:06] compile you don't have to re rewrite Trion kernels
+[1:28:21] yes sorry w w
+[1:28:25] k oh gate oh it's just another Matrix so w gate W up you train this um and W down
+[1:28:32] these are all you train them W down W up these are all you train they're just
+[1:28:36] numbers um so like matrices x * W gate is like it's so remember the
+[1:28:44] um uh this thing right W this is for attention W uh
+[1:28:49] x * WQ w k WV assume it's just w gate W up and W down um and it's the same thing
+[1:28:58] so you just train these um does that kind of answer your question
+[1:29:07] or oh no no no it's just a naming convention W up is just it's just a it's
+[1:29:13] just it's actually called up production the naming convention is like WB w a WC
+[1:29:19] it's just a naming convention that people like to use W up W gate and W
+[1:29:23] down um they have meanings so w down is a down projection up means up projection
+[1:29:28] um so essentially you take the Matrix and you like make it larger and then you
+[1:29:31] project back to a smaller version it just makes the model better to like know
+[1:29:35] make the model has have capacity to learn um so it's just a naming thing um
+[1:29:40] any other questions
+[1:29:44] okay um the as I said like before the
+[1:29:49] derivatives are always a pain if you do the derivatives of s Glo it is a
+[1:29:53] nightmare to do and I do not suggest you to do this um but I had to manually do
+[1:29:57] all the you can see all my comments so like the comments are actually there if
+[1:30:00] you do see more carefully I wrote it in math formulas of how to actually take
+[1:30:04] the derivatives and it's extremely painful um I highly suggest you not to
+[1:30:09] inflict pain on yourself by doing this um it took me many days to do so do not
+[1:30:15] I don't suggest this um yes
+[1:30:20] question that is a very good question so I use Desmos so desm is a graphing
+[1:30:25] graphing online graphing calculator you type all these equations in and then you
+[1:30:30] can see does a graph align
+[1:30:35] um oh every single component you have to be careful so every single component has
+[1:30:40] you have to check um oh is this component correct is this component
+[1:30:44] correct check all of them um and so like I normally so like you isolate each
+[1:30:49] component separately and then test it I I'll talk about that actually yeah um
+[1:30:54] any other questions no yes okay um and this is the cross entry loss konel I'll
+[1:30:59] probably just skip this don't have enough time so um I wrote this as if you
+[1:31:04] want to inspect the formulas and stuff like that how do we do the derivatives
+[1:31:07] for this um you can do this it's not that complicated um actually it is very
+[1:31:14] complicated um I did spend a lot of time trying to like work out the derivatives
+[1:31:18] um uh it might be a bit foreign for some people for the derivatives the main
+[1:31:23] reason why it get get complicated is when there's sums right for like
+[1:31:27] whenever there's sums I just like you know doing derivatives when the sums is
+[1:31:31] always painful um Matrix differential is actually very easy if you do x * W the
+[1:31:37] derivative of w is just X transpose it's very simple but if you do derivatives
+[1:31:41] when the sums uh it's horrible um yeah it's quite horrible what you can do for
+[1:31:47] the sum when you do derivatives if you transform the sum into a matrix Al
+[1:31:52] matrix multiplication right so sum is just x times like a vector of all ones
+[1:31:57] so that's called the row sum and essentially if you do this you can
+[1:31:59] actually make differentiation much easier um but I will be talking about
+[1:32:02] that um that's for another topic um and someone was talking about stability for
+[1:32:08] softmax if you minus the maxim of the row you can make softmax much more
+[1:32:12] stable um and this is to like reduce exponentials of large numbers and you
+[1:32:18] like essentially it takes over the entire exponential right and so like if
+[1:32:21] you do this trick when you minus the maxim of the row this makes training
+[1:32:26] much more stable um always do this um yeah always do this um yeah and that's
+[1:32:32] the code for the forward um not that important oh yes I wrote the code for
+[1:32:36] the backward as well um oh wa so this is the sorry this
+[1:32:41] is the forward um the forward um and it is quite long but I wrote all of this
+[1:32:46] down for your own leure if you want to read and implement this have fun um but
+[1:32:51] I wrote this step by step right so like take y equal to log sum of X you know
+[1:32:55] then I simplified it out like you know if you if you exponentiate both sides
+[1:33:00] right you can do exponential of the Y is equal to the sum of sum of exponentials
+[1:33:04] and so on right and so like I wrote this all down um for the but there is a
+[1:33:09] methodology which we showed in unso is you can use chunked cross inter and this
+[1:33:14] is actually very helpful for large models um your logits are very large so
+[1:33:20] if you chunk them you can you can make multi-threading much better for the GP
+[1:33:23] you and so like the problem though is like the derivatives the forward
+[1:33:27] propagation you have to be careful now when you do chunking um so like
+[1:33:30] essentially you divide these into sbus and paralyze each
+[1:33:34] component um I also wrote some you know maths and stuff like that for you to
+[1:33:39] review um and how you actually do the chunk sum is very interesting um the
+[1:33:44] chunks the log chunk sum of the log sum exponentials is just a log sum
+[1:33:48] exponentials um there's like you have to do some manipulation and it's actually
+[1:33:51] very interesting um you don't actually need to change that much code to make it
+[1:33:55] work um okay now we go to the next component
+[1:34:00] which is to investigate the Llama architecture um hopefully this works yes
+[1:34:13] question it is part of unso currently um I think I heard that the py toor team
+[1:34:18] will be including this in Toral compile Al I'm not 100% sure um this reduces
+[1:34:23] memory this just makes this makes long large context oh sorry large vocabulary
+[1:34:28] sizes work so the biggest issue why you have to do chunking is Cuda um Nvidia
+[1:34:33] gpus has a limit 65536 I think that's 2 to the^ of 16 or
+[1:34:38] not I think so yeah yeah so there is a limit and so if you go if your
+[1:34:42] vocabulary size is larger than 65536 you must do chunking um yeah you have to do
+[1:34:47] chunking so like if you like I I think was it J 128,000 although I'm getting
+[1:34:52] confused I think it's 128,000 you have to divide it into two um and so like
+[1:34:56] your chunks would be two um so it should be in py torch in the future release
+[1:35:01] maybe um yeah so now we learned all of this now you can read the code for llama
+[1:35:08] so if you go to um if you go to The Code by modeling Lama
+[1:35:14] py um it should be in the slides but you can also type in Google like modeling uh
+[1:35:19] you know modeling py uh this right there is your if you go to line 94
+[1:35:27] you have your rope edding which we talked about right just assume don't
+[1:35:31] worry oh okay I need to okay I probably use my mouse yeah okay I don't really
+[1:35:36] like how GitHub does the it's kind of annoying sometimes but I think I can
+[1:35:40] disable it if I log in anyways the symbols um so if you go to
+[1:35:46] this right this is not important if you go to the first one is line 74 the Llama
+[1:35:51] RMS Norm right this is the layer Norm kernel right this is the code for the
+[1:35:55] lay kernel just this much um right this is the you take the row you take the sum
+[1:36:01] of the you take the squares of the like each row you sum them you divide it by
+[1:36:05] the mean remember this is the only reason why you do lorm is to make
+[1:36:08] training more stable um and it's actually not that complicated it's just
+[1:36:12] these few lines um the rest as the rest is just bloat code for like you know you
+[1:36:17] have to set stuff up you have to do random initialization blah blah blah
+[1:36:20] comments and stuff like that um but that's the Lor
+[1:36:25] kernel the Rope kernel the rotary embedding is a rope kernel this is just
+[1:36:30] setting stuff up this right this is setting stuff up um forward right this
+[1:36:36] is the most important component which is the forward component now don't get
+[1:36:39] scared by this that's because we fixed a bug so this is actually our bug fix that
+[1:36:43] we did so this is all in Transformer architectures is like you have to be
+[1:36:46] very careful when you downcast to float 16 if you use B flat 16 right this is
+[1:36:51] actually very important before you have to be very very careful um when you use
+[1:36:56] float 16 and B float 16 training mixed position training cuz it were downcast
+[1:36:59] incorrectly and your rope embeddings will be wrong um so it's actually it's
+[1:37:04] not supposed to look as ugly as this but unfortunately it looks ugly now um
+[1:37:08] before it was just this right but this is just setting up code um that you know
+[1:37:14] we have to like fix the bug and stuff like that um yeah so it's actually not
+[1:37:19] that long right so like it's it's just this um yeah up to here
+[1:37:24] so whenever you see these architectures it just looks complicated but it's
+[1:37:34] yeah no no no so there are like some if you do torche compile we're still like I
+[1:37:39] think 30 30% faster so no matter sorry if you use Tor compile plus
+[1:37:49] unso oh it's with store 30 times faster oh not 30 30%
+[1:37:54] so we're two times faster than hugging face plus F attention 2 but tors compile
+[1:37:58] you know they're adding kernel from multiple packages in so yes they could
+[1:38:02] learn from unso and put it in I'm assuming they're doing that I did have a
+[1:38:06] talk with them so yes they're probably doing that already but yes we're still
+[1:38:09] 30% faster um there was like some I think someone tested this last week um
+[1:38:14] yeah is that any other questions
+[1:38:19] okay this is not important this is for this is the we talking about for linear
+[1:38:24] scaling for rope embeddings if you want to extend the context length that's kind
+[1:38:27] of what they do right this is this is for scaling not not that there is a
+[1:38:30] rotate half rotate half part which I was talking about right how do we actually
+[1:38:35] derive the formulas for the gradient uh how do we actually do the rope and Bings
+[1:38:39] is just this um the MLP which we talked about again remember the MLP layer right
+[1:38:44] so there's a gauge projection the up projection the down projection um this
+[1:38:48] code is bloat again ignore this it's just this is just one line that's the
+[1:38:56] rest is blo um ignore that right so like the down projection is just the down
+[1:39:00] projection right the activation function the gate projection times the up
+[1:39:03] projection right so that's that is the MLP that is the you know Swig glue one
+[1:39:08] line not all of this and that's just for training purposes um repeat KV is just
+[1:39:15] an that's for like you know um okay won't explain this too much but that's
+[1:39:18] for the attention part um this is just to make inference faster when you do 2K
+[1:39:23] and when you go back to slides um if you go to um where is
+[1:39:33] it right WQ WK and WV instead of training WK and WV you train a small s
+[1:39:40] and you repeat this and this can make inference faster um and so like you
+[1:39:45] don't we don't actually train the full m The Matrix size WK anymore we train a
+[1:39:49] small Slither um and we just repeat this the attention again all of this is just
+[1:39:57] preparing right this is just preparing right okay ignore ignore ignore blah
+[1:40:02] blah blah bloat get rid of this um don't look at that um there is q k and V
+[1:40:08] that's the Matrix part um there is some the only problem I find that people
+[1:40:13] struggle with is there is like Dimension manipulation you have to like
+[1:40:17] manipulated the dimensions of the output that is actually kind of annoying I do
+[1:40:20] agree this is actually very annoying but just assume it is the this right that's
+[1:40:25] all we're trying to do is this um and that is just these these three lines do
+[1:40:31] this do this um and then we want to do qk transpose
+[1:40:37] right oh you have to sorry you have to apply the r betting don't forget to
+[1:40:40] apply the rer betting um and then qk that's repeat KV repeat KV is the one
+[1:40:46] that the trick that I said to make inference faster um by repeating the so
+[1:40:52] if you go back here the K and the V the K and the V you take only small slivers
+[1:40:57] you only train small slivers and you repeat them four times um and it does
+[1:41:01] not reduce accuracy that bad um and that's repeat
+[1:41:04] KB this is the qk transpose right Tor on mball qk
+[1:41:10] transpose this is the attention part soft Max drop out okay no one uses
+[1:41:16] Dropout anymore get rid of that line um matrix multiplication right so this is
+[1:41:22] so up to here up to here is qk transpose over root D softmax time
+[1:41:29] V right so up to here and then we do some sort of and then we have to do some
+[1:41:34] um output projection as well um the rest okay whenever you see this part just
+[1:41:38] ignore that right whenever you see like if self. convict do pre-training TP is
+[1:41:42] more than one this is just for um this is just for faster training so you can
+[1:41:46] get rid of that well not for faster training for like you know training
+[1:41:49] across multiple gpus you don't you can ignore that and just assume it's is just
+[1:41:53] that one line uh now there is more code like flash
+[1:41:58] attention to ignore that's just for f flash attention ignore ignore ignore
+[1:42:03] right no you don't need to see this s um scale do product attention is a faster
+[1:42:08] version of attention that is native to P torch also ignore you don't want to see
+[1:42:12] that as well pretend you didn't see that um and then finally we get to the
+[1:42:16] decoder layout right remember each we show uh okay wait maybe I should exit
+[1:42:21] the slides um where is
+[1:42:26] it
+[1:42:30] no so remember the decod delay um so this right remember we say we repeat L
+[1:42:35] times right this is repeat L times this is just shoved in in the decoder layer
+[1:42:40] right we call this one decoder layer and again we do the layer Norm remember put
+[1:42:47] lay Norms everywhere do laym do attention add some residual um this also
+[1:42:53] training moreable right when you add residual it makes training more stable
+[1:42:56] do more L do more do an MLP add more residual and then we complete it right
+[1:43:02] that's just one that's one component of the decoder and remember we repeat this
+[1:43:07] L times and the rest of the code is just
+[1:43:11] doing this L times now where is L times um comments comments comments forward
+[1:43:16] right you go to forward um yeah
+[1:43:28] in my opinion put it
+[1:43:32] everywhere oh that's just by yes why is the ordering why is the
+[1:43:38] ordering do I think it's lorm first then add residual is that correct or maybe
+[1:43:42] I'm getting
+[1:43:51] confused yes ordering to turn the trip it doesn't really matter I think there
+[1:43:55] are some research papers which show if you switch the ordering it maybe
+[1:43:58] increases like it decreases accuracy by like
+[1:44:02] 0.01% to be honest we need to do more testing again like in my view shs
+[1:44:07] everywhere um this actually this should make training more stable um but it
+[1:44:13] makes training slower that's the problem um that is the only problem but I
+[1:44:17] suggest you to put layer Norms everywhere wherever you see at just
+[1:44:21] shove layer Norms um yeah LMS always work
+[1:44:26] um okay
+[1:44:45] and so why do you add the residual of the previous so you do you take the
+[1:44:50] resid you you save the state before the lorm yeah and then you and then you do a
+[1:44:54] layer norm and then you add back it in so why do we have to do that is that
+[1:44:59] your question
+[1:45:04] yeah oh you can do it before if you want to you could try it it depends I think
+[1:45:09] it's for ACT yeah it depends as I said all of this is like gospel like oh why
+[1:45:13] do we do this it's just people tried it and they said it works
+[1:45:21] um oh what do you mean by not an issue like why does this work or why is this
+[1:45:26] like not a what what do you mean by issue I
+[1:45:28] mean
+[1:45:33] kind yes it scales it
+[1:45:45] yeah it's just Maps you just let it just it just works yeah because like because
+[1:45:51] like if you do that the autograd engine will still know that you did it and the
+[1:45:55] derivatives will still be applied correctly so you just assume that it
+[1:45:59] works um to be honest that is another research topic you should try that um
+[1:46:05] I'm being like serious like all there's so many research questions that are like
+[1:46:08] open like why doesn't everyone just put lorms everywhere like why didn't you put
+[1:46:12] a Leonor after the multi multi-ad detention put a Lon Norm after the swalo
+[1:46:16] put a Lon Norm after the inputs put Aon you know everywhere um and my my
+[1:46:21] hypothesis is to makes training more stable like makes it slow though yes in
+[1:46:26] Mech interpretability not solve explain
+[1:46:34] this do you mean like what do you mean by like explain this meability where you
+[1:46:39] do which method do you mean like doing the auto encod style like
+[1:46:46] Spar just direct weight just looking at the weights and what that happened at
+[1:46:50] INF time or training do you mean like the uh what which method like the um cuz
+[1:46:56] I know there's like many methods for mechanistic interpretability like
+[1:46:59] there's different types of methods this SP Auto encoded one or the well
+[1:47:03] Transformer lens is ne's tool okay I I don't I have sensor I'm not that I'm not
+[1:47:08] expert on that but so but you can see the um the literal like um activations
+[1:47:16] yes yes the activation one yeah yeah so basically what so I mean I'm going to
+[1:47:21] not diers but um so basically can do you think we can figure out why this works
+[1:47:29] this way like because you said it's kind of an open question right but do you
+[1:47:34] think that using tools like Transformer lens where we can look at training
+[1:47:39] activate or not activations but like Steps where in fact we would have to
+[1:47:45] like um I'm not sure if I explain it right correctly but like do you think
+[1:47:49] mechanistic interpretability is a path to understanding this
+[1:47:55] good question um could mechanistic interpretability okay H it
+[1:48:01] depends I think my view is it just lorms if it's specifically on the topic
+[1:48:06] of lorms it just makes training more stable I don't think so has any like
+[1:48:10] meaning like that's my view okay that's fair like I think like the mass
+[1:48:14] equations don't show that it has any meaning I just find it to be just
+[1:48:17] stabilized training um there was like papers like the um uh what was the one
+[1:48:21] um batch normalization I forgot what the term was um yeah there was like a theory
+[1:48:27] which shows that b normalization reduces problems of out of distribution data and
+[1:48:31] stuff like that um oh reduces internal coari shift or something um that was the
+[1:48:37] phrase which yeah um I don't know what that even means but anyways um does
+[1:48:43] anyone know what that means there was like a um there was like a video for
+[1:48:47] that as well the yeah does anyone know what that means or yes what do you
+[1:48:55] mean so layer Norms my view of lay Norms is when you do if you don't do layer
+[1:49:01] Norms if you keep okay let's say you take a number two you multiply by two
+[1:49:06] you get four remember there's 32 layers right if you multiply by two
+[1:49:10] continuously you will get Infinities in the end right because you like go out of
+[1:49:13] scope of the float 32 so what lorm does is it makes your number go back to a
+[1:49:20] good scale so if you do 2 * is four let's divide it by four go back to one
+[1:49:26] right and so now it's one again if you times two it's two again let's divide it
+[1:49:29] by two again go back to one so all Leon Norm does is it makes a scale go back to
+[1:49:33] a good scale like it doesn't your numbers don't like diverge on both sides
+[1:49:37] that's what Leonor kind of does does that kind of okay any other
+[1:49:43] questions okay um so all we remember the decoder style
+[1:49:50] oh wa I think we actually kind of finished reviewing the Lama architecture
+[1:49:52] there's nothing else to do um the decoder right you do this 32 times
+[1:49:56] remember like four decoder layer is in self do layers you do this 32 I think it
+[1:50:00] 32 I can't remember um multiple times um that's the decoder you just do you apply
+[1:50:05] this multiple times you do a layer norm and finally you get your logits
+[1:50:11] where is it your LM head right this outputs the probabilities of which token
+[1:50:16] remember we're trying to predict the next token we output probabilities for
+[1:50:20] each token and that is called the LM um and where's the forward function the
+[1:50:27] forward right there's a forward always with the forward um self you do you go
+[1:50:33] through the model and then you okay remember ignore this right ignore this
+[1:50:37] and you LM head that's just one line one line okay one line and then you do the
+[1:50:41] float now another question people have is like why do you have to do the float
+[1:50:45] um um does anyone know why you have to do you have to upcast a float why
+[1:50:53] any clues have a guess I make this bigger have a guess have a guess have a
+[1:50:58] guess why do we have to upcast to float sorry gradients okay close why why
+[1:51:06] gradients it is related somehow to gradients
+[1:51:12] anyone okay it's for training stability purposes so the soft Max you should
+[1:51:17] always upcast the float 32 because it makes training more stable if you take
+[1:51:20] the derivatives and the gradients if you do not do float 32 you might get nans as
+[1:51:26] well remember the exponential is can be very large so you want to take the float
+[1:51:31] 32 which has larger Precision than float 16 right float 16 is the maximum number
+[1:51:37] is 65536 I think I think it's 65536 right but float 32 the maxim is like
+[1:51:42] some large number to the power of 38 or something 10 to the power of 38 so
+[1:51:46] that's why you have to upcast it to float to float 32 this just makes
+[1:51:49] training more stable right so all of these things that we do tricks it's just
+[1:51:52] to make training stable yes said you're times is that just
+[1:52:01] like oh that's up to you so like if you want to do more parameters you can do
+[1:52:05] 300 times up to you that's just make your model 10 times larger so like when
+[1:52:09] you when you hear like you know llamas
+[1:52:19] yeah so so the weights you train when you take the tokens you go through the
+[1:52:24] architecture and like it changes the it changes the tokens and these tokens keep
+[1:52:29] shifting to like some sort of like New Direction and you keep doing this so but
+[1:52:32] if you do it more times get a larer model the problem is
+[1:52:38] you have to train more weights so each each 32 times has different
+[1:52:45] weights correct each of the each of the iteration but not yeah each there'll be
+[1:52:49] 32 different weights for each layer okay and so like yeah normally people
+[1:52:54] just if you see like this like you know gbd4 what is it like one one something
+[1:52:59] trillion tokens I'm assuming there's more layers larger embedding Dimension
+[1:53:03] larger this larger that more layers um normally speaking the more layers you do
+[1:53:08] the model can learn more um so that's the whole reason why you wanted to add
+[1:53:11] more layers you just want to increase the capacity of the model to learn um
+[1:53:15] again is to make training more stable again
+[1:53:18] um and so this remember the shifting trick that we did in p torch the
+[1:53:23] shifting trick is just this and this that's the shifting trick that's
+[1:53:28] the thing that makes it learn to predict the next token
+[1:53:32] um and then you pass through the loss function the cross entropy loss which we
+[1:53:36] discussed about um and then that's the Llama architecture and that's normal the
+[1:53:40] rest is not useful the rest is yeah so in theory you could write the entire
+[1:53:45] llama architecture in like I think 50 lines or something um the rest is just
+[1:53:51] unnecessary BL right this all of this is 1,600 lines of comments and stuff like
+[1:53:55] that but you know this is for hugging faces implementation I it's highly
+[1:53:59] respected um and this is what you should look at first when you read a new
+[1:54:03] architecture um so we just kind of went through the Lama architecture hopefully
+[1:54:07] you can kind of get a sense of it obviously this if this is your first
+[1:54:10] time reading the source code um it's actually not that hard it's not that
+[1:54:14] complicated you just have to see which components you can ignore right it's not
+[1:54:18] that scary um yep does that kind of get it or you guys kind of get that feel um
+[1:54:26] we're going to do more obviously this is the first one um any
+[1:54:35] questions um no not really other than more tokens
+[1:54:40] um I think they Chang embed they did change some of the numbers like how many
+[1:54:44] how many numbers you want to represent for each number they changed that um
+[1:54:48] large vocabulary they did much larger vocabulary and more tokens other than
+[1:54:52] that I no there's no change at all yeah
+[1:55:05] yes the reason why it's funny I used to work at inidia why shouldn't I be
+[1:55:10] writing Cuda right the reason is I see Cuda as extremely annoying to write and
+[1:55:17] if you want to optimize for just Nvidia Hardware okay go ahead you can do Cuda
+[1:55:21] but my view is like I I don't think so that's going to be forever so as a as
+[1:55:25] like a um as like a safety precaution let's just do Triton right let Triton
+[1:55:32] handle the compil compiling down to Cuda or AMD or whatever Intel or whatever
+[1:55:38] right and try to comp the intermed intermediary if you want to get like 10%
+[1:55:41] faster yes you should do Cuda but it's only 10% right if you do fine tuning two
+[1:55:46] times faster it's already like it's already nearly at the ceiling you can
+[1:55:49] only go so much um and so like if you want to go down the extra mile yes more
+[1:55:53] than happy to welcome you to do that but I do know I do not like it's funny
+[1:55:56] because I used to do Cuda all the time but I don't suggest it um you will get
+[1:56:00] more performance though but I don't suggest it yes
+[1:56:03] question oh sorry yes what never drop could yes you don't yeah so so Triton
+[1:56:10] you write it in Triton then it compiles down to Cuda yeah sorry
+[1:56:20] wait actually it could work the only problem why it doesn't work on
+[1:56:24] AMD is Triton oh I think and X formers actually if so if Triton works on AMD we
+[1:56:33] work if Triton if x formers so Facebook's um flash attention Library if
+[1:56:38] that works in AMD then we work oh funny we work but anyways it depends on those
+[1:56:44] conditions so if if AMD has those to work then yes in theory you can remove X
+[1:56:49] forers and just use scale do product detention so there's only one dependency
+[1:56:53] which is Triton um I think some people have gotten into work so it depends yes
+[1:56:58] I kind of have been answer to that I've trained on a mi3 Instinct with one card
+[1:57:05] withon and it work with AMD so okay I mean if Triton works then yes it just
+[1:57:12] works so just I just have an answer sorry okay good you answered yeah okay
+[1:57:18] yeah but we don't so officially we did not support AMD um but I guess
+[1:57:22] it it works okay that's interesting um yes okay um what's next where's my where
+[1:57:30] is it JMA one uh yes okay so we're now be talking about JMA bugs um
+[1:57:35] specifically jamama so if you go to a blog post I actually we wrote a blog
+[1:57:40] post um about all the issues that we found in Jemma um for example you must
+[1:57:45] add a BOS token there is a typo in the PayPal um yes so we don't just find bugs
+[1:57:50] and you know we have to read the paper first to understand the model um now the
+[1:57:55] problem is sometimes when people release models they don't release papers that is
+[1:57:59] very painful that happens a lot now so please model creators please provide
+[1:58:05] papers um otherwise it gets more complicated um there's also like some
+[1:58:10] other issues um and we have a color notebook which provides all these um so
+[1:58:15] if you open up the link G details um in the remember if you don't have access to
+[1:58:20] these slides it is time url.com unso right um that's the slides um if
+[1:58:27] you open up the collab notebook um this is actually runable in
+[1:58:32] collab please log into your G uh Google account for this to actually work um but
+[1:58:38] we show that this is the log L2 Norm so we check the so this layer number right
+[1:58:44] there's like 18 layers we check every single layer the output of the actual
+[1:58:50] good implementation so the Deep m impementation with the hugging face one
+[1:58:53] with the pie torch one with the other ones and if you do the L2 Norm you find
+[1:58:58] that the error is very high and we what we we showed is that you can actually
+[1:59:02] move the error down by doing multiple changes right so each line you can see
+[1:59:06] there's like multiple lines each line is actually a method that we apply to make
+[1:59:10] it better right so like we finally found that approximately either the blue line
+[1:59:15] I maybe it depends on which you like either the blue line or the black line
+[1:59:19] makes training much better um there anyone notice any interesting things
+[1:59:23] about that this graph anything interesting like do you
+[1:59:29] see the you know the so remember each line is a fix that we did right so like
+[1:59:33] there's many lines and we did a fix and it changes the the error what and we
+[1:59:39] selected the black line to be the final one does anyone have any what is like
+[1:59:46] anything interesting
+[1:59:52] yes so one of them caus a huge jump and that is a rope float 32 fix that we did
+[1:59:58] for all architectures yes and the other ones are less prominent but anything
+[2:00:01] else anything else interesting
+[2:00:07] yes yes fantastic why I do not know and that is
+[2:00:14] a good question and I don't actually know I think it's just language you I
+[2:00:17] have a theory the theory is yeah but unfortunately I can't say
+[2:00:21] everything like I I mean my theory is and there was also a jump as well in the
+[2:00:25] middle um and the blue line you know it starts from very low it goes up very
+[2:00:29] high and everything does this right so like there is this some weird transition
+[2:00:33] boundary um in the Gemma model right and so like I'm just going to guess um my
+[2:00:38] guess is that when you do when you train a Transformer the layer the later layers
+[2:00:44] get harder and harder to train right the earlier layers actually get very easy to
+[2:00:47] train and so this transition boundary is when the model probably was not really
+[2:00:52] trained that well um so I'm going to guess this is just guessing um that
+[2:00:56] maybe the model should have been trained for more data um and the boundary should
+[2:01:00] disappear um this is just my guess um so there is a phenomenon essentially is
+[2:01:06] like more dat the model the the LA the last layers are much harder to train and
+[2:01:13] that's kind of my theory but I I don't I don't think so that's correct but okay
+[2:01:22] yes right last one yeah exactly um so in the end so now the question is like why
+[2:01:28] do we choose the black one then why don't we choose the green the blue line
+[2:01:32] um so that's adding the exact jell that we found so if you add the Rope Fix Plus
+[2:01:36] the exact jell you get the blue line but we in the end decided to do the black
+[2:01:41] line and why do you think that is we did not choose a blue line we should have
+[2:01:44] chose a blue line right but the with final all the fixes that we did so
+[2:01:48] essentially the answer why we did not choose a blue line the blue line should
+[2:01:51] actually have lower error right the reason why we didn't choose that is
+[2:01:55] because there was not just one error there were two errors there was many
+[2:01:58] errors and all of the errors combed together we finally chose the black
+[2:02:02] lines because it matches the original implementation so because remember the
+[2:02:07] trick is you have to match the original implementation of whatever the Gemma
+[2:02:11] models Creator the Gemma model creators did um so you kind like just look for
+[2:02:15] this era maybe like I mean maybe like if someone CH chose different like fixes
+[2:02:21] that we did you can probably get even a lower training loss um I guess you could
+[2:02:27] um but we decided to choose the black line because that's what the original
+[2:02:31] implementation did um any other
+[2:02:50] questions oh I'm talking about the weights so the weights are the ones in
+[2:02:54] so the model weights are the ones training right so the rest you don't
+[2:02:57] actually train it's just the weights
+[2:03:19] itself what are
+[2:03:34] yes so remember the the the goal of a transforma is you want to predict the
+[2:03:38] next word right so the sentence hello my name is Daniel you're trying to predict
+[2:03:41] hello predict my right my predict name and so on you have this data correct
+[2:03:47] like you have just take novels you shove in the novels you already you
+[2:03:51] essentially created data out of thin air and then you change these weights using
+[2:03:56] like back propagation do derivatives and try to like change these weights such
+[2:04:00] that you get the highest accuracy um and this training procedure is called back
+[2:04:04] propagation um and so like I was trying to show you like how do we actually
+[2:04:08] derive the derivatives when you do a back propagation you need to derive the
+[2:04:11] derivatives um just use P torch P torch will do the derivatives for you um and
+[2:04:16] yes but that's does that kind of answer your question or
+[2:04:22] okay
+[2:04:26] yes
+[2:04:36] yes yes on actually has that so you can actually depending on your layer so for
+[2:04:42] now what we do is you're embedding and your final layer you can change
+[2:04:44] different weights uh different learning rates so we found that if you train on
+[2:04:49] if you train the last layer with the embedding weights and the first sorry
+[2:04:53] the embedding weights in the LM head by a factor of 10 smaller the learning rate
+[2:04:57] you can actually have increased accuracy so you so yes you should you should
+[2:05:01] change the you should change the learning rates for each layer um but
+[2:05:04] people don't actually do that I think it's because if you set a learning rate
+[2:05:09] for each layer beforehand you're kind of like it's like there's you're like doing
+[2:05:14] subjective bias so that's why people just set one learning rate for all the
+[2:05:18] layers um but I think in this case I'm just going to guess okay this might be a
+[2:05:22] Transformer this is Transformer General this is not just for Jamma this is for
+[2:05:25] all Transformers maybe I guess lay layerwise
+[2:05:28] learning rate could work I think there are like some papers which do that I
+[2:05:32] think it's called LS I think L does layerwise um I think it's called L
+[2:05:37] layerwise um learning rate um I hopefully that anwers your question um
+[2:05:46] yes other it's a log L2 Norm so it's we take the Deep Mind implementation you
+[2:05:53] code it up correctly then you take the other implementations like pie torch
+[2:05:57] hugging V even Deep Mind own implementations and then you check each
+[2:06:02] layer the output you compare it with the original imp the correct implementation
+[2:06:06] and check what's the error and that's the thing that I graphed um and your
+[2:06:10] goal is you want the error to go go to zero right so like you want it to go all
+[2:06:13] the way to zero so like you know on the bottom and not not like very high um and
+[2:06:17] that's log scale right so the error is not like a small number it's 1,000
+[2:06:22] right so like every single line every single step you go down is a log
+[2:06:25] difference right it's not it's not like a it's I essentially logged it if you
+[2:06:30] did not log it it would look very bad um but I just logged it um yeah does that
+[2:06:34] okay any other question yeah so let's say if there's an issue in
+[2:06:40] tokenization part fundamental thing or we find some
+[2:06:45] optimization a and you have to change the way you're
+[2:06:49] tokenizing uh would you have to retra your models to
+[2:06:55] incate FES this actually happens a lot very
+[2:06:59] frequently and I think like so like for example tiny llama someone try tiny
+[2:07:04] llama and then training already 80% completed they found a bug for
+[2:07:08] tokenization they're like so it happens very frequently and it depends on what
+[2:07:13] you want to do I think it depends to the model Creator if you already spent
+[2:07:16] millions of dollars maybe just keep just train it with the B and then you release
+[2:07:22] the bugged version but it should still work um hopefully um yeah so in theory
+[2:07:28] let's say open AI would have a lot of difficulty shifting if they found like
+[2:07:33] somebody else found an OP more optimized tokenizer or something like that they
+[2:07:38] would have trouble shifting to that model because they would have to spend
+[2:07:41] like you have to retrain everything correct so just just assume it just
+[2:07:45] leave it if you already spent like billions of dollars I'm probably not a
+[2:07:48] good idea to retrain so even if like a like 2x
+[2:07:53] optimization they would have spend they would have retra and spend yes you have
+[2:07:57] to retrain everything from scratch um but that's why like I think like that's
+[2:08:00] why you should do like small scale experiments you know get like a smaller
+[2:08:04] model train it for less data test it and then see if the accuracy is good and
+[2:08:08] then you scale it up um yeah any other questions okay I will yes so there's a
+[2:08:17] notebook so we show step by step exactly what we did and if you inspect the code
+[2:08:21] okay the Gemma code is now the Gemma code
+[2:08:26] um if you oh okay wait no it's modeling
+[2:08:33] Gemma oh okay maybe I should just go to hugging face itself um wait let me go to
+[2:08:38] you can actually find this um if you copy paste
+[2:08:41] this right you edit the you go to jamama and you go to modeling jamama
+[2:08:52] right this is oh did I not okay let me just okay maybe I typed it wrong did
+[2:08:57] they not oh okay maybe I did two L's my bad I always get confused on that um oh
+[2:09:03] what is this this is interesting okay this is like new um so okay yeah I did
+[2:09:10] not yeah so all of this so we wrote inside the for like you know llama does
+[2:09:15] so we show for example in the code now if you go to like hugging pces code for
+[2:09:18] JMA we wrote I tried to write some comments
+[2:09:22] you know for it to be more clear why we are doing this um and so for example the
+[2:09:28] the lay Norm right you have to be careful to where you upcast and downcast
+[2:09:34] um and we write this in here um where is it I think it's no no no not wait is it
+[2:09:41] no I'm pretty sure I've read it some no it is here yes okay it's a bit unclear I
+[2:09:45] need to um make this bigger okay it's a bit blurry but you
+[2:09:49] can see that depending on the model um in Gemma you have to actually upcast a
+[2:09:54] float 32 everywhere you must use float 32 everywhere because that the original
+[2:09:58] implementation use Flo 32 right so you must always follow the original
+[2:10:02] implementation if you don't follow the original implementation then you will
+[2:10:05] get wrong like you know somewhat worse results um and the problem was other
+[2:10:10] implementations just copied llama and Mistro's code and they did not do this
+[2:10:15] and so we found that you actually have to upcast correctly over here right you
+[2:10:21] have have to upcast immediately um and then you downcast at the very end um and
+[2:10:26] so we wrote A Few comments right llama does X do2 float 16 whilst Gemma is X
+[2:10:31] you know it really like llama does that right but Gemma does this right so there
+[2:10:38] are like small little issues downcasting upcasting another question is like why
+[2:10:42] do we have to do downcasting does anyone know why like why is there always like
+[2:10:45] downcasting upcasting float 32 float 16 float 8 does anyone know why we have to
+[2:10:50] do downcasting
+[2:10:54] casting yes correct it's for faster speed um so do you know how much faster
+[2:11:01] like so float 32 to float 16 what do you
+[2:11:09] think it depends who said two okay good guess why
+[2:11:15] why did you guess
+[2:11:18] to well that's vacity okay okay yes okay float 8 approximately two um actually
+[2:11:26] could be more so float 32 to float 16 is actually not two it's actually much more
+[2:11:31] I think it's five I think or is it six um the reason is because the
+[2:11:36] representation of the float is different right so float
+[2:11:38] 32 I have float floating Point representation Wikipedia I think it's in
+[2:11:46] here somewhere um oh maybe I go to beat float 16 um where is beat float 16 brain
+[2:11:54] float be float beat float yes right so
+[2:12:00] like there it is um oh there's more pictures now oh they edited this I did
+[2:12:06] not okay this is new I didn't see AMD fp24 format or Pixar oh okay they have
+[2:12:12] like weird formats now um this is float 32 right and Flo 32 um the exponent has
+[2:12:20] eight numbers right eight bits and the fraction of a bit has 23 um and when you
+[2:12:26] do Matrix when you do matrix multiplication does anyone know how to
+[2:12:30] calculate the number of transistors you need for float 32 does anyone know it's
+[2:12:35] a formula that's related to the exponent the fraction and this just exponent and
+[2:12:39] fraction what do you think the formula is have a guess right I said that it's
+[2:12:43] approximately so if you have B float 16 the fraction is seven right refo 16 has
+[2:12:49] 16 bits you can use exponent the exponent is used for the the dynamic
+[2:12:55] range of the number right so the if you want larger numbers you have to have
+[2:12:58] larger exponents right so this means b36 only has a range of two to the okay it's
+[2:13:03] not 2 to the 8 but like just assume you know it's 2 to the power of 8 okay
+[2:13:07] that's not right but just assume that um 2 to the^ of eight right
+[2:13:12] but is it yeah um and this one float 32 also has 2 to^ 8 there is another format
+[2:13:18] called float 16 which is 2 to^ 5 um and then the fractional component is
+[2:13:23] 10 so all of these numers you can scale right how many do you want for the
+[2:13:26] exponent how many do you want for the fraction you must include the sign bit
+[2:13:30] and the trick is you must have 16 you need to fit you know 16 so you could
+[2:13:34] have like exponent one in fraction could be um 14 that could also work um but
+[2:13:41] does anyone know how many transistors you need to use for float 16 for example
+[2:13:47] and B flat 16 remember I said it's was like around five times faster it's
+[2:13:50] actually not right I think it's even more um what is the formula have a guess
+[2:13:54] how many transistors do you need to use to do float 16 multiplication
+[2:13:59] approximately or float multiplication it's it's a formula related to exponent
+[2:14:04] and
+[2:14:06] fraction the answer is exponent plus fraction squ that's the answer um so
+[2:14:13] what does that mean that means float 16 is 5 + 10
+[2:14:19] 2 right and FL 32 is 8 + 23 S so it is not two times faster it is much faster
+[2:14:28] right so like I don't know what that is what is um so it's 8 + 23
+[2:14:35] S 5 so you need approximately okay this is approximately you need 537
+[2:14:41] transistors for float 32
+[2:14:46] multiplication oh it's just 23 squ so it's 8 plus 23 squ yeah
+[2:14:51] and so what what is the other one I think was um what that I can't remember
+[2:14:56] so um so it's eight and seven right so eight and seven this is this is Google's
+[2:15:00] format it is 57 so what does that mean how many times
+[2:15:05] faster yeah so it's actually 10 times faster right so32 to float 16 B float 16
+[2:15:10] is around 10 times faster right float 16 is 5 + 10 right so 5 + 10 so B FL 16 is
+[2:15:20] approxim two times faster than float 16 although
+[2:15:23] to the no one really notic any difference um but in general b 16 is
+[2:15:27] actually faster right so that's why it's not two times faster it's 10 times
+[2:15:31] faster um and that's why you must use Tesla t4s as I said because it has TS
+[2:15:36] which does this right the TAC CA does float 16 multiplication very effectively
+[2:15:40] and very efficiently um and so do not use p100s again right p100s do not have
+[2:15:46] this methodology um yes question
+[2:15:52] yes float eight so float eight I don't know um there are two formats for
+[2:15:59] float8 uh oh wait I don't think so it's in Wikipedia
+[2:16:04] float8 oh okay uh floating
+[2:16:10] point there is it's called e em oh it's I just use mini float does it they have
+[2:16:15] some yeah there we go right so you got to decide remember if you want have
+[2:16:21] eight bits you get to decide how many you want to do for the exponent how many
+[2:16:24] you want to do for the fraction or the mantisa part right you get to decide and
+[2:16:29] depending on the company you know it's it's unclear there's no standard um so
+[2:16:34] this one's 143 right so like what's 143 1 + 4 right 4 3 S right is that is that
+[2:16:41] 43 yeah 13 so float 8 is I think it's around yeah so around
+[2:16:48] four times faster than b 16 but in General it's not okay in general it's
+[2:16:52] like 2 to three it's it's not going to be four the reason is because you're
+[2:16:56] packing so many transistors in you also have to do like energy you have to like
+[2:16:59] do the data movement there's like other transistors you have to do I just
+[2:17:03] approximately it's two two to three times faster that's float eight can you
+[2:17:08] go even lower yes why don't we go one one
+[2:17:13] bit so you must have to sign though so you can't do one
+[2:17:17] bit so 1.58 bits some people have been talking about um two bit two bit could
+[2:17:22] be possible the problem with two bit is it's problematic because when you do two
+[2:17:28] bit training um yes okay so let's see let's do two bit right so what do you
+[2:17:33] want to do how many exponent zero remember you have to have a sign bit
+[2:17:36] that's the most important one for the exponent and
+[2:17:40] fraction zero right that's because remember it's squared so plus one oh
+[2:17:44] wait no it's it's Z plus one okay so it's one okay
+[2:17:51] um 10 times faster I don't think so um okay maybe maybe two bit is probably too
+[2:17:56] low maybe four bit four bit could work yeah
+[2:18:12] yes oh that's just because they wanted to do that just for easier calculation
+[2:18:18] like and for their 32 they turn 32 is not
+[2:18:23] 32 it is they have it somewhere Nvidia T of
+[2:18:29] float it's 19 that's the trick they like to like do
+[2:18:33] marketing and they say it's 32 but it's actually 19 um yes that's why it's the
+[2:18:37] same okay any other question was it someone else raise a hand or okay but
+[2:18:42] yes I was going to say like you can do four bit right so forbit is actually a
+[2:18:46] new nvidia's new gpus the um the B 100s do have FL bit um so that is
+[2:18:53] approximately two times faster now the reason it's not okay let me just try 4
+[2:18:57] bit I think it's 1 plus it's it's probably like 2 plus two or something I
+[2:19:02] don't know six okay right um it's not going to be that much faster because as
+[2:19:07] I said there's power transistors and there's other transistors you can only
+[2:19:10] go so far just the jump from FL 32 to Flo 16 was very large um yes yes so
+[2:19:15] quick question um so for the example the one bit
+[2:19:18] bit that 1.5 bit bit yeah yeah so that would be an example one
+[2:19:23] bit so it's a different so actually I had a tweet about this 1.58 bit and
+[2:19:29] Float 4 is the same in terms of number of transistors you'd rather use float
+[2:19:32] four the reason why is 1.58 bit is you have to do more manipulation to make a
+[2:19:37] work you have to use like the straight through estimator like it's a it's a
+[2:19:41] horrible mess you'd rather just use float 4 um so float 4 and 1.58 bit are
+[2:19:46] like similar you get to create your own base model you do
+[2:19:51] if you replicate if you replicate the paper yes me which most of us have never
+[2:19:57] done right which would be I technium and the Noah research probably reated there
+[2:20:03] some though it does work somewhat somewhat Works um I mean yeah it's one
+[2:20:07] bit but I mean 1.58 yeah it's actually one bit yeah it's I think it's like
+[2:20:11] three call one bit oh they like to call it one bit Yeah but my question is like
+[2:20:16] so in theory like obviously I don't know who works here
+[2:20:22] but like most of us have never built a Bas model yes so like well you could
+[2:20:28] yeah yeah yeah you can with enough GPU power but but one bit bit that you know
+[2:20:33] that was and they even had like a really good great tutorial and like so but do
+[2:20:37] you think that that's just like I'm just asking for your opinion on
+[2:20:42] that I don't think so 1.8 1.58 bit would be the future I think Nvidia is like the
+[2:20:46] focus is on float 4 they might go to float I think float might be the final
+[2:20:51] Precision I don't think you can go any faster with that I think float for is a
+[2:20:54] final no more so we won't be having that much faster gpus I don't think so um I
+[2:20:59] mean float four is actually they don't actually do float four anymore it's like
+[2:21:02] float six for the gradients float six and then float four for the activation
+[2:21:06] like you it's very weird I mean you could do like float three float two but
+[2:21:11] like it's your diminishing returns um so um in arm silicon though uh there's um
+[2:21:18] there's been like advances like like super
+[2:21:23] low fix Point stop is it called Fix Point stop or I think it's called fixed
+[2:21:29] I I knew um has fix Point um oh well yeah so it's uh I mean just like the
+[2:21:34] Snapdragon X like the new yes they have so it's like customizable as well or I I
+[2:21:39] don't know yeah well the okay so the SDK is broken you have to pass the um so
+[2:21:45] this is why you can technically run mixol 8X um 7B on your phone at like 20
+[2:21:52] something FPS FPS sorry TPS is because you can use ufs 4.0 as flash storage and
+[2:22:00] subsequently use that as memory and then the the but the thing is then you're
+[2:22:06] running at two bit Precision which is um so that's probably why this so if you
+[2:22:12] use two bit Precision that's why you have memory reductions but there is
+[2:22:14] actually papers which show that if you do two bits for the MLP plus four bits
+[2:22:17] for attention that's actually the most appropriate you can actually do that so
+[2:22:21] that so that's not a invalid approach no that's not invalid actually it works it
+[2:22:26] works the mous people did that I think yeah that's yes question
+[2:22:32] sorry okay two kind of related questions on Precision first one is like why is
+[2:22:37] thetive bit like you must have the sign bit yeah you don't have to but it's
+[2:22:43] generally generally like standard practice to have to sign bit in theory
+[2:22:48] you don't have to um the only problem is if you don't have a sign
+[2:22:52] bit your numbers will be 0 one2 right but then what happens if you wanted to
+[2:22:57] like make the model like you're you're trying to not make the model learn
+[2:23:00] negative directions anymore you could do that I don't know if there are papers
+[2:23:04] maybe you should write a paper about that um train a model on that and let's
+[2:23:07] see what okay but yeah related I think all all right
+[2:23:13] yeah uh softmax you're basically just linearly like fitting Stu down
+[2:23:21] there's nothing about that could beon right the reason it's because
+[2:23:28] remember when you do softmax you also have to normalize by the sum of the
+[2:23:31] exponentials and if you do exponential of 10 you already get like some large
+[2:23:35] number and this this probability will take over the entire sum well but you're
+[2:23:40] not you're not likeing it you're just sare rooting it no no it's it's
+[2:23:45] it's the sum of exponentials divided by sorry the exponential divid by the of
+[2:23:50] the exponentials yeah but the BG exponential dominates the right yes
+[2:23:54] that's the problem though if you do that then your model's not learning you're
+[2:23:58] just trying to learn to predict one token why don't you just predict that
+[2:24:01] one token then like the the largest one that you did that's kind of what you
+[2:24:06] you're forcing the model to not learn anything that is why you have to like
+[2:24:09] minus the maximum that that's trick that we showed is like minus the maximum and
+[2:24:12] then you can like reduce this effect of this one token um or this one issue um
+[2:24:17] so it's for training stability purposes um I don't know if that kind of okay
+[2:24:21] probably that didn't answer your question but okay
+[2:24:34] yes that is a good question to be honest I do not know I don't think so it
+[2:24:38] changes too much um lay Norms if you upcast um it's probably yeah small
+[2:24:45] effect small effect but the reason why you need to upcast is because JMA did it
+[2:24:49] before so you have to do it um remember the trick is you must follow
+[2:24:53] what the original implementation does um any other questions or okay there are
+[2:24:58] like some other issues which we showed um that more okay this it's funny
+[2:25:03] because it's all about upcasting downcasting and stuff like that each
+[2:25:06] implementation had does its own thing um unfortunately how do you actually
+[2:25:09] analyze this you have to open three screens up the Deep Mind
+[2:25:13] One the Deep mine one okay okay too excited um you have to open up three
+[2:25:19] implement a Deep Mind One the hugging face one the carass one you have to open
+[2:25:23] three screens and you see line by line what did they do and then now you have
+[2:25:27] to guess which one's the correct one um the guessing part is the most painful so
+[2:25:32] you have to like inquire you ask hugging face which one's the correct one you
+[2:25:36] look at the paper which one's the correct one you assume the Deep Mind
+[2:25:39] one's correct and stuff like that so there's like some human component you
+[2:25:42] have to guess um guessing so that's probably why it can't be automated right
+[2:25:46] these error checking things cannot be automated is because there's a human
+[2:25:50] there which made these made these decisions and so you have to now you
+[2:25:53] have to decide which one which of those decisions did they choose um and you
+[2:25:58] can't really automate this away I guess you could automate this by doing the
+[2:26:02] methodology which we describ try all combinations and see which one has a
+[2:26:05] lower error I guess you could do that but remember you must have the original
+[2:26:08] implementation first um that is a problem um so there's like chicken and
+[2:26:12] egg problems um the Rope position um so this is the one I was talking about
+[2:26:18] upcasting rope um this is an all architectures now you must not downcast
+[2:26:24] rope if you do you will get wrong results so previously on the left right
+[2:26:31] if you see 8192 8192 8192 that's the positions um that is definitely
+[2:26:37] incorrect right what does that mean like do you know why that's incorrect 8192
+[2:26:41] 8192 8192 does anyone know why remember this is positions why is it why is it
+[2:26:45] all the same like does anyone know why this is very bad
+[2:26:50] so we kind of like essentially now we the three words have the same position
+[2:26:56] right 8192 is a position and what is another big error of this there's
+[2:27:00] actually one more error let's assume the maximum is
+[2:27:05] 8192 the sequence length what is 81
+[2:27:12] 92 it's out of bounds remember it's minus one for
+[2:27:17] python right it's 8191 is the correct number right so so if you correct this
+[2:27:21] you get 819 8189 8190 and 8191 right and you can see all the numbers are like
+[2:27:27] this so the point is if you use remember the whole point of this problem is
+[2:27:30] because we're using float 16 for faster training remember float 16 is how much
+[2:27:34] times faster yes around 10 or 5 to 10
+[2:27:38] something around there right that is why you have to do this and these are the
+[2:27:41] issues prop out because of this issue right we're trying to make training
+[2:27:44] faster but then these issues come
+[2:27:48] um and the jell one which we described before
+[2:27:52] um this was the first bug that we found um actually I think this is the main
+[2:27:56] reason why we were trying to look through bugs is we found that oh look
+[2:28:00] there is this bug in jell um in the activation function and so the point is
+[2:28:05] caras use approximate jell the P torch and the P torch version used exact jel
+[2:28:11] and hugging face also used exact jell um and the question is which one is the
+[2:28:16] correct one is the exact jell correct is the approximate jel correct so what's
+[2:28:20] the difference between exact and jell um jell activation function
+[2:28:26] um there is the where is the I don't know if they have the exact and the um
+[2:28:31] it's called
+[2:28:35] Flex oh okay that's night mode the oh that's even worse okay whatever oh
+[2:28:41] that's prel where is jell oh wait no I have to find it
+[2:28:48] right yes right so like the the exact J is this one right there's an error
+[2:28:55] function um okay my thing is not rendering it properly um but if you
+[2:29:00] essentially what you do is you use Desmos so what I like to do is I use
+[2:29:03] Desmos um Desmos right and literally plot them together plot them on the
+[2:29:09] graph right so like if you have right X Y isal to X over 2 right you literally
+[2:29:15] type this in and what is this one I think you can do error function oh yes
+[2:29:18] you can right you can do error function right X /are < TK of 2 right that's the
+[2:29:25] exact J right now you type in this complicated formula for x / 2 um 1 1 +
+[2:29:36] than what I don't remember this square root of two / what was it pi oh it's Pi
+[2:29:44] Pi and the what um X Plus 0 point can I oh we can't okay
+[2:29:52] 0447 0447 what was
+[2:29:56] the 15 15x to the cubed was it cubed yeah
+[2:30:02] okay right oh is it oh you're right okay wait
+[2:30:09] is that is that oh is it just the rendering problem or is it square root
+[2:30:12] no no no it's square root of two over Pi I think wait is it correct wait
+[2:30:16] something I did something wrong maybe I did something wrong
+[2:30:20] oh whatever who just just assume okay oh wait oh you're right I put the square
+[2:30:24] root everywhere oh is that what you were saying yeah oh okay oh no no no no
+[2:30:30] whoops no get rid of that okay let me just no it's it's tan of everything now
+[2:30:35] I have to do this oh okay probably have to play
+[2:30:40] around of this oh there we go there we go right so the blue line if you remove
+[2:30:44] it the blue line and the red line right they're the same thing but what's the
+[2:30:48] difference remember in I don't know if people know this we can
+[2:30:51] actually do derivatives D DX did anyone know this
+[2:30:57] you could actually do derivatives you get your D over DX and then you can do
+[2:31:00] this as well D over DX right and they generally
+[2:31:06] align right the exact J and the um approximate J generally align and guess
+[2:31:11] what you can also do integration integral of minus
+[2:31:17] infinity oh did I spell wrong oh Infinity to
+[2:31:24] Infinity right of I think this works I'm not 100% sure right you take your exact
+[2:31:30] jelly you minus the difference oh I don't think so this works I I I yeah I
+[2:31:34] don't think so oh yes it works yes it works so what you do is you can take the
+[2:31:38] integral of minus infinity to Infinity so the entire line your minus exact jell
+[2:31:42] and the approximate jell and you do DX and there is a difference right but the
+[2:31:46] difference is very small right it's like 10- 16 it's very very small and notice
+[2:31:52] is like when you do when we do fast Tron kernels I generally use this feature so
+[2:31:58] you can do integration integration and derivatives
+[2:32:02] and you know you can use Desmos so I highly recommend Desmos um and if you do
+[2:32:07] this that's where we found the problem it's like oh okay there is some sort of
+[2:32:12] issue and if you fix it remember the jelly fix does do some effect it does do
+[2:32:18] some effect but remember we only showed there only very small effect so it's not
+[2:32:21] that useful um the Rope fix was the most important right the Rope fix actually
+[2:32:25] caused issues um so you must fix that and that's the most important fix that
+[2:32:30] you must do um and finally there is like some other things that we do um
+[2:32:35] depending on the Precision that you use there is actually a difference between
+[2:32:38] float 16 and bleed float 16 and if you do this we show that float 32 um
+[2:32:44] remember we showed before that in the fixes that we did the lines some
+[2:32:49] sometimes go back up right but actually if you do float 32 it actually does work
+[2:32:55] if you do float 32 position the lines actually don't do separate very well but
+[2:32:59] once you use float 16 the lines then match up again right and B float 16 the
+[2:33:04] lines match up again right so this is just a phenomena that you're using fast
+[2:33:07] smaller precisions and that is why you have this problem but if you do use full
+[2:33:11] Precision you get good results and the fine tuning notebook for
+[2:33:16] the Gemma one also works so Gemma is two times faster uses like I think 60% less
+[2:33:21] memory as well it's more now um so if you run this remember you have to
+[2:33:24] connect to um you have to connect to your Google account and you will get
+[2:33:28] this to run any questions on the Gemma one okay
+[2:33:40] yes okay yes um where did I put the picture
+[2:33:48] oh wait it's in the blog post um yes that's fine um wait where did I put it
+[2:33:54] oh it's the first picture right yeah this one right so the x axis is the
+[2:33:59] layer number so Gemma has 18 layers so each of those the xaxis just indicates
+[2:34:04] which layer the um which layer it is the y axis is log to log to Norm um log log
+[2:34:12] L2 Norm so what you do is you take the original implementation like deep Minds
+[2:34:16] implementation you take hugging face pie torch J like you know implementations
+[2:34:20] you check the output of both of them so the output you run the model through you
+[2:34:25] take output layer one and output layer one the your other implementations and
+[2:34:30] you just find the error um and so this is just the error um and this is log
+[2:34:33] scale um so when it's log scale it looks better when it's not log scale it looks
+[2:34:38] very bad um so does that is that better you're taking theut yes output of each
+[2:34:45] layer yes
+[2:34:49] um that's called Jam so that's for Jamma for fe3 um similar what you do is you
+[2:34:55] open up the fe3 implementation you read through the flee three implementation
+[2:34:59] and because like you guys like prob most likely can go through llama and like
+[2:35:03] just look at it in general remember delete useless parts of the code you
+[2:35:07] will see there are differences in V3 um and the differences are um they use
+[2:35:14] other methodologies um they use upcasting they use stuff but there was a
+[2:35:18] weird thing that we found in the config file um I will show you um V3
+[2:35:28] config okay just use the instruct version
+[2:35:33] um if you go to always when you go to like new models always read the config
+[2:35:37] file right config.js when you open it up it tells you all the tricks you need to
+[2:35:43] know about the model architecture um and I highly right it tells you what is the
+[2:35:47] EOS token ID 32,000 right when you look at this hm is that a
+[2:35:52] good idea 32,000 32,000 what is the EOS token ID right 32,000 okay that's fine
+[2:35:58] the pad token no h is that a good idea like you have to think about like why
+[2:36:02] these why they there how many layers does P3
+[2:36:06] have it's 40 right so 40 layers um how many positional encodings does it have
+[2:36:12] so how long what is the context length it is 1 13 1 072 that's the context
+[2:36:17] length um remember it's 100 so this model the V3 medium is 128k right it's
+[2:36:23] not 1 128 right just be careful it's actually 128k right it's
+[2:36:29] 131072 um there are other issues with this model as well um okay this is okay
+[2:36:35] that's the okay that's probably okay probably don't use the instruct version
+[2:36:38] instruct sorry the we CH choose the small
+[2:36:41] version um this is a smaller version there is a thing we noticed is a sliding
+[2:36:46] window so mistro has sliding window um sliding window essentially attends to
+[2:36:50] only 248 tokens um and this just makes training much faster um and does anyone
+[2:36:56] notice what the problem is for this why is it 2047 anyone notice any
+[2:37:01] issues yes well it's not a power of two but correct so is that weird I mean
+[2:37:08] that's horrible yeah so I did ask the hugging face people and they said yes it
+[2:37:12] is a bug so they actually did fix it but then I don't know why they reverted it
+[2:37:16] back so I'm bit confused um they never they kind of forgot about this
+[2:37:20] yeah so it's actually it's supposed to be 2048 um yeah because that that only
+[2:37:24] makes sense because you're training onk like you know to you're training on the
+[2:37:28] correct context right then this sliding window makes no sense in fact I've seen
+[2:37:33] a lot of sliding window bugs recently yeah for some reason yeah I yeah I'm not
+[2:37:38] sure why um but I'm pretty sure this should be 2048 yeah I'm very
+[2:37:43] confident I I'm actually 100% show is 2048 yeah it's not and yeah so the these
+[2:37:50] small issues are they need to fix um they still Haven not fixed um but when
+[2:37:55] unof it's fixed so we actually uploaded models which fix them right so if you go
+[2:37:59] to our unso hugging face repo we actually have models which we fixed all
+[2:38:04] of them oh this is too big um where is the Fe one oh I didn't put it up okay I
+[2:38:11] need to find the Fe one now um where's V oh there V3 mini 4K instruct right if
+[2:38:18] you go to files you go to config.js we fixed it all right and there's other
+[2:38:23] things that we did to fix it um for example the pad token ID is 30 okay
+[2:38:27] that's actually wrong okay okay I need to fix my own okay anyways um there is a
+[2:38:31] bug which we discovered ourselves it should be 30 this is actually wrong
+[2:38:36] another thing is you must not make the pad token the same token ID as EOS never
+[2:38:40] never never never never um this must be a different token to the EOS token um I
+[2:38:45] do not un if we automatically fix this during the loading it's just the config
+[2:38:48] itself is not not right um but that's okay Uno itself is fine um just a config
+[2:38:52] is a bit wrong um oh okay I found my own box but okay yes um so okay I'm not
+[2:38:59] gonna slow down keep going because there's a lot of
+[2:39:03] okay oh yeah yeah actually there okay there's not that much slid okay actually
+[2:39:06] there is oh okay I just noticed more okay um so another one is like fe3 used
+[2:39:13] um they merged the qk and K remember we did qk and V they're unmerged right the
+[2:39:18] weights are separate for the attention mates V3 did a very interesting move is
+[2:39:21] that they fused them into one Matrix and we found that to be very problematic for
+[2:39:26] fine tuning um because if you fuse them together um when you do lower adapters
+[2:39:31] you actually you actually only learn new extra weights and it's very less um so
+[2:39:36] please unfuse them um and we do this so our version of the V3 actually unus the
+[2:39:42] weights um you must unfuse actually I have to like highly suggest you to
+[2:39:46] unfuse the weights you can only fuse them if you want to do training fter um
+[2:39:50] this will make training like maybe 5% faster it's actually not that much it's
+[2:39:53] like two 2% you actually increase memory usage a lot so just be careful of that
+[2:39:57] as well um oh yes they actually did so this is the sliding window one they
+[2:40:01] actually fixed it um and then they unfixed it um I think they just forgot
+[2:40:05] about it I'll probably like push them again to fix it um and this is the
+[2:40:08] fusing of the weights um so we show that if you actually unfuse the weights so qk
+[2:40:13] and V must be separate you must not combine them um if you combine them you
+[2:40:17] actually have lower accuracy so please do not do that um for tokenization
+[2:40:22] remember this slide which I show you about the um the smiley faces are like
+[2:40:25] the spaces and each one's a different tokenization there are actually many
+[2:40:29] issues um for tokenization um this is a totally different SE separate topic from
+[2:40:33] finding bugs and issues in language models um this is a whole topic of its
+[2:40:38] own because tokenizers are very problematic um and they're very hard to
+[2:40:42] find and fix did I double this slide okay I double that um and also we have
+[2:40:48] new support which we have not announced yet which you can try out so lots of
+[2:40:52] people have asked us for how do we actually fine-tune a language model and
+[2:40:57] Export it to AMA um effectively um does does people do know what's Ama or no or
+[2:41:04] does anyone not know what's okay so AMA is like a interface
+[2:41:09] when you when you find a model you have to run it right you have to run the
+[2:41:13] model somewhere and just makes you run the model much easier um so like youit
+[2:41:18] chbt PT is like the running mechanism AMA is just like chbt but they don't
+[2:41:22] have the model you have to select a model um that's kind ofama um yes how
+[2:41:26] did you manage to like um so I've been working on converting uh creating model
+[2:41:32] files using U um the uh automated pipeline but we've been found many
+[2:41:40] issues trying to automate model file creation is this using unslot no using
+[2:41:46] Axel or something or other ones did you automat modify yourself or well we yeah
+[2:41:51] we because we need we need our own model files right also we do this
+[2:41:54] automatically now so we've un we actually we spent I spent like a few one
+[2:41:58] month on trying to automate the model file creation why we were struggling so
+[2:42:02] hard as a company yes um uh we I have code for that somewhere um okay open SCE
+[2:42:10] oh yeah it's already in the GitHub repost if you go to unso um you go to
+[2:42:15] chat templates we have code for that Lama it is feel very ugly um so these
+[2:42:20] are the chat templates for remember the BOS token someone mentioned you have to
+[2:42:23] add it um yeah add the BOS token this is the oama chat template um which we so
+[2:42:27] AMA has a Umama has a specific requirement is you must have a chat
+[2:42:31] template because if you don't use a correct chat template your model will
+[2:42:35] output incorrect like substandard responses um so this is the chat
+[2:42:39] template for like some of them I had to we had to write chat templates for all
+[2:42:43] of the architectures um and we have an automatic one so these are bakuna and
+[2:42:48] blah blah blah um alpaca skit style um Jemma the JMA style we also have that um
+[2:42:54] we have many many even a llama 3 chat template we have as well um now for the
+[2:42:59] automatic one so what we do is we can actually make an automatic chat template
+[2:43:03] a modifier for you automatically um and this makes your fine tune much more
+[2:43:08] accurately um wait I'll show you the where is the code for that um where is
+[2:43:13] the code okay you can see the code is quite large for the just the chat
+[2:43:16] templates right this is just for tokenization so it's not even the yes
+[2:43:20] this is aache 2.0 right yes it's aache yes it's it's open source yeah um wait
+[2:43:25] where is it okay so we have something called pass combined prompt which does
+[2:43:31] some open squar it didn't actually optimize this it does over squ I should
+[2:43:35] have done o of n but anyways it's O of n squ um checking the prompt um here's the
+[2:43:41] prompt format so we do it looks quite ugly the code for automatic model file
+[2:43:46] creation but we actually made it so you can actually
+[2:43:49] Auto automatically creates a modile from your chat template um you can see it's
+[2:43:53] quite ugly um but it works um and uh yes oh it's even more ugly y it's
+[2:44:01] quite ugly code um but unfortunately the model file is very hard to create
+[2:44:04] automatically and so we have the notebook which allows you to do this um
+[2:44:09] so so this notebook is in here alpaca so this one's for the alpaca data set and
+[2:44:16] so this is our installation llama 3 uh where is it so we we so we'll be using
+[2:44:22] alpaca gbd4 um gbd4 data set so you use alpaca data set and use gbd4 to create
+[2:44:29] the data set um and the trick is though um we also have a CSV file now so you
+[2:44:36] can actually upload a CSV file and use unsoft directly to find you in a
+[2:44:39] language model um and but the problem is a language model must have an
+[2:44:43] instruction and output right only two columns CSV files and Excel files can
+[2:44:48] have many columns colums so what do you do you have to merge The Columns into
+[2:44:52] one um so remember each of those columns in your Excel file convert them into
+[2:44:56] text and for example the Titanic data set you merge them to say they have one
+[2:45:02] siblings and spouses and so on right you merge the row into one row um and that's
+[2:45:07] what you do and with unstop you can do this now it's I still probably need to
+[2:45:10] edit the um the like syntax calling but this merging technique says okay your
+[2:45:18] First Column is called an instruction column and the two double brackets means
+[2:45:21] it's optional um so if if the input column exists then it will say the
+[2:45:27] instruction followed by your input is um and you can like make this very crazy
+[2:45:32] you can do as many columns as you like um I don't know if the syntax is useful
+[2:45:36] but like I will probably be editing this we're going to make a YouTube video
+[2:45:39] about this to talk about this um this is actually very important for fine tuning
+[2:45:43] um we noticed that every single provider requires you to use only one column for
+[2:45:48] instruction and one output column now you can have infinite columns well how
+[2:45:51] many you like but you must Define the chat template um
+[2:45:55] and and we also have a custom customizable chat template um so before
+[2:46:00] when you do F tuning of language models you have to use our Packa prompt um in
+[2:46:04] our other notebooks right below is an instruction that describes a task paired
+[2:46:07] with an input blah blah blah you put your instruction here you put your input
+[2:46:10] here and you put your output here right but notice what is the problem with this
+[2:46:14] is there a problem with this so you must only put one
+[2:46:19] instruction and one output or response right the input is a problem right so
+[2:46:23] how do you solve this you solve this by merging the input into your instruction
+[2:46:28] prompt right so this actually should be removed entirely right and your your
+[2:46:33] input should be something else and what you do is we can actually you now we can
+[2:46:36] do this now right so you must do you must put the input and you must put an
+[2:46:40] output right you can only use two columns now but you can use remember
+[2:46:44] even though you can only use two columns you can use this to convert your data
+[2:46:48] set into two columns um yes do you lose any of the semantic
+[2:46:54] meanings though oh no I don't think so no you don't think so no I don't think
+[2:46:57] so it depends on how you it depends on how you format the data set remember
+[2:47:00] it's a language model so you can do the more you tell the language model what to
+[2:47:04] do the better of course yeah but the problem is to do the model file creation
+[2:47:09] you must do two iterations repetitions of this right you must do instruction
+[2:47:13] response and then you do another one you must okay you must do this for unso I
+[2:47:16] found this to be very very important for the model file creation if you do not do
+[2:47:19] this you have dangling new lines and you actually make your model output terrible
+[2:47:22] um so you must do two repetitions of this okay it's a must must um and if you
+[2:47:27] don't do that we'll error out um and so once you do this we also have examples
+[2:47:31] of for example this is Lama 3's chat template right we again do two
+[2:47:35] iterations you must do two iterations most important um and when you finish
+[2:47:41] training the model um remember you can do runtime run all um you can do
+[2:47:45] inference now right continue the Fibonacci sequence your input is 1 one2
+[2:47:50] whatever and the next Mar sequence is 13 I think that's correct yes that's
+[2:47:55] correct um so your language model has learned how to do Fibonacci and because
+[2:47:59] it's a chat template you can also do you can shove in multiple messages into the
+[2:48:03] model um so this becomes a chat gbt for you this is the customized chat gbt that
+[2:48:07] you can use um and finally when you want to save the model um you can save it to
+[2:48:13] lower adapters so this only is 100 MB in size so once you f to the model you have
+[2:48:18] 100 m b but some people also want to like merge the model back um and that
+[2:48:24] will take 16 GB um but you must merge this for like Umama support and ggw and
+[2:48:29] stuff like that and what we sh for AMA support is you first have to like you
+[2:48:33] know install oama um you select what you want to save the model to ggw so this is
+[2:48:39] 8bit um we now support multiple quantization methods right you don't
+[2:48:44] have to do eight bit you can do like four bit five bit whatever you like and
+[2:48:47] this will be saved into one go much faster um in fact I think this will save
+[2:48:50] you like 20 minutes of your time um and we save this automatically um okay and
+[2:48:55] this does all the saving blah blah blah saves and we also you see we
+[2:49:00] automatically create an model file automatically using your chat chat
+[2:49:03] template and I can verify this is actually correct because I tried it um
+[2:49:06] and then when you want to serve the model file you can actually print out
+[2:49:09] the model file which we created and this is the model file um whoops I pressed
+[2:49:13] run already um anyways um and finally to serve it you can just do model file to
+[2:49:18] serve it um and you can serve this um and we do have a CSV version so you can
+[2:49:24] actually use the Titanic data set um okay it's loading um so if you want to
+[2:49:30] use a Titanic data set you can upload the Titanic data set right we I upload
+[2:49:34] the tianic CSV you can use the Cs CSV file for this um and again you have the
+[2:49:39] merger columns and so on right this is a more complicated example um in fact I
+[2:49:44] provide this entire example for you for the entire Titanic data set to merge all
+[2:49:47] the columns into one um and it's the same exact output so that's a notebook
+[2:49:52] that we're sharing for we did not release this yet so this is for you guys
+[2:49:56] to like experiment and see if there's any issues um yeah and just tell me um
+[2:50:00] we also have blog posts on our website which you can see um our unsu GitHub
+[2:50:04] repo um and we have stickers available um and they're very very cute for you to
+[2:50:10] take and than yeah and also yeah we have Q&A now yeah yes
+[2:50:15] oh did you meure did you measure the difference makes to write the CSV
+[2:50:21] content in English sentences as opposed to just D
+[2:50:27] the put Jason format the problem is if you put them in Json format you still
+[2:50:32] need to have instruction and output so how would you do that you need to have
+[2:50:36] two columns only for fine tuning can you do
+[2:50:42] like in your template here you have instruction and then you add all yeah
+[2:50:48] you add all the other colums onto it can you
+[2:50:51] just
+[2:50:55] instructions yes you could you could do the Json file yes you can um but we just
+[2:50:59] show you that you can do multiple columns now so like if you have like 10
+[2:51:03] columns you can now make the 10 columns into one um by merging them
+[2:51:07] together does that kind there's a big difference in representing that merge
+[2:51:12] columns as an English sentence for like a dictionary oh no you can't use you
+[2:51:17] mean like you shove the actual dictionary for fine tuning I you could
+[2:51:20] do that I don't I think you should do English language because a language
+[2:51:25] model predicts the next word Jason is probably less useful always convert it
+[2:51:29] into English I have the same intuition I was wondering if you measured research
+[2:51:34] paper yes it should be another research paper yeah any other questions so
+[2:51:40] there's a lot of upvoted questions from me on the chat sorry it's oh I was
+[2:51:46] wondering if you could take a look at them I oh yeah I oh yeah I didn't
+[2:51:49] actually check the slider questions whoopsies um it actually didn't load so
+[2:51:53] oh there's lots of questions okay I will okay oh okay oh okay oh okay I need to I
+[2:51:59] need to um answer each of them afterwards I think I'm already out of
+[2:52:03] time though so yes thanks a lot
+[2:52:10] [Music]

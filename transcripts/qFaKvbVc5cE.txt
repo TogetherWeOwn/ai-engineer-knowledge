@@ -1,0 +1,653 @@
+# title: Teaching Agents to Search with NVIDIA Data Designer — Dhruv Nathawani, NVIDIA
+# source: https://www.youtube.com/watch?v=qFaKvbVc5cE
+# speaker: Dhruv Nathawani, NVIDIA
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T03:27:21Z
+# sha256: ff9328df99a3fa484e0471df2f4ab8a61e050b9f3b7c9d91585bb261d655c0fc
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:12] The workshop is about something more generic and more powerful. It's about
+[00:17] how do we build data pipelines um using the tool that we created Nemo uh data
+[00:22] designer uh to be able to create or add any kind of functionality to a model or
+[00:28] an agent. So let's get started. And by the way, I
+[00:31] have a GitHub repo uh where I have some notebooks. So if you're interested, you
+[00:35] can scan the QR code or you can go to that GitHub repo. Um and I'll have the
+[00:40] same QR code on all the other slides as well. So if you miss it, there'll be
+[00:43] more chances to get it.
+[00:48] So what is the workshop about and what will we learn here? Um the first thing
+[00:52] we're going to learn is how do you actually take a target agent behavior
+[00:56] that you want and turn it into a data problem right? So basically can we
+[01:01] create data for this targeted agentic behavior and then can we train a model
+[01:07] to learn how to um uh do that task. And so we built a tool called data designer
+[01:13] to build uh synthetic data pipelines uh which does exactly that. And the use
+[01:19] case that we're going to target today is search. Um, and by the way, this is a
+[01:24] very reusable framework. So if you want to create data for something apart from
+[01:28] search, this is exactly how you would do it.
+[01:31] And there's two ways to participate in today's workshop. So um, we have, you
+[01:36] know, of course, you can follow live, try to run the notebooks, but since we
+[01:39] just have like probably an hour or less than an hour, um, you could also listen
+[01:45] now and then run the notebooks later. Um, so yeah, make sure you get the
+[01:49] GitHub link. And if you want the slides, I also have the slides on the on the uh
+[01:54] GitHub repo.
+[01:58] So you're going to need four things if you're going to follow along either now
+[02:01] or after the workshop. Obviously, you need a GPU enabled machine. So a cloud
+[02:06] VM or a workstation. Um, you also need a Tavi search API key. Tavi is a company
+[02:13] that does uh search for agents. If you sign up on their website, they'll give
+[02:17] you a thousand credits for free. And you need data designer, which is our tool
+[02:22] for creating data. It's fully open source. Anyone can download it, use it,
+[02:27] do whatever they want with it. And all the notebooks that I've provided um on
+[02:32] the GitHub repo.
+[02:37] So here's the agenda for today. So we'll first spend a few minutes talking about
+[02:41] what is data designer and why do we actually need a framework like this and
+[02:46] then we'll talk about uh the basics. Um there's three notebooks I'm going to
+[02:52] actually be showing you code. U the first notebook is about the basics of
+[02:56] data designer. How do you actually create data that you want? And then the
+[03:00] second notebook is about model context protocol or MCP. How do you actually uh
+[03:05] create agentic data? And then the third notebook which is what um is the super
+[03:10] interesting use case of search. How do you actually teach a model to do search
+[03:14] and then we'll leave some time at the end for questions.
+[03:19] So I want to start off with a quote from Andre Karpati and he said internet data
+[03:23] is not the data you want for your transformer. So this is um a very uh
+[03:29] valid point because internet data could be you know highquality sources like
+[03:34] Wikipedia or it could be you know someone's opinion on Twitter or X or
+[03:39] some other platform right so how do we actually know um what data is useful for
+[03:44] training AI models and what data is not useful so uh we need to process this
+[03:49] internet data curate it and then uh create training data from it so that's
+[03:54] the traditional approach approach. What we're proposing is that we could
+[03:59] actually synthetically generate data uh either from scratch or from a seed data
+[04:05] set. And so that's what data designer is for. So data designer is a framework to
+[04:10] create synthetic data. And what do I mean by um seed data? So
+[04:16] seed data like you could use Wikipedia data as a seed and then try to create
+[04:22] synthetic training data from Wikipedia. So your synthetic data is not just made
+[04:28] up by a model. It is grounded in real world uh distribution and real world
+[04:33] data.
+[04:37] So data design is a completely open-source framework. We have a large
+[04:40] team at NVIDIA that works on this. Um and uh you can just install it by uh
+[04:48] running pip install data designer. And I think um what's really um what
+[04:55] we're really proud of is data designer has been used to create six and a half
+[05:00] trillion tokens of um training data and this is increasing every single day. Um
+[05:08] and yeah we're keeping track of the GitHub stars as well. So if you like our
+[05:12] repo give us a star.
+[05:16] So uh what is synthetic data generation right? U well one way to do synthetic
+[05:21] data generation is take a loop run it a million times and then if you want to
+[05:26] create a product review data set just you know continually prompt a LLM saying
+[05:31] give me a product give me a review and then give me a customer profile that's
+[05:35] one way to create a data set but you're going to run into a bunch of issues if
+[05:39] you do that so what's missing um well diversity diversity diversity that's the
+[05:45] most important thing right if you continually prompt LLM after 10, 12,
+[05:49] maybe 20 tries, it's going to start repeating stuff. It's not going to give
+[05:54] you what you need. Um, you're also missing correlations between all the
+[05:58] features that you're looking for in your data set. Um, you don't have
+[06:02] multimodality. Um, you know, you're not really able to
+[06:06] steer the creation of that data set and there's no validation, verification, uh,
+[06:11] and so on. And if I create a data set, I can't really share it with you because
+[06:16] how do you actually take the uh process that I use to create my data set to
+[06:20] create something similar. So that's why we created data designer.
+[06:26] So how does it work? Uh we have many different columns or features in data
+[06:33] designer. U these columns are essentially um a data designer
+[06:38] abstraction. In data designer, we generate data
+[06:42] column by column. So first you have your seed column which is completely
+[06:46] optional. So I gave the example of Wikipedia which could be a seed data
+[06:49] set. Um we could use any data set as a seed. So anything which is a CSV, JSONL,
+[06:56] parket file. So you could use your own company data as seed. And then you can
+[07:01] try to uh add sampler columns to inject diversity. So let's say you are trying
+[07:07] to create a coding data set. Well, a very simpler sampler column would be
+[07:11] like easy, medium, and difficult coding questions. So that's a sampler column.
+[07:16] You could add which is difficulty. You could also add subsamplers. So for easy,
+[07:22] you could map it to a specific type of problem. For medium, you could map it to
+[07:26] a specific type of problem and so on. So we'll get into all of this. I know it
+[07:30] feels a bit abstract, but we'll get into all of this once we look at the code. Um
+[07:34] and then we have columns for generating text, for generating structured data,
+[07:38] for generating code. Uh we also uh data designer is now multimodal. So you can
+[07:43] generate images as well. Um and you can validate your generations too.
+[07:51] So the whole idea is we build a DAG or a graph which describes how your data set
+[07:56] should be and then this DAG once you're ready to execute on it you can just hit
+[08:03] one click and get a data set out of it. So there's three different notebooks
+[08:08] we'll walk through today. Um I know some of you are thinking well in 2026 he's
+[08:13] going to be showing us code right? I mean now there's codeex and cloud code
+[08:17] and all these amazing tools. So I think if you understand the code, it'll be
+[08:22] much easier to use codeex or cloud code to write your own uh synthetic data
+[08:26] workflows for you. Uh so we'll just take a brief look at each notebook now.
+[08:33] And by the way, this is our repo. So this is our data designer repo. It's
+[08:38] fully open source. Um and this is the GitHub repo that um I have created for
+[08:44] this workshop where we have notebooks. Um so you can try out notebook one 2 3
+[08:51] and then we also have um the slides here if you want to follow along or if you
+[08:58] want access to the slides after the workshop.
+[09:02] So let's go to the first notebook. So this is our intro to data designer
+[09:06] notebook. Can everyone see? Okay. or should I zoom in?
+[09:11] It's good.
+[09:15] Okay, so first things first, we set up our
+[09:20] environment. Um there's a bunch of uh prompts in here that we're importing.
+[09:25] And then what we do is we just, you know, import data designer. That's it
+[09:30] literally. Uh and once you do that, you see in data designer there's a concept
+[09:35] of model providers. Um, so we're currently using uh VLLM, so that's local
+[09:41] inference. So I'm running this on a on a on a Nvidia GPU cluster and then we have
+[09:46] access to different types of models, right? So on my local cluster, I have
+[09:50] access to GPTOSS 120 billion. You can use any model or any open model to
+[09:55] create synthetic data. Um, some closed models prevent you because of licensing
+[10:01] issues uh from creating data from it and using it for training models. But open
+[10:06] models are usually fair game. So I'm using this model and um the goal here is
+[10:11] can I actually take a data set of Wikipedia topics uh for this notebook.
+[10:16] So like you know different like uh what Wikipedia has so many different pages
+[10:21] and um uh many different topics. So we just made a list of those put it in a
+[10:26] CSV and then we basically just call our config builder with seed data set. And
+[10:32] so essentially now we're um trying to create a data designer workflow but with
+[10:36] Wikipedia uh topics. Um so once you do that you can add question difficulty.
+[10:43] You can say easy, medium, hard, however you want your data set to be. And then
+[10:47] there's weights you can specify. So you can have more medium questions than um
+[10:51] you know easy or hard. And then there's all kinds of sampler columns you can add
+[10:57] about question difficulty. So for example for easy you might do like
+[11:02] direct lookup or simple fact or definition right but difficult might be
+[11:06] you want something in more detail or obscure um and then once we get to the
+[11:11] LLM generated columns you just call this function add column and then you have
+[11:16] your prompt which is essentially going to um look something like this.
+[11:26] Just trying to find it.
+[11:35] Yep. So, you are an expert trivia question writer. Um, so here's a topic
+[11:40] difficulty question type. So whenever you put these uh ginger templating for
+[11:45] topic, what it's going to do is the topics you created in the previous um or
+[11:50] in the seed that you had from your Wikipedia, it's going to insert those at
+[11:54] runtime into this prompt. So essentially every prompt that the LM sees is now
+[12:00] unique and diverse. And so the model is going to give you diverse data when you
+[12:05] actually hit generate. Um and then um you you can also have
+[12:12] like a structured column. So a structured column is when instead of
+[12:15] trying to generate like text data um you can try to generate like a JSON or
+[12:20] markdown format or any custom format that you're interested in. Um and uh we
+[12:26] know that LLMs you know we have to be nice to them. We have to talk to them
+[12:29] but sometimes they may not give you that structured format that you want. So then
+[12:33] we just end up dropping those records.
+[12:39] So the way um data creation works is we have something called preview mode in
+[12:47] data designer. So essentially when you hit preview what's going to happen is
+[12:51] it's going to try to create three records for you and then you can go and
+[12:54] look at those records. So let's look at some records. So all of this will make a
+[12:58] lot more sense. So the topic here is the worldwide web. Um, and the question or I
+[13:04] guess some consortium of the worldwide web and the question is which W3C
+[13:09] recommendation is identified by the same three-letter abbreviation that serves as
+[13:13] a airport code for some city in Norway. So there's no way I would know the
+[13:17] answer to this question, right? That's why these questions are essentially hard
+[13:20] because you want to invoke the model to do search, right? But in this first
+[13:24] notebook, we're just trying to create question answer pairs. So uh which is a
+[13:29] very simple data set. So I guess this is the answer the model came up with. And
+[13:32] then you can also add LLM as a judge to score how your model is doing. So this
+[13:37] is the question the model came up with. This is the answer it came up with. And
+[13:42] then um this is the question quality. So we can have another model judge what uh
+[13:48] it thinks of the question that the uh previous model created um and so on. So
+[13:53] in the end you end up with a data set like this. And by the way, we have a a
+[13:57] function that you can just push your data sets directly to hugging face. Um
+[14:01] so it's super easy to use and um you can also visualize all of
+[14:07] your questions here as you can see. And then you can get some stats about your
+[14:12] data set. Obviously we generated only three records here. So uh you know these
+[14:16] stats are not very meaningful but if you generate like hundreds or thousands of
+[14:19] records you could do that. And then we have something called batch mode. So
+[14:23] which is data designer.create create and here instead of a 100 I could just you
+[14:27] know put how many other records I need and then I can go and create all these
+[14:32] records and as I mentioned previously we generate data column by column so in the
+[14:38] batch mode first you generate the questions and then you generate the
+[14:43] answers right so this is obviously a very simple example and then you have
+[14:47] the LLM as a judge um and here's your final data set that's
+[14:51] what it looks like so That was the first notebook. I think it's quite
+[14:57] straightforward once you look at it and try it out. Um, we have a second
+[15:01] notebook which focuses more on MCP and then we're going to build to the third
+[15:06] notebook which I think everyone will find interesting because that's where
+[15:09] we'll actually talk about search. Sorry.
+[15:15] >> Yeah.
+[15:18] >> Oh yeah. The all the GitHub links are the same. I'm just putting them in every
+[15:22] single slide. So, if you missed the first one, you can you can get it. But
+[15:26] I'll pause here for a minute if you want to scan.
+[15:37] So, um let's talk about MCP. So, MCP is a standard which allows um an agent to
+[15:46] essentially connect to tools, right? So the tool here is tavly which is nothing
+[15:50] but a search tool for agents. There are many other search tools as well. Um so
+[15:56] that's basically the um uh what what we need the mo what we're trying to teach
+[16:02] the model here is how do you do search right so uh tavly is a good tool for the
+[16:08] model to use to learn how to do that search. Um so going back to the second
+[16:13] notebook.
+[16:18] So here what we'll do is we'll just build upon some simple concepts from the
+[16:22] first notebook and we'll add um how to create agentic data. So again you have
+[16:29] the imports you have the the model configs and then the same seed data set
+[16:35] the same sampler column. So question difficulty, question type and so on. And
+[16:40] then you actually create the question and then at the end you get like a
+[16:44] config, right? I don't know why it's printing printed this in like uh light
+[16:48] color but yeah this is essentially your graph um that you're creating and then
+[16:53] you have the answer. So it's the exact same thing except now when you actually
+[16:59] create the answer you add this tool alias here. And so the goal is instead
+[17:06] of just trying to answer the question, the model is now going to use a tavly
+[17:11] search tool to try to find the answer on the internet. Right? So that's we're
+[17:17] build we're building upon the first notebook where we were just like okay
+[17:20] please generate a question and then please generate an answer. Now it's
+[17:24] please generate a question and then hey you have this tool available. Can you
+[17:28] use this tool to go to try to find the answer rather than trying to generate
+[17:32] the answer? So that's that's the difference between the first and the
+[17:36] second notebook. And then again you have the preview mode
+[17:41] where you can generate a few records and then you look at your records. And by
+[17:45] the way data creation is very iterative. It's not like one and done. So when you
+[17:50] create some data you look at it. If you're not happy with it, then probably
+[17:55] you go change your workflow, change your prompts and then you know iterate on it
+[18:00] and then once you're happy with it, you can send it off to batch execution. So
+[18:03] let's look at what um the second notebook produced. So let's say the
+[18:09] question is uh to which German city did Teleifan
+[18:14] move its headquarters in 1949. Does anyone know the answer?
+[18:19] No. Right? I mean I don't know the answer. So um
+[18:23] what we want to do is create questions that are difficult so it invokes
+[18:28] reasoning and tool calling from the model and so when the model is actually
+[18:32] trying to respond to this um it's as you can see here it's using tavly so the
+[18:38] first search it made is tell if you can moved its headquarters in 1949 to which
+[18:43] company so essentially it's using one search tool called here and then um it's
+[18:49] going to get an answer so this is the query from the model and then here are
+[18:52] the results. These are all the URLs and then for each URL it's going to give you
+[18:56] a title and then it's also giving you the content. So that's what Tavali gives
+[19:00] us right if you make a query or that's what it gives the agent when the agent
+[19:04] makes the query and then you end up with the response and then finally at the end
+[19:11] you can create your data set with batch mode just like we did last time. And if
+[19:17] you're thinking he just blazed through this whole first two notebooks, that's
+[19:20] because the crux of it is in the third notebook, right? So, um that's what I
+[19:25] really want us to focus on today. So, let's talk about search. Um cuz we just
+[19:30] went through a couple of notebooks showing us how to use data designer and
+[19:34] that's fine, but what's the problem we're actually trying to solve? So, um
+[19:39] like I mentioned before, I'm a research scientist at NVIDIA and we're also part
+[19:43] of the Neotron team. So, Neimotron is a collection of found open-source
+[19:47] foundation models um that we've created. Uh we just released our latest model
+[19:52] Ultra, but we also have two other models. So, we have three different
+[19:55] sizes of models. And so, as part of that work, we actually had to teach Neotron
+[20:01] how to do search. And that's very important, right? Because maybe this
+[20:06] feels like a long time ago now, but maybe two or three years ago, I'm sure
+[20:09] you all remember looking at like I don't know chat GPT Claude or Gemini and then
+[20:14] looking at the web UI and it says the knowledge cutoff date is December 2023.
+[20:20] So the reason it said that is because well you have to start training the
+[20:24] model at some point. So you have to stop collecting and creating data at some
+[20:28] point, right? So let's say they're training the model in January 24. by
+[20:32] December 23, they need to like um essentially freeze the data. So,
+[20:38] anything that the model knows after um December 23 is not part of its
+[20:44] training data. So, if you had to ask a question like what is the weather today,
+[20:48] there's no way the model can answer that question from its training data, right?
+[20:53] Uh question.
+[20:58] >> Yeah. So yeah, definitely scan the QR code. So
+[21:03] the idea is how do you actually um teach the model about current events because
+[21:08] learning about current events seems as important if not more important than you
+[21:12] know knowing about uh things from the past, right? So um that's why search
+[21:19] exists and that's why models need to learn how to do search. Um so coming
+[21:25] back to the slide um so teaching neotron models how to use search tools that was
+[21:30] our motivation and um um we essentially the model needs access to real-time
+[21:37] information to be able to do useful things. So how did we actually do this?
+[21:42] So before I get to how did we do this? We need something to measure progress
+[21:45] on. Right? So um in the foundation model community when you need to measure
+[21:51] progress on something you use a benchmark which is like a standardized
+[21:55] test set without the answers right like we don't have the answers so one of the
+[21:59] benchmarks for search is browse comp uh which is a really difficult benchmark
+[22:05] and uh the FIFA World Cup is going on right now so I don't know how many
+[22:09] soccer fans there are here but I'm I'm a big soccer fan but we don't call it
+[22:12] soccer but um between 1990 and 1994 four. Which teams played in a soccer
+[22:18] match with a Brazilian referee? Had four yellow cards, two for each team, three
+[22:23] in total, blah blah blah. I won't read the rest of the question, but it's it's
+[22:27] quite complicated question, right? There's no way that any of us know the
+[22:31] answer to that or maybe there's like, you know, someone who's um really
+[22:35] wellversed in this who has the answer at the top of their head. What we would do
+[22:40] back in the day like you know three four years ago is we'd actually try to break
+[22:44] a problem down if we had a complicated uh query like this and then we would
+[22:48] reason about what queries to actually make. We would go and search on Google
+[22:53] or elsewhere uh get access to more information and then reason about what
+[22:59] was our original goal, what information did we get access to and then proceed
+[23:03] from there and then finally arrive at the answer. Right? So the answer is
+[23:07] Ireland versus Romania. I I didn't know that.
+[23:11] Um so how did we actually create a data set that allows us to train a model to
+[23:17] go from 0% to 30% on this browsecom benchmark? Um so that's what we're going
+[23:24] to learn about today. So to do that we took we did something um uh we we used a
+[23:30] seed data set which I described earlier except our seed data set is not just
+[23:35] Wikipedia it's something that um is essentially a graph of Wikipedia topics
+[23:42] so it's called wiki data and what we did is we did a few hops along this graph
+[23:49] and that is our seed data set and I know the diagram on the right looks like a
+[23:53] tree it's not a tree it's a graph So um if it looks like a tree that's my
+[23:57] fault. Uh it should it should it should be a graph. Um and essentially um you
+[24:03] can see um on the right the first topic is Nvidia and then Nvidia is connected
+[24:11] to Jensen who is our CEO and then that is connected to Oregon State University
+[24:15] because Wiki Wiki data says that that's where he went to college and then that
+[24:20] college is located in Benton County and Benton County is loca is actually named
+[24:26] after a person called Thomas Hart Benton. So if you took um if you
+[24:34] randomly sampled an entity in wiki data and then did five to eight hops along it
+[24:39] and I'll explain why five to eight you'll end up um with a hop like this
+[24:45] like the green you know set of entities with like arrows in between. So that is
+[24:51] essentially our seed data set to create uh search riddles. So, one search riddle
+[24:57] that I could create from this, and I'm going to have to read this from my
+[25:00] speaker notes, is um
+[25:05] which company was founded by the person who went to college where the county was
+[25:10] named after Thomas Hart Benton. So, there's no way the LLM knows the answer
+[25:15] to that in the training data, right? Because if we give an agent the chance
+[25:20] to cheat, it's going to cheat. It's going to just give us the answer. it's
+[25:24] not going to use the tool calls or the tools sorry like search that we want it
+[25:28] to use right so we want to make the questions as difficult and as I guess um
+[25:34] riddle like as possible so we can invoke the search behavior from the model so
+[25:41] this is our seed so I I spoke about the first step which is create random walks
+[25:46] with seed and why four to eight or five to eight hops sometimes it just you know
+[25:50] if you do these hops it just goes completely off topic like It will say um
+[25:55] I don't know like u a person's name and then it will say well human being well
+[26:00] sure that is true but you know it's not really related like basically your hops
+[26:05] will go off topic so that's why we want to as a heristic stay between four and
+[26:10] eight that's what worked well for me and then you transform these seeds into
+[26:14] search riddles and then um you execute the search via the search tool which is
+[26:20] tavly so that's how you create a data set with a prompt and a with a search
+[26:24] prompt and a search response, right? And then we evaluate our data and then
+[26:30] something that's not mentioned here is, you know, we train our models, right? So
+[26:34] once you have the data set, you train the model with it and then you measure
+[26:37] performance on a standardized benchmark. So let's look at the notebook and see
+[26:42] how we can do this. Any questions so far?
+[26:49] Yes.
+[26:57] So the reason uh it was important to do I guess it's not difficult questions
+[27:02] it's questions that the model uh cannot find on the internet readily uh cannot
+[27:09] find answers readily on the internet too. So like if you took that full blob
+[27:14] of text that we had in the browsecom benchmark and you put that on the web
+[27:18] you're not going to get the answer. I mean you will get the answer because of
+[27:21] the AI search thing with Gemini now but that's what we're trying to teach the
+[27:25] model essentially. Yeah.
+[27:30] Okay. So um so this is the tutorial for the end
+[27:37] to end aentic search. So we already spoke about the way we do
+[27:43] this and how we create the data. We already spoke about how we import all
+[27:47] these um prompts and I wrote a function to like use Tavi with MCP. You can go
+[27:54] and look at the code later. Um and here is where we have our seed entities.
+[28:03] So this is the example I showed you. This is just one seed entity. So the way
+[28:08] uh my seed collection algorithm works is like you can run it a million times and
+[28:12] you get million different hops along wiki data right so those are just topics
+[28:17] we want to ground our search riddle creation on
+[28:21] so another topic is um we like modern art and like I'm not
+[28:27] really an art buff but so I don't understand most of these words but
+[28:31] essentially this is like another seed hop that you can
+[28:36] So the way to create this data set is um well you are an expert search agent that
+[28:42] uses web search to answer questions accurately
+[28:46] provide valid JSON with the final answer supporting URLs and a short
+[28:50] justification and here are the tools you have available. You have one tool which
+[28:54] is tavly search and then here's some usage guidelines for the tool. So, like
+[28:59] we're like, "Okay, please please don't use more than like, you know, don't
+[29:04] don't like call the tool like a hundred times and spend, you know, $1,000 or
+[29:08] something." I guess those are like all kinds of instructions you can put in
+[29:12] there, but essentially um uh jokes aside, what you want here is um your
+[29:19] agent shouldn't go crazy and try to like you know spend way too much money
+[29:24] answering a question that's very easy or you know something like that. So that's
+[29:29] why we have all these instructions and we also have an example. So this is um
+[29:35] um something like in context learning, right? So you put an example into the
+[29:40] prompt and then the model can essentially um learn from that example
+[29:44] how to actually call the search tool. So here's your prompt that you want to
+[29:50] create. So here what we do is um we collected the wiki data hops. We can
+[29:58] insert those hops into the prompt here uh which is our um you know seed entity.
+[30:05] And then uh we ask the model to essentially come up with a question um
+[30:11] using any or all of the seed entities from this hop. And then we ask the model
+[30:19] to create a response using uh this agent
+[30:24] solution draw which I showed earlier. So in the in the second notebook. So
+[30:32] once you do this, you'll end up with a preview data set. And so here's our
+[30:37] preview data set. So Indian Council of Medical Research is the start entity for
+[30:42] the seed. And then apparently that's located in a city called Bhuaneshwar
+[30:48] which is a capital of some state in India. Uh so that's our seed path. And
+[30:54] then here is the question that the model came up with.
+[31:00] And then this Asian solution draw is not displayed in here. But if you look at
+[31:04] it, we can we can see what it looks like here. So it did a bunch of tool calls.
+[31:08] It reasoned about the question and then it's trying to find the answer on the
+[31:13] internet. So that's how you create um a search
+[31:18] tool called data set. And I guess I'll pause here for questions and then we can
+[31:26] move on to the next few slides after that. Any questions? If something was
+[31:32] Yes.
+[31:51] Yeah, >> absolutely.
+[31:56] >> Yes. So we moved the bird benchmark from 26 to 41%. So you asked the you know
+[32:02] exact right question and we have a blog post on this as well. Um you can read
+[32:07] about it. Um so all the data sets we've created with data designer um we have
+[32:13] blog posts and you can see right here so I was involved in this work as well. Uh
+[32:20] so yeah this talks about SQL and I can also share the link with you after um
+[32:25] but essentially data designer can be used to create any kind of data set for
+[32:30] training AI models possibly other data sets as well if you're looking for test
+[32:34] data sets not related to model training and so on. Um and we have a bunch of
+[32:39] data tools that we've created in our team apart from data designer that I'll
+[32:43] talk about in the end.
+[32:55] >> So the soda is 70 on bird is because it's agentic. Our um current SQL data
+[33:02] set is not agentic. And um also a sort on benchmarks is very much model
+[33:09] dependent. We're talking about moving uh Neotron Nano which is our small size um
+[33:16] LLM or SLM. Okay. I don't I don't know if you can call it an SLM because it's
+[33:20] an MOE but it's an LLM. And so um for that model size it's a pretty
+[33:25] respectable performance on board. Yeah. question.
+[33:47] >> Yeah. No, this is a deterministic algorithm to create the seed data and
+[33:51] then the uh tool calls and the agentic stuff is in creating the actual like
+[33:57] performing the actual search once you have the question and creating the
+[34:02] trajectory. We call it a trajectory. So creating the search trajectory this is
+[34:06] deterministic. This is just something I came up with to create seed data. Yeah,
+[34:11] you can have any kind of seed data. Maybe like you know you can come up with
+[34:15] a better way of creating seed data than this as well.
+[34:26] >> Oh great question. So we could do that. Um we have created data sets that can be
+[34:32] used in pre-training and post- trainining. My main focus is post-
+[34:36] training um or you know creating data sets for post- training. So this
+[34:40] specific uh um I guess project was SFT uh in posting.
+[34:48] Yes,
+[34:52] >> there's no reason apart from the fact that uh I think someone at Nvidia did a
+[34:56] deal with Tavly to get credits. You can use Exa. Exa is another search agent uh
+[35:00] provider. You can write your own search tool. Um I guess so. Yeah, there's that
+[35:06] as well. >> Yeah.
+[35:11] essentially.
+[35:17] >> So the golden responses are generated by um tail designer using the model that
+[35:24] you choose and so um in the first notebook um yeah and sorry I think I
+[35:31] think um you know I went a bit quick because it's we just have an hour for
+[35:34] this workshop uh previous version of this workshop was 2 hours. So the model
+[35:39] that I used is GPDOSS120B to create the data. Um but data designer
+[35:44] is not just a collection of LLMs that you can use to create data. It has a
+[35:49] bunch of LLM and nonLLM models as well working together to help you create
+[35:54] diverse data.
+[35:58] >> Say that again. >> This is SC. Yeah. Uh what do you mean?
+[36:07] Yes. >> Yeah.
+[36:17] >> Yeah. >> Yes.
+[36:23] >> Yes, you are distilling. But in some cases, you can even go beyond
+[36:26] distillation. And that's the case that I'm trying to make because we have built
+[36:30] this uh tool that allows you to create diverse data. So for example, a
+[36:34] completely different use case that I was working on. GPTOSS gets some percentage
+[36:40] on this uh benchmark called strructal which is a way to measure how models do
+[36:46] on JSON, markdown, XML, YAML and CSV formats. And Neotron actually distilled
+[36:52] from GPTOSS but went beyond GPOSS's performance. So it's distillation but it
+[36:58] can also be more powerful than that because of all the things we've built
+[37:01] into data designer. Yes. >> How can I use data designer?
+[37:07] >> You can use data designer for RL. >> So let's say uh and by the way we're
+[37:13] doing this for search right now or or the team at NVIDIA is doing this for
+[37:16] search. So instead of trying to create the golden solution like how he
+[37:20] described it or or you know um executing the search riddles as written on my
+[37:25] slide, you just don't do that step and then you essentially end up with a data
+[37:29] set full of prompts and then we have a tool called Nemo Gym which is
+[37:34] essentially um an RL um reward function. You know I guess it's an it's a it's a
+[37:41] tool to basically teach your models how to do RL. But the thing is in Nemo gym
+[37:46] you write like a a function that essentially gives you a reward and then
+[37:51] you can use our uh any RL training framework to execute in real time with
+[37:58] those tools and then provide a reward in RL.
+[38:10] >> It's a great point. We're thinking about how to do this actually currently. But
+[38:13] to build something generic is the is the challenge, right? Like we don't want to
+[38:17] build something specific to one use case. Yeah.
+[38:22] Yeah.
+[38:30] Is this reliable and accurate for
+[38:35] ETL?
+[38:42] So I haven't tried it myself but I think it is because it it should be because um
+[38:48] we've created a diverse set of data sets with data designer and I think at the
+[38:53] start we showed about 6 and a half trillion tokens and if it's not reliable
+[38:58] you should come talk to us and see how we can help you.
+[39:05] >> I can't hear you. Sorry.
+[39:11] Sorry, I'm not able to hear.
+[39:17] >> Oh, I I don't know about that. I I'll come back to you at the end and we can
+[39:22] we can chat more. Yeah, sorry about that. Okay. Um, we have about 15 more
+[39:27] minutes. So let me move on and we can have more questions at the end to
+[39:33] something really interesting which is evaluating your synthetic data right and
+[39:38] that's not an easy thing to do because without this evaluation step
+[39:43] the synthetic data is not that useful. So when I started just to give you a
+[39:48] sense of how SDG as we call it works synthetic data generation I started with
+[39:52] 50,000 seeds and in the end I ended [clears throat] up only with 7,000 high
+[39:58] quality endtoend SFT records and then I used that to train the model and we
+[40:04] moved the benchmark from 0 to 30 right so that's great but 50,000 to 7,000
+[40:10] that's a lot of you know um um funneling and filter ing for high quality. So what
+[40:18] like I'm trying to focus on here is that data quality is the most important thing
+[40:23] when you're trying to create data and um what do I mean by quality? It can be
+[40:28] task specific but it can also be generic like diversity is one way to um you know
+[40:33] one axis of quality I would say. Um so after that I created this function to
+[40:41] help us um show like this is what the LLM as a judge scores for each
+[40:47] trajectory um and what is like your um you know
+[40:51] number of words in your uh question or search query and then here is your keep
+[40:57] percentage 66% and so on. So what's really so you can take a look at that
+[41:02] function later but what's really interesting is how do you actually check
+[41:06] if the answers that the model got are correct or not. So I came across this
+[41:12] really interesting example and the search riddle was quite simple. It said
+[41:16] which comp which country owns US steel and I thought the answer is the US. And
+[41:23] so um I you know I I guess the agent predicted US in the training data set
+[41:31] and um my verifier said that it was correct but then I went and googled it
+[41:37] and apparently the US sold US steel to Japan I think if I remember correctly a
+[41:42] couple of years ago. So even my wiki data seed can become stale, right? And
+[41:48] so that's the real challenge is how do you actually evaluate and um uh tell if
+[41:54] the data that you've created is um good, accurate, you know, relevant
+[42:02] and so on. Um
+[42:05] so I guess if you go and implement a determinist I guess like a simple
+[42:11] matching function like how I did you'll end up with like 24% and then you'll be
+[42:16] like well my data is terrible why did I do all of this but that's not entirely
+[42:20] true because here low percentage I expected because I don't know how to
+[42:24] actually create that function. So this is an active area of research is how do
+[42:27] you actually evaluate this data? So I think evaluation from my perspective is
+[42:31] a very multifaceted problem. So you can't just take LLM as a judge and put
+[42:36] it in there and hope that that's going to you know give you everything.
+[42:42] Evaluation is a problem where if you check for a 100 problems and if you see
+[42:46] that those 100 problems do all you all you can tell from checking for a 100
+[42:51] problems is those 100 issues don't exist in your data set. there could be a
+[42:55] thousand other issues. So that's the challenge is how do you actually
+[42:58] evaluate the data? Um so we have a few different ways that we do that. Um one
+[43:04] of them is like I mentioned earlier LLM as a judge which is generic. Uh
+[43:08] something I did really interesting is I actually did LLM as a judge with uh and
+[43:12] I took the judgments and I sent them to human reviewers and I have those
+[43:16] reviewers um cross-check the judgments of the LLM and essentially give me
+[43:22] confidence that the LLM is judging my responses correctly. So that's one way
+[43:28] to do it. And then in search you could look at real-time information. So you
+[43:32] have to basically find a union of all these different different uh layers of
+[43:37] evaluation that's going to essentially give you enough confidence in your data
+[43:41] set. So that's it for the code. I know I
+[43:45] blazed through this but hopefully I've you know um given access to all of this
+[43:50] in my GitHub repo so you all can take a look. Um so let's talk about a few other
+[43:56] use cases. So like I mentioned earlier, we are the um you know part of a much
+[44:00] larger team that creates Neotron, right? So um my focus or my team's focus is
+[44:05] essentially creating data sets or creating a framework for creating data
+[44:10] sets and or I guess both of those. So there's all kinds of data sets we've
+[44:14] created. The first one that we spoke about today, search tool calling. Um and
+[44:19] then we also have a data set to do multi-turn tool calls. So, I think the
+[44:24] search one was very much single turn, right? Like we're going from prompt to
+[44:28] response. But what if you had multiple turns or what if you had multiple tools
+[44:34] um or you know not just search tools but like you might have a I don't know a
+[44:39] weather tool or a coding tool and so on. Um so we're working on multiple
+[44:45] different projects here. Another really interesting one is structured output
+[44:49] generation. I briefly spoke about it. There's a benchmark called strructal
+[44:52] which measures your performance on toml, json, yaml, csv, xml and all of these
+[44:58] are super important because everyone wants to use um you know agents to do
+[45:04] everything. Now, I'm sure you all have seen the the uh the blowtorrch meme uh
+[45:10] on LinkedIn or something, but but uh if we're going to be using agents as um the
+[45:17] central piece in software applications, then they need to reliably give us um
+[45:22] like a JSON format or a YAML format and so on. So, that's what we were focused
+[45:26] on there. Um we've also worked on SQL um that someone asked about here and uh
+[45:33] we've also worked on scientific reasoning. Um there's also pre-training
+[45:38] data sets that we've created using data designer for stem performance and so on.
+[45:43] Um and so I can talk about the best practices for generating data. Um I
+[45:49] won't go over this in detail. There's because you can always look at the
+[45:53] slides later but essentially diversity before volume. I think the Kim K2 paper
+[45:58] showed something similar which is 10 strategies one epoch is better than one
+[46:02] epoch. Sorry 10 strategies one epoch is better than 10 epochs one strategy. And
+[46:08] um you always want to use the cheapest correct column type. So like using a LLM
+[46:13] to create a sampler makes no sense, right? It's a complete waste of
+[46:17] resources. But using LLM to generate text data makes a lot of sense. So our
+[46:21] samplers are written in Python of course. Um and then you generate you
+[46:25] overproduce data and then you filter down like I mentioned earlier and then
+[46:29] you verify what you can uh iterate on the preview. I think the best way to
+[46:34] know if your data is any good is to actually look at the data. That's the
+[46:38] best way. Uh if you can look review a few samples and um of course what is
+[46:43] this idea of data designer? Essentially you're taking the data creation process
+[46:47] and making it um something you know version controllable uh sharable like
+[46:53] code. So essentially we're creating code that can create data. So now you can
+[46:58] share this code with anyone because you know we already built all this tooling
+[47:02] for sharing code and having version control and all of these other things.
+[47:06] So if you're trying to do search but not exactly the way I did it and just
+[47:10] slightly differently you take my code you modify it and you can create your
+[47:13] own data set from it. Um, so something that's super interesting.
+[47:19] I'm getting into the extra slides which I didn't think I would. I think I have
+[47:23] 10 more minutes. Right. So, um, this is something that's really interesting.
+[47:29] We've created uh something called personas. So, Neotron Personas USA um
+[47:35] it's also inspired from this other paper which is scaling synthetic data creation
+[47:39] with 1 billion personas. So, what is a persona? Right. A persona is essentially
+[47:44] um so we're trying to solve the problem here of how do you know if the data
+[47:50] you've created actually um adheres to like demographic
+[47:55] information or you know grounded in some real world distributions right that's
+[47:59] very important u so if I were to create a data set of healthcare records in San
+[48:06] Francisco California well I want to make sure that the uh the demograph the
+[48:11] actual demographic of San Francisco is reflected in my data set, right? So like
+[48:16] the number of uh you know there's all kinds of demographic features. Um so we
+[48:21] created a data set called Neimatron personas uh using data designer but is
+[48:26] also now a seed in data designer to create more data sets and um this
+[48:32] essentially allows you to learn from user data without actually leaking any
+[48:39] single person's information out there. So now you can train AI models and you
+[48:45] can learn from the aggregate of um you know people's information but you don't
+[48:49] actually have to have like for example my healthcare records you know directly
+[48:55] um uh being used in training an AI model. I I keep using the healthcare
+[48:59] example because I want to find a sensitive industry which is like you
+[49:03] know there's HIPPA compliance there's all kinds of regulations there right
+[49:06] that we have to respect. So, um, so this is a persona. Um, this person is a
+[49:13] 50-year-old pharmacist with a free spirit, balances her relaxed approach,
+[49:16] blah, blah, blah. But essentially, there's a persona, there's a
+[49:19] professional persona, um, first name, last name, middle name, gender, age,
+[49:26] um, all kinds of things. And we have a million of these. You can take this, you
+[49:32] can use it, um, however you please as seed to create more data.
+[49:39] So yeah, I think with the personas um I will probably stop here. So we have two
+[49:44] more minutes. I'll talk about these other tools and then we'll leave time
+[49:47] for questions. Oh, one question. Yeah. >> Yeah.
+[49:54] >> For
+[49:58] >> Yeah. Yeah. Yeah. Yeah. So essent that's essentially why we created it is to um
+[50:04] have a way to learn from aggregate information without actually like you
+[50:09] know having individual people. So like you could create synthetic social
+[50:13] security numbers. Now, they're not actually going to be like your social
+[50:17] security number, right? But I think the idea is like if there's um for example
+[50:24] um um I don't know what is a good example that I
+[50:36] >> Yeah. Yeah. >> Yeah. Yeah. Exactly. So for example, we
+[50:40] we actually created some tax data for u you know a customer and this tax data I
+[50:47] realized there's exactly uh seven people in the US who are below 18 earning more
+[50:54] than $10 million a year on their tax return but there's like way more people
+[50:58] who are older and they're earning you know x or y or z amount of money and so
+[51:03] the tax data that we create let's say we want to create a synthetic W2 form we
+[51:08] want to make sure that that form is not just random values from the LLM because
+[51:13] the LLM is not going to give you um if you have you asked LLM to tell a joke
+[51:18] it's going to tell you the same joke every time. So similarly, it's not going
+[51:22] to give you like numbers that are realistic, right? Like it's always going
+[51:25] to come back to the average of things. And so when you create data, you want to
+[51:30] make sure that that synthetic W2 form or 1040 form or whatever is actually um
+[51:35] adhering to real world distribution. So that's why we created this persona data
+[51:39] set. So we have a bunch of tools uh just two
+[51:44] minutes and then more questions. Sorry about that. Um so we have a bunch of
+[51:48] tools that we've created. Data designer is only the tip of the iceberg I guess.
+[51:53] Uh but it's our most successful tool so far because it's our oldest tool. Uh we
+[51:57] also have uh you know at NVIDIA we have data curation tools. So which is Nemo
+[52:05] curator which I'm sure there are other talks about this. I I believe I saw on
+[52:09] the schedule. Um it is very interesting. you know you have to take data uh real
+[52:14] world data curate it modify it post-process it get it to a state where
+[52:19] it's usable to train in LLMs or you can create synthetic data so I think it
+[52:23] depends on your use case like I'm not going to stand here and say synthetic
+[52:26] data is the best thing ever for everything but I think there are
+[52:29] specific use cases where you want to curate real world data or where you want
+[52:32] to you know generate synthetic data um and so we have data uh curation tools we
+[52:37] have data designer which is our synthetic data generation tool We have a
+[52:41] new tool called anonymizer. And by the way, all these tools are completely open
+[52:45] source. So everything that our org does at NVIDIA is fully open source,
+[52:50] including Neotron, including all these tools. Um, so you can use it however you
+[52:55] want. Um, so this data tool is called Nemo Anonymizer. And the goal here is
+[53:01] can we actually anonymize data? So, I don't know about you guys, but I I don't
+[53:05] know if I should be saying this when the talk is recorded, but I've been putting
+[53:09] all kinds of things into my agents like you know, I accidentally put my API keys
+[53:13] in there once or like you know some other sensitive information, right? All
+[53:17] this log data for like all your agents that you're using. You need some way to
+[53:22] anonymize it and before it's usable, right? So, that's what anonymizer does.
+[53:26] So, that's just an example, but there's obviously many other ways to use
+[53:29] anonymizer. And then we have Nemo safe synthesizer which is allowing us to
+[53:34] generate safe synthetic versions of sensitive data sets um as well. So yeah
+[53:39] come talk to me if you have any questions. Um here's my LinkedIn if you
+[53:44] want to stay in touch. Uh again you can use data designer. I would love for you
+[53:49] guys to try out the notebooks. I'm so sorry that we had to we had only one
+[53:53] hour so I had to just like blaze through all the code but you can try out the
+[53:56] notebooks. We also have the blogs if you're interested in text to SQL or some
+[54:00] some other use case. So um this is this is showing us how to use the personas.
+[54:07] Um I think there's a blog somewhere on how we created the personas data set for
+[54:12] the US. We took the census information and we used a PGM, a probabilistic
+[54:17] graphical model to essentially um create um like a connection between all
+[54:24] basically take that demographic information, process it and then try to
+[54:28] uh uh create a data set from it uh essentially. So that's what we did. Um
+[54:35] and so every country pro uh publishes this uh demographic information. So,
+[54:40] it's not really like um I'm looking at other slides now. We we've done a bunch
+[54:45] of these workshops recently. Um but yeah, there's all kinds of personas if
+[54:50] you're not if you're trying to build for something outside the US, if you're
+[54:54] building something for Japan, India, Singapore, Brazil, I'm sure we have more
+[54:58] now. So, we we have all kinds of personas data sets. So, um it's giving
+[55:03] us um um a way to uh create customized AI for whichever country you're
+[55:12] interested in.

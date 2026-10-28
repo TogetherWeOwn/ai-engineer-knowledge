@@ -1,0 +1,262 @@
+# title: Taking Reinforcement Learning Cross Datacenter — Nan Jiang, Modal
+# source: https://www.youtube.com/watch?v=maRzp4kImJ4
+# speaker: Nan Jiang, Modal
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T06:23:44Z
+# sha256: ae24c3f0101623558c70b601e92e89d113d768348d218c847f6117c8d59e6c41
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:01] [music]
+[00:12] All right, cool. Hi everyone. Uh, hope you all have a good time at the
+[00:16] conference. Uh, I'm N from Moto. Uh, at Moto, we spend a lot of time thinking
+[00:20] about GPU capacity, like where it exists, how do we make it elastic, and
+[00:25] what kind of workload can we actually use it. Today I want to talk about one
+[00:29] place where everything became like gets really interesting the IO post training.
+[00:34] A lot of IO discussion right now is about algorithm and the environments
+[00:37] sandbox PO GRPO like to call maybe low precision training maybe deterministic
+[00:42] kernels. Um but when you run those experiments at a scale the problem
+[00:47] became more physical. Where are the GPUs? Are they in the same region? Uh do
+[00:52] they have fast fabric? Uh can we get them right now? Maybe the default shape
+[00:56] of IO comput is too restrictive. Maybe some of the work we usually force them
+[01:00] one cluster uh like can actually run on scattered autoscaled capacity. So can we
+[01:07] do our cross globe? So this is my talk about many about. So to make this more
+[01:11] concrete let's start with the IO loop itself. So in the standard uh our post
+[01:17] training loop we can see there's a one trainer and the trainer updates the
+[01:21] policy rollout worker or maybe people call it sampler use those policy to
+[01:25] generate trajectories. The environment will be returning the reward and
+[01:29] observations. Those trajectory will go back to trainer for the next updates.
+[01:34] The important error here is the way sync in the default setup trainer and the
+[01:38] rollout will be living in the same cluster and the the way sync will be
+[01:42] super fast with RDMA. But that also couple the rollout fleet
+[01:46] to the to the trainer cluster. If the rollout needs to more to have more
+[01:51] capacity maybe no more nodes during runs um you are normally limited by the fixed
+[01:56] size during your trainer maybe your trainer cluster. So the ne next question
+[02:01] is what kind of compute shape did we actually force everything into?
+[02:06] On the left side is the cathedral uh one region one faster interconnect uh many
+[02:11] GPUs wild together. This is the right shape for the trainer. On the right it
+[02:16] is bro. This is where a lot of like usable useful usable compute actually
+[02:21] lives. Different providers different regions different price and different
+[02:25] availability. There's still a lot of capacity out
+[02:28] there, but it's not one perfect RDM in the island. This is the mismatch.
+[02:33] Available computer is distributed, but the default IO loop ask one tightly
+[02:38] coupled cluster. And that cluster is exactly the hot part hard to get.
+[02:43] IO wants all four of these at the same time. Enough GPU, same region, fast
+[02:48] fabric, and available now. Any of these like is manageable, but all four of them
+[02:53] that are pretty hard to get at the same time. ADMIC capacity is not elastic in
+[02:58] the way the inference capacity is elastic. You cannot assume you can grow
+[03:02] the trainer cluster uh halfway through a run just because roll out wants more
+[03:06] nodes for a trainer. So if the whole out loop has no live like has to live inside
+[03:12] the the one cluster rollout inherents the hottest part capacity constraint in
+[03:17] here. So that leads to the key question does the whole out loop actually need
+[03:22] that like this kind of shape. So let's dive into this training is one tightly
+[03:28] coupled job. Every step has collectives all reduced and the model parallel
+[03:32] communication that part actually wants one fast fabric a RDM connected rollout
+[03:37] is a fleet of serving jobs. It generates trajectories call environments or maybe
+[03:42] tools and they will be sending back data back to the trainer. So cross rollout
+[03:47] jobs there's no global or reduce. So the thing I want to move here is not back
+[03:52] propagation. Back propagation should stay in the cluster. The run the rollout
+[03:56] fleet is the one that can leave. More precisely, the movable unit is the
+[04:01] rollout serving island a coherent endpoint or maybe a local group of
+[04:05] endpoint or that they can be serving one policy version inside island. A large
+[04:10] model may still be having like local parallelism. They can do PD segregation.
+[04:14] They can have like local serving constraints. So across islands the
+[04:18] dependency is much lighter right now. policy version in and the trajectory and
+[04:23] the metadata out. So once we define the unit that way the architecture is much
+[04:27] much more natural. Once we define the movable unit the architecture is very
+[04:32] straightforward. In this case we just have trainer standing audic cluster and
+[04:36] that's where the back proper and the collective go the rollout side will be
+[04:40] fing out across the SPR. Each rollout island will be can be single engine will
+[04:44] be a local serving group depending on the model and the serving topology
+[04:47] there. across island there is no global or reduce that's the most important
+[04:52] thing there the global interface is very simple the trainer send policy weight
+[04:57] version out and the rollout sending trajectory and the metadata back at this
+[05:01] point the architecture depends on one remaining link the weight update so if
+[05:06] you want to if you want to send the full parameter like full checkpoint from disk
+[05:10] or maybe through the network then everything is like minimless and like it
+[05:14] will be breaking immediately so uh after this aggregation The things
+[05:19] we will be discussing about like the size of like go the size of the full
+[05:23] parameters go through the disk. Naively that means shipping all full checkpoints
+[05:27] every time rollout needs a new way version. At this scale the checkpoint is
+[05:31] very huge. So a Kim scale NVIP for checkpoint you have like 500 gigabytes
+[05:36] normally take a minute or maybe normally take multiple minutes to hours to just
+[05:41] do the way. So moving that over commodity link is might not be the
+[05:44] smartest choice because like uh when you're doing async maybe even even fully
+[05:49] async training you still want way updates latency to be as low as possible
+[05:53] like within seconds. So the problem here is not whether rollout can leave the
+[05:57] cluster the problem is like the full checkpoint is a wrong unit of
+[06:00] synchronization. So the next question is can we keep the
+[06:04] exact same serve version there but send a much smaller object. So this is the
+[06:10] bet. What if less than 1% of rollout visible weights got changed from one
+[06:14] version to another one by rollout visible weights I mean the weights in
+[06:17] the served rollout checkpoint uh not the FP32 optimizer states not the atom like
+[06:24] moments like the weights are the rollouts engine which will actually use
+[06:28] to serve maybe let's say the FBA or maybe MVP4 format if that's true we do
+[06:33] not need to shift the entire full parameter over the network we just need
+[06:37] to shift the change the server view the precision data got different. The
+[06:42] important part here is like still a bit wise reconstruction. The rollout engine
+[06:46] gets the same served served version. You would have gotten to as sync to the full
+[06:52] checkpoint there. So if this works then the link shrinks from hundreds of
+[06:56] gigabytes to maybe hundreds of megabytes and this is something smaller enough we
+[07:00] can just send it across like the network. So right now we need to justify
+[07:04] the less than 1% like claim. Why would this roll of visible like weights barely
+[07:09] change? Uh now we get we will get into this
+[07:12] mechanism. So it's kind of small atom like step meets finite precision. We
+[07:17] need we need a two uh prerequisite. The first one two two
+[07:22] ingredients. The ingredient one is the precision. The optimizer may keep very
+[07:26] high precision master weights but the next four will pass really a BF6 visible
+[07:31] view. That view has final resolution around a value of magnitude theta. uh
+[07:36] BF16 spacing is roughly theta over 128. Uh that spacing is people call it oop
+[07:42] basically the unit in the last piece. Basically it's the distance between the
+[07:46] adjacent representable BF systeming value. But the update only needs to
+[07:50] cross the near surrounding boundary to be viable to be visible. That boundary
+[07:54] is about half of the oop. So roughly like the over 256 for weight around one.
+[08:00] The BF systeming loop is around uh 0.78 and the near surrounding boundary is
+[08:05] about 00039. If the optimizer notched the master
+[08:10] weight by something like smaller than that uh the BFC visible value will run
+[08:15] back so you will not see any change from the weight perspective rollout weight
+[08:19] perspective. So that's the floor. The second primitive there is we call push.
+[08:24] So for Adam maybe add here we just like we ignore the weight decay turn the per
+[08:30] per sorry the the per parameter updates is the learning rate times a normalized
+[08:34] direction the raw gradient can be dense and can have very different magnitudes
+[08:39] across parameters and add like device by running uh gradients statistics. So the
+[08:46] per wise push is usually on the order of learning rates. The paper passed I sight
+[08:50] there they prove a bound. The addon step is at most B times the learning rates.
+[08:56] So you do not need to actually remember the exact like bound there. Like the
+[09:00] important notes is the adden makes the push small and very controlled. So at
+[09:05] our post training learning rates the push is very very tiny. So that's the
+[09:09] push. Combining these two primitives now we
+[09:13] have to we have a whole like better picture assert the value changed only if
+[09:18] the push clear the floor the push is the addent step roughly the learning rate
+[09:23] the floor is the nearest the BF16 rounding boundary roughly theta over 256
+[09:28] take theta equal one the BF6 boundary is about 039 a typical added step here is
+[09:34] around 3 millions so the update is more than a thousand smaller than the
+[09:38] boundary so the BF visible value will not change. This is not saying the
+[09:43] master weights uh in is frozen forever. It is saying the value that rollout
+[09:48] engine would serve does not change on this part. So the whole magnet is
+[09:52] pushing is is pushed versus four. Let's visualize this to have better
+[09:57] understanding. The x-axis is the weight magnitude and the y-axis is the update
+[10:02] magnitude. First we look at the red line. The red diagonal is the bxis
+[10:06] invisible boundary. It's like theta over 256. And now we look at the green bound.
+[10:11] This is the atom push. Is this roughly around the learning rate and with a
+[10:15] conservative upper bound? So now we ask like where the most point fits for most
+[10:20] of the weights. The red floor is above the green push. Those updates exists in
+[10:24] the master weights but they are not visible in the served BI6 view. This
+[10:28] step small weights on the left can move. Large weight on the right. They will
+[10:33] just stay the same. They will be absorbed it. This is the addon
+[10:36] absorption. This is why the serve update become very sparse.
+[10:41] In this case, the object will be shipped is just a diff uh is just a diff not the
+[10:47] entire FP32 automated state. We first look at the rollout view. The weight
+[10:52] cast or projected to the dype that the rollout engine will be serving. Then we
+[10:57] will be comparing the version t minus one and the version t. Uh in this view
+[11:01] the patch is the patch is the change the position plus like uh replacement bits
+[11:06] and also like some metadata. There are multiple lossless encoding. People can
+[11:10] do selective overrides. They can people can also do xor. The important part is
+[11:15] like there are bit equivalent bit level equivalent. So it's not a floating point
+[11:20] addition. So there's no additive uh delta drift. If a roller engine applied
+[11:25] the patch correctly, it reconstruct the sync server version bitwise.
+[11:30] So everything so far we explained is about the full parameter which is hot
+[11:34] power. So in full parameter reinforcement learning the automizer
+[11:37] update the whole model but the roll of view patch is sparse as the thing we
+[11:41] just explained lower is a small for a different purpose for for a different
+[11:46] reason. The base model is frozen and the adapter is small enough by construction.
+[11:50] So you do not need to pu So you do not need to have the push versus flow
+[11:55] arguments here. So full parameter delta is small by absorption and the lower
+[12:00] updates are small by construction. Let's dive into deeper about the paper
+[12:05] itself. So the paper they mentioned more stats I will be showing here. The
+[12:09] measurement is not great in sposity. It's not optimized state sposity. They
+[12:13] cast weights to BF16 compare consecutive version stness and they compare the the
+[12:18] version bitwise and they count what did not change over time across model family
+[12:23] the result around 99% of the time is bit identical per step is also it also
+[12:28] survives stillness even when the roller lax the changes set remain very small
+[12:34] the important part is not only the number it is the patch is lossless
+[12:38] change index plus imprint value reconstruct the exact same version.
+[12:44] So a common misconception there is like the work it works because all our
+[12:48] gradients are sparse. They are not. The paper reports the gradients are dense.
+[12:52] About 99% of the parameter gets non-zero gradients. The FP32 master update is
+[12:58] also dense. It's just small. The main thing is like the rollout weight change
+[13:01] is just 1% from the perspective of rollout engine.
+[13:06] So far we mostly talk about BF16 but the rollout of open serving even lower
+[13:10] precision such as like MFP4 FA and NVF4 and we can see many many model providers
+[13:16] doing this in the roll out. Uh this is not a training precision the training is
+[13:21] just like in the normal BFC although people can do QA on that. So for fixed
+[13:26] stale flow format the visibility for is roughly theta over two to the mantisa
+[13:31] plus one. So as you can see the F4 will be higher and FA also will be between
+[13:35] BF60 and F4 which means in even lower precision there will be less weight
+[13:40] changed. So plane flows are easy to reason about.
+[13:45] So each element has its own rounding sling one value cross the floor one
+[13:49] value they just flip and changed group scale such in4 they are they're a bit
+[13:54] different. This is the regime where many low precision serving system are moving
+[13:57] towards right now. For in four each ways is quantized against a shared group
+[14:02] scale and we can apply the same rationale and also we can observe
+[14:06] similar thing for NBF4 is hierarchical scales and uh we can see there are
+[14:10] different encoding and the displaying mechanism for MPV4.
+[14:16] So this is the from one internal run. So here's the model we serve like GM 4.7
+[14:21] air in FP8 and we can see in the beginning there are only like 0.15% of
+[14:26] weights got changed in the first step where the learning is high and after we
+[14:30] have more training step like when the adden is going relatively stable and you
+[14:35] can see the entire curve goes stable when you got only one 05% uh weight
+[14:41] change during each step. So we can see this pattern showing more
+[14:45] generally. We have a different research uh we saw different research sync have a
+[14:50] similar conclusion and we saw a different model providers such as cursor
+[14:54] composer 2 mi they all using add in the post training at at this point assume we
+[14:59] can produce exact rollout weights version cheaply. The next question is
+[15:04] how do we do this in practice? So from sparse delta to to our cross
+[15:09] globe. How do we do this with elastic rollout engines and also explicit stness
+[15:16] this is the whole shape the trainer saying a cluster after it got updated it
+[15:21] publish immutable rollout based version to a shared bulletboard rollout engine
+[15:26] leave outside of the training cluster which means they don't need to be RDM
+[15:29] connected with the trainer they can be in different region or different
+[15:33] providers. This is also request lane. You can see a
+[15:36] request does not just say give me the completion. You will also say which
+[15:40] version you will be sending request to and which version you will be accepting
+[15:44] and the response will come back with the version and also like exact same
+[15:49] information as if as if they are in the same cluster as the trainer. They will
+[15:53] be returning tokens log prop like router replay information and many more
+[15:58] metadata. The trainer writes immutable version to
+[16:01] the broad after optimizer state uh after optimizer step engine pool version and
+[16:07] the materialize it locally in the checkpoint layout. So they can just like
+[16:11] serve directly the artifact defined version the engine choose how to how to
+[16:16] load and shot it. It does not change it does it does not choose a different
+[16:20] server version since it will be displaying in a hugging HF will be saved
+[16:25] tensor format which is accepted widely by many rollout engines such as sjet and
+[16:30] VLM. So we can support any compatible back end attention back end back end
+[16:35] different parallelism compatible serving these type and any compatible GPUs
+[16:39] there. We can talk more about the scar itself.
+[16:43] The scikar is basically what makes a normal roller engine version aware. If
+[16:46] the version is already at acceptable commit version, the psychar just proxy
+[16:50] the request. If the engine is behind but can they can catch up the psychar just
+[16:56] apply the missing transition. If they cannot get there the the psychar just
+[17:01] simply return not ready. So this will be supporting elasticity
+[17:06] rollout and any idle GPU can just be used with design with this design to
+[17:11] support this aggregated roll out. So this is more like a system latency
+[17:15] analyst incluster way syncing is fast because they have RDMA. Uh a full
+[17:21] checkpoint across regions through network is pretty slow and but if we use
+[17:26] the delta if we use exactly what we described previously we can decrease the
+[17:31] number of like transfer transfer size from like 500 gigabytes to
+[17:36] 5 500 megabytes. So it will be like extremely fast in seconds.
+[17:41] So everything above was very general protocol. Stitch is one of very concrete
+[17:45] implementation from model that we imple implementing everything above. So on the
+[17:50] on the trainer side stitch publish uh what defines a rollout weights version
+[17:54] and on the contract side you will be pulling out and record everything on the
+[17:59] bulletboard and the only rollout side you will be pulling the latest weights
+[18:02] and it start doing way sync across different region and
+[18:06] different providers. So stitch itself is a very framework agnostic about trainer
+[18:11] and engine and also transport. It's very async first and also agent first agentic
+[18:16] first. By doing this we can have rollouts uh
+[18:20] engines like autoscale globally. Each one self-s sync it weights serve accept
+[18:25] version and return rollout metadata. That means scattered inference cap
+[18:30] capacity became one elastic rollout fleet. Instead of being limited by the
+[18:35] trainer cluster rollout can be the global pool. So inference capacity can
+[18:40] now become our capacity.
+[18:43] Last section we have some uh ongoing explorations.
+[18:48] So we can see a lot of model providers such as moonshot and also deepc4 they
+[18:54] have like they're adopting muan in their post training. Um does the spicy still
+[18:58] hold for muan because a lot of thing we discussed previously only for Adam.
+[19:02] Second question is async RL at the scale right now we can use the compute across
+[19:07] the globe then how like how scalable is the fully async RL this is a very
+[19:13] open-ended question there and uh third question is like does it generalize pass
+[19:18] because like we have pre-training mid training and SFT like do we have can we
+[19:22] apply same paradigm there last but not least we are working on
+[19:27] some very hot problem and come work with us you can check the link there model
+[19:32] Thank you.

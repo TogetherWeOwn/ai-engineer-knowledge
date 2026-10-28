@@ -1,0 +1,166 @@
+# title: Is Speculative Decoding Worth It? Profiling vLLM on NVIDIA Blackwell — Akamai
+# source: https://www.youtube.com/watch?v=XTpyNrEgJQ4
+# speaker: Akamai
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T04:05:41Z
+# sha256: 11266b2cdb3fb42ef821cf41bff841211b5ebf2cbe7a3b73de126d3c4a166c26
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:12] My name is Sheila. I'm a DA at Akami and we're here today to discuss um the topic
+[00:19] speculative decoding and how you can um figure out whether it's worth enabling
+[00:24] for your workloads. Okay, I'm a little anxious.
+[00:36] Okay.
+[00:39] So, typically when you ask LLM a question, there are usually two phases
+[00:42] that happen under the hood. The first is the model would read your prompt,
+[00:46] process all the input tokens and then build what is known as a KV cache um
+[00:50] which is essentially the model's working um memory um for the rest of the
+[00:55] request. And this happens only once. Um and then you have the decoding phase
+[01:00] which is uh when the model starts to actually write the answer. Um so because
+[01:04] every token depends on the previous tokens um this process usually happens
+[01:08] one at a time. Um and so imagine you're deploying an application that uses a big
+[01:13] model like llama 70 billion model. Um typically like this would require like
+[01:19] even up to hundreds like forward passes on the model and this is a very
+[01:23] expensive process right um and it can cause a lot of latency for your user
+[01:27] applications which um brings the question of like
+[01:32] what if you didn't have to use your bigger model to handle the token
+[01:37] generation. What if you use a smaller model to um do some of that guesswork to
+[01:43] speculate on a couple tokens? Um which is still an auto reggressive process,
+[01:48] but the whole point is because it's smaller, there's it's a faster process,
+[01:52] so it would be a cheaper process. Um the output is still the same because um the
+[01:57] target model, the main model that has the accuracy still has to verify the
+[02:01] tokens and it does this in one forward pass. Um so that's the idea behind
+[02:05] speculative decoding. Um I'll just leave this here for a second.
+[02:11] So as I said you have a small model um which generates
+[02:16] token typically you can set it between three to five for each cycle. The target
+[02:20] model would handle the predictions um like be able to scale like basically
+[02:25] approve or reject it. Um and then for all the for the tokens that are rejected
+[02:29] the target model would um recomputee the the token for that.
+[02:35] Okay. So, um this process it's great. It can
+[02:40] save you a lot in terms of inference generation, but it's not free. Um
+[02:45] because you're hosting now two models, you have to account for the memory
+[02:49] required to host that second model. Not that much since it's a smaller model,
+[02:52] but you also have to allocate extra space for um the KV cache for both
+[02:58] models. Um yeah so typically you would consider running speculative decoding
+[03:04] when you have um extra space in GPU um for example if your workload is high
+[03:10] concurrency your your GPUs are probably already busy trying to run all the
+[03:13] requests so it wouldn't make sense to implement speculative decoding but if
+[03:18] you have extra GPU space it's worth considering but uh we'll talk about how
+[03:22] to evaluate whether it's worth um and the first question is um choosing the
+[03:27] draft model. Um
+[03:34] yeah, so typically when you're deciding whether it's worth enabling, um can the
+[03:39] draft model predict as accurate as the target model? And then the other
+[03:43] question is whether um it's as fast. So you would typically choose a model
+[03:47] that's definitely like a fraction of the cost like um yeah, so these are the two
+[03:51] main um decisions that you have to balance, right? Um,
+[03:58] I'm just going to leave this here. Um, so for my situation, um, I will explain
+[04:02] why I chose these two models. For my demo setup, when I was running this, I
+[04:07] have access to one GPU. I was running on a Blackwell GPU and I wanted to run both
+[04:13] the baseline and the speculative decoding setup in one. Um so to be able
+[04:18] to do this I had to choose a model that was small enough to be able to fit
+[04:21] because I have to split the GPU utilization between the both servers. Um
+[04:25] so this is what that looked like for instance you can the baseline alone um
+[04:30] takes about 16 gigabytes of weight and then the draft model is
+[04:36] 2.5. So that leaves a huge amount and space for KB caching. Um, and then when
+[04:45] you're thinking about choosing the model, some of the things that you would
+[04:48] usually consider is um, first of all, like I said, it has to be smaller,
+[04:53] typically 10 to 50 times smaller than your target model. Um, it has to have
+[04:57] the same tokenizer. Um, ideally from the same model family, otherwise you know,
+[05:03] you would have to like manually translate between the different
+[05:06] tokenizers. Um, what's the other?
+[05:12] Yeah, those are the main things. I think I'm forgetting one. Um,
+[05:17] oh yeah, and like I said, the cost and accuracy. Uh,
+[05:24] okay. So,
+[05:29] oops.
+[05:36] So when I was running this, there's three questions. Um, speculative
+[05:40] decoding, there's some work loads that would benefit from it versus others that
+[05:44] wouldn't. Um, typically because the goal here is to get a smaller model that can
+[05:50] predict almost as accurately as the target model would. It helps with some
+[05:54] use cases when you have a workload that is more like highly structured like
+[06:00] coding use cases. Um, what's another one? Like writing JSON or SQL prompts.
+[06:07] Um, it would probably like benefit more versus if you were using it for a highly
+[06:13] creative use case like writing poetry or brainstorming or anything like that.
+[06:17] Yeah. So,
+[06:21] I think I have
+[06:25] this is a quick application. I'm not even sure if it's going to work, but um
+[06:30] so here I do have for the first demo, I just have um two tabs here. Um like I
+[06:36] said, this is just to focus on looking at how the acceptance rate performs
+[06:42] depending on the type of task that you have. Um so the first tab here is a
+[06:46] structured output. Um when I click this, it will run both at the same time.
+[06:53] Whoa.
+[06:57] Oh god,
+[07:03] I'm just waiting.
+[07:24] Technical difficulties. I'm not sure why my demo is not running. Um, let's see.
+[07:34] Oh, do I have to reconnect? Um, just give me one second. I think I might have
+[07:37] to restart the
+[08:03] Looks like I need to restart the VLM servers and my setup. Give me just a few
+[08:07] minutes. Is this on?
+[08:15] LSU I
+[08:53] Oh. Um,
+[09:00] should I Yeah, I think I need Oh, it's showing up. Okay, there we go. Um, so
+[09:05] yeah, I was saying this is a demo. So when I run this, I'll redo it.
+[09:17] So you can see um as expected with a speculative on the right side um it was
+[09:22] able to generate much much faster um 1.6 times faster. Um the key thing to note
+[09:29] here is how high the acceptance rate is which is the rate of the tokens that
+[09:35] were accepted by the the number of tokens that were accepted over the total
+[09:39] generated by the draft model. Um another metric here um you can see with the
+[09:46] speculative enabled um you we are able to generate a lot more tokens per second
+[09:52] um which improves the throughput. And then if I run it for the other
+[09:58] case.
+[10:09] So here it's another use case. Um as expected same thing. Um but in
+[10:18] this case I guess the main metric to see here is the low acceptance rate. And
+[10:22] like I said, this is because this is a more um there's more variety in how the
+[10:28] next tokens that would be generated because first of all, the temperature is
+[10:31] set high. It's a creative use case. Um yeah. Um what else? I think that's
+[10:39] pretty much for this um case. And then the other situation where
+[10:49] oops
+[10:52] oh yeah this is what I was I should have put this up here um just to explain when
+[10:56] it would benefit and then the other use case would be context length. Um so as I
+[11:01] mentioned earlier there's two parts of generating tokens. Um with speculative
+[11:07] decoding it's supposed to accelerate the generating part not the part where the
+[11:11] model reads the prompt. So typically if you have a use case where you need to
+[11:15] provide the model with a lot of context like for rag applications or um
+[11:20] analyzing lots of documents um with those situations um the model will spend
+[11:26] a lot more time with the portion of like building the KV caching um especially if
+[11:31] you're using it to do like a quick where the the generated tokens are much less
+[11:37] than the context like the input um Yeah. So ba I think the main point here
+[11:45] is just how to think through like what is your application doing? Um is it
+[11:51] highly structured? Do you have enough VRAM space to even consider it? Are you
+[11:54] doing more creative scenarios? Are you running a lot of concurrency um or not?
+[12:00] Like smaller batch sizes would benefit from this. Um
+[12:07] yeah.
+[12:11] Yeah, I'm gonna leave this slide here. This just basically summarizes uh what I
+[12:16] just went through. And if anyone has questions, I'll take one or two
+[12:20] questions now.
+[12:27] >> Oh, I can't hear you.
+[12:38] >> Oh, yeah. Um the question was are there particular
+[12:42] tools that I recommend for speculative decoding? So I implemented this with VLM
+[12:48] um the serving engine. Um they have really good documentation on how to get
+[12:53] started with it. This is the simpler one of the simple versions of speculative
+[12:57] decoding. There's a couple others like the engram medusa eagle that's more like
+[13:02] the architecture beneath is like more advanced. Um, but for getting started,
+[13:07] yeah, I would say you can't go wrong with just reading up I when I was doing
+[13:11] this, there's there's not much content out there on this, but I did find a few
+[13:16] like blogs. Uh, when you re when you type in circulative decoding, um, one of
+[13:20] the first blogs that will come up by general compute talks about more in
+[13:25] detail. Um, there's also like two research papers that were published um,
+[13:28] by Google and what's the other company? Yeah, it but that's more like goes like
+[13:33] more in depth. Yeah. Um, but I'm also trying to maybe like
+[13:40] make more content around this, like maybe like videos. It was kind of hard
+[13:44] to go through this. I I'm a little all over the place, but I would definitely
+[13:47] love to maybe like publish a blog or make snippet videos. Um, yeah, on like
+[13:53] YouTube or somewhere, but you can definitely find the resources.
+[14:03] >> Okay. Right. I should have covered that. Um, but I don't have the I should have
+[14:09] put a QR.
+[14:13] Oh, um, as I said, I I'm from Akamay. And if you're interested in like
+[14:19] learning how to replicate this, you can find it on our website, our GitHub,
+[14:23] GitHub. Um, Akami developers.
+[14:29] Yeah. Um, yeah. So we have a a lot of like different resources on here. Um I'm
+[14:36] focusing on in inference optimizations. Uh we have other people that are
+[14:40] focusing on building AI agents um and how to leverage our like manage
+[14:45] Kubernetes service, how to use Akami functions. So if you have time, please
+[14:49] go check out our GitHub pages and also we have a Discord channel that we're
+[14:53] trying to build up now. Um so it would be great to chat with some of you on the
+[14:58] side. Thank you.
+[15:04] >> [music]
+[15:12] [music]

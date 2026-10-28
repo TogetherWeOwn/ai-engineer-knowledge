@@ -1,0 +1,196 @@
+# title: How agents broke app-level infrastructure - Evan Boyle
+# source: https://www.youtube.com/watch?v=_-oIuRH4oGA
+# speaker: Evan Boyle
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T12:57:41Z
+# sha256: fc17aa252fc153f38c0de7f5b6a967c1ec7fa1db02a7b4886fc28c2d2c9c1cce
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:02] How agents broke infrastructure. Particularly, we're
+[00:06] going to focus on the compute layer
+[00:09] today. My name is Evan Bole, the founder and CEO in Genisx. I was an early
+[00:14] employee of Palumi and I've spent my entire career working on cloud and
+[00:18] developer tools. Typo warning. In the spirit of
+[00:21] embracing AI for this talk, all diagrams are AI generated, but 40 still has some
+[00:26] spelling issues. So, thank you for your patience. We all know this journey. We
+[00:31] start off as AI engineers with a simple prompt and a couple of tool calls and
+[00:35] typically this is enough to raise our $10 million seed round. But from there,
+[00:39] when rubber meets the road, we end up building workflows, right? We take that
+[00:44] fully non-deterministic code and make as much of it deterministic as possible.
+[00:49] That might mean chaining a couple of very specific tailored prompts together
+[00:52] that we've written eval uh and more carefully controlling the
+[00:56] context. This takes the runtime of our workflows from 30 seconds to a couple of
+[01:02] minutes. But eventually we all end up becoming data engineers because the most
+[01:08] challenging part of the problem is getting the right context into the
+[01:11] prompts. And that means that we might have to crawl a user's inbox, ingest
+[01:16] code from GitHub or many other artifacts that require lots and lots of LM
+[01:20] processing. But our assumptions around infra have
+[01:26] changed. In web 2.0, you would build a simple web service where you'd make an
+[01:31] API request, maybe talk to a database to fetch some data, and return all that
+[01:36] back in a few tens of milliseconds. In AI applications, our P1 is a couple of
+[01:42] seconds at best, and that's only if you're using a fast model or if you hit
+[01:46] a prompt cache. In the previous era of infrastructure, if you had a request
+[01:51] that took a couple of seconds, your on call was getting paged. Um, and so the
+[01:56] infrastructure that was designed for the last 10 years of the web is not really
+[02:01] designed for the applications that we're building
+[02:03] today. LM applications are really built on shoddy uh foundations. It's really
+[02:09] hard to build reliable apps today. And if you're like us and you run a tight
+[02:12] ship, you might have a Slack channel that looks like this where you subscribe
+[02:15] to, you know, issues and outages from your dependencies. But luckily, this one
+[02:20] only lasts, you know, an hour. By 10 p.m., it's
+[02:23] resolved. But, oh, at 1:20 a.m. we're back at it. And 4:00 a.m. it's still
+[02:28] going on. But surely, you know, Chat GPT and OpenAI have have better
+[02:33] availability, right? Well, I wouldn't really trust this 99.9% uptime number.
+[02:38] And no, it's not lots of yellow and red in this graph. But maybe we could have
+[02:43] failed over to, you know, Gemini during this time period. Nope, we have an
+[02:48] outage during the exact same time period. And even if you don't hit an
+[02:53] outage, you still have rate limits to contend with. A lot of these traffic
+[02:56] patterns are going to be extremely bursty as you batch process documents
+[03:00] from a user or you onboard new customers. And not everybody has tier
+[03:05] five rate limits that require spending thousands of dollars just to get to that
+[03:09] point that you can start experimenting with high levels of
+[03:13] traffic. So we start off nice and happy with our prototype. Maybe we built
+[03:18] something on top of the next.js chatbot template. That's easy, right? But as our
+[03:22] workflows start running for minutes and hours, us full stack AI engineers
+[03:26] accidentally become data engineers. So how do people solve this
+[03:31] today? You know there this used to be something that was rather niche
+[03:35] longunning workflows data engineering. So there is an existing set of tools.
+[03:40] People build these Rub Goldberg machines on top of cues like SQS. They might use
+[03:44] batch processing data engineering tools like Airflow or durable execution
+[03:48] engines like Temporal. But me personally, I'm a Typescript developer.
+[03:52] I'm a full stack engineer. And frankly, I don't want to use anything that was
+[03:56] designed by a Java engineer. No offense. I'd much rather use serverless. What
+[04:02] about existing serverless providers? They aren't really well suited for these
+[04:06] kinds of longrunning workflows. Uh most of them time out after 5 minutes and
+[04:11] some of them even limit outgoing HTTP requests and for all of them they don't
+[04:16] really have native streaming support. Streaming is something that you have to
+[04:19] bolt on at the application layer and not something that's a native part of the
+[04:25] infrastructure that you're building on top of. something that's really
+[04:28] important when you're building an application that might run for multiple
+[04:31] minutes. Users might refresh the page. So you want
+[04:34] resumability. And so let's look at some of these common product experiences.
+[04:38] We're going to look at both onboarding where we might ingest a bunch of data
+[04:42] from the user with an LLM upfront and then also a product experience where
+[04:46] we're going to run an agent that's going to take multiple minutes and we have to
+[04:49] keep the user engaged during that time period. So during this onboarding
+[04:53] experience, the user puts in their URL, right? Right? And we use a single LM
+[04:57] call to grab some information from that web page and then detect all the pages
+[05:02] that we're going to scrape. Right? And now we've kicked off that scraping job
+[05:06] in the background and it's going to take multiple minutes uh and we're going to
+[05:10] be making hundreds of LLM calls to extract content from those web pages and
+[05:13] enrich them. And we want the user to be able to start using the product right
+[05:17] away. So this ingestion can take, you know, a varying amount of time, but we
+[05:22] want users to use the app immediately. If we wait 10 minutes, that means we're
+[05:26] going to have increased fall-off in the funnel. So, we have to run this in the
+[05:29] background, right? And we want to show users the status of this ingestion as
+[05:34] they're using the product. We want them to know, hey, as time goes on, we're
+[05:37] going to enrich more data and your experience is going to get
+[05:41] better. Next, this is an example of building a content generation app,
+[05:45] right? We're going to write a blog post uh about building high performance web
+[05:50] apps with Versell and Nex.js. And this agent, we tell the user up front, sit
+[05:55] back and relax. This is going to take a couple of minutes. And on the right,
+[05:58] we're showing them all of the different steps, right? We're running research.
+[06:02] We're writing an outline. And we're writing each section
+[06:06] step by step. Since this takes multiple minutes, it's really important that if
+[06:10] the user leaves the page or navigates away that they don't lose this context,
+[06:15] right? And so that workflow that we built when working on a previous product
+[06:20] took 3 to four minutes. And we really felt a lot of friction experimenting
+[06:25] with longer workflows. Like we were deterred from making our workflows
+[06:28] longer than five plus minutes because that meant that we would have to make
+[06:32] deep infra changes due to limitations from our serverless provider. Eventually
+[06:38] we did rip it out and it was a bunch of work but it took us much longer than we
+[06:41] should have to run those experiments uh because of the amount of work that was
+[06:45] required to migrate off of you know our easytouse serverless offering.
+[06:52] Also, we need to stream both the final content as well as the intermediate
+[06:56] status. And if the user refreshes the page and comes back, we want them to see
+[07:00] that same thing, just like you get with deep research, right? And if there's an
+[07:04] intermediate error, users are going to be way more frustrated if it takes them
+[07:08] 5 minutes to get back to that same point uh versus if it's just, you know, a
+[07:12] simple web page that you have to refresh or a form that you have to resubmit.
+[07:18] So we built a lot to make this easy in our core product uh when we were working
+[07:23] on you know agentic workflows uh and we ended up turning a lot of this into an
+[07:28] open source library. So we built a simple component
+[07:32] model that's infra in infrastructure aware right uh the the framework itself
+[07:38] is very aware of the infrastructure it's running on and the infrastructure is
+[07:41] aware of the framework and that's so that we can provide things like
+[07:45] resumable streams for intermediate status uh and final output and we call
+[07:50] this a bit of an anti-framework. It's unopinionated and focused on building
+[07:53] blocks. uh it's it takes inspiration from React's component model and applies
+[07:57] it to the back end because we know that abstraction is bad when building agents.
+[08:02] You don't want to abstract. You want to share, you want to compose, you want to
+[08:05] reuse code. So we have components that are reusable, item potent, independently
+[08:10] testable steps and then workflows that are collections of components that run
+[08:15] together. So this is a simple component that uses a wrapped version of the
+[08:19] OpenAI SDK. It's wrapped so that we can get a bunch of other tooling for retries
+[08:23] and tracing and things like that, but it's the same exact OpenAI surface area
+[08:28] that you would expect. We give you full access to the model. So, it's just a
+[08:32] prompt, a little bit of context that's inject ingested and it returns a
+[08:35] response. So, a simple function that takes in some prompts and returns some
+[08:39] output and it can be independently run or tested. We can also combine it
+[08:44] together into what we call a workflow. This workflow fetches the front page of
+[08:48] Hacker News, analyzes those posts, generates reports, writes a tweet, and
+[08:52] then edits the report. And with this, every single
+[08:57] step, we're going to get a retry boundary, an error boundary off each
+[09:01] component. And we're going to get traces both at the top level of the workflow,
+[09:06] but also all of the components that run within it. Each workflow can be turned
+[09:11] into a set of REST APIs automatically by the framework that support synchronous
+[09:16] invocation as well as asynchronous invocation and the relevant API so that
+[09:21] we can retrieve the intermediate stream and the final output stream if
+[09:26] needed. When we run this workflow, we see that we get a trace. This trace
+[09:30] shows us all of the nested components that run inside the workflow, including
+[09:34] all the tokens, all the details on the OpenAI call, user messages, system
+[09:39] messages. So, it makes it super easy to debug. And we have built-in retries.
+[09:44] Every component has a fluent API hung off of it that allows you to configure a
+[09:48] component with things like retries and a cache. So if I have one component that's
+[09:53] particularly problematic, I can add an exponential retry policy uh with and and
+[09:58] configure the number of retries that run. And so this all gets deployed to a
+[10:04] serverless platform that we built that's tailor made for longunning workflows and
+[10:09] building agentic UIs uh for processes that run in the background. So we have
+[10:14] an API layer and a compute layer that are completely separate. And this is
+[10:18] really important for a lot of reasons. The API the API layer invokes the
+[10:23] compute layer and passes it in a reddish stream ID. That's the last time that the
+[10:28] API layer is going to have to talk to the compute layer. The rest of it is
+[10:32] going to happen via communication with this reddest stream. Status is going to
+[10:35] come from the reddest stream. The output is going to come from the reddest
+[10:38] stream. And as the sandbox program executes, it's going to emit heartbeats
+[10:43] so that the background processes within the system can monitor and make sure
+[10:47] that a workflow runs to completion and doesn't die or doesn't crash. And if it
+[10:52] does, we can automatically restart it or notify the
+[10:55] user. So key architectural points of this is this separation between the API
+[11:00] and the compute layer. It allows us to scale things independently, scale the
+[11:04] API layer independent of the compute layer. It also allows us to plug that
+[11:08] compute layer. So we can provide uh a compute layer by default on top of ECS,
+[11:13] but we can allow users to bring their own compute layer as well since it's
+[11:17] completely stateless and just talks to the API layer and the reddest streams to
+[11:21] store output. All that API goes to the Reddus
+[11:24] stream both for sync and async workflows which means that we get resumability,
+[11:29] right? The API layer only reads from the reddest stream, not the compute layer
+[11:33] directly. So that means that we can build UIs that allow users to refresh
+[11:36] the page, navigate away, transparently handle errors, uh, and they still get
+[11:41] the full history of status messages and all of the output. Um, something that
+[11:46] you wouldn't get from a typical serverless like infra
+[11:51] platform. Like we said, key point here is being able to refresh the page,
+[11:55] resume directly from the Reddus stream, and get all of your intermediate status
+[11:59] messages. none of the work is lost if the new user navigates away or if the
+[12:02] web browser terminates the connection to the API
+[12:06] server. So things and lessons to consider when you're building your own
+[12:11] infrastructure for agentic workflows. Always start simple. You're not going to
+[12:15] write a workflow that runs for an hour on day one. So don't build for it. But
+[12:19] do plan for a future that's longunning. In my opinion, this is where agents are
+[12:23] going. And I think that we can see this with all of the recent coding agents
+[12:27] that have come around experiences like deep research. Like the future is giving
+[12:31] your agent instructions and letting it go off and do work for you and
+[12:35] communicate with you when you need it. And to make that happen, think about
+[12:39] keeping your compute and API plane separate and lean on Reddit streams for
+[12:44] resumability. Make it easy to you for users to navigate away from the page,
+[12:48] not lose progress and handle errors transparently.
+[12:52] All this is also to say you got to take care when deploying. If you're going to
+[12:56] let your workflows run for 60 minutes, you have to be very very careful about
+[12:59] how you drain workers and how you uh do kind of a blue green deployment pattern.
+[13:04] And overall, the devil is really in the details. Easy to get started, but very
+[13:08] hard to get this right. Now, it's really, really fun to build
+[13:13] all of this infrastructure yourself, but if you don't want to build it yourself,
+[13:17] I'd encourage you to check out GenSx on GitHub where we've implemented a lot of
+[13:21] this for you. Again, my name is Evan. Thanks for having me at this talk. Uh,
+[13:27] and happy building.

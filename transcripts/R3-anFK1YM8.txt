@@ -1,0 +1,147 @@
+# title: Memory Harnesses for Long-Running Research Agents — Stefania Druga, Sakana.ai
+# source: https://www.youtube.com/watch?v=R3-anFK1YM8
+# speaker: Stefania Druga, Sakana.ai
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T06:20:56Z
+# sha256: c3a0de30f5e5e4ee28d3022f2090719f7914398431483f79a3fb800119ad6cce
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:01] [music]
+[00:12] Hello, welcome. Uh, this is a big room, so you're if you're in the back, don't
+[00:17] hesitate to come closer. Um, my name is Stefania Dug. I'm a research scientist
+[00:22] at Sakana AI in Tokyo. Uh I used to be based here and AI engineering uh is home
+[00:30] community for me before being the hyperloop. So it's very good to be back
+[00:34] and today I'm going to talk to you about memory harnesses for longunning research
+[00:39] agents on device. So if you work with long horizon tasks,
+[00:46] you probably run into this issue of context blow, right? Like when the model
+[00:51] starts contradicting itself or it has to redo the work because it forgot it did
+[00:56] that task in the first place or it starts to drift from your questions
+[01:01] because it forgot them. And this this matters now more than ever because from
+[01:07] this recent projections from meter we see that the trend is to solve longer
+[01:14] and longer uh horizon tasks and also that we're getting fewer and fewer model
+[01:19] releases. So at some point later this year we're going to have this
+[01:22] convergence right where we'll get many more long-term horizon tasks and fewer
+[01:27] model releases. So that makes this issue of dealing with context rot a priority.
+[01:36] And why did I wanted to to tackle this problem on local models and with a local
+[01:41] harness? Uh maybe some of you have seen this tweet. It's only two days old. Uh
+[01:46] the CEO of Coinbase actually shared how their company managed to reduce their AI
+[01:53] spent while actually increasing uh the AI usage. And the way they did that was
+[01:59] by transitioning to use many more local models but also having better practices
+[02:04] like using better routing, better caching, keeping the context clean and
+[02:10] then having better visibility for what people are using and for what uh what
+[02:15] kind of task. So we are seeing the local models like crossing the line, right?
+[02:21] Like GLM is on everyone's minds like especially with Fable going away. uh
+[02:26] DeepSync V4 flash can now be run on uh M3 Ultra and there's still a bottleneck
+[02:34] for RAM. It's tricky, but these local models are starting to be useful for
+[02:40] agentic tasks and for tool use. So, I wanted to show you what has been my
+[02:46] setup for the experiments I'm going to share with you today. Uh this this is my
+[02:50] Mac. It's still running evaluations right now uh back in my desk in Tokyo
+[02:55] and I'm controlling it from my phone. Um and after running EVAs non-stop for a
+[03:01] couple of days, it started to get hot. So I had my husband put fans around it.
+[03:06] Um we're running out of fans, but the the machine is still running and the
+[03:11] valves are still giving results. Um, on this M3 Ultra with 96 gigabytes and 28
+[03:18] core CPUs, I'm using two models. I'm using a Quen 27B quantise at 4 and the
+[03:26] DC V4 flash. And before I show you how I built the
+[03:32] memory harness on this machine, I wanted to tell you what this little what is
+[03:37] this an example of, right? like memory when we design a harness for memory this
+[03:42] is the mental model I want you to have in mind um you can think of memory as a
+[03:46] write manage read loop so it's not just the database store it's actually this
+[03:51] control loop around the model more concretely how did I take that loop
+[03:57] and customized it so this is my harness design like I started with research
+[04:01] agents that are the small agents because they have zero durable memory and I
+[04:06] wanted all the memory to come from the harness
+[04:08] And then um in the middle I have a core which is always shown to to the agent um
+[04:14] of traces. And then I have a recall block where I'm testing different modes
+[04:21] and an archival block where I'm keep keeping track of information across
+[04:26] different um sessions. And in that recall block I'm actually going through
+[04:31] a ladder of modes that I'm testing. The baseline is like not to use memory at
+[04:36] all. no recall at all. So I'm I'm testing for that. Uh next is to use rag
+[04:42] vector vector rag um just to see whatever like the harness would pull in
+[04:48] terms of similarity. Then is to use a decisions uh ledger
+[04:54] where I actually keep track of what decisions are being made for every turn
+[04:58] and then I can prioritize them. And last but not least and this piece is very
+[05:03] important. I have a what I call an oracle, but basically this is the ground
+[05:07] truth. So this is like telling the harness for every loop what the correct
+[05:14] memory that needs to be retrieved is. And the model is fixed across all the
+[05:21] different tasks. So the only things that I'm changing is like these different
+[05:24] variables in the recall block. And I wanted to to give you an example
+[05:29] of a first task that I tested. So I wanted to see if I give the agent a
+[05:36] task of doing literature review and I'm including a lot of papers in the corpus
+[05:41] where there was a big scientific claim like this is actually a nature paper
+[05:46] where they said they discovered 742,000
+[05:52] promising materials like it was a very big claim which got retracted later but
+[05:57] the retraction it's a much smaller like haystack back needle in that corpus than
+[06:03] the headlines and the citations. So I wanted to see if if the system can
+[06:09] retrieve the right answer for these type of questions. And what I found was
+[06:16] because like for these tasks all the papers and all the information fit into
+[06:21] the context the memory actually didn't add more capability. It was the same
+[06:27] performance with memory and without memory and it only added more cost. So
+[06:33] when your task fits in context, the harness doesn't add much.
+[06:39] However, if I start to run tasks that are longer
+[06:44] term horizon and the entire task and the relevant context doesn't uh fit, then
+[06:51] having a good memory harness really starts to pay off. So this is another
+[06:56] example of a task that I ran. This is actually from an established benchmark
+[06:59] for a long horizon uh tasks memory. It's called Xbench.
+[07:04] And this is an example of a question, right? So I'm asking a question and then
+[07:10] like the right answer is in a like step 124. But the moment when I ask the
+[07:19] question, I'm asking it like at step 500. So it's completely outside of the
+[07:25] context window and the model needs to use the memory harness to retrieve the
+[07:30] specific answer from the right step. So I'm testing this by uh changing the
+[07:38] different policy ladder that I explained before with memory off uh by deploying
+[07:42] recall different types of recall and by using the oracle as a reference.
+[07:49] And what I found was that with the ranked recall, the model gets the right
+[07:55] answer um more frequently than without. And here is a breakdown of the
+[08:01] decomposition of performance on this Xbench tasks. So I ran over uh 68
+[08:08] questions and for each of these questions there were like multiple
+[08:13] um cells and lots of different seeds. And what I found was that the rank only
+[08:21] ledger performed the best and it performed better than like just
+[08:26] gating the harness by saying do you need to use
+[08:29] memory or do you not need to use memory and you're probably going to ask like
+[08:35] why is the oracle not hitting like the max and I'm going to explain that too.
+[08:40] So the oracle what it does it provides the right information the right memory
+[08:44] to the model but it doesn't force it to use it. So the model can get the right
+[08:50] memory but still retrieve the wrong information or choose to ignore it or be
+[08:54] confused. So that's why the oracle in this case doesn't hit the max
+[08:58] performance. And I've done lots of ablations on these
+[09:01] tasks to see like what happens if I give arbitrary
+[09:07] um examples. What happens if I give it the wrong step? What happens if I give
+[09:12] it the most recent step? And I still found that the best performing
+[09:17] condition was the one with the ranked policy for recall.
+[09:22] And this actually works on several models, not only on the Quen 27B, but
+[09:29] also on the DS4 flash. And it also works across different benchmarks. I also
+[09:33] tried it on the Spider V2 benchmark. And it's not just that it gives you
+[09:38] better recall, it actually costs less. So maybe a good heristic to have here is
+[09:45] that bad memory is expensive because it spends more token and it can send agent
+[09:51] the wrong way. But having like a good structural policy for recall can save
+[09:57] you a lot of tokens and uh budget. So one thing that I want to encourage
+[10:04] you from this experiment is to consider the recall policy as a first class
+[10:10] metric and to start to think about how you might use it in your systems. Like
+[10:16] what are the type of memories that you want to store? What how do you rank
+[10:21] them? Like how do you design your recall function?
+[10:25] And then um what are the type what survives when you run this over and over
+[10:29] and over? and um multiple sessions, multiple runs
+[10:35] and this is just a simple first kind of experiment. Um but the memory technique
+[10:41] landscape is very rich. Um so there's over 30 runnable cookbooks that are
+[10:47] shared in this open-source repository from um Diamond and memory is complex.
+[10:55] We have short-term long-term different cognitive techniques. uh we can use
+[11:00] start to use evaluation results as well. Um and right now there's actually a a
+[11:05] pretty broad landscape of solutions, right? So going from simple file system
+[11:11] retrieval to training memory models. Um there's there's a wide spectrum of
+[11:17] solutions from less structural to completely structured. Um so I think
+[11:22] there's a lot of research we're going to see in this space. uh it's important and
+[11:27] it becomes more and more relevant and for me it's been super fun to to test
+[11:33] this on local models um because I got to control everything.
+[11:38] I got to control the data I was using the entire traces of compute and
+[11:43] evaluations and um yeah I I see that as an example
+[11:48] of sovereignty and it comes at a cost. Uh I didn't tell you that these local
+[11:53] models I can only what uh run them in serial like they don't support batch
+[11:58] querying for the DeepSc V4 flash. So that's why I am still running
+[12:03] evaluations back on my computer in Tokyo or I I was doing it on the flight on my
+[12:07] way here because it takes a long time. Um, but I still think it's very powerful
+[12:12] and it's a very good test for what memory can do when you can control every
+[12:17] single step of the pipeline. And this sovereign capability is part of a bigger
+[12:23] ecosystem that is very important for us at Sakanai in Japan. Um, we believe in
+[12:29] the importance of sovereign AI today more than ever. And we are also hiring.
+[12:34] So, if you're interested and want to hear more about this and if you want to
+[12:38] come join us in Japan, come talk to me. Uh, thank you very much. [applause]

@@ -1,0 +1,789 @@
+# title: Agents That Self Improve While You Sleep - Fuad Ali, Arize AI
+# source: https://www.youtube.com/watch?v=UGuNt2_Oz8s
+# speaker: Fuad Ali, Arize AI
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-27T04:41:01Z
+# sha256: 1b609439c84291c883a1829e81e4b0e169b6d5575129b076178b889cbce250c4
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:01] [music]
+[00:12] >> Well, thank you guys for coming to the workshop. Really appreciate you. My name
+[00:15] is Fouad Ali. I am a product manager at Arise. Arise
+[00:20] is helps you guys build the self-improvement loop for your agents.
+[00:24] Today today I'm going to be talking through what that loop is, how it gets
+[00:29] built, and I'm going to be walking through a
+[00:31] little bit of an example agent as well to kind of show how that agent works.
+[00:36] Now we have an hour for this workshop. With that in mind, I know that workshops
+[00:40] can be hectic, Wi-Fi can go out. So I have everything ready on my screen. I'll
+[00:45] be walking through it. It's optional for you guys to follow along. Highly
+[00:48] recommend you do. I personally learn a lot better when I have hands to the
+[00:51] keyboard. But if you are having issues, don't worry. And we also have Lori in
+[00:55] the house who is more than happy to kind of help troubleshoot along as well.
+[00:58] Sound good? Cool.
+[01:01] So I'm Fouad, I work in product at Arise, and we work with a lot of agents.
+[01:04] And I'm assuming you guys are all very familiar with what agents are and how
+[01:08] they fail and how they are non-deterministic.
+[01:12] And you know, this is sort of like a classic engineering problem that has
+[01:16] reared its ugly head, you know, 10 times worse with agents because of the
+[01:20] indeterminism, right? So when you have agents that can do a lot of things and
+[01:25] have a lot of different ways of doing a lot of things, understanding their
+[01:28] failure modes becomes trickier. And then add on to that the fact that
+[01:34] there are thousands of these agents. Maybe I have internal agents. Maybe I
+[01:37] have coding agents. You have marketing agents. And you have
+[01:41] obviously customer-facing agents as well.
+[01:44] And that all adds a ton of noise to the problem.
+[01:47] And so how do you actually start to build to a loop where these agents
+[01:53] use the feedback that you provide as a human being,
+[01:56] customer feedback, and obviously actual evidence, so things like traces,
+[02:02] um to inform how they can improve. Uh and that's what I'll be talking about
+[02:06] today. Uh Signals are out-of-the-box version of this, which I'll be showing
+[02:10] heavily today. We have a managed agents platform that lets you kind of define on
+[02:14] your own terms what these do. Um obviously data sets, evals, experiments,
+[02:19] uh all that will be part of this as well.
+[02:21] Uh but this is what we're trying to solve, and uh apologies for the meme.
+[02:25] Claude's uh sense of humor is not that good, but um
+[02:29] I think it illustrates the use case pretty well. Um
+[02:32] in the previous world of software engineering, um your SRE would probably
+[02:38] be in the first picture, right? So, classic situation, PagerDuty
+[02:42] uh notification goes out 4:00 a.m. Your agent broke something in
+[02:46] production. Um
+[02:48] in this case, we're we're doing like a little, you know,
+[02:51] uh shopping assistant, and shopping assistant is saying, "We sell zero board
+[02:55] games to all your customers on production." Not a situation you want to
+[02:59] be in. Uh there have been worse use cases of agents as well, where uh I
+[03:03] don't know if you guys are familiar with what happened in Canada with a car
+[03:06] dealership, where someone was able to get um
+[03:09] a uh I think it was like a a Prius or something for like $5 uh through a
+[03:13] chatbot. They obviously didn't honor the sale, but that's legal's problem now. Um
+[03:18] and so, these agents can fail in a number of
+[03:21] different ways for a variety of reasons, and it becomes really important to try
+[03:25] to move to a world where we're in the after stage, where the agents can learn
+[03:29] how to fix themselves and build that feedback loop into it. And I'll talk a
+[03:32] little bit about what where humans still add value in in that sort of world as
+[03:36] well. So,
+[03:39] this is what you'll need to follow along. Again, like I said, this will be
+[03:42] optional. I'll be walking through the flow for you guys. Um
+[03:47] we do have an hour. Um we can spend the rest of the time with questions. You can
+[03:50] spend some of the time trying out the loop. Um I would recommend if you have
+[03:54] some time I'll I'll put up here for you know 30 seconds ish to a minute. Um if
+[03:59] you can sign up for a completely free Arise X account uh you'll need a space
+[04:04] ID and an API key which I can show you how to get.
+[04:07] Um you'll need some sort of coding um API or sorry um LLM API provider key
+[04:13] OpenAI or Anthropic both work. Uh you'll need Node and Python on your machine if
+[04:18] you don't have that don't worry we'll we'll still talk you through it.
+[04:20] Um Cloud Coder Chris will help kind of set
+[04:23] this up for you as well. Um I assume none of you guys are strangers to those
+[04:27] tools either. Uh and it's very simple. So
+[04:31] this is kind of the app we have. So it's a chat base toy buying
+[04:36] experience. It's called Wonder Toys, right? Very simple.
+[04:39] You can ask in the chat about different products that are available. You can
+[04:43] chat to purchase. Um this is all running locally on my
+[04:46] machine. So this is the agent that we're going to be dealing with today. Uh we're
+[04:50] going to be walking through how we instrument it, how we set it up so that
+[04:53] we can build that feedback loop. Um so I'll pause here real quick.
+[05:01] I'll give you guys 30 seconds to try and do some of this again
+[05:04] optional. I don't want to you know block the entire workshop on API keys for
+[05:08] sure. Cool. So really three things getting the
+[05:13] repo running the actual app
+[05:17] making sure you have an API key that actually powers the agent. Um so not uh
+[05:22] a provider API key like OpenAI or Anthropic. Um then this this part here
+[05:26] is about installing the skills that helps your coding agent work with our
+[05:29] tools uh in a more kind of opinionated manner. Um Node and Python just to run
+[05:34] the repo and that's about it. Cool.
+[05:39] I'm going to continue in the interest of time.
+[05:42] So open question for you guys
+[05:45] of these you know six Did I count that right? Five boxes. Five
+[05:49] boxes. Which of these boxes would you classify
+[05:53] your team is in? And, you know, the usually it starts from, "Okay, we are
+[05:59] tracing what our agents are doing. So, we know
+[06:03] when they fail, we know what tools they call. We can see the entire trace tree
+[06:08] for the interaction points of the agent. Uh and that's box one.
+[06:12] Show of hands, does anyone have tracing for their agents right now?
+[06:16] Cool. Okay, we got a bunch, actually. It's good.
+[06:20] Then the next stage of that is, "Okay, well, I know what what the agent is
+[06:24] doing, but is it doing the right thing?" Um and how do I actually score and
+[06:28] evaluate that? So, we call those evals in the industry, and so
+[06:31] I would say, you know, some people probably are in that box. Are Are any of
+[06:35] you guys evaluating your agents? You have evals running on traces?
+[06:39] Okay, we got a couple. Okay, a lot. Yep. Then there's someone reading the traces,
+[06:44] presumably. Uh and that's sort of what we're trying to unlock here, right, with
+[06:48] the agents. Um but realistically, if you have coding
+[06:52] agents internally, there's no way someone's actually reading all these
+[06:55] traces, right? Or, you know, a chatbot serving millions of customers, no one
+[07:00] single human being is going to be able to read those traces, right?
+[07:04] Then you actually want to be able to save
+[07:07] those failures as tests, right? So, every time something fails, you capture
+[07:12] that, and you're able to use that as a regression test moving forward, so you
+[07:16] don't, you know, mess the same thing up twice.
+[07:19] Um and then finally, you want to prove that you want to make the fix, and you
+[07:24] want to prove that you actually fixed the thing, right?
+[07:27] So, in those last three boxes, have you got anyone kind of in in there, in that
+[07:31] stage where they're actually Awesome. Cool. We got a couple.
+[07:35] Cool. So, how do you actually thread all these
+[07:38] things together, and how do you make this workflow as easy as possible, and,
+[07:42] you know, have humans in that workflow in their highest value leverage points,
+[07:46] but not necessarily reading tons of traces, right?
+[07:50] Um the flow generally goes trace
+[07:55] signal, which is our out-of-the-box kind of SRE agent, which I'll show you guys
+[07:59] in the platform. Signal then runs reads the traces,
+[08:03] creates a data set off the failures, proposes an eval for you, automatically
+[08:07] fixes what's going wrong, and then runs an experiment
+[08:12] that actually proves that that fix is um something that's valid.
+[08:17] And then you review that fix, you choose to merge that fix, and you go back into
+[08:22] the loop. And every single one of these steps builds additional context as your
+[08:25] agent continues to improve, continues to, you know, move into new
+[08:30] use cases. Let's say I want to add, you know, one-click checkout on this on this
+[08:34] agent or something like that. Um
+[08:36] that then feed not just your product roadmap, but your engineering
+[08:40] reliability organization as well. So, uh this is kind of what we'll talk
+[08:45] through. I'll walk through the loop. Uh I'll show you a bit of the agent and
+[08:49] its traces, signal reviewing the agents, the failure data set, the eval that we
+[08:54] build off of that failure data set, fixing it, proving it with an
+[08:57] experiment, what the agents did themselves, and what still needs a
+[09:01] person, um and where you guys can add the most
+[09:03] value, and then we'll have some time for questions as well.
+[09:07] So, Wonder Toys of the Shopping is assistant agent that we're doing today.
+[09:11] Uh it's got a bug in it um that we planted for the purpose of this demo.
+[09:15] Although, I hope you guys are not planting bugs in your own agents.
+[09:19] Um it's built with uh like I said, the repo
+[09:22] has a bunch of different agent frameworks out there.
+[09:25] Um Mostly Fast API, Next.js, Chroma DB, uh
+[09:28] and then agent SDKs as well. Uh and it sends traces to Arize AX.
+[09:34] It has a few tools available to it. Um and one of those tools, specifically
+[09:39] the one with the bug, um, misfires a filter. And so, I'll kind of
+[09:44] show you at a base level what the tracing experience looks like. Um, we
+[09:50] made it very, very easy for you to set up traces, so you're not instrumenting
+[09:53] things manually to get, you know, the information out of your agents. Uh, we
+[09:58] have skills set up that wrap our CLI and our MCPs uh, that help you get started
+[10:03] uh, with tracing. We have provider um, all the major providers uh, instrumented
+[10:08] already with auto instrumenters uh, and all the major agent frameworks as well.
+[10:12] It's all open source, so very easy to get started with tracing. Sounds like a
+[10:15] lot of you guys are familiar with tracing, and so you'll be very familiar
+[10:19] with what the trace tree looks like. Um, a user asks, "Show me toys for
+[10:25] 9-year-olds." Um, and that goes through an entire
+[10:29] request path, right? So, the agent's called, the agent calls a model, the
+[10:33] agent has an end uh, LLM call. It has some tools
+[10:38] available to it, whether it's searching products, etc. Um, and you can kind of
+[10:42] see all the information available um, to ask it what the agent's doing under the
+[10:47] hood. Uh, so all these attributes kind of show, you know, start time, end time,
+[10:51] latency, what the input was, what metadata was passed, what stage in the
+[10:54] in the graph it is, um, results that it fetches from the DB,
+[10:59] uh, and what at every single one of these stages, what information is
+[11:02] available to the agent. Uh, so this is valuable, but again, you probably don't
+[11:07] want to read this at 4:00 a.m. Um, I think it would be kind of tough to read
+[11:10] through thousands of these at 4:00 a.m. just to find where an error lies.
+[11:14] Um, so what we want to do is we want to
+[11:16] enable agents to make use of this information, and then see how we can
+[11:21] actually close that self-improvement loop.
+[11:28] So, I kind of walked through the trace. If you want to instrument, the AX CLI is
+[11:33] what we use. Um
+[11:35] it has a guided setup. It's very easy to get started with it. All you need is an
+[11:38] API key from Rise and it will take care of translating all those nasty little
+[11:43] attributes into the beautiful trace tree that you saw there. Uh you'll get a span
+[11:47] per tool call with arguments and results uh to the tool call. You'll get model
+[11:52] calls, prompt token counts, all all the basics that you need to actually monitor
+[11:56] what's going on. Um as well as grouping. So, you can see sessions uh where
+[12:01] there's multiple back and forth with a customer instead of just individual
+[12:05] traces that are single back and forth with a customer.
+[12:10] So, enter Signal which is sort of the second step in this platform, right? So,
+[12:16] once you have these traces, what Signal does is Signal is an
+[12:20] always-on agent that is able to read your traces
+[12:24] on a schedule. Uh and you can configure this in the platform to be kind of like
+[12:28] whatever schedule you want. Um by default, it's uh set to every 6 hours.
+[12:33] Uh you point it to a project that's, you know, has live traces coming into it.
+[12:38] Um you enable it and it reviews those traces
+[12:42] and can then do a number of different actions via its skills, right? So,
+[12:47] [clears throat] the base action that we're going to show
+[12:48] today is Signal connected to a repo on GitHub.
+[12:54] So, this agent Signal is reading another agent's traces.
+[12:58] It's reading the source code of that agent based on sort of what's actually
+[13:03] happening in production traces from that agent and the coding
+[13:07] definition, it's able to actually propose fixes to what you're seeing.
+[13:12] Uh so, I'll show you guys what that looks like here real quick.
+[13:16] So, we have this Wonder Toys agent. It's
+[13:19] publishing traces in. We can see all the user requests. You can see I did a lot
+[13:22] right before uh this presentation at 1:00 p.m.
+[13:26] We can see, you know, kind of base facts like latency, token count, cost uh of
+[13:31] running this project. And you'll see this signal tab.
+[13:34] So, what Signal is doing is it's clustering issues it finds with the
+[13:38] traces and actually proposing and identifying
+[13:43] um a fix for for these issues. Um so, for the purpose of this agent, the bug
+[13:48] we planted uh is causing redundant search retries. And so, we're see what
+[13:53] Signal is seeing is that based on the traces that are coming into this
+[13:57] project, we are uh causing three sequential LLM
+[14:01] calls and high latency because of something that's happening with the
+[14:06] search products call, right? And specifically, what that's happening
+[14:10] what's happening is that um the casing on some of these queries for the
+[14:14] filtering is not working, right? So, what Signal does is instead of you
+[14:19] getting paged at 4:00 a.m. uh if you remember the meme in the beginning of
+[14:22] this presentation, um Signal's finding this issue,
+[14:27] analyzing, you know, clusters of these issues,
+[14:31] writing an overview and analysis, writing a fix for you, and then what you
+[14:35] can do is you can create evals to catch this issue moving forward
+[14:40] automatically and trigger off those uh evals. So, you know, if we run into this
+[14:44] issue at any point in the next, you know, 30 days, we automatically fire an
+[14:50] alert and that gets triaged by our team immediately.
+[14:53] You can add failure cases to the data set
+[14:56] here as well. So, that you have a snapshot uh for
+[14:59] future regression tests on exactly this failure mode.
+[15:03] You'll see a GitHub icon here as well to connect and open a PR or open issues
+[15:08] well, so that you can actually get Signal to write a PR. I've actually
+[15:11] already done that, and so you can see the PR attempts uh that Signal has done
+[15:16] to fix this, right? So, I'm going to go click into the session.
+[15:21] And the agent worked for 6 minutes, found
+[15:26] the root cause within the coding repo as well, based on
+[15:30] the traces, and found that product product categories are stored as
+[15:35] lowercase hyphenated slugs, but the element is passing human-readable names
+[15:40] with title case and spaces. Uh so, when someone is searching for car games, for
+[15:44] example, without that normalization,
+[15:47] we actually never get back any results. The agent is then going and searching
+[15:51] every single product, right? So, you can imagine why that causes the latency
+[15:55] spike up to 14 17 seconds. So,
+[16:01] everyone following along so far? We have an agent,
+[16:04] we have an issue. Signal is reading the traces for you,
+[16:08] proposing a fix in connection with GitHub. Uh so,
+[16:11] actually reading the the definition of this agent, uh and then doing some
+[16:16] analysis for you, and kind of making sure that that's available to
+[16:19] you. So, this is one of many skills you can connect to Signal. Um you'll see
+[16:26] here on the manage agents platform, you have the ability to use one of our
+[16:30] out-of-the-box templates, so Signal is reviewing your project traces on a
+[16:34] schedule, clustering failures, suggesting fixes. We have a cost agent
+[16:39] that can flag expensive models doing cheap work, recommend cheaper routing,
+[16:43] and actually quantify your savings. Uh but, the interesting part is you can
+[16:47] actually start from scratch. Um And so, what the agent studio allows you
+[16:51] to do is you choose an agent config, you point it
+[16:55] to a project where traces are coming in, you give it a task, and you can connect
+[16:59] skills to it as well. So, like I mentioned, GitHub is one of those
+[17:02] sources. Maybe you have um you know, a third-party system that holds your R
+[17:07] back information that and you want to check permissions on this agent. You
+[17:10] want to make sure what the agent is calling is actually within its
+[17:13] permission boundaries. You can You can a skill to do that.
+[17:17] You can connect a skill to uh another APM system like DataDog if there's more
+[17:21] logs you want to pull in. Um there's really no limit to what skills you can
+[17:26] define as long as you have an API key and it's callable from the agent harness
+[17:30] itself. Um and we're actually under the hood running these as a Rise managed
+[17:34] sandboxes uh within the platform. Uh you can bring your own harness, bring
+[17:38] your own sandbox provider as well uh to kind of you know whether you're using
+[17:41] Modal, Daytona, E2B, whatever it is or whatever harness you're using as well we
+[17:45] support Codex, Cursor, Cloud Code, and Open Code with more harness support
+[17:50] rolling out. So, does everyone kind of understand,
+[17:53] you know, we have a managed agent doing this in the platform. You can set up
+[17:58] your own automations to you know either be triggered on a time schedule or off
+[18:04] of an alert. So, anytime you see latency spike above 10 seconds, we automatically
+[18:09] kick off this agent to do an investigation. Um and investigation
+[18:12] agents are part of it. Kind of solves the SRE use case. There's a cost lens to
+[18:17] this. There's a product classification lens to this. Um
+[18:20] there are many ways in which you can kind of use this agent platform to
+[18:24] operate on your traces. Cool.
+[18:28] Uh I will continue through these. So, Signals are reading your traces, filing
+[18:33] what it finds. It keeps one ticket per problem uh the
+[18:37] way a reviewer would. So, you're not getting hundreds and hundreds of issues
+[18:40] on the same uh piece of evidence.
+[18:44] Uh it opens those. You fix it. You can either resolve it if you think it's
+[18:47] resolved, you can ignore it um and it will dedupe those issues moving forward
+[18:51] so you don't, you know, kind of get inundated with noise.
+[18:54] Um the add to data set field or
+[18:58] uh flow I think is one of the most important parts here
+[19:02] because how do you build the actual continuous
+[19:04] improvement? You have to have a record of what's failed in the past and guard
+[19:09] against those as regression checks moving forward, right? So, adding these
+[19:12] two data sets give you that sort of living fixture quality. So,
+[19:17] you know, you define test cases in code before you ship code.
+[19:20] Everyone should be doing that, and hopefully we are all doing that with the
+[19:24] help of some agents now. Um
+[19:26] but this idea of living fixtures that change over time as you add new use
+[19:31] cases, as you see new failure modes, is a pretty novel one and that kind of
+[19:35] helps with the self-improvement uh loop where, you know, you're not beholden to
+[19:41] one definition at one time of what has failed and what our failure modes, but
+[19:46] you're organically growing that definition of failure mode as your agent
+[19:50] is failing in production, right? So, um think of it like,
+[19:54] you know, every time you go to try and ride a bike,
+[19:57] you notice something about how you're riding, and then over time, those become
+[20:02] so ingrained in your memory that riding a bike feels like nothing. You don't
+[20:05] even think about the failure modes of um I actually fell off a bike and broke
+[20:08] my foot 2 months ago, which is why I'm mentioning this this little anecdote,
+[20:12] but typically you don't think about, you know, putting your left foot on left
+[20:15] pedal anymore because it's been so ingrained into your learning process.
+[20:18] And that's what we're trying to kind of accomplish with these agents.
+[20:23] Um so, on the data set side, once you get these
+[20:27] living fixtures, you actually want to codify the behavior on these fixtures,
+[20:31] right? And that's where the eval comes in.
+[20:34] Um so, I saw a few show of hands of that people are running evals.
+[20:38] Uh can I get a quick gauge of the room? Who here is running LLM as a judge evals
+[20:42] or you're running code evaluators? Cool.
+[20:46] So, if you were in any of the earlier workshops of the Rise, we went into
+[20:49] evaluators in great depth. Um there are many, many different forms of
+[20:52] evaluators. Um so, just quick quick overview. There are code checks
+[20:58] that are, you know, really, really cheap to run that are for deterministic
+[21:02] checks, right? Is this field present? Is this valid JSON?
+[21:07] Exact rules. Was this filter applied? Was this tool called with the right
+[21:10] arguments? >> [clears throat]
+[21:12] >> Very, very easy for that, right? >> [snorts]
+[21:14] >> LLM as a judge, evals also help with this use case where you need to have
+[21:19] more of a qualitative or nebulous kind of analysis of the trace, right? And so,
+[21:25] this is using another LLM model to score the results of one model's trace.
+[21:32] Um obviously costs will be higher here because you're making another model
+[21:36] call. Um per record, obviously you can, you know,
+[21:40] kind of set your own sampling, filtering. You don't have to run these
+[21:43] on 100% of the traces that you're running at. Um there's some trade-offs
+[21:46] in terms of eval design that we can discuss, but that's sort of what an LLM
+[21:50] as a judge is for. Then you have
+[21:53] for the even more open-ended use cases, you have this concept of agent as a
+[21:57] judge. So, where you're not actually sure what you're evaluating, you have a
+[22:01] goal in mind, um and you leave kind of the the determination of whether
+[22:08] that goal has been achieved to the agent. So, the agent can actually pick
+[22:11] its own rails, it can actually pick its own scores, it can go through that
+[22:16] process itself. And that's obviously the highest cost method because there's
+[22:19] multiple LLM calls happening under the hood.
+[22:22] Um [snorts and clears throat] decision models have been around for,
+[22:26] you know, what? A month-ish now, and with Lower actually at Arize has
+[22:30] published a ton of material on sort of benchmarking them and how they operate,
+[22:34] and what trade-offs are present with
+[22:37] decision models. I will say they are a very, very cheap
+[22:41] way to run some of these checks on your traces versus um using a classic LLM.
+[22:47] Um and they give you, you know, type type choices, yes, no, choice, score.
+[22:56] So, once you have sort of this eval signal, right? So, you you understand,
+[23:02] you know, qualitatively is this
+[23:05] in the right direction? Is it not in the right direction? Is it passing my eval
+[23:09] checks? And you have the trace data. That's all really rich context for a
+[23:14] coding agent to go um implement a fix, right? So, signal in
+[23:18] this case is is running on on an Auri managed sandbox with a coding harness,
+[23:23] implement those fixes for you, but
+[23:26] if you're in your development phase, you can actually pull these traces live into
+[23:31] Auri through the CLI as well, right? So, it's instant context to feed other
+[23:35] agents to actually work on those PRs for you.
+[23:38] Um and this is where we have kind of the
+[23:40] human check and balance in in the room. Um so,
+[23:45] I would say the the places a human adds the most value here are one, obviously
+[23:50] validating the fix, right? Reading the PR.
+[23:53] There are, you know, maybe some of us in the camp of we don't want to validate
+[23:58] every human PR. I assume if you're in a high-stakes use case like finance,
+[24:02] you're very much in the camp that humans read the PR before the merge, right? So,
+[24:06] that's one very high-leverage point for a human to be here. In the data set
+[24:09] curation phase as well, so adding that to a data set is part of why we left it
+[24:12] manual is are these good enough findings to add to
+[24:16] my fixture, right? So, that's a manual step in the process,
+[24:20] uh and that relies on kind of human judgment as well. Um the eval design, so
+[24:25] we have agents that kind of help you write these evals, um but the eval
+[24:29] design portion is something where humans can definitely be in the mix because
+[24:33] you're imparting your taste of what is good onto the agent, whether that's in
+[24:37] the form of an LLM as a judge or a more deterministic check. Um
+[24:42] and then folding all this information into the coding agent gives it really
+[24:45] rich context for it to work from. Um so, just as an example of kind of
+[24:50] like how you would create an eval off this,
+[24:52] I'm going to go to my traces tab. I'm working off of this Wonder Toys project.
+[24:58] I have signal running and signals found two issues so far. One is the orphan
+[25:02] spans issue, um, which was actually just my mistake instrumenting this. Uh, but
+[25:07] it did catch it. Um, and two is the redundant search retries.
+[25:12] That's the bug we planted. Um, so I'm able to create a new evaluator with one
+[25:16] click off of this. And that actually,
+[25:19] uh, looks like
+[25:23] I need to use a different model.
+[25:28] That actually opens up Alex, uh, which is our in-house agent that I'm doing a
+[25:32] talk about tomorrow, um, that is able to go and create that eval off of that
+[25:37] evidence for me, right? So, based on the traces that are supported in the
+[25:40] evidence here, we can kind of codify in a prompt template what we
+[25:46] should be expecting moving forward and how we how we make sure that the eval
+[25:51] fires and fails on any mistakes that are made.
+[25:53] >> [snorts] >> So, this is the eval I came up with.
+[25:56] You're a helpful AI bot that checks for redundant search product retries,
+[26:00] inspect the complete trajectory including tool calls,
+[26:03] see if there's any unnecessary tool call, return a redundant retry when
+[26:07] search product is called more than once, um, and put the score and classification
+[26:11] choice on the trace itself.
+[26:14] And then you can run this eval on incoming traces that are coming into
+[26:19] your project, so you make sure you catch that, you can monitor that, you can
+[26:22] graph that, you can create an alert off of that, uh, and you can track spend
+[26:26] associated with that eval as well. So, over time, you know, maybe
+[26:30] your development flow has codified this as a regression check and you no longer
+[26:34] need to deploy this eval on production data. You don't
+[26:37] want to spend the model tokens on running this on every trace. You can
+[26:41] actually view the cost over time and retire that eval as well.
+[26:47] Cool.
+[26:50] So, the next part of this
+[26:53] is okay, we have a fix. Signal found something.
+[26:57] It analyzed the repo. We created an eval to catch it for the next time. We added
+[27:02] the evidence to a data set. So, now we have a living fixture that's growing
+[27:05] with time. How do we know that the fix is right?
+[27:09] How do we actually know that, you know, it wasn't just slop code that the agent
+[27:12] produced and tried to find an issue that didn't actually exist? Um and this is
+[27:17] where the world of agent experimentation comes into play. And this is a very,
+[27:21] very rich and deep world. Um so, I won't spend, you know, time talking about all
+[27:25] the different frameworks and providers that exist out there. Phoenix team did a
+[27:29] good job earlier today talking a little bit about the harbor integration they
+[27:32] have in Phoenix. Uh but really what we're concerned about is prove that the
+[27:36] fix works and prove we didn't break anything else, right? Um and there are
+[27:41] many cases where, you know, in this non-deterministic world, if you make a
+[27:45] small change to a system prompt, it can then have ramifications on other
+[27:49] tools that you didn't think were going to break. Uh and, you know, kind of um
+[27:54] redundancy issues there. Um and so, making sure that we can prove that this
+[27:59] fix actually worked and that nothing else broke is really, really important.
+[28:04] And that's kind of the experimentation stage. Um
+[28:07] so, I will talk a little bit about this through the flow as well. So, in the
+[28:11] Rise, we support a bunch of different types of experiments. Um
+[28:20] this is the category code enum fix experiment that I just ran.
+[28:27] And so, you'll see here that we have actual evals running on this experiment.
+[28:32] So, what we're essentially doing is we have this living fixture of failure
+[28:35] cases. We have this proposed fix. We actually want to rerun the agent on
+[28:41] these failure cases and score the results. And if they meet a certain
+[28:46] um threshold, that's kind of up to you to define.
+[28:49] In my case, 88.9% I thought was pretty good. So, I was like, ship it.
+[28:54] Um if they meet that threshold, you
+[28:56] actually have results to prove that fix from the agent, right?
+[29:00] And the agent can actually run these tests for you through the AX CLI as
+[29:03] well. So, as Signal is going and finding these failure cases, and it has access
+[29:08] to the agent code, it can actually pipe those failure cases through
+[29:13] and replay them through the agent with the version two fix,
+[29:17] and then score those results themselves, right? So, you come back in the morning,
+[29:21] you weren't working up at 4:00 a.m. You not only have a PR that has a
+[29:26] proposed fix, you have some validation results that say, "Hey,
+[29:30] I proved this fix because I actually took the test cases that we failed on,
+[29:34] and I re-measured latency or tool call retries, and I saw that we were no
+[29:39] longer retrying tools, and latency was lower. And hey, by the way, you had
+[29:43] three other evals that you don't want to fail on, either. So, I made sure to
+[29:47] check that those evals are not regressing, right? And so, as that
+[29:51] living fixture grows over time, you have new cases, these experiments become more
+[29:56] and more robust, right? Um and in the platform, obviously, you can go view
+[30:00] those experiment results, see what the output is, see what the evals are. If
+[30:03] you disagree with the agent, you can annotate that output, and that becomes
+[30:08] another piece of information to the context for the next run, right? So,
+[30:13] everyone kind of clear on this experiment flow at a high level, like
+[30:16] how you can run some of these experiments
+[30:18] to take a test case, take an eval that you've created as a
+[30:22] benchmark, and actually validate your fix before it goes out, before it goes
+[30:26] to prod. Um and you can shove this into the CI/CD process as well.
+[30:31] Um up to you on how you want to configure it. Obviously, running the the
+[30:34] agent may be expensive. Um so, your discretion on how you want to run that.
+[30:40] Evals as well, right? If you're using an LM as a judge eval, you want to be
+[30:44] careful about which model you're picking, when you're running those
+[30:47] evals, what sampling rate you're running those evals at, to make sure you're not
+[30:51] just ballooning costs and you know, just sending a ton of spend
+[30:55] on validating these fixes on every push.
+[31:00] Cool. So,
+[31:03] kind of continuing on, we approve the fix, we look at the task
+[31:08] completion rates. Um we validate those results and while
+[31:14] you kind of step away from this process, what keeps running is that the eval that
+[31:19] you created runs on every new trace and becomes additional context to the next
+[31:23] signal run. The
+[31:25] task system that we have in arise can also automatically add failed eval
+[31:29] results to new databases or data sets so that that fixture grows over time. And
+[31:35] signal keeps rerunning every 6 hours or off of an alert or off of a triggered
+[31:40] monitor and make sure that
+[31:44] new failures are surfaced, new evals are created and that data set grows with
+[31:49] those new examples over time. We also have, you know, weekly digests where you
+[31:53] can kind of consume these in a little bit more of an easy-to-read
+[31:56] result where you just have a summary of what's going on with the agent.
+[32:00] What is waiting for you is confirming that these issues are
+[32:04] real, right? You can't just trust every single issue that comes out of this
+[32:08] agent. I would say use it as a starting point, validate these fixes and use your
+[32:13] judgment on when those issues are actually real.
+[32:16] Writing down what the right answer looks like, so this kind of goes in the
+[32:19] annotation flow, right? You run the experiment, you get a new output, maybe
+[32:23] you don't think this is the perfect answer or the perfect trajectory for the
+[32:26] agent and you can actually use the annotations product to kind of codify
+[32:30] that taste. Merging the fix, this is up to you.
+[32:34] You can auto merge these PRs. I will leave that to your discretion. Uh
+[32:38] and then actually deploying and promoting the new version, right? So, I
+[32:42] have V2, I validated it, I think the issue is real, I created the eval, I
+[32:45] looked at the score, I validated the fix, I like the code, I reviewed the
+[32:48] code. Now it's time for me to actually upgrade the agent.
+[32:53] Um I think the the other thing that's
+[32:57] really interesting about this is like you
+[33:01] can codify the confidence scores, especially with these decision one
+[33:05] models that actually return an explicit confidence score,
+[33:08] and have those auto route to human beings uh in annotation queues, right?
+[33:12] So, um not only are you, you know,
+[33:15] responsible for reviewing the outputs, but you actually get a ready-made queue
+[33:19] for you that is based on all the low confidence results, and um
+[33:23] you know, in some of our benchmarking uh we've seen these confidence scores to be
+[33:27] pretty good. It depends on your use case and uh specifics in the industry, for
+[33:31] sure. Uh so, I wouldn't say that an 80% confidence score is
+[33:35] the right threshold for everyone, uh but setting those thresholds is important,
+[33:40] and then once you have those thresholds defined,
+[33:43] you can kind of auto route those low confidence cases to a person to go
+[33:47] annotate. Um
+[33:49] So, I mean, there's, you know, in the spam test that we saw, 4.6 % of
+[33:55] cases scored between 0.3 and 0.7 confidence to people, left the rest at
+[34:00] 99.5% accuracy, right? So, that is one example of an industry
+[34:05] where, you know, specifically for spam detection, where those confidence
+[34:09] thresholds might be more defined. It It depends on the use case, for sure.
+[34:14] Um So, I kind of talked about some of the
+[34:18] stuff we've built so far with signal manage agents and traces, right? So, the
+[34:24] ability to actually read those traces at scale,
+[34:27] the ability to add things to data sets, uh the ability to run those experiments
+[34:31] with the help of a coding agent, um, and actually review those results in line.
+[34:35] You can also interrupt sessions. You can look through the model's reasoning. You
+[34:39] can kind of continue a session, kick it off to a local agent, uh, so that you
+[34:43] can continue development on your own side if you don't want this all managed
+[34:46] by a rise. But, I think our vision for the future is
+[34:50] this running this full end-to-end loop with almost zero human involvement until
+[34:55] you need to go test something, right? Until you need to go click around in a
+[34:58] UI and validate something. Um, and so there are a lot of providers out there
+[35:03] for that experimentation setup, right? There's the harbors of the world.
+[35:06] There's many, many different ways that you can test the agent. Um, I think most
+[35:11] of it, and and this is where a lot of the discussion is happening, is
+[35:14] how many dependencies do you have to run to run this agent, right? Um, running an
+[35:19] agent in the experimental phase, does that mean you connect it to a mock DB?
+[35:23] Do you stop some tools? Um, do you actually run the entire thing in a
+[35:27] docker image? Can you even do that safely? Um,
+[35:31] those are all sort of questions that I would encourage you guys to think about
+[35:35] as you start thinking about this experimentation flow. With this agent,
+[35:38] you know, it's very simple. We just rerun the agent in its entirety. There
+[35:43] are no dependencies. It spins up its own DB, and then we run requests through
+[35:48] that. So, that might be a very simple use case. But, when you have external
+[35:51] dependencies that really matter, your use case become can become bit more
+[35:55] convoluted. Um, so our goal for this is really enabling
+[35:59] the one click from issue to experiment. Hey, I have this proposed fix. Go test
+[36:04] it. Spin up all the infrastructure necessary to go test it. Um,
+[36:09] in addition to this, and we've we've worked on the CLI around this, is
+[36:12] connecting signal where you work as well. So, whether that's in Slack, so
+[36:17] tagging uh, from Slack to communicate with signal, whether that's your local
+[36:21] agents, which we have through the API, CLI, and skills, where you can actually
+[36:25] ask your local agent to go do a digest of what signal is finding and and check
+[36:29] those. Um
+[36:31] making sure that we have the fix drafted straight from the issue and its traces
+[36:36] and that's part of what we've done already and actually having the evidence
+[36:40] in line. So, here are the actual five traces that failed
+[36:44] in the PR description so you can actually go validate those.
+[36:47] Um we have signal now proposing evals as well for you so it'll actually check
+[36:51] your evals see which ones are healthy as in, you know, if this eval is passing
+[36:57] 99.999% of the time maybe we don't want to spend the tokens
+[37:01] on this eval and so we can retire this eval going forward. Uh we feel pretty
+[37:05] confident on it. Or, you know, vice versa if any eval is in poor health,
+[37:10] making that eval more robust. And we have a whole process on eval alignment
+[37:14] which is how do I make sure the judge is actually aligned to what I think and
+[37:19] isn't just outputting scores that I don't believe in. Um so there's a whole
+[37:23] process for doing that. And then, again, the experimentation
+[37:27] flow, running your agent against running these data sets against your agent
+[37:31] wherever it lives. Uh whether it's your laptop, in my case for this very simple
+[37:35] agent, or whether it's on more complicated infrastructure.
+[37:40] Cool. So, I think it would be really great to get
+[37:44] started with some of these. Uh so I have the workshop repo URL.
+[37:48] Um we have docs pages as well for agent experimentation.
+[37:53] And um we have a few other talks throughout
+[37:57] this week as well. Um
+[37:59] So, if you has one tomorrow at 3:20 about um agent fixes and their run-off
+[38:05] um implications. So, you know, you fix
+[38:08] something somewhere and that eventually has impact downstream. Um and I have a
+[38:13] talk tomorrow at 3:45 talking about Alex which is our in-house agent. Um and we
+[38:18] use Alex to build Alex so it's all kind of the perfect dog fooding tool for us
+[38:23] in the agent space. So, I'll talk a little bit about how we designed that
+[38:27] agent, you know, how we design context, memory, and some of the decisions and
+[38:31] lessons we learned along the way. Really, I would encourage you guys to
+[38:35] try to get some traces from the agent. We have this built out for you, but if
+[38:39] you have an your own example and you haven't traced your agent yet, it's
+[38:42] very, very simple to install our skills and CLI, have it instrument your agent
+[38:46] for you, and send those traces to Arize. Um
+[38:51] once you get those traces in, it's one click to enable signal,
+[38:55] and then you can start to see the clustering of issues and patterns across
+[39:00] your traces as well. Um so, yeah. I would say
+[39:04] the things I want to leave you guys with are
+[39:08] the hard work of reading a ton of data should definitely be just be done by an
+[39:12] agent. Understanding where to add the highest
+[39:16] leverage human points is kind of the theme of this presentation.
+[39:21] Just because you can automate something doesn't mean it should be automated, but
+[39:26] you should use that automation to really inform the reviewer. So, things like
+[39:29] auto routing low confidence threshold scores to that reviewer queue are really
+[39:34] important. Um and making sure that all the context is fed back to the same
+[39:40] system, and obviously we're here with Arize, and you know, we're telling you
+[39:44] how great Arize is, but really I you want to make sure that this context is
+[39:47] recorded somewhere, right? And that's the only way you build the
+[39:51] self-improvement loop is when the human judgment, the eval scores, and the
+[39:55] traces, and the the trace evidence are all held together in the same place
+[40:00] feeding that context for the next run, so you're catching new issues instead of
+[40:04] just fighting to stay afloat. Um and that's what I have for you guys. Thank
+[40:08] you so much. Um I'm happy to walk around and kind of help you guys get started on
+[40:12] some of these. Um
+[40:14] you can check out the repo, clone down the agent. If not,
+[40:17] uh we you can install the skills, instrument your own agent, and yeah, I
+[40:21] can take questions as well if you would like.
+[40:23] I would say there's like two lenses to take how we're actually evaluating.
+[40:27] There's how do we evaluate signal as a product line, and that one of the key
+[40:30] factors there would be, okay, how often is this right about our PRs, right?
+[40:34] That's sort of like an internal evaluation. Do you mean more of that how
+[40:38] we evaluate our own product or how you can evaluate an an agent use case,
+[40:43] generally speaking? Uh we will do a whole talk about evals for Alex
+[40:47] tomorrow, but to give you the long and short of it,
+[40:51] um eval design is you know, as an as an AIPM, I think
+[40:55] that's probably my primary job is like how do I actually design good evals that
+[40:59] actually measure the right things? The shorter answer to that question is
+[41:05] I think codifying qualitative decisions is very
+[41:09] hard. Codifying things like latency, retry count, like these are more
+[41:13] classical issues that, for example, the issue signal found, I think, is
+[41:16] relatively simple, like you found an inconsistency in casing, you saw
+[41:20] evidence in retries, make the fix, measure the latency.
+[41:24] That's really easy to do, right? Now, qualitative outcomes, I think, are a
+[41:28] little bit harder, and I would say there's there's a couple things to index
+[41:32] on there. One is
+[41:36] the the actual like definition of what is good is only emergent from
+[41:41] as much signal as you can give it, and I use signal as like the word signal. Um
+[41:46] so what I mean by that is, okay, I can look at one example and say it's right
+[41:50] or wrong. I can't get an agent to learn from one
+[41:53] example because then it's just going to overfit to that one example, or that
+[41:57] example might not generalize properly. Um and so part of what I was talking
+[42:00] about with the living fixtures and the annotations is a lot of what we do. So
+[42:04] I'll give you an example, Alex generating um filter queries, right? So
+[42:09] we have Alex in in platform. Uh we have a flow where, okay, if you
+[42:13] want to search agents or search traces, you can obviously type in a filter, or
+[42:18] you can ask Alex to filter with AI. How do we actually measure the
+[42:23] performance of that? There's no right or wrong answer, cuz it could return a
+[42:26] filter that succeeds, and it doesn't, you know,
+[42:30] parse this JSON, and it will give you some results, but
+[42:33] how do you know that's actually a good result? So, there's a few things. One,
+[42:36] we look at the entire session of users, right? So, we're not just saying, "Okay,
+[42:40] for this turn, was this a good response?" But, did that user ask again?
+[42:44] Did it Was it happy with the results? How many additional filters did they
+[42:47] create, right? So, that can be one thing to as a signal for you to evaluate on.
+[42:53] The second is, I mean, annotations like reading through, okay, what was the
+[42:56] query? Does this look like a right filter? Did it return the right eval
+[43:00] results? And actually annotating that by hand as a PM who knows what to expect.
+[43:05] Um, and then you combine both of those with new use cases, and that
+[43:10] rich context becomes the eval template, right? So, you can actually use another
+[43:15] coding agent to feed that context in and write a really good prompt template, and
+[43:20] then it becomes like a a prompt optimization essentially, right?
+[43:23] So, like, how good can I get this eval template on the lowest cost model so I
+[43:28] can run this at scale? Um, so, that's kind of how we think about it. We have
+[43:31] some more specifics to talk tomorrow where I'll talk through a little bit of
+[43:34] which models we choose, and um, how we think about which use cases are worth
+[43:39] running an eval on or not. Um, but yeah, that's the short answer. So, it is kind
+[43:44] of like a, you know, post hoc algo propter hoc, like, where can we make
+[43:48] sure like what we define as healthy
+[43:52] is actually healthy, and where should we define where it breaks? So, So, what I
+[43:56] mean by that is, okay, it's right 99.9% of the time. If that 0.1% is
+[44:00] catastrophic, and we need to catch all of those, it's a very different
+[44:04] discussion, right? And then evals, when I when I say like Evals
+[44:09] there's kind of two lenses. There's the Evals that you can run in the
+[44:12] development flow as CICD checks, as regression checks
+[44:15] before you deploy code. There's Evals that you're running on live traces,
+[44:19] which that becomes a cost-benefit ratio question, right?
+[44:23] If I'm running this on 100% of live traces
+[44:26] is the cost of running this model on all my traces
+[44:30] worth it compared to the cost of this 0.1% failure, right? So
+[44:36] I think a lot of it boils down to ROI. I think general guidelines are whatever
+[44:40] you can catch in CICD you should, and I understand it's a challenge to run some
+[44:44] of these. So like and and convince teams to run some of these in CICD
+[44:48] I would probably make some of these non-optional checks in the CICD process,
+[44:53] right? So you have a data set of fixtures that shows where this Eval has
+[44:58] actually failed on the 0.1% of cases and you run you rerun those with an Eval
+[45:02] score every single time you push or before a PR is merged. So you're at
+[45:07] least you at least have some confidence that that set of cases is not going to
+[45:11] fail. And then you run an Eval that has a sampling rate on your prod traces,
+[45:15] right? Um so instead of saying, "Okay, we're going to ignore the development
+[45:18] process, evaluate everything that comes in production."
+[45:21] That can be a very high cost thing to do versus "Okay, we ignore prod completely
+[45:28] and only test in development and try to capture every case, which you probably
+[45:32] can't do um in a data set with coverage, and then just let it happen in prod." I
+[45:37] would say both of those are extremes, and the answer is somewhere in the
+[45:40] middle. And it depends a bit on the ROI of the Eval, right? Um and what model
+[45:45] you decide to use has an implication on cost, etc., etc.
+[45:49] It's a very good question, and it gets very meta, and uh I I hope I hope you
+[45:54] haven't noticed how meta this conversation has gotten so far where I'm
+[45:57] using signal in multiple different ways. Um the short answer is
+[46:03] you can do that entire loop again, right? So,
+[46:07] we have a project for eval traces. This is a Rise created. These are all the
+[46:10] evals, and those evals are traced, right? And you you can have an agent
+[46:13] reading the eval traces and making sure the evals are good.
+[46:17] And then, each of those agents actually produces
+[46:21] their own traces, right? So, when you're running Signal, these are Signal's
+[46:24] traces. So, you'll see here you are Signal, an automated reviewer for Rise.
+[46:30] These are these are steps you have to do. These are the instructions. This is
+[46:33] what Signal actually called under the hood. So, made a few bash calls. It
+[46:36] called our MC internal MCP to go do this investigation and then mits it, writes
+[46:41] it as an issue, right? And then, you can run Signal on top of Signal as well to
+[46:45] make sure that And that's kind of what how we evaluate internally, right? Uh,
+[46:49] it's kind of what I was alluding to as the the ultimate dog fooding tool.
+[46:52] Um, now I I assume your question is more of
+[46:55] like a when does this break down? When is this useful to do? Um,
+[46:59] I think the harness changes are useful up to a
+[47:04] certain point, and I'll talk a little bit about this in in my talk tomorrow on
+[47:08] like how we evaluate Alex. So, like there are certain use cases where
+[47:14] you just a- after a certain point, you don't need
+[47:17] to continue evaluating, uh, and there's just diminishing returns on cost from
+[47:21] there. Um, where we've seen it is, you know, we monitor Signal
+[47:26] and we have, you know, traces coming in from Signal.
+[47:29] We have some evaluation score criteria, but there is a certain point at which we
+[47:32] actually don't know what is good for our customer beyond what the customer knows
+[47:36] themselves. Um, so, I mean, you can turn on Signal and it
+[47:40] can propose the PR, and we can use some proxy metrics like merge rate on the PR,
+[47:45] or the session transcript or whether
+[47:47] session was handed off or whether data set was created or eval was created as
+[47:51] feedback mechanisms, but beyond that and
+[47:55] beyond that and the merge rate of the PR, we can't really tell that much more.
+[47:59] So, it becomes, you know, diminishing returns to continue to evaluate from
+[48:03] there. Um cuz then you're just kind of relying
+[48:05] on an agent transcript and you have no ground truth, right? You're just
+[48:10] vibing with the agent's output and pretending you're increasing shareholder
+[48:13] value, right? So, um I don't think that's useful. Uh but I
+[48:17] think we have, to answer your question, we
+[48:19] have used signal to evaluate signal as well. I think in execution time checks,
+[48:25] because such low latencies like probably the most exciting, like where you can
+[48:28] actually route a request during execution time. So, these these evals
+[48:33] that you're seeing are are, you know, post talk where the the agent has
+[48:36] already run and we're evaluating it from that. So, due to the low latency of
+[48:41] decision wall models, I think that's something I'm actually genuinely excited
+[48:44] for uh in the execution loop. Um
+[48:48] Like selfishly, or maybe not even selfishly, but like
+[48:52] for my personal enjoyment, I like that people are much more likely to use evals
+[48:56] now because they're cheaper. Um so, that's like just, you know,
+[49:00] purely good for the ecosystem health. Uh like more people thinking about evals,
+[49:04] more people thinking about actually classifying their traces. I think it'll
+[49:07] unlock that to a large degree just because it's cheaper.
+[49:10] Um And then, maybe not related to to this
+[49:14] talk, but like just my my personal opinion is I think like
+[49:18] um because these models are so small that there's some really interesting
+[49:21] stuff you can do with on-device stuff um that I'm really, really excited for. Um
+[49:26] we're also like kind of pioneering it for some multimodal evals as well. Um
+[49:30] because I think multimodal evals can be really complicated because of latency.
+[49:35] Um and they can also be super, super qualitative. So, in the multimodal eval
+[49:40] space, like trusting an agent's taste on an image that was generated, for
+[49:44] example, or how it interpreted a click box can be very hard, but getting
+[49:49] confidence scores allows you to at least route this to human a lot faster, so I
+[49:52] think that's also a space where decision models will help a lot. Yes, 100%. So, I
+[49:57] kind of briefly alluded to this when I talked about skills, but you can
+[50:02] actually create your own agents. Um
+[50:05] And we have the out-of-the-box signal agent,
+[50:09] obviously. Um Let me do this one.
+[50:18] So, you'll see here we have a DataDog skill as well where you can pull up
+[50:22] metrics, logs, and APM traces around the alert. Um we have a bunch of providers
+[50:27] available for you to do that as well. You can also write your own skills, so
+[50:31] the the agent is doesn't just have access to the agent traces, but
+[50:35] downstream system application metrics as well. Um so, you can connect it to
+[50:40] basically any data source. Um Obviously, there's like an element of
+[50:44] taste to the data source like connect the ones that you need to
+[50:47] connect, make sure it has the right access, make sure, you know, the scope
+[50:50] key, make sure that you're not over flooding context because more isn't
+[50:54] always better to actually triage the alert. Um but yeah, we have the ability
+[50:58] to do all that as well. The the shitty answer that everyone
+[51:01] always gives is it depends, but it it does kind of depend. So, for example,
+[51:04] like what harness are you using? Um what underlying providers are you using? How
+[51:09] often are you running this? And we expose those as configurations. We allow
+[51:13] you to kind of monitor the cost, too, so you'll see here that this is the signal
+[51:17] traces. This is how much it's Oh, I guess this
+[51:20] is still flowing in right now, but the same way that you can view kind of your
+[51:24] cost for like Wonder Toys, you can view the cost
+[51:27] of signal. Um so, we make it easy for you to understand the ROI like, okay, if
+[51:32] this shopping assistant agent cost me $8, and it cost me
+[51:35] 20 bucks to improve with the self-improvement
+[51:39] loop, is that really worth doing or not? Um
+[51:42] Now, like I don't have like a hard number as like
+[51:45] 5% of your agent budget should be allocated to the self-improvement loop
+[51:49] or something like that. I think it really just depends.
+[51:52] Um but I will say like that is exposed to
+[51:55] you and available to you and there many ways in which you can
+[51:58] kind of pull the levers to make that a little
+[52:01] bit cheaper or more expensive depending on how you're seeing results.
+[52:05] Um so one is the amount of context you're providing,
+[52:08] right? So which skills are you including up to a certain point
+[52:12] without like just spending more money to give it more information that doesn't
+[52:15] actually help. Um and then the other is like the eval kind of design question,
+[52:21] how often you're running these evals, sampling rate, etc. Um
+[52:25] And then the other thing is like you I mean you can use this
+[52:28] part of the platform, but all these are consumable via API as well. So if you
+[52:32] want to shunt this to coding agents, which you get a subsidized cost for or
+[52:35] something like that, you can just export that to a coding agent and have it do
+[52:38] many many of the similar things. Thank you for the wonderful questions. I'll be
+[52:42] around over the next 3 days. We have the Rise booth as well. Um feel free to sign
+[52:47] up. Try this loop out for yourself. Completely free to sign up. Completely
+[52:51] free to use. Um and yeah, happy debugging.
+[52:57] >> [applause]

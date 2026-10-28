@@ -1,0 +1,994 @@
+# title: Building voice agents with OpenAI — Dominik Kundel, OpenAI
+# source: https://www.youtube.com/watch?v=iXhba366fQc
+# speaker: Dominik Kundel, OpenAI
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T12:11:43Z
+# sha256: f1096aca288191dcb6fc98fa61ca44038a05ae646dababddb3b9a70f85fa1230
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:00] Awesome.
+[00:16] Well, hi everyone. My name is Dominic. I work on developer experience at OpenAI
+[00:21] and I'm excited to spend the next two hours to talk to you all about voice
+[00:25] agents. Um, the QR code was already on the slides. If you just entered the
+[00:30] room, you want to try to download the dependencies as soon as possible. So,
+[00:37] head over to that QR code or to that starter repository and follow the
+[00:40] instructions to install. That might take a while with the internet right now. So,
+[00:44] please do that as soon as possible. You have like 15 minutes of me rambling
+[00:48] about stuff before we get started with uh with actually coding.
+[00:52] Um, so I said we're going to talk about voice agents. I want to first put
+[00:56] everyone on the same page because I know we all have different uh definitions of
+[01:00] agents and there's going to be a lot of definitions flying around at this
+[01:03] conference naturally. Uh so when we're going to talk about agents, we're
+[01:06] talking about systems that are going to accomplish tasks independently on behalf
+[01:10] of users and most importantly um they're going to be essentially a combination of
+[01:14] a model that is equipped with some set of instructions that then has access to
+[01:19] tools that can both be used to work on that goal. And then all of that is
+[01:24] encapsulated into a runtime to manage that life cycle. And that's an important
+[01:29] definition because uh today we launched the OpenAI agents SDK for TypeScript. If
+[01:34] you've heard of the one for Python, today we basically released the
+[01:37] TypeScript equivalent. Um and so we're going to use that and it maps those
+[01:43] exact patterns. So, if you're unfamiliar with the agents SDK, it's basically a
+[01:48] SDK that provides you with an abstraction based on the best press
+[01:53] practices that we learned at OpenAI to build agents. Um, and they it comes with
+[01:58] a couple of different base foundational features including things like handoffs,
+[02:02] guard rails, streaming input and output tools, MCP support, built-in tracing, so
+[02:07] you can see actually what your agents did and how they interacted with each
+[02:11] other. And then additionally to those features that are coming from the Python
+[02:14] SDK, the SDK we launched today in Typescript also includes human in the
+[02:19] loop support with resumability so that if you need to wait for human approval
+[02:24] for a while, you can deal with that. And most importantly, native voice agent
+[02:28] support. What that means in practice is you can use that same those same
+[02:32] primitives that we already have in the agents SDK and you can build voice
+[02:36] agents with that that handle handoffs have output guard rails to make sure
+[02:39] that the agent is not saying things it's not supposed to. uh tool calling,
+[02:43] context management, meaning keeping track of the conversation history so you
+[02:47] can use it in other applications and built-in tracer support um so that you
+[02:53] can actually replay conversations, listen to the audio of the user and
+[02:57] properly debug what happened. Plus native interruption support. If you've
+[03:01] tried to build interruptions, you might know how hard this is. If you haven't,
+[03:05] be glad you don't have to. um both WebRTC and websocket support meaning
+[03:10] it's actually can communicate both on the uh on the server for things like
+[03:15] Twilio communicate like phone call voice agents or directly in the client in the
+[03:21] browser that's what we're going to use today using WebRTC
+[03:26] but first why why would we be interested in voice agents in the first place um
+[03:33] one of the things that I'm most excited about is it makes technology much more
+[03:37] accessible to people. There's something magical about being able to talk to a
+[03:40] voice uh to like a voice agent and just have it like see it do things. It's also
+[03:47] um much more information dense. I can convey information much faster, but also
+[03:53] it can contain a lot of information through the type of tone and voice that
+[03:58] I'm using, the emotions. So, it's much more information dense than sort of just
+[04:02] based basic text is. One of the cool things is also it can act as like an API
+[04:07] to the real world. You can have a voice agent go and like call a business for
+[04:12] you and like have a conversation with them where maybe there isn't a there
+[04:16] isn't an API for that business. And so when we talk about building voice
+[04:22] agents, there's essentially two types of architectures that have emerged on when
+[04:26] building these. The first one is based on your traditional textbased agent and
+[04:32] just sort of wrapping it into a chained approach where we have a speech to text
+[04:36] model that is taking the audio and then turning it into text so that we can run
+[04:41] our basic textbased agent on it and then we take that and we uh run that agent
+[04:48] take the text output and run it through a texttospech model to generate audio
+[04:52] that we can play. Again this has a lot of strengths. One of the
+[04:57] most common reasons why we raise this is it's much easier to get started with if
+[05:03] you already have a textbased agent. You can take that wrap some audio around it
+[05:08] and you have something that you can you can interact with. But uh the other
+[05:13] aspect is that you have full access to any model. Text is the main modality
+[05:18] that any LLM has and so you can use really any of the cutting edge models.
+[05:23] also gives you much more control and visibility of what the model did by
+[05:27] being able to actually look into the exact text that went in and out of the
+[05:32] model. But it also comes with some challenges. Turn detection is one of the
+[05:36] one of the big ones where you need to now take into consideration what did the
+[05:41] user hear by the time that they interrupted some uh interrupted the
+[05:46] voice agent. Then translate that part back into text. make sure that like your
+[05:51] transcript is appropriately adapted so that the model doesn't think it told the
+[05:56] user something that it didn't. Um, chaining all of these models together
+[06:01] adds latency on every possible level. And so that's another big challenge. And
+[06:06] then you're losing some of that audio context, right? You're transcribing the
+[06:10] audio. And if you've ever tried to convey a complicated topic over a text,
+[06:15] you know it's a bit harder than dealing the deal dealing with the same thing
+[06:18] using using your own voice. And so an alternative to that chained
+[06:23] approach is a speechtoech approach where we have a model that has been trained on
+[06:29] audio and then takes that audio uh to directly interact on the conversation
+[06:34] and make tool calls. Meaning there's no transcribing in the process. the model
+[06:40] can just natively deal with that audio and that translates into much lower
+[06:46] latency because we're now skipping the speech to text text to speech processes.
+[06:50] We can also now have much more contextual understanding of the audio um
+[06:55] including things like tone and voice and all of that leads to a much more natural
+[07:00] fluid uh level of conversation. But there are some challenges with this.
+[07:05] One of the most common ones is reusing your existing capabilities. Everything
+[07:08] is built around text. So if you already have some of those existing capabilities
+[07:12] or a very specialized agent for a certain task, uh it's harder to reuse
+[07:17] those. Also, dealing with like complex states and complex decision making. It's
+[07:22] a bit harder with these models since they've been really focused on improving
+[07:26] on the audio conversational tone, less so on being very complic complex
+[07:31] decision makers. But there is a solution that we can get
+[07:35] around with this. Um again taking inspiration from what we do with
+[07:39] textbased agents, we can actually create a um delegation approach using tools
+[07:45] where we have a frontline agent that is talking continuously to the user and
+[07:50] then that one uses tool calls to interact with much smarter reasoning
+[07:55] models like 04 mini or 03. Uh actually let me at this point give
+[08:01] you a quick demo and see how the internet goes here. Um, so I have a
+[08:05] real-time agent here that we build with the agent SDK. It's going to be very
+[08:09] similar to what you're going to build later on. Um, but when I start talking
+[08:13] to this, hello there.
+[08:19] Hello there. How is the engineer going? So we can now give it t like give a task
+[08:27] to like call tools that I gave it like hey what's the weather today?
+[08:34] Let me check the weather for you. One moment, please. Transferring you to the
+[08:38] weather expert now. Actually, I can directly help you with the weather
+[08:43] information. Could you please specify the location you're interested in? Oh,
+[08:46] yeah. What's the weather in San Francisco?
+[08:50] So, you can see here it's actually dealing with the interruption.
+[08:54] Enjoy the bright and pleasant day. Is there anything else I can? No, that's
+[08:59] it. Thanks. You're welcome. If you need anything
+[09:04] else, feel free to ask. Have a great day. And so in a similar way, we can
+[09:08] actually trigger the more complicated backend agents as well. So I have a tool
+[09:13] for this to handle refunds that will call out to 04 mini and evaluate the
+[09:17] refund. So hey there. Um I have one more thing. So I recently ordered this
+[09:23] skateboard that I tried to use and it seems like I'm really bad at
+[09:27] skateboarding. So I want to return it. Um, it is slightly a scratch though.
+[09:34] I'm here to assist, but it sounds like you need customer service for that. I
+[09:39] recommend contacting the company where you bought the skateboard. They can
+[09:43] provide you with the Looks like I didn't add the tool. Maybe I did.
+[09:49] Oh, I asked for I didn't ask for a refund. Um, let's try this once more.
+[09:55] Hey there. Um, I bought a skateboard recently that I tried and apparently I'm
+[10:00] really bad at using it, so I wanted to return it. It is slightly scratched, so
+[10:04] can you give me a refund? Hello there. How is the
+[10:10] Hello there? How is the AI engine? The joys of internet. Um,
+[10:17] hey. Um, I recently ordered a skateboard from you and it uh
+[10:24] failed. Like I I can't use it. I'm struggling to use it. It's slightly
+[10:28] scratched. Can you give me a refund, please?
+[10:32] Hello there. How is the I'm going to assess your request for a
+[10:38] refund. There we go. It is slightly struggling with this like weird echo
+[10:42] that we're having here. your skateboard arrived damaged and you're eligible for
+[10:47] a full refund, we'll process that for you. All right. Um, but you can see here
+[10:52] that uh it was able to call that more advanced tool and um actually process
+[10:58] that request. And one of the nice things is that like while time to first token
+[11:04] is often a really important thing, the longer a conversation goes, like your
+[11:09] model is always going to be faster than the audio that has to be read out. And
+[11:13] so this this is like a really helpful thing where by the time that the model
+[11:17] was able to say like, hey, I'm going to check on this for you, it already had
+[11:22] completed that LM call to the 04 mini model to get the response there.
+[11:29] All right. Um, let me Oh, one more thing. Since we
+[11:34] talked about traces, one of the nice things now is we can actually go back
+[11:38] here into our traces UI. And this launch today, um, you'll be able to actually
+[11:43] look for any of your real-time API cases, look at all the audio that it
+[11:48] dealt with, um, and all the tool calls. So, we can actually see here that the
+[11:52] tool call was triggered, what the input was, the output. We can listen to some
+[11:56] of the audio again um, to understand what happened. And
+[12:02] then because both this and the backend agent used the agents SDK, we can go
+[12:07] into the other agent as well, which was the O4 mini one, which we can see here.
+[12:12] And we can see that it received the context of the full past conversation,
+[12:16] the full transcript, um, as well as additional information about the request
+[12:21] and then generated the response here. So this allows us to then get a full
+[12:25] complete picture of like what happened both on the front end and the back end.
+[12:30] Let's jump back into the slides and cover a couple of more things before we
+[12:33] get coding. Um, and that's about best practices. So, I would group when you're
+[12:40] group the best practices of like building a voice agent into three main
+[12:43] things to keep in mind. Uh, the first one is to start with a small and clear
+[12:48] goal. This is super important because measuring the performance of a textbased
+[12:53] agent, you will hear a lot about evalu.
+[12:58] But with voice voice agents, it's going to be even harder. So you want to make
+[13:02] sure that you're very focused on like what is the first problem you want to
+[13:05] solve and keep it focused on that and give it a like limited number of tools
+[13:10] so that you're fully centered on this. The agents SDK makes this really easy
+[13:14] because you can then later on add additional tools to additional agents
+[13:18] and deal with like handoffs between them. Uh but this way you can kind of
+[13:23] really stay focused and make sure that one of your use cases is great and then
+[13:27] hand off other ones to human agents for example.
+[13:31] The second one is what I elaborated on which is building evals and guard rails
+[13:36] very early on. Uh so that you can feel both confident in what you're building
+[13:40] but also confident in um that is actually working so that you can then
+[13:46] continue to iterate on it and know when it's time for you to like grow the
+[13:49] complexity of your voice agent. Uh as of today you can use the traces API the
+[13:56] trace dashboard for that. Uh but alternatively, some of our customers
+[14:00] have even built their own dashboards like Lemonade to really get an
+[14:03] end-to-end idea of the customer experience and then even replay some of
+[14:07] these conversations with their agent as they're iterating on it.
+[14:12] The other thing that I'm personally super excited about with these models is
+[14:16] uh both our speech to speech model and our text to speech model are generative
+[14:20] models meaning you can prompt them the same way that you can prompt a LLM
+[14:25] around tone and voice and you can give it emotions roles personality. Uh we
+[14:31] built this little micro site called openai.fm. It's a really fun website to
+[14:36] play around with where we have a lot of examples of different personalities and
+[14:40] how that uh that that style of prompt can then change what is being read out
+[14:44] by our text to speech model. And so that's a great way for you to not just
+[14:49] limit one second uh limit the experience of your model
+[14:55] um or like the personality of your model by the voice that you picked but also by
+[14:59] the prompt and instructions that you're giving it. There was a question there.
+[15:03] Would you mind using the mic that is right behind you just so that it's on
+[15:06] the recording?
+[15:11] Hello sir. So my question regards to the previous slides on Lemonade. So you're
+[15:16] displaying how they have this dashboard where they can show all of this. Is this
+[15:22] a dashboard that OpenAI provides and Lemonade just integrates as like an
+[15:27] iframe or something? No. So in this case they built their own um solution for it.
+[15:32] Okay. And does OpenAI then provides all the JSON or the data structure that we
+[15:36] can just plug into the so the the way the real time API under the hood works
+[15:40] is that you get all the audio data and you can do whatever you want with that.
+[15:45] Basically, you're getting all the necessary audio events. So you can use
+[15:48] those data structures. So we're not storing them by default. You can use the
+[15:52] traces AP uh the traces dashboard. We don't have an API for it yet, but you
+[15:56] can use the trace traces dashboard to um get a a basic look of of that, but it's
+[16:02] not ifraable. But you mentioned it's only audio data. This shows not just
+[16:07] audio, but also transcription and all of that as well. Right. So, the the traces
+[16:11] dashboard, if we go back to it, um does show
+[16:15] um all of the transcripts and stuff as
+[16:19] well, as long as you have um transcription turned on, which I don't
+[16:25] seem to have turned on for this particular one. Um but it should like
+[16:29] you can turn on transcription and you should be able to see the transcripts as
+[16:32] well. Okay. Thank you. You're welcome.
+[16:38] All right. Um let's go back to this. Um the other part with it is as I said you
+[16:46] can prompt both the personality you can also be very descriptive with the
+[16:50] conversation flows. One of our colleagues um found that giving it
+[16:55] conversation states and so this JSON structure is a great way to help the
+[16:59] model think through sort of what processes and what steps it should go
+[17:03] through the same way that you would give a human agent a script to operate on.
+[17:08] If you're struggling to write those scripts though, uh we also have a custom
+[17:12] GPT that you can use to access that. And I'll share all of those links and a copy
+[17:16] of the slide deck later on in the Slack channel. So if you're in that, uh you
+[17:20] should be able to access those. But with that, um that's primarily what
+[17:26] I wanted to talk through from a from a slides perspective. So from here on,
+[17:32] what I want to do is um build with you a voice agent. We'll see how that goes
+[17:36] with the internet. Um, also, if you have headphones, now is a great time to bring
+[17:41] them out. It's going to be really weird when we're all gonna talk to our own
+[17:44] agent. Um, but we're going to try this and see how that goes. Um, so if you
+[17:49] came in later, please scan the QR code, go to that uh GitHub repository, and set
+[17:56] that up. Install the instructions. There's no code in it yet other than
+[17:59] like a boilerplate Nex.js JS app and a um empty like package JSON that install
+[18:06] just like the dependencies that we needed so that we are not all trying to
+[18:10] run npm install at the same time. But what I want to do is build a first
+[18:17] agent. Um, so if you want, you can just straight up copy the code that is on
+[18:23] here, but I'm gonna um actually go and type it along with you all so that you
+[18:30] get a feeling for what's happening and we have a good idea of like timing. So
+[18:35] if you want to take a picture now and just code ahead, do that. And otherwise,
+[18:39] I'm going to switch over to my code editor and we're going to do this
+[18:41] together.
+[18:44] Oh, and if you're running into trouble, the Slack is a great way to post
+[18:50] questions that are technical questions and a noop who's over there um is going
+[18:56] to try to help you. Um, alternatively, raise your hand, but it's a bit easier
+[19:00] if you're just slacking the messages there and we can kind of multi-thread
+[19:05] the problem. Um, all right, let's go and build an agent. So if you clone the
+[19:12] project, you should see an index uh.ts file. Go and open that and you
+[19:19] should be able to import the agent class from the OpenAI/ aents package. That's
+[19:26] what we're going to use to create the first agent. Yeah.
+[19:31] Oh yeah, good call. Um
+[19:44] Is that better? Cool.
+[19:48] That seems a bit seems worse on my side than yours, but I think as long as you
+[19:53] all can read that, I'll be fine. Um, all right. So, what you what I want you to
+[19:57] do is go and import an agent. And we're going to define our first agent. And as
+[20:01] I mentioned, um, primarily the an agent has a like a few centerpieces. The first
+[20:07] one being a set of instructions on what to do. So we can give it instructions.
+[20:12] I'm going to say you're a helpful assistant. That's sort of the most
+[20:15] boilerplate thing you can do. We do need to also give it a name and that's uh so
+[20:19] that we can actually keep track of them in our traces dashboard.
+[20:24] I'm going to say my agent here. This can be anything that helps you identify it.
+[20:29] And then we need to actually execute this agent. So we can import a run
+[20:34] function here. And then
+[20:39] we can await the run here. I'm going to run this agent with just hello, how are
+[20:47] you? And then log out the results. And with the results we get a lot of
+[20:52] different information because uh essentially when we run an agent it's
+[20:55] going to do a lot of different tasks from executing all necessary tool calls
+[21:00] if there are any to validating output guard rails etc. But one of the most
+[21:05] common things that you just want to log out is the final output. That's whatever
+[21:09] the last agent in an execution said. Um, so in this case it's going to be uh a
+[21:16] set of text and then you should be able to run npm start
+[21:21] um oh npm run start 01
+[21:28] and that should execute it and then you should see something like this um
+[21:33] depending on what your model decides to generate and by default this is going to
+[21:38] run gbt 4.1 um as the model but if you want
+[21:42] experiment with this. You can set the model property here and we can set it to
+[21:49] for mini for example and then rerun the same thing. So this is the most basic
+[21:55] agent that you can build. But one of the things that really makes something an
+[21:59] agent is if it can execute tools. So we can import a tool here.
+[22:07] We go and we can define a get weather tool. Um,
+[22:14] one of the things here is you have to specify what arguments the model is
+[22:20] going to receive. And one of the ways that you can do this is through a tool
+[22:24] called ZOD. If you've never heard of it, it's essentially a way to define
+[22:27] schemas. Um, and what we'll do is we'll both use that ZOD schema to inform the
+[22:34] model on what the parameters for this function call are, but we're also going
+[22:37] to use it to validate then what are the actual arguments that the model tried to
+[22:42] pass in and do they fit to that schema. So we get full type safety here if
+[22:47] you're a TypeScript developer and you care about that. So in this case we have
+[22:51] um a get weather tool and then we can give that tool to the agent and we can
+[22:56] change this to what is the weather in Tokyo uh is what cursor wants to check.
+[23:03] So if I run this again, let me move this slightly. We can see
+[23:09] it's going to take a bit longer now and that's because it ran some tools. Um and
+[23:13] now it's telling me the weather in Tokyo is sunny. And if you're wondering, well,
+[23:17] did it actually run a tool? We can go into
+[23:25] our traces dashboard here and look at the trace. We have a my
+[23:32] agent here. And in there we can see it ran
+[23:40] tried to call the tool executed the tool and got the weather in Tokyo sunny back
+[23:46] and then took the response to generate the final response. So the traces
+[23:51] dashboard is a great way for you to see what actually happened behind the
+[23:54] scenes. How we feeling? Can I get a quick
+[23:58] temperature check? Are able are people able to follow along? See Zeke is giving
+[24:03] a thumbs up there. So um all right so this is a textbased agent. I wanted to
+[24:09] show you this just to get a bit familiar with the um overall agents SDK so that
+[24:14] we can jump into building voice agents. Uh the first one we're going to build or
+[24:19] like the first thing we need to understand about a voice agent is the
+[24:24] slight differences between a voice agent and a and a what we call a real-time
+[24:29] agent. Essentially, a real-time agent is just a specialized version of an agent
+[24:33] configuration. There's just a few fields you can't pass in, but they can be used
+[24:37] in what is a what's called a real-time session because with voice agents,
+[24:41] there's a lot more things to deal with than just executing tools in a loop. Um,
+[24:46] one of the most important things is you need to deal with both the audio that's
+[24:49] coming in, uh, process that and then like run the run the model with that and
+[24:54] then gener deal with the audio that's coming out. But you also need to think
+[24:58] about things like guard rails, handoffs, other life cycle things. And so the
+[25:03] real-time sessions are really dealing with all of that. So let me show you how
+[25:08] that works. Um for this what we're going to do is we're going to go in the same
+[25:13] project. There's a 02 and it has a page txt tsx in there. Um,
+[25:20] this is a Nex.js app that really I just gutted to have like the bare minimum in
+[25:26] there, but this is a great way for us to just uh build both the front end and the
+[25:30] back end part of the um voice experience because this voice agent that we're
+[25:37] going to build is going to run in the browser. In order to make sure we're not
+[25:41] leaking your API credentials, one of the important things is you need to use an
+[25:45] ephemeral key. That is a key that is shortlived and is going to be generated
+[25:49] by your server and handed off to your client so that they can use that to
+[25:53] interact with the real-time API over a protocol called WebRTC.
+[25:58] Um, for that you should see a token.ts file in your repository that just calls
+[26:06] out to the real-time API to generate a session and then return a client secret
+[26:11] which is that ephemeral key that we can then use to authenticate with the SDK.
+[26:14] You do not have to do this if you're building a real-time agent that is
+[26:19] running on your server. For example, in the case of a Twilio app or something
+[26:24] else where you can just directly interact with the
+[26:29] uh open AI API key. But if you're running anything in the browser, then
+[26:33] you actually need to generate this client key just so that you're not, you
+[26:37] know, giving your API key to the world. So with that in here, we can actually go
+[26:44] and build our first real-time agent. So similar to previously, we're going to
+[26:48] import a an agent class here, but in this case, it's going to be a real-time
+[26:53] agent.
+[26:57] And we're going to import it from the real time package
+[27:00] uh which is just a subpath in the same package. So you don't need to install a
+[27:04] different package here. But now we can define a real-time agent that works the
+[27:09] same way. We have a name, we give it instructions.
+[27:12] Um, just sort of going with a default suggestion here. And now we actually
+[27:18] need to connect that agent to a real-time session. So I have a connect
+[27:22] button here for running this example. Let me start it up here with npm run
+[27:29] start02. That command should be in your readme as well.
+[27:33] Uh, it's going to start a development server. And we can go over here, reload
+[27:38] this, and you can actually see it just has like a little connect button
+[27:43] that right now doesn't do anything. So, let's connect that up. I don't need
+[27:49] this anymore. Um, so let me just move this to the side.
+[27:55] Um, so in this on connect function that gets triggered whenever we press the
+[28:00] button, we want to deal with that connected state. So
+[28:05] we're what we're going to do here is we're first going to fetch that token.
+[28:09] And this code what this basically does is it's going to import that server
+[28:14] action which is an next.js concept that just makes sure that like this code is
+[28:18] going to run on your back end. If you're using a different framework, you you
+[28:22] should be able to just go and fetch this key from your backend server. Um, and
+[28:28] then once we have that token, we can go and create a new real time session. So,
+[28:34] what we're doing here is we're going to give it the first agent that should
+[28:37] start the conversation up. Uh, I'm going to specify the latest model that we
+[28:42] released today along with the agents SDK. This model is a if you've used the
+[28:47] real-time API before, it's an improvement especially around tool
+[28:50] calling. It's much better on that front. Um, we have a couple of different
+[28:55] customer stories on our Twitter if you want to check that out. Um, and then I'm
+[29:00] going to give it not there. I don't know why cursor insists on that. Um, the last
+[29:05] step that we need to do is we need to connect to that session.
+[29:09] So, this is where we're going to give it that API key so that the mo that we can
+[29:15] connect to the real-time session under the hood
+[29:19] just so that it's easier for us to deal with all of this. I'm also going to
+[29:22] close the session. But I've got one thing here that is an oddity of
+[29:28] uh React. We do not want to generate that session every time. So, I'm going
+[29:34] to on every rerender. So, I'm going to create a what is called a ref here.
+[29:39] Again, if you're new to React. Um, this basically is just a variable that's
+[29:44] going to persist through rerenders. So, we need to slightly change this here
+[29:48] where we're going to assign that to session.curren
+[29:51] so we can maintain that. And then that also allows us to say if there is a
+[29:56] session.curren set, uh, we want to actually close that connection when we
+[30:00] press the disconnect button. That just makes sure that we're disconnected from
+[30:04] the audio again.
+[30:07] So, I'm going to leave that on the screen for a second and then we can test
+[30:11] this out. But if you already typed this, go into your browser, refresh, press
+[30:16] connect, and you should be able to talk to your agent.
+[30:29] All right, let's try mine. Let me move this to the other side so it's not
+[30:33] blocking your cut.
+[30:38] Hello. Hi there. How can I assist you today?
+[30:43] All right. So, you can see um it's just a few lines of code. We didn't have to
+[30:48] deal with things like figuring out how to set up the microphone, how to set up
+[30:51] the speakers. By default, if it's running in the browser, it will do deal
+[30:55] with all of that automatically. If you do want to pass in your own microphone
+[30:58] source or other things like that, you can do that as well. Um, if this is
+[31:02] running on a server, you have a um both a
+[31:11] send audio function that allows you to send an audio buffer in or you can
+[31:16] listen to the audio event which is going to emit all of the audio buffers that
+[31:21] are coming back from the model so that you can pass it to whatever your source
+[31:27] is. Um,
+[31:31] so that's our first basic agent. Any any questions so far?
+[31:40] H, can you send that code to the red? Sorry, we want you to send the code. Can
+[31:47] you push it? Can you push it up? I can push it. Yeah.
+[32:04] Good call. Thank you. Um, all right. So, now that we have that,
+[32:12] let's go and actually give it a tool. So, this is really where the benefit of
+[32:16] the um agents SDK comes in. We can actually use that same tool definition
+[32:22] that we did earlier. Um, so I'm just going to follow the autocomplete here.
+[32:26] We should be able to just give that tool now to our agent
+[32:33] and save. I need to import zod
+[32:38] again to do that schema validation. This is especially important on the real time
+[32:42] side because the real- time model currently do not does not support strict
+[32:46] mode. So the JSON might not fully comply with your um
+[32:53] um schema unless you're running you're giving us a zod schema and we'll go and
+[32:58] validate that this actually fits that schema. So that makes your code a bit
+[33:01] easier. So with that we can go back. Hey, what's the weather in San
+[33:09] Francisco?
+[33:12] The weather in San Francisco. We can disconnect it here. Um, also this
+[33:18] does now deal with interruptions. So, hey, can you slowly count to like 20?
+[33:26] Sure, I'll count to 20 for you. 1 2 3 4 5 Okay, stop.
+[33:37] Sure, I'll stop counting. How far did you count?
+[33:41] I counted up to six. It's pretty pretty close. It's always
+[33:46] hard with the timing to like perfectly get it, but uh normally that's enough to
+[33:51] um deal with the context, but it is super crucial to have that interruption
+[33:55] timing so that like your model doesn't think it read out like the full customer
+[33:59] policy um but the customer interrupted it halfway through, for example. Um all
+[34:05] right, question. You don't have to um manage
+[34:09] all the events to actually do that anymore? No. Um, so the the real- time
+[34:14] session will handle all of those events. That is a great proxy to if you are
+[34:20] curious about these events um that you're alluding to. What we can do is
+[34:26] listen to the transport event
+[34:33] and let's do this later. Uh this will log out all of the events that are
+[34:38] happening under the hood. So, if we open the dev tools here and rerun this.
+[34:49] Hey, hey there. How can I help you today? So, you can see all of the events
+[34:55] that normally you would have to deal with are being dealt with, you still
+[34:58] have full access to them. So, you can both read them, but you can also send
+[35:02] events yourself. So, it's going to handle all of the things but continue to
+[35:07] par pass them on to you if you want to do your own logic. On top of that,
+[35:14] I'm going to push that code for you so you can pull it.
+[35:28] Cool. Um, all right. Since we already have this
+[35:33] commented out code, the other part of this that typically is a request that
+[35:37] you want to deal with is I want to show like the transcript. I want to see what
+[35:42] sort of is being transcribed. And the important thing here is I'm using the
+[35:45] word transcribe because even though the speechtoech model is dealing with the
+[35:50] audio directly, um, and there is no transcription step in between, by
+[35:55] default, we're going to transcribe all of the conversation at the same time.
+[36:00] Um, you can turn that off if you want to. Um, if you're using the API
+[36:04] directly, you have to actually turn it on. Um, in the agents SDK, it's turned
+[36:09] on by default because it's such a common request and it enables us to do a couple
+[36:13] of additional features that we'll cover later on. But this is going to give us
+[36:18] that whole history every time. So, I'm just going to um log that history here.
+[36:26] Or rather, I'm gonna There we go. import that. I'm going to
+[36:32] set that as a variable. And then because it's React, we can let's create a list
+[36:39] here. We're going to go over all of this. I need to filter because it has
+[36:44] both tool calls and messages. And I only want to show the messages for this. Um,
+[36:49] so should be able to does why I want that. Um, let's see.
+[36:58] Close this. Refresh. Hey.
+[37:02] Hello. How can I assist you today? How's the weather today in San
+[37:07] Francisco? The weather in San Francisco today is
+[37:12] sunny. Anything else you'd like to know? So, you're automatically getting that
+[37:16] conversation. If you are interrupting the model, one of the things that
+[37:20] happens is the transcript is going to disappear. And that's because uh the the
+[37:26] model currently does not adjust that transcript and instead it's going to be
+[37:31] removed and we're going to remove it from that object as well just so that
+[37:34] you get the most accurate representation and you're not thinking that like the
+[37:38] model read out a certain piece of text. And again with everything that we're
+[37:44] doing here can actually go back into traces and we can see that same
+[37:48] representation here with the weather call and everything. So again helps with
+[37:52] the debugging.
+[37:57] Go briefly back to the slides. So we covered we set up our first agent.
+[38:02] Yeah.
+[38:07] The question was how do you store the conversation history? Um so it's
+[38:11] currently fully stored in memory. Um, so basically there's going to be a bunch of
+[38:16] events that that I logged out that are being emitted by the real-time API. All
+[38:21] of those are going to be sent over to the client and then store it in memory
+[38:26] in a conversation like in just like an array essentially. So you can do
+[38:30] whatever you want with that by listening to that history updated event. So if you
+[38:34] do want to store it somewhere, you can store it. Um the other part is the
+[38:39] traces part is automatically going to be stored on the open AAI uh platform as
+[38:44] long as you both enable that tracing you can disable it um by default in the
+[38:50] agent SDK is enabled and then um the other aspect of that is if you are a ZDR
+[38:56] customer so a zero data retention customer of open AAI you don't have
+[39:00] access to that traces feature um about the conversation
+[39:17] Um, so the question was how much of the like voice context, how much of the
+[39:22] previous conversation is being used. Um, that's going to depend and sort of like
+[39:27] dealt with directly by the real-time API. So like the real-time API when you
+[39:31] do start that session um that holds the source of truth for that whole
+[39:37] conversation session. So what you're receiving on the on the client side is
+[39:42] just a copy of whatever is happening at that point. It's not the source of truth
+[39:46] of what we're going to adapt to pass into the model.
+[40:11] Um the question is how does it work with like the inference cost and like whether
+[40:16] you're passing like passing in that whole conversation. Um, and Noob is
+[40:21] nodding. Um, he is the bigger expert there. But yes, um, we're actually like
+[40:25] you can log the the like we're keeping track of the usage. There's an event
+[40:31] that you can like log out to see your token cost. Um, so you have an idea of
+[40:35] like what is being actually passed in. So like with every if we're going back
+[40:39] here to this example, you can see these response done events. Um I don't know
+[40:46] where is the um shouldn't it be on the response done?
+[40:52] Uh it is being sent over. I just do not know right now why it's not showing. Oh
+[41:00] there. So you can see here um it outputs the detailed information of your tok to
+[41:06] token usage at any point in time. So while you don't have like access to like
+[41:10] what is exactly what was passed into the next response generation um you can keep
+[41:16] track of the cost as it's happening. You're welcome. Uh yes. Do you there's a
+[41:23] microphone right over there that might be easier than you yelling across the
+[41:26] stage to me. I I see that the format that you're using is PCM16. Is there a
+[41:32] way in which we can modify the output formats of the audio files so we can
+[41:36] save in memory? Um yeah, there are different different audio modes that you
+[41:41] can use um including like for example u law for that is like helpful for phone
+[41:46] calls for example.
+[41:50] Sorry, another question on the usage. Um does that like final assistant response
+[41:56] roll up all the tokens from like all the intermittent tool calls as well? Does
+[42:01] that make sense? Like the agent needs to like kind of reason through and then
+[42:05] format tool calls. So I'm assuming it's not just the output tokens for only the
+[42:09] assistant response, right? It like every tool call is a response in general as
+[42:16] well. So like it it works the same way that like the responses API works for
+[42:21] example. Okay. So like each right because we're using this and we have
+[42:26] like tool calls and tool call outputs, right? And I couldn't find the like
+[42:29] usage attribute on the tool call output. Is it somewhere in those like raw events
+[42:33] that are outputed? Do you do you know a new Okay, no
+[42:38] worries. I I know it's like kind of early on. We can we can follow up
+[42:40] behind. Thank you. You're welcome. Uh yeah. Do you want to head over to that
+[42:44] microphone that is right behind you? It just makes it a bit easier.
+[42:50] Uh yeah, there's in the meantime just a quick question. Can I go back to the
+[42:54] slides explaining the different modes of the uh the audio agents like the text in
+[43:00] text out that's the first one. Oh yeah, text to speech that's the second one.
+[43:04] Uh, I didn't get the third one. And uh Oh, you mean this?
+[43:12] Yes.
+[43:15] Yes. It's uh when you just showed us the GPT4 real time that one. Yeah. That
+[43:22] model is that uh this PPT this slide is about. Yeah, exactly. So like where it's
+[43:28] like when we did the refund um it kind of followed this pattern where it
+[43:33] performs a tool call like the like real time API agent can perform tool calls.
+[43:39] It performed a tool call to trigger a separate agent that was the refund agent
+[43:44] that in my case used 04 mini to execute that task and then hand that back.
+[43:50] Okay, got it. Thanks. You're welcome. Yes. Um I'm currently using like a
+[43:56] regular uh OpenAI agents. So what will be the challenge that I will face when I
+[44:02] would when I want to change my regular regular agents to realtime agents? So
+[44:08] there's a couple of different challenges like one is like anything that you're
+[44:14] doing around latency like like anything you're doing around um voice latency is
+[44:21] always king. So like you want to figure out what are the best ways to actually
+[44:26] have a slide around this. Um like when you when it comes to things like tool
+[44:31] calling, you want to find ways to do things like buying yourself some time.
+[44:35] So you will typically see some prompting around like announce what you're about
+[44:40] to do next um before you're doing it. And that's to do that little trick
+[44:44] around uh while the while the previous audio is still being read out, the agent
+[44:50] can already perform the tool call and wait for the tool call to come back
+[44:54] because similar to a textbased agent, the model can't do like can't receive
+[44:59] additional data as like like do another thing. Um outside of like we can
+[45:05] interrupt the response but it can't finish that response if that makes
+[45:09] sense. And so you want to do these sort of like buying time. The other thing is
+[45:13] like if you're building a real-time agent, the longer your prompt gets, at
+[45:19] one point it increases the likelihood that it gets confused. So you want to
+[45:22] make sure you're properly scoping those use cases and like through what what we
+[45:28] call handoffs where you have different agents that are more spec scope to
+[45:32] specific steps in your experience. Thank you. You're welcome.
+[45:40] Yes.
+[45:50] Yeah. So you're uh
+[45:55] Yeah. So the question is about memory. Um basically
+[46:00] right now the the the
+[46:04] let me correct this. Um, when we go back to this demo, what you're seeing here is
+[46:10] essentially just like a copy of the events that we're receiving back. So,
+[46:14] this is like helpful as a visualization of the history. Uh, that being said, the
+[46:19] actual like memory in the sense of like an LM agent memory is the session
+[46:25] context that is happening on the real-time API side. There are events
+[46:29] that you can use to update that. Um, we actually have an update history event
+[46:34] that you can pass in what you want the history to be. But what that does is
+[46:38] essentially like fire off events to the real-time API to say like delete this
+[46:43] item from the history or add this new item. Um, and you can give it a previous
+[46:48] item ID. So like you can for example like slot messages into a specific spot
+[46:53] if you wanted to. Um, does that make sense? But there's like no no like
+[46:58] advanced like long-term memory solution like like you were alluding to. Cool.
+[47:05] Yes. Hi. Do you have tips for handling input from low fluency users? Like say
+[47:11] someone who's just learning a language and they have like multilingual input
+[47:15] and maybe broken grammar and their pronunciation is not so good. Uh I don't
+[47:19] think I have any like best practices right now that I could share. Can it
+[47:24] handle it just off the shelf or? Um, it can handle like switching languages and
+[47:29] and things like that. Okay. But it might not be able to handle low fluency.
+[47:34] Um, I don't know if we have any use cases.
+[47:44] Yeah, we have we have some customers that are like language learning
+[47:47] companies. So there there is some that are using it that way. But I don't think
+[47:50] I have any like best practices that I can share. Okay. Thank you. You're
+[47:54] welcome.
+[47:58] Sorry. Back in the code, is there a call back for the interrupt and does it
+[48:03] include the last transcription? Um, there is a call for the interrupt, but
+[48:09] uh there is no um
+[48:15] there's no actual like event that there's no parameter E that comes with
+[48:20] it or anything like that. No, there's currently no um transcript. So what you
+[48:24] can do is if you're getting this, you can call get history or something. Uh
+[48:30] there's just history. Um so like this always is up to date. Um so you can you
+[48:35] have access in that moment. The the thing that we do have is um for tool
+[48:43] called specifically um you're getting some additional
+[48:47] context and that context has a um history parameter that you can like
+[48:54] push into. Okay. Um it's more documented in the in the documentation the API.
+[48:59] Okay. Great. Thank you. You're welcome. Awesome. Um, let's move a bit on and
+[49:07] show a couple of other things. So, we talked about tools. As I said, like one
+[49:11] of the benefits is you can reuse the same syntax that you're doing with
+[49:14] textbased ones. Um, it's also a good way for you to then communicate with your
+[49:19] backend systems using HTTP. um follows sort of a um
+[49:28] general practice around like keeping both the tool calls as low latency as
+[49:34] possible. like send out a tool like for example if you know a task is going to
+[49:39] take longer, start the task, give it a task ID and have the agent have a tool
+[49:44] to check on the status for example like that helps getting back to it because
+[49:50] again while the tool call is going on the model is sort of stuck. So you want
+[49:55] to you want to make sure to like get get back to that as soon as possible. Um one
+[50:00] of the other things that you can do is human appro uh uh human approval. I can
+[50:04] show you that quickly. There's essentially a use uh it needs approval
+[50:11] that um you can either specify as a function that will be evaluated before
+[50:16] the tool ever gets triggered. This is a great way if you have like a more
+[50:20] complex logic on I need approval for this. You
+[50:24] can also give it just straight up I always need approval at which point
+[50:29] there is a another event here. um
+[50:35] tool approval requested and then that gets a
+[50:40] um event here. So we can do things like um
+[50:51] good old prompt um and then we can go and approve that
+[50:58] tool call again.
+[51:02] I don't know why the autocomplete is not working.
+[51:07] Um,
+[51:13] proof. There we go. And
+[51:21] why is it
+[51:30] Oh, this is wrong. This is where I go into the docs because
+[51:36] I do not remember why this is autocompleting the wrong way. But
+[51:41] everything I'm showing you is in the docs. Um, so we can just
+[51:47] Oh, took the wrong thing. Right. The first
+[51:55] There we go. Approval request.
+[52:00] And then we can do
+[52:07] approval request. Thank you. It's like the classic thing when you're on stage
+[52:11] and you can't really
+[52:16] There we go. So, in this case, I'm just going to always approve. But if we now
+[52:24] go in, hey, um, can you tell me the weather in
+[52:29] Seattle?
+[52:34] So we can in that case approve it. It's always going to approve right now
+[52:38] because I'm not actually checking the status. But um that means you can build
+[52:41] like a human in the loop approval experience.
+[52:45] This is really convenient especially if you're running it in the browser and you
+[52:48] just want to have like a confirmation if like the tool is hallucinating things
+[52:51] before the customer actually submits it. And does it do it directly? kind of
+[52:56] actually say you okay if I do this or not to do that and then do voice extra
+[53:02] voice so the the basically this is happening so the question is does it
+[53:07] automatically do this like the what we're doing and the reason why this is
+[53:12] separate is the model is asking for this tool to be executed but we're
+[53:17] intercepting this um basically before we're ever generating or executing the
+[53:22] response this is intentional so that like you don't have to deal with like we
+[53:27] want you to think through why should this tool need approval as opposed to
+[53:32] doing that somewhere halfway through your tool execution and you have to like
+[53:36] deal with the consequence of rolling back every decision that you've made for
+[53:40] example and so by default if this is just needs true it cannot get past that
+[53:45] until the execution was approved at which point it stores it in the context
+[53:50] that is stored locally and then bypasses that security. So this is not happening
+[53:55] on the on the model level.
+[54:00] Um I'm going to remove that again. Uh so the other thing we talked about
+[54:05] already but I want to show it in practice is handoff. So a handoff is
+[54:09] essentially just a specialized tool uh call that resets the configuration of
+[54:15] the agent in the session so that um we can update the system instructions, we
+[54:21] can update the tools and make sure that we can nicely scope the task of what
+[54:26] we're trying to um solve. So what you cannot do, I know people probably gonna
+[54:33] ask about this is you can't change the voice of the agent mid session. You
+[54:39] could define different voices on different agents, but the moment that
+[54:43] you're like the first agent that starts talking, that's the voice that we're
+[54:48] going to stick with throughout the entire conversation. So that's a caveat
+[54:52] to just keep in mind. Um, but they're still very helpful to let's say have a
+[54:59] weather agent here.
+[55:06] Sorry.
+[55:09] Um, and what we're going to do in this one is called weather agent.
+[55:15] Um
+[55:23] um
+[55:29] let's give we'll do this and then what we can do is we can actually give it a
+[55:34] handoff description. So if you don't want to have this in your system prompt,
+[55:37] but you just want to help the model understand when to use this, you can say
+[55:41] like uh this agent is an expert in weather. And then this one is going to
+[55:47] have that weather tool. We're going to remove it from this one and we're going
+[55:51] to give it a handoff instead to that other weather agent.
+[55:55] So now if I'm going to restart this, hey, can you tell me the weather in uh
+[56:02] New York?
+[56:05] The weather in New York is sunny, so you might want to grab your sunglasses if
+[56:10] you're heading outside. Enjoy the day. All right, that's that's the model's
+[56:15] best attempt at New York accent. Uh, we'll take it. Um, but you can see there
+[56:21] that like it automatically handed off from that first agent to that second one
+[56:25] and let it handle it. You can through prompting do things like do you want it
+[56:29] to announce that it's about to hand off? Do you not want to do that? Sometimes
+[56:33] it's a bit awkward if you're forcing it to always do it. So like I would not
+[56:37] necessarily try it, but maybe that's the type of experience that you want to
+[56:40] have. Um, so that's handoffs. Let me do you a
+[56:45] favor and push that code. Baby push.
+[56:50] So the change voice, but it can change
+[56:55] accents. Yeah. So uh, that's a good question. and
+[56:59] the the the agent can ch can't change the voice but it can change the accent.
+[57:05] Um that's because the um like again this goes back to like the
+[57:11] model is a generative model. So you can prompt it to have different like
+[57:17] pronunciations, tonality like voice in that sense but it cannot change the
+[57:24] voice model that is actually being used to generate that output.
+[57:29] So maybe it is it like the whole real time request
+[57:36] body that can't be changed or just the voice. So can I like create a tool that
+[57:40] could adjust the speed if someone was saying it's talking too fast for the
+[57:45] noise reduction? You should be able to change I I have
+[57:49] not tried the speed because speed parameter changing at mid session
+[57:52] because it literally came out today. Um uh I don't know Anoop if you tried this.
+[57:58] No. Um but like you can like essentially a handoff does change the session
+[58:03] configuration. Like if we look back at like um the
+[58:10] like one of the transcripts here like now that we have a handoff
+[58:15] um let's go to this trace. So you can see here that like it called the
+[58:20] transfer to weather agent. Um but then like the this these instructions were
+[58:27] talk to talk talk with a New York accent. Um so in this case it did change
+[58:33] the instructions midway through the session. And the same way like when that
+[58:37] handoff happens we take away the tools we give it new tools. So you can change
+[58:42] those tools. You could have a tool to change the tool but my recommendation
+[58:47] would be like use a different agent for that. Um, but then like the speed
+[58:51] control like you could you should be able to send off an event but I have not
+[58:55] tried that. Yeah. Maybe like the background basically like if you had
+[59:00] something and someone was like in a noisy environment like hey you seem to
+[59:05] be getting interrupted could you adjust we catch in the background and start
+[59:09] adjusting that parameter so just the voice.
+[59:14] Yeah. So the the question is like for example if someone is like in a noisy
+[59:18] environment like could you have the agent detect that and then use um like
+[59:24] adjust some of the session configuration to deal with that and just the voice is
+[59:29] protected. I don't know honestly which parameters are protected or not. The
+[59:34] good thing is the like the API will throw an error if if a thing didn't
+[59:38] work. Um so it's a good way it's a good thing to experiment with. Um Python
+[59:45] with the previous ones you could do that Python. Oh yeah. Um well with the Python
+[59:50] uh agents SDK we're doing the chained approach. We don't have a real time
+[59:55] built in yet. So
+[59:59] just calling the old API Python. Oh all right. Yeah. Yeah. Um then it should
+[1:00:05] work. Yeah. Uh if you can do it in Python like it should just work.
+[1:00:10] Cool. Um so the other thing we talked about um is
+[1:00:16] this delegation part. So that's what I like had mentioned earlier that was in
+[1:00:22] the diagram. So this is essentially where you want to be able to have
+[1:00:27] certain complex tasks dealt with by a more intelligent model. Um and the way
+[1:00:32] we can do that is essentially just creating another
+[1:00:36] um agent except on the back end. And because it's because the TypeScript SDK
+[1:00:41] works both in the front end and back end, we can do that through um
+[1:00:48] uh I think I have a let's see if we have a file here or not. Uh we can do that
+[1:00:55] using the same SDK. So I'm going to create on the in the server folder here
+[1:01:00] a new uh file. I'm going to call just agent.
+[1:01:05] And in here we can build our regular textbased agent. So this is essentially
+[1:01:10] the same code that we've done before. Um and we can say this is a I don't know um
+[1:01:20] called the Riddler. Um you are excellent
+[1:01:26] at creating riddles based
+[1:01:31] on a target demographic. and topic. Um, and we'll just give it a
+[1:01:40] model of O4 mini.
+[1:01:47] Also, a reminder for those if you are trying to follow along um, and you run
+[1:01:51] into troubles, post in the Slack and the Noob can help you with that. Um, so we
+[1:01:58] have that new agent here. We're not going to give it any tools or anything.
+[1:02:01] Uh and then we can export a function here
+[1:02:09] that we just call run agent. And this is just going to take some
+[1:02:15] input and then return that output. And we can go back into our front end code,
+[1:02:22] create a new tool here, create riddle. Um, and this one we're just going to
+[1:02:30] have take like two parameters, the demographic and the topic, and then call
+[1:02:36] out the run agent function that is going to run on the server. We can pass in
+[1:02:45] realize I didn't specify this. Let's do demographic and topic and then create an
+[1:02:51] input here of this. The other thing you want to do
+[1:02:58] when you're using server actions in uh next is put
+[1:03:03] that use server at the top. That makes sure that this file executes on the
+[1:03:08] server. And then we can pass in that demographic. And again, if you're using
+[1:03:12] a different framework, this is just the equivalent of a fancy fetch request. So
+[1:03:17] like if you want to do an HTTP request to your service, if you want to maintain
+[1:03:21] a websocket connection to your own backend, you can do all of those things
+[1:03:26] to like talk back to other systems. So with that, we can give that to our
+[1:03:33] main agent.
+[1:03:38] Riddle
+[1:03:42] tools
+[1:03:47] And then what you want to do in these cases is like um
+[1:03:55] you can tell it like announce when you are about to do a task.
+[1:04:03] Don't say you are calling a tool. Things like that can be helpful to like
+[1:04:10] buy itself some time. Hey there. Um, can you tell me a riddle
+[1:04:17] uh for like a five-year-old Star Wars fan?
+[1:04:26] Hey, are you there? I'm still here. I'm working on creating
+[1:04:31] that Star Wars riddle for you. It should be ready in just a moment. Here's a
+[1:04:36] riddle for your little Star Wars fan. I'm not. So you can see that like
+[1:04:42] because it announced that like what it's about to do, the tool call came back
+[1:04:48] before it even finished what it previously said. And so like that's
+[1:04:52] again one of the benefits of like if you can get your agent to um balance out
+[1:04:57] that and like buy itself some time. This is a good way to uh you know deal with
+[1:05:03] the more complex tasks. And like it also means that you can like for example take
+[1:05:08] all of the like more reasoning heavy workloads and take it out out of the
+[1:05:13] voice agent model. Um for delegation. Yeah. Is it possible
+[1:05:19] to delegate to more than one agent like simultaneously or is it just one in the
+[1:05:23] current SDK? Um you can it's it's tool called so like I think you like you
+[1:05:29] would have two options right like you could do par like parallel tool calling
+[1:05:34] or you could um like have one tool that then triggers running multiple agents
+[1:05:42] right so like my recommendation would be that part potentially
+[1:05:46] uh so that you're not relying on the model making the right decision of
+[1:05:50] calling multiple tools at the same time like you want to make the decision
+[1:05:54] making for the voice agent always as easy as possible. Thanks. Yeah,
+[1:06:00] previously when you did you go back to previous page. Yeah. Oh, no. Sorry. Your
+[1:06:04] example. Which example? The one you're running
+[1:06:09] where it had the output. Oh, yeah. So on line three there where it said I'm still
+[1:06:14] here. Yeah. Is that coming from your SDK? Do I have to use the SDK to do that
+[1:06:19] or is the real time API? No, it's the real time API. It responded because I
+[1:06:23] asked like, "Hey, are you there?" Um, so it it it tri it realized that like it
+[1:06:31] didn't start anything and like interrupt. I was like, "Hey, going."
+[1:06:35] Yeah.
+[1:06:38] Um, yeah. So, the thing is that like I
+[1:06:42] didn't render out the tool calls in here, right? So like what basically
+[1:06:46] happened between this and this was like it started off a tool call um and then
+[1:06:54] that tool call because I interrupted it then it stopped that tool call because I
+[1:07:00] interrupted it. It stopped the the generation it also reset that like
+[1:07:05] transcript here. it's a good indicator that like the interruption happened and
+[1:07:09] so when I said this it remembered it was trying to call a tool did that tool call
+[1:07:14] um and then gave you back the response so that's all the just the the regular
+[1:07:20] realtime API
+[1:07:24] any other questions around this
+[1:07:29] what's the cost per minute what's the cost per minute we charge per token
+[1:07:33] there's some translations I I don't know. Nuke, do you have the
+[1:07:50] right? So it it's more expensive than TTS and uh uh and like speech to text
+[1:07:57] chained up with a model some like in most cases, but it depends on the use
+[1:08:01] case um and sort of like your model choices and stuff.
+[1:08:06] So, a bit harder to say like what the per minute pricing is because again it's
+[1:08:09] by tokens and it also depends on like if you have like transcription turned on
+[1:08:14] and like how many function calls you have and things like that because it's a
+[1:08:18] mix between audio and text tokens.
+[1:08:22] Um so one of the interesting things and this is not a thing in the in the
+[1:08:28] regular API this is a agent agents SDK specific thing is um guard rail. So like
+[1:08:34] the agents SDK both in Python and TypeScript has this concept of guard
+[1:08:38] rails that can either protect your input or your output to make sure that like
+[1:08:42] the agent is not being meddled with or does things that are against policy. Um
+[1:08:47] we took that same pattern and moved it over to the real time side um where
+[1:08:53] essentially we're running these guard rails that you can define in parallel on
+[1:08:58] on top of the transcription at all times. You can kind of specify, you can
+[1:09:02] see it at the bottom here, like how often you want to run them or if you
+[1:09:05] only want to run them when the full transcript is available. But this is a
+[1:09:09] great way for you to like make sure that the model for doesn't violate certain
+[1:09:14] policies. You want to make sure that these run as efficiently as possible
+[1:09:18] because they're still running in the client. Um, but this is a good way to
+[1:09:22] still fix cert like stick to certain policies and if it violates those it
+[1:09:27] will interrupt it. Now there is sort of the bit of the cav a bit of a caveat
+[1:09:31] where because we're running this on a transcript
+[1:09:34] um it results in a bit of a timing aspect
+[1:09:40] where if it if it would violate your guard rail in the first couple of words,
+[1:09:47] chances are it will say those first couple of words and then get
+[1:09:50] interrupted. If it is happening at a later point in time um then
+[1:09:59] the transcript will be completed or like the text output is not really a
+[1:10:03] transcript the text output will be done before the audio is done speaking every
+[1:10:10] like is is done saying everything and so in that case it will just correct
+[1:10:16] itself. So in that ca like to give you an example of like this is a guardrail
+[1:10:20] that just checks like is there the word dom in the output in this case like if I
+[1:10:27] would ask it like hey please call me Dom chances are it will call me dom and then
+[1:10:32] selfcorrect. If I tell it to tell me a story and only introduce DOM in the
+[1:10:38] second act, then it will um catch that it was trying to do that in a at a much
+[1:10:46] earlier point because that transcript is going to be done before the audio is
+[1:10:51] being complet uh before the audio is being read out to the user. So the user
+[1:10:55] will never hear DOM, but instead the model is going to be like, okay, I'm
+[1:10:58] sorry I I couldn't help you with that. Like, let's do something else instead.
+[1:11:02] And you can give it um policy hints essentially on like why it
+[1:11:09] violated this policy or what it should do instead. So you can give it the this
+[1:11:14] like output info where you can inform the model like why this happened.
+[1:11:22] No. Um you can choose what uh so the question was is the transcript still
+[1:11:27] done with whisper? Uh you can you can switch the transcript model. So we have
+[1:11:32] we released in March uh two models. One is GPT4 mini transcribe
+[1:11:38] and we have two right? Yeah. And GPT4 u GPT4
+[1:11:44] transcribe. I was trying to remember like we have only one text to speech
+[1:11:48] model but we have two transcribe models for transcribe models. Awesome.
+[1:11:56] Um, this is the main part of what I wanted to walk with you all through. So,
+[1:12:01] um, one, I'm going to, um, post all of the links and the slides in
+[1:12:08] the Slack channel, which let me go back to
+[1:12:15] where was that slide? There we go. Um, so in that Slack I'm
+[1:12:20] going to post all of the resources. So if you want to check them out
+[1:12:24] afterwards, I'll also like I already put a bunch of the resources that I talked
+[1:12:29] about into the bottom of that starter repository. So you should have access
+[1:12:34] there as well. And uh I'm happy to hang around answer any questions. Yes.
+[1:12:47] My understand
+[1:13:12] Yeah. Um in the API.
+[1:13:18] Yeah, the the question was around how prom caching works um and sort of
+[1:13:22] whether we like for prompt caching that like we guide the requests to the same
+[1:13:28] um same system again to run and whether like there's any control with that with
+[1:13:34] real time because latency obviously matters. Um I don't think there is any
+[1:13:39] controls about that. Um, no. Um, I'm getting a no from there. So,
+[1:13:45] like I don't think there's any any controls around that right now.
+[1:13:50] Yes. Hey, so we all know that having natural conversations is involves more
+[1:13:57] than just a spoken words. It involves detecting emotion and adjusting tone.
+[1:14:02] Um, it also involves a cadence and even humming to let the other person
+[1:14:10] know that you are listening. Mhm. I wonder if the current speechtoech model
+[1:14:14] is capable of having that kind of natural conversation.
+[1:14:19] Um, part of this is like a a prompting challenge. So like it it definitely can
+[1:14:25] have pretty natural sounding conversations. And like I think this is
+[1:14:29] sort of the the part where I highly recommend to check out the openai.fm
+[1:14:35] page. Um because this is like it's it's pretty interesting to see sort of uh if
+[1:14:42] we go to um let's see if we find the um
+[1:14:49] actually I didn't show one neat feature that I normally call out on the
+[1:14:58] playground. If you're just getting started with real time and you don't
+[1:15:01] even want to write any line of code, um this is a great way to just have
+[1:15:05] conversations and try things out. But one of the things it has is this. Um it
+[1:15:10] has a couple of system prompts. One of my favorite ones to show sort of this is
+[1:15:15] the board teenager. Um so if we start this
+[1:15:22] Hey there. Um, so I'm at AI Engineer World's Fair and everyone is super
+[1:15:27] stoked about voice agents. Can you show me some excitement of this whole thing
+[1:15:31] launching today?
+[1:15:36] See, I guess it's cool. Whatever. There's
+[1:15:42] always new stuff launching. People get excited, but you know, it's just voice
+[1:15:47] agents. Not really my thing to get all hyped up about it.
+[1:15:53] So you can see in this case like it it put its own pauses in there and stuff
+[1:15:58] like this wasn't a pause because the model was waiting, right? Like um it can
+[1:16:02] deal with a lot of that sort of adjusting tone and voice and it can do
+[1:16:07] similar things like reacting to like someone talking in and stuff. Okay,
+[1:16:12] thanks. You're welcome. Yes. So again on the new API that's been released, what
+[1:16:19] else has changed? Semantic has improved. Is there anything improve in terms of
+[1:16:22] tone detection or voice. Um we have not released any new VAT models. Um we
+[1:16:28] primarily released like a new base model for or like a new model for the um GPT4
+[1:16:35] realtime model that is just better at function calling and has been overall
+[1:16:41] well received from our alpha testers. Yes. Can you inject uh can you inject
+[1:16:47] audio as as a background audio like ambience audio like piping audio and so
+[1:16:54] on? Um you like basically like you're in a real office,
+[1:17:00] right? Yeah. Yeah. Um you can just intercept the audio that is coming back
+[1:17:04] from the model and then like overlay your own audio.
+[1:17:10] Oh yeah. Hi. Um, I was wondering what your support is for like multiple
+[1:17:14] speakers. If there's more than one person in a conversation, can it detect
+[1:17:18] who's talking and and do pauses that way? There's no no current like speaker
+[1:17:22] detection in the model. Um, so it might struggle with that.
+[1:17:27] Yeah.
+[1:17:32] Um, I just wanted to ask um about like custom voices. Is it limited to the
+[1:17:37] preset voices you have or can I upload my voice as a sample for instance? It's
+[1:17:42] currently limited to the voices that we have. We keep adding new voices though.
+[1:17:47] Is there going to be support to add custom voices anytime in the future? Um
+[1:17:51] at any time in the future? Not not like not like years. Uh what I mean what I
+[1:17:58] can say is like we're trying to make sure we're finding like the safest
+[1:18:02] approach. Like we have an article on online that talks about sort of like the
+[1:18:06] responsible take we're trying to take on this on making sure that like the vo the
+[1:18:11] voice like if we're providing custom voices that it comes with the right
+[1:18:15] guard rails in place and stuff to avoid abuse. All right. Thank you. You're
+[1:18:19] welcome. Yes.
+[1:18:29] I don't think that has changed. Um to my knowledge,
+[1:18:34] my personal recommendation would be that like one of the things that you can do
+[1:18:38] and this goes back to like for example in the demo that I was showing um if
+[1:18:45] you're keeping track of the transcript and stuff you can re like when you're
+[1:18:51] starting a new session you can populate that context by creating new items using
+[1:18:56] the API. So like one of the things that you could do is starting a new session
+[1:19:01] if you know what the previous context was because you kept track of it you can
+[1:19:04] then um basically inject that as additional context.
+[1:19:11] Um what type of event are you looking for? Oh if there's a timeout event um I
+[1:19:18] do not know right now but all of our events are documented in the API
+[1:19:24] reference. Yeah. So when you see
+[1:19:34] file,
+[1:19:38] can you sorry can you repeat that question once more? Oh, I was wondering
+[1:19:43] API function functions such as system file.
+[1:19:49] Oh uh whether the function calls can do things like system file reading and
+[1:19:53] stuff. I would say it depends on where you're running that a where you're
+[1:19:57] running that um real-time session. So if you're running it on the server, you can
+[1:20:01] do anything you can do on the server. If it's if it's running in the browser,
+[1:20:05] then you're limited to whatever things are available in the browser.
+[1:20:13] Um, no, you should be able to like you could create a like web socket based
+[1:20:18] like um voice agent that runs on on your device. I mean like it's going to use
+[1:20:25] the real-time API for the model, but then like because the actual tool calls
+[1:20:29] will get executed on your system, you should have access to whatever aspect of
+[1:20:34] your system your program has access to. Cool. Yes. So even before we get to
+[1:20:42] voice agents, we all need bigger, better, and more diverse evaluation
+[1:20:46] sets, especially for anything around function calling and parameterization.
+[1:20:51] Uh do you have any best practices or suggestions for how we now take
+[1:20:55] evaluation into the voice world? Should we keep things in text and then turn
+[1:20:59] them, you know, use text to speech to have voice versions of it? just if you
+[1:21:03] have any suggestions for how we evaluate the the full range of inputs that we
+[1:21:07] would expect users to bring to this. I mean one of my suggestions would be if
+[1:21:10] you can go to the leadership track go to Anoop's talk um which is tomorrow I
+[1:21:15] think. Yeah. Um he's going to talk a lot more about like additional best
+[1:21:19] practices of what we've learned um in uh building voice agents. I would say like
+[1:21:25] if you can hold on to the audio like it it's helpful. Um, obviously
+[1:21:31] transcriptions definitely, but like it it's sort of like the audio is still the
+[1:21:35] thing that is like the most powerful thing, especially for speechto speech
+[1:21:39] models where you have the model act on the speech, not on the text, right? And
+[1:21:46] like this is one of the one of the few things where like the the chained
+[1:21:50] approach obviously makes some of this much more approachable because if you
+[1:21:54] have if if you're if your agent is running on text anyways and you can just
+[1:21:59] store the text and rerun it that makes that part of eval.
+[1:22:04] That makes sense. And then also for those of us who might be thinking about
+[1:22:08] launching a new voice agent, how would you suggest evaluating it before we get
+[1:22:12] to that stage that we'd have uh customer interactions to work with? Um I would
+[1:22:18] start with like having like I think it goes back to like um
+[1:22:25] like some of this is like uh where is it?
+[1:22:30] there. Um like human review is an excellent solution for this, right? So
+[1:22:35] like have it like have a system like like one of the big things with like
+[1:22:41] things like lemonade and stuff is like they're able to go through all of these
+[1:22:43] calls and like get an idea, but they also have their own like predetermined
+[1:22:48] set of examples that they might want to test as they're developing the agent. So
+[1:22:53] like that's a great first way. I would scope clearly the problem you're trying
+[1:22:57] to solve as well. Like if you're if you're trying to sort of boil the ocean,
+[1:23:01] it makes a lot of this significantly harder as opposed to like well scoping
+[1:23:06] what the agent should be able to do and what it shouldn't be able to do. Makes
+[1:23:10] sense. Thank you. You're welcome. Get getting on the same path of our friend
+[1:23:14] over there. Uh actually when I'm testing my agents, my text agents
+[1:23:19] conversational, uh I use promptful. It's a platform for do all the proper
+[1:23:25] testing. Could I put another agent to talk with this this agent to do all the
+[1:23:31] evaluation? I think you can try it. Um like I don't
+[1:23:37] think it shouldn't work. Um um like so I put another voice agent
+[1:23:44] talking to that agent to try to execute all the prompets and then I could get
+[1:23:49] like the transcription community. I mean I know we have we have
+[1:23:54] use cases where customers also use our models to like prompt humans right so
+[1:24:00] like um where it's like for for like training use cases or other things for
+[1:24:04] example um so she'll work out but I don't know if anyone uses that kind of
+[1:24:10] approach and lemonade does oh cool so the second the second picture
+[1:24:16] is is exactly that awesome thank you welcome Any
+[1:24:23] any other questions? Yeah, go ahead. Slightly related uh do
+[1:24:28] you have something around wake word detection on the real time API road map
+[1:24:32] or patterns for wake words? Oh reports. Um no wake words. So that's activating
+[1:24:38] the case. Um no we don't have any wake words built in or anything.
+[1:24:44] No patterns either like any patterns to avoid costs. Um, no. On device, I guess.
+[1:24:50] No. Okay. You could basically like what you can do is you can build your like
+[1:24:55] you can turn off our uh voice activity detection and then build your own um and
+[1:25:00] then basically use that. So like you could use a model that has like a like a
+[1:25:05] VAD voice activity detection model that has wake words in it and then like do it
+[1:25:11] that way and basically commit all of that audio to our API and then send like
+[1:25:16] a commit like a commit event. Cool. Thanks.
+[1:25:23] Well, awesome. Thank you so much for taking the time and spending the
+[1:25:26] afternoon with me.

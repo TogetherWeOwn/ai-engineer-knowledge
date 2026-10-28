@@ -1,0 +1,215 @@
+# title: Rethinking how we Scaffold AI Agents - Rahul Sengottuvelu, Ramp
+# source: https://www.youtube.com/watch?v=-rsTkYgnNzM
+# speaker: Rahul Sengottuvelu, Ramp
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T13:26:29Z
+# sha256: 9c8f9f702ed4662bcc771340f775736f78b0d77ca24eef958d4191e3c2d4dcd6
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:00] [Music] so a little bit about me um had of a
+[00:20] plaat ramp I've been working on llms for four years which
+[00:25] is well which is uh kind of a long time I
+[00:29] guess uh in LM land everything started happening really when chat GPD came out
+[00:34] um so I was trying to build what people would Now call an AI agent company back
+[00:39] then we were just doing customer support we're trying to make our chat bot
+[00:41] smarter we're trying to figure out what what models to use to or what tech to
+[00:45] use to get them to respond to customers better and we were messing with gpd2 on
+[00:51] BT and models were so frustratingly stupid and context windows were small
+[00:55] and they were not very smart reasoning and it was just incredibly annoying and
+[00:58] we just wrote lots of code around these models to get them to work at least
+[01:02] somewhat reliably and along the way as models got
+[01:07] smarter this kind of had to delete more of that code and this ended up seeing a
+[01:12] lot of patterns in what what code needs to get deleted how to build agents in
+[01:16] what ways that will scale with more intelligence and clearly we're going to
+[01:20] continue to get a lot more intelligence and I just wanted to uh maybe talk about
+[01:24] a single idea throughout the talk uh through various examples uh we we'll do
+[01:28] some uh some uh setting but I'll also have a bunch of demos to kind of like
+[01:33] drive home the point and maybe it can convince you guys that uh there's a
+[01:36] certain way of building agents that's slightly better than other
+[01:40] ways I also built a structur extraction Library called Json former um I think it
+[01:46] was the first one I don't I'm not fully sure but timing wise it was before all
+[01:50] the other major ones um and that was also scaffolding around a model models
+[01:54] were too stupid to up with Json and we were just really begging it pleading
+[01:58] pleading it and forcing it to uh in ways that we want it to
+[02:01] be so as I said earlier just have a one core agenda item here which is want to
+[02:07] convey one idea uh we'll start off all of you probably read the essay bit or
+[02:11] lesson just quickly go through what it is uh we'll go through a production
+[02:15] agent we have at ramp and how it works and three different ways of architecting
+[02:18] it and then I have a demo that to really push maybe how we all think about how
+[02:24] software and backends and things will work in the
+[02:26] future so very simply the idea is just that systems that scale with compute
+[02:32] beat systems that don't so there's two systems and uh without any effort the
+[02:37] the system one of the systems can just think more or use more compute in some
+[02:41] way that system tends to be systems that are rigid and fixed and just
+[02:46] deterministic so from that idea it's pretty clear like if you're Building
+[02:51] Systems you might as well build systems that improve with more compute and this
+[02:55] this seems pretty obvious like obvious conclusion from the B lesson taking it a
+[02:59] step further why is this true it's because exponentials are rare like they
+[03:03] just don't exist most things in the world aren't exponential so when you
+[03:06] find one you just should hop on strap on just take the free pass and go for the
+[03:10] right and probably shouldn't try too hard and there's a lot of examples from
+[03:14] history that um to kind of reflect this so for for chess and go and computer
+[03:20] vision Atari games like people have tried to build lots of systems and
+[03:23] written a lot of code and my way of thinking about rigid systems just like
+[03:27] spending a lot of time grinding weekends and writing very clever software well
+[03:32] abstracted uh maybe trying to synthesize human reasoning and thought process into
+[03:36] features and then using them in clever ways and trying to approximate how a
+[03:40] human would think and if you actually fix the amount
+[03:43] of compute that approach will win but if you just turns out if you end up scaling
+[03:48] out how much search you're doing the general method always ends up winning
+[03:53] even uh like in all these cases so Atari go and computer
+[03:56] vision a little bit about ramp so ramp is a finance platform that helps
+[04:01] businesses manage expenses payments procurement travel bookkeeping more
+[04:06] efficiently and we have a ton of AI across the product so automate a lot of
+[04:10] boring stuff the finance teams do and employees do with uh submitting expense
+[04:14] reports and booking your flights and hotels and uh submitting reimbursements
+[04:18] all that and so a lot of the work behind the scenes is just we're interacting
+[04:22] with other systems um and helping like Legacy systems and helping employees get
+[04:26] their work done faster so let's actually talk through
+[04:29] one of the systems we have today at ramp and um maybe some talk through the
+[04:33] different versions of the system and how it evolved over
+[04:36] time so we're going to talk about something called a switching report it's
+[04:40] very simple agent all it needs to do it's taking a CSV a CSV arbitrary format
+[04:45] so the schema could be seriously anything from the internet and we want
+[04:51] these csvs to come from third party card providers so when people on board to
+[04:54] ramp we want to give them a nice checklist and say hey here are all the
+[04:57] transactions you have on other platforms and we want help you move them over and
+[05:01] the more transactions come on ramp the more we can help you and the more you'll
+[05:04] use our software and more everyone benefits and so the switching reports
+[05:07] just really a checklist but to read people's CSV transactions we need to
+[05:12] understand those and other platforms have all these kinds of crazy
+[05:16] schemas and so the the description of the problem we have here is just for an
+[05:21] arbitrary arbitrary like CSV how can we support um parsing it and then into some
+[05:27] format that we we understand so let's just start with the the simple
+[05:32] approach right is like let's just take the 50 most common third party card
+[05:36] vendors um and just manually write code for all of them now obviously like this
+[05:41] this will just work it is some work not a lot of work but you still have to
+[05:47] maybe go to 50 different platforms and download their csvs see what schemas
+[05:51] they have and then write code maybe if they decide one day they change their
+[05:55] format your thing will break but that's okay you'll get page and you can wake up
+[05:58] and go fix it so let's maybe introduce some LMS in
+[06:03] here so from the over engineered code where you ended up writing 100,000 lines
+[06:08] maybe we don't we don't we want a more General system so let's introduce a
+[06:11] little bit of LM a little bit of AI in here and so in the deterministic flow
+[06:17] let's maybe add some or just like scripting In classical scripting land
+[06:21] let's add some more um call to open AI or you have an embedding model you want
+[06:25] to do semetic similarity or something like that so then let's just take every
+[06:29] column in the CSV that comes in let's try to classify what kind of column it
+[06:32] is is it a date is it a transaction uh is it a transaction amount is it a
+[06:36] merchant name or is it the uh users's name and then we map it on and then we
+[06:41] probably could uh end up in a schema that we're happy with again most of the
+[06:47] compute is running in classical land some of it is running in fuzzy llm land
+[06:52] but this is somewhat looking like a more General
+[06:56] system let's go maybe a different approach when like we just go all the
+[06:59] way through let's just say we're just going to literally give the CSV to LM
+[07:03] and say you have a code interpreter so you can write whatever code you want
+[07:07] pandas or all the faster rust based ones um you have all these python packages um
+[07:14] you're allowed to look at the head of the CSV the tail whichever rows you want
+[07:17] um and then I just want you to give me a CSV uh with this specific format here's
+[07:23] a unit test here's a verifier that you can use to tell if it's working or not
+[07:28] turns out this approach actually doesn't work like we tried it um if you only run
+[07:31] it once but instead if you run it 50 times in parallel it's actually very
+[07:36] likely that it works really well and generalizes across a ton of different
+[07:40] formats the amount of compute here is actually probably like what is that
+[07:45] number 10,000 times more than the the first approach we came up with but again
+[07:50] like what is truly scarce in the world is engineer time maybe not for not in a
+[07:53] while but at least today and we'd rather have a system that works really well and
+[07:58] even with a 10,000 times more compute it will probably cost less than a dollar
+[08:01] and every transaction that switched over every fail CSV will cost ramp way more
+[08:05] money than whatever money we spend on this exact this exact
+[08:09] architecture so this is a very specific uh example it's like how does this apply
+[08:14] to the agents that we all build and maybe the systems we're all working on
+[08:18] turns out something like this actually generalizes so if you look at three
+[08:22] approaches and let's assume like The Black Arrow is just classical compute
+[08:27] and then the blue arrows are fuzzy lands so it goes into neuron net and all all
+[08:31] sort of weird matric multiplication happens and we're in latent space and
+[08:35] gets all alien intelligency and then comes back to a classical land first
+[08:39] approach there was no AI we just wrote code and it just worked mostly the
+[08:44] constrainted agent so the second approach we broke into fuzzy land from
+[08:48] classic land when when we decided we wanted similarity scores or something
+[08:52] like that and then the third approach is actually flipped where the llm decides
+[08:58] it needs to go into classical l so it write some code write some pandas or uh
+[09:01] python code and it decides to break in into this classical land when it needs
+[09:06] to but most of the computer is fuzzy actually this is maybe not the
+[09:11] most accurate graph like because I propos that we run it 50 times it more
+[09:15] so looks like this but if you look at a back end in general they're all request
+[09:20] response so some sort of message is going in it's like a post request or get
+[09:24] or update or read any sort of credit operation and we're really just asking
+[09:28] the back end to take this piece of information do whatever you must with it
+[09:32] run out whatever mutations you want and return me a
+[09:35] response and almost all systems we've built so far as like Humanity I guess
+[09:39] like look like the first one but more people are using open AI open AI makes
+[09:44] billions of dollars and probably a lot of the systems that use them look like
+[09:48] number two where just regular uh programming languages are calling into
+[09:53] open AI servers and we're running some fuzzy
+[09:55] compute what we're seeing in like more and more parts of the ram codebase we're
+[09:59] moving to the third approach because it just tends to work well because all the
+[10:05] blue arrows if you did nothing it Absol absolutely nothing we all went to
+[10:08] vacation for the next year the big labs are still working and spending billions
+[10:13] of dollars making those models better so the blue arrows will get better and so
+[10:17] how much blue arrow you're using in your code base actually will help directly
+[10:21] your company without much effort from your end so this is what I was saying is
+[10:24] like the bit or lesson is just so powerful and exponential Trends are so
+[10:28] powerful that you can just hitch hitch the
+[10:33] ride let's um let's take this idea like further um let's actually like go all
+[10:41] the way like something something
+[10:44] crazy um on the left you'll see a traditional web app so usually the way
+[10:49] it works is you open um gmail.com and some uh static file server
+[10:56] and Google sending you bunch of JavaScript HTML and CSS your browser
+[11:01] renders that um and shows you some nice UI nice HTML that's user friendly maybe
+[11:06] you see some emails maybe you click on one of them um the friend end makes a
+[11:10] request to the back end the back ask the friend end friend end asks the back end
+[11:14] give me the content for email and whatever ID it is and then the back in
+[11:18] hits database and gives you the result and maybe they use cod genen maybe they
+[11:23] use all the Coden tools available to make Gmail so that that was probably the
+[11:27] LM only worked when the software engineer was writing the code but once
+[11:31] the code is written and it's like pushed to production it's just classical
+[11:36] compute and on the right I'm actually proposing a different model which is the
+[11:40] back end is the LM it's not Cen it's this LM is doing the execution it is the
+[11:46] back end so the LM has access to tools like coder interpreter and potentially
+[11:51] has access to um through that making request Network requests and also has an
+[11:57] access to uh DB so I have a mail client actually that
+[12:02] works with this principal and this is my test email so if y'all want to see any
+[12:08] emails you sent to me in a minute or so you can send me an email but please be
+[12:13] nice
+[12:36] all right I think um it's probably enough
+[12:39] time so I'm going to go
+[12:56] over so we have this email client I mean we still have some regular JavaScript to
+[13:02] hook into the LM hook the LM into the browser but when I do log in I'm going
+[13:06] to use my email is just showing you
+[13:16] [Music]
+[13:40] what oh it's
+[13:45] probably okay we're good we're good all right we're
+[13:48] saved I
+[13:53] think thankfully I have a room full of Engineers
+[13:59] so there's a dot but the reason it's so slow is because when I open this page
+[14:03] and log into Gmail the Gmail token is actually being sent to an llm we're
+[14:07] saying literally this is a LM chat session what we're we're seeing on the
+[14:11] screen is like hey LM you're you're actually simulating a Gmail client you
+[14:16] have access to Oh all the emails you have access to um rahul's Gmail token
+[14:23] and aord interpreter and so just render some UI based on uh what you think is
+[14:29] reasonable for the homepage for Gmail client and so looks like it decided to
+[14:33] render his markdown uh I think we actually tell it to render his markdown
+[14:36] and it's rendering all the emails that a bunch of people sent me from here so it
+[14:40] looks like it says uh hello from California so I'm going to click on that
+[14:45] when I click on that we're actually not running um any like backend calls or
+[14:48] anything like that we're just telling the LM the user clicked on that piece of
+[14:51] text in this case it was hello from California and the ID number so the LM
+[14:56] now has the information on what the user clicked on and it has the chance to
+[14:59] render the page much like a web framework would so again it goes back it
+[15:03] probably hits uh a get request for that specific email and pulls the
+[15:08] body what is this agent going to do I'm watching you live so the LM just decided
+[15:13] this is the appropriate UI for a Gmail client also I have other features the LM
+[15:20] thought was reasonable so looks like I could mark it as unread or or delete the
+[15:23] email if I want to uh maybe I'll delete it because it's not that good of an
+[15:26] email I'm sorry
+[15:34] it is very slow because we're doing a lot but wanted to push you in this
+[15:37] direction because this kind of software barely
+[15:42] works dang I guess not um also I clicked on it
+[15:49] and now the LM is trying to do something with me clicking on it anyway um this
+[15:54] kind of software barely works today and it doesn't mean it w won't work in the
+[15:57] future uh but exponential trends like things might just like this might just
+[16:01] take off um so just wanted to push you all to think in this direction um yeah
+[16:07] Will software more software look like this I don't know we'll see thank you
+[16:13] [Music]

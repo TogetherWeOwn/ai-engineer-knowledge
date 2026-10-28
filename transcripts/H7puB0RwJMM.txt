@@ -1,0 +1,226 @@
+# title: Citation Needed: Provenance for LLM-Built Knowledge Graphs — Daniel Chalef, Zep AI
+# source: https://www.youtube.com/watch?v=H7puB0RwJMM
+# speaker: Daniel Chalef, Zep AI
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T07:05:42Z
+# sha256: 381a2d7df0c827f6fecb28e8577d9597ec3ab3f86784c9431591d6efd8daecc4
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:01] [music]
+[00:12] So, LLMs are really great at pulling together data from many sources. Uh, but
+[00:18] they do so non sorry, they do so non-deterministically.
+[00:23] They interpret and synthesize data generating a summary, an extracted fact,
+[00:29] uh a structured record. And this output artifact may not appear verbatim in the
+[00:34] source inputs. Synthesis often destroys the paper trail
+[00:39] of how these outputs were originated. And I'm going to be talking today about
+[00:45] provenence, which is tracing how an artifact was built and why. Legal
+[00:52] compliance often demands provenence, but it's also useful for debugging. Deciding
+[00:58] which sources you trust and which artifacts to delete. And solving this at
+[01:04] scale presents a real engineering challenge.
+[01:10] If I can get my next slide going here. So my team and I built Graffiti uh the
+[01:17] open-source temporal graph framework and Zep, our enterprise agent memory
+[01:22] infrastructure is built on graffiti. Our customers derive context or agent memory
+[01:30] for many user touch points. Those could be chat, but not only chat. Often it's
+[01:35] voice transcripts, email, business data. And our customers have struggled with
+[01:41] provenence. Where did this fact come from? What is the veracity of this fact?
+[01:47] And over the next few slides, I'll share how we engineered solutions to this
+[01:52] problem. So here's an stylized failure mode. An
+[01:59] agent retrieves context about a patient. So this is a healthcare scenario.
+[02:06] And what comes back is a clean confident fact. Patient has a penicellin allergy.
+[02:13] And the context was synthesized from three sources. A lengthy EHR record,
+[02:19] electronic health record, a PDF lab report,
+[02:24] and something a patient typed into an AI intake chat.
+[02:30] If the agent presents the fact to a doctor in treat in a treatment scenario
+[02:36] without clearly indicating the source was from the patient themselves, it may
+[02:41] mislead the doctor. When an agent retrieves context, can we point to the
+[02:47] exact source and its veracity? For complex agent applications, the
+[02:53] answer is often no.
+[02:58] So, I can imagine you're probably thinking,
+[03:01] um, but can't we just store like a source ID on the fact?
+[03:07] This can work well in structured data warehouses or data lakes. A pipeline
+[03:12] outputs one value copied or mutated deterministically,
+[03:17] and the sources are known and easily marked. But with context pipelines run
+[03:22] by LLMs, this breaks in several ways. You prompt an LLM with several sources.
+[03:29] Many facts are each synthesized from one or more of the sources.
+[03:35] Somebody like J. Smith and John Smith are merged into a single entity, one
+[03:41] identity. And John's facts are derived from many different places.
+[03:46] So new data might invalidate old facts. The store keeps changing underneath your
+[03:52] pointer and an appendon log which often might you know might come to mind here
+[04:00] gets very hard to manage at scale as there's so many changes occurring. So
+[04:05] lineage needs to be an evolving set and survive mutation.
+[04:13] So sets of links between facts and their sources can be modeled on a graph as
+[04:19] relationships. So provenence in a context store
+[04:22] containing facts is a knowledge graph. We have three in this example we have
+[04:29] three source data in graffiti that turned episodes. We have two entities
+[04:35] extracted from the episodes patient and penicellin
+[04:41] and an edge between them. This graph triple the two entities and
+[04:47] the edge can be hydrated as a fact. Patient has a penicellin allergy.
+[04:54] Tracing a fact to its source is just a graph walk.
+[05:01] So it's pretty simple and easy to map source to fact on the first right
+[05:09] but keeping it correct while the graph changes can be really hard when new data
+[05:18] uh so for example when two entities merge the merged entity needs to keep
+[05:23] all source links from both otherwise we silently drop a source and we lose
+[05:30] lineage. And when new data contradicts existing
+[05:34] data, mutating it, we need to capture this lineage too.
+[05:41] In the rightmost card, a fact is rendered invalid by new data. And in
+[05:46] graffiti, an invalid date is added to the mutated edge. And the source
+[05:55] episodes that resulted in the edge mutating
+[05:59] are noted against the fact.
+[06:06] So gaining graffiti, the relationship between source data and derived
+[06:10] artifacts such as facts is easily modeled on the graph.
+[06:16] With metadata projection, we can also model classifications that span many
+[06:22] different episodes. and facts derived from them. And so I'll give you an
+[06:27] example here. In in the prior healthc care scenario,
+[06:33] episodes may originate from an EHR record and have an EHR tag associate
+[06:40] associated with them, but not all records are. And so on ingestion, we tag
+[06:46] the episodes with the EHR tag. All subsequent entities and facts derived
+[06:54] from the episode inherit the tag. And so if the agent wants to retrieve
+[07:01] only facts from verified clinical sources, it's very simple to filter for
+[07:06] the appropriate tag as we walk the graph.
+[07:11] So one tagging action at ingestion supports evaluating the veracity of a
+[07:18] fact.
+[07:22] But what if the fact is three parents or more? Here we have a verified flag as
+[07:29] our metadata and in this case one parent is not verified.
+[07:34] So is the fact verified for the allergy flag which could be a
+[07:41] life and death situation. the agent missing it, missing that particular flag
+[07:47] could be a deadly mistake. So not retrieving the fact and any source of
+[07:52] the three should block that prescription being issued.
+[07:58] But for something like a consent on file for procedure fact, the mistake
+[08:04] is operating on unverified consent. So the patient hasn't actually
+[08:10] given their consent and every parent needs to be verified. So every single
+[08:15] episode should have that tag. So the facts are very similar shapes.
+[08:21] They have three three parent episodes but opposite policies. And here
+[08:28] graffiti or the underlying store exposes that choice. It exposes which of the
+[08:34] episodes have the gra the particular tag,
+[08:38] but your agent needs to execute or apply your business rules. So that's not
+[08:45] necessarily something that we bake into the graph. [snorts]
+[08:49] It's situational. Another
+[08:54] situation where lineage is really important,
+[08:58] we may have to delete source data due to retention policies or right to be
+[09:04] forgotten requests. So privacy compliance
+[09:07] and this is really tricky because if we have context derived from multiple
+[09:12] sources, how do we do so?
+[09:16] Mapping lineage here is really useful. We know which facts are derived from the
+[09:22] source data we intend on deleting. But what if only some of the source data
+[09:28] needs to be deleted but not all? So in this example, we need to delete
+[09:34] the intake chart data. So what the patient filled in, which is only one of
+[09:40] three source data. In graffiti's model, the allergy fact survives the deletion
+[09:50] and that's because there are two parents parent episode still supporting the
+[09:55] fact. However, the contact preference fact
+[10:00] is deleted as it was derived solely from the deleted source data.
+[10:07] So, the rule is pretty simple here and it's easier to apply because the link
+[10:11] exists. A fact is only deleted if no remaining episodes support it.
+[10:19] So to sum it all up, deriving context is lossy and
+[10:24] generative. Lineage needs to be built in to the data
+[10:29] structure, engineered into the data structure, which is a graph, not logged
+[10:34] afterwards. And in graffiti we keep the sources
+[10:39] verbatim and we link everything back everything derived from those sources
+[10:44] back to the source. And provenence offers many benefits to
+[10:51] users of graffiti. You have compliance built in which makes
+[10:55] your chief compliance officer very happy.
+[10:59] You can verify a fact based on its sources
+[11:03] so you understand veracity. Should I trust this fact?
+[11:08] It's easy to debug where something came from. So, why do I have this fact? How
+[11:14] was it generated? And also determining what to delete.
+[11:18] And most of what I've covered today is in the graffiti framework. So, you can
+[11:23] go to uh the graffiti repo on GitHub and I have a little uh QR code QR code later
+[11:31] that you can zap um and try it out. So, by the way, as an aside,
+[11:40] lineage and provenence is expensive. Graph construction is really expensive
+[11:46] uh in the way that graffiti does it. And so we've put significant effort into
+[11:51] reducing cost and latency of generating graph artifacts. And I'd be happy to
+[11:57] speak to how we've done that uh in in the Q&A.
+[12:01] So thanks for attending. Um if you'd like to learn a little bit more about
+[12:06] Zep or Graffiti, you can zap the QR codes. Uh Zep is on the left and
+[12:12] graffiti on the right. And I don't know if we're doing Q&A here or outside.
+[12:19] Okay, happy to do Q&A. >> Just repeat the question.
+[12:23] >> Yeah, >> we have time.
+[12:25] >> Anybody have a question? >> Yeah, one right from the front.
+[12:34] >> How do we mutate the graph at the edge?
+[12:41] >> Oh, to account for weight changes in relevancy.
+[12:45] Um that is some structure that we've
+[12:48] actually built into Zap not into graffiti and
+[12:52] um what we do is we do have for that a some tracing that we do which is kind of
+[13:01] x of the graph. So not all of the um provenence is in the graph. Sorry,
+[13:08] you >> if you have 50 edges,
+[13:16] >> uh, sorry, is was that a question? If you have 50. Oh, there you go.
+[13:19] >> I said I I use 50. >> You use 50.
+[13:23] >> Yeah, >> 50 edges. Um, so so you know, Zep is
+[13:29] able to uh look at provenence across those but using a separate data
+[13:34] structure from the graph. >> Okay. Thank you. Thank you
+[13:38] >> for that particular problem.
+[13:43] >> So uh does the agent also create the edges edge types and the entities itself
+[13:48] or how does it resolve those edges types?
+[13:51] >> So in graffiti you can search across the entire graph. Uh it has um vector
+[13:58] similarity search against various textual artifacts
+[14:02] um full text search as well as graph relational operations things like BFS
+[14:08] um it depends on the underlying uh graph database that's used and so your agent
+[14:14] can walk the graph it can search semantically etc.
+[14:19] And obviously from anywhere you hit in the graph you're then able to understand
+[14:23] the provenence of a particular artifact that you've hit.
+[14:29] Uh I find it very uh fascinating this temporal support out right out of the
+[14:37] gravity database. Can you uh tell just a little more
+[14:42] um under the hood what are those really the the episodes are nodes in the graph
+[14:48] just like the other nodes and how do you extract so I saw the API that let's say
+[14:52] I give some uh ad ed episode how do we extract information from the ad episode
+[15:00] call under the hood like large language models and and edges
+[15:04] >> yeah yeah so uh yes episodes are an entity on the graph uh or a node on the
+[15:12] graph. Um it makes sense to model them that way. Um in Zep and graffiti we have
+[15:20] various derived artifacts that are um nodes on the graph as well because they
+[15:27] too need to have lineage and we need to understand how they were derived. Um,
+[15:34] and in terms of how the ad episode method works,
+[15:39] there's a pretty complicated uh, pipeline that gets run on um, uh,
+[15:47] episode ingestion and I'll just give it the very high level uh, uh, outline for
+[15:52] you. So there's a structured extraction extracting entities and the
+[15:58] relationships between them and candidate facts and those are the materialized or
+[16:04] hydrated fact triples. So two entities and a fact. Um and it's structured as uh
+[16:12] a fact is structured as um um uh subject well
+[16:18] subject uh verb object. Um and after that there is a uh deconliction process
+[16:28] that runs dduplication and deconliction process. We dduplicate entities and we
+[16:32] deconlict facts because there might be existing facts in the graph
+[16:38] that are going to be mutated by a new learned fact. So Daniel loves Adidas
+[16:43] shoes. Three months later, Daniel's shoes fell
+[16:46] apart. He sends it back to those the shoes back to the return application and
+[16:50] he sends a nasty gram along with it. We now Daniel returned shoes as a fact and
+[16:56] Daniel was unhappy about Adidas. We need to invalidate the Daniel loves Adidas
+[17:01] shoes fact and so that is part of that pipeline as well. A lot of what we do
+[17:09] uses LLMs but we try very hard not to use LLMs in this process as well. So
+[17:15] where we're able to deploy more traditional information retrieval
+[17:19] techniques, more traditional NLP techniques, uh looking at things like
+[17:23] entropy and a bunch of other, you know, using um sim hash and a bunch of other
+[17:29] approaches to ddupe, uh we do so uh far cheaper, far faster, deter more more far
+[17:35] more deterministic. So hopefully that answer your questions.
+[17:41] >> Yep. Uh thank you for the great talk. Um just
+[17:45] wanted to ask a question. So it seems like a common theme these days in uh
+[17:50] memory systems is more filebased memory and wikis and knowledge bases and uh I'm
+[17:57] just wondering have is Zep working on something like that and also uh could
+[18:01] some of the ideas here be represented in that paradigm?
+[18:05] >> Yeah. uh
+[18:09] markdown suffers from provenence. File-based um file-based uh memory
+[18:16] starts to break down with provenence. It's very difficult when you m mutate
+[18:21] lines in a file to understand the lineage or the provenence of why those
+[18:28] changes occurred. Um, not only that, but in multi- aent,
+[18:34] multi-user, and multi-source scenarios, it can be
+[18:38] very challenging to manage markdown files at scale. I think they work really
+[18:43] well um for desktop usage. Uh, they sometimes
+[18:48] work well in uh agentic use cases that are server based, not necessarily
+[18:53] desktop or single user, single agent scenarios. Um
+[18:59] but what we found is that it's um they just break down with the types of
+[19:04] enterprise problems that we solving in particularly in particular provenence as
+[19:08] an example. Does that answer your question?
+[19:14] Oh more I don't know how much time we have left but maybe one more
+[19:19] >> uh Daniel thank you. Um question on the right bag. How do you do that explicitly
+[19:25] or implicitly? Um, how do you create the facts? Do you ask the LLM to summarize
+[19:31] the conversation or at every turn you do that? And and which component does it,
+[19:35] Zep or? >> Uh,
+[19:37] >> yeah. So, so we do um as part we actually as part of the extraction,
+[19:42] we've managed to get um a singleshot extraction working that extracts
+[19:48] entities and the relationships between them and facts.
+[19:55] and we're able to do so really cheaply as a consequence. Um,
+[20:01] and so yes, we're using an LLM for that. Uh, we do have a reflection step or some
+[20:06] reflection built in to ensure that the things that we've retrieved um are
+[20:12] actually accurate um as well as to do some other stuff
+[20:17] around uh uh more more richness to lineage. So why did something change?
+[20:24] Not just this was related but also why did it change.
+[20:30] Uh that's uh partly in graffiti partly in zap.
+[20:35] Yeah. All right. Well, thank you everybody.

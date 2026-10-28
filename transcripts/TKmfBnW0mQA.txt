@@ -1,0 +1,244 @@
+# title: Fixing bugs in Gemma, Llama, & Phi 3: Daniel Han
+# source: https://www.youtube.com/watch?v=TKmfBnW0mQA
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T14:41:46Z
+# sha256: 80fd69ab35aa572285c0cf4c36d03ed30ba7572384e3169e53973f2cd4c1010d
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:00] [Music] hello everyone um so today I'm going to
+[00:15] talk about how to fix bugs and open source models um thanks for coming again
+[00:20] um we had a talk yesterday the 3-hour workshop um and thanks for coming again
+[00:25] um so we have slides it's at tinyurl.com to for the workshop slides which we did
+[00:32] yesterday um you can also access that now tinyurl.com unof as
+[00:37] well so you might know me from like the Gemma bug fixes that we did so Gemma was
+[00:42] an open source model by Google and there like a few bugs in there and we fixed a
+[00:46] few of them um and we just did some tweets about this and you know like
+[00:51] there's many bugs in there like you know the activation function had to be ex um
+[00:56] approximate jel not exact jelo and there are some other issues that we talked
+[01:00] about for Gemma we also have like some a few
+[01:03] stickers which you can you know get them from like when we're outside um but this
+[01:08] is yeah we won't be handing them during the talk um but yeah they're very cool
+[01:12] and cute um and also there's like tokenization problems as well in
+[01:16] language models which we also help to fix today I'm just going to be talking
+[01:20] about llama 3 bogs so yesterday I talked about Gemma and V3 and today we're just
+[01:25] sharing all the stuff that we found with llama
+[01:28] 3 for JMA you can access like all the bug fixes that we did um in our blog
+[01:32] post and we have a collab notebook for all of the J bug fixes as
+[01:37] well for fe3 for example um we talked about this yesterday um and I just
+[01:43] pasted some slides again if you want to like review this in your own time um for
+[01:47] example like the sliding window should be 2048 not
+[01:51] 2047 um you can also like you should unfuse all of the qkv matrices otherwise
+[01:56] lurine tuning will not work that well but we'll be talking mainly about llama
+[02:02] 3 um so there's actually eight bugs in llama 3 we some of them are not
+[02:06] announced yet um we will be announcing these later um so this is like a
+[02:10] pre-release um and we'll be going through each of them
+[02:14] separately the first one is you must not use double BOS tokens um so this is
+[02:19] actually a very common theme in fine shoting Lama 3 some people don't
+[02:23] actually know that you're adding two beginning of sentence tokens to the fine
+[02:26] tune and this will actually ruin your fine tune um by making the accuracy of
+[02:30] your inference time lower um so please like check before you find tune if
+[02:34] you're using double BOS tokens um in unsoft we do this we check this
+[02:38] automatically and we'll remove the extra BOS token automatically for you so this
+[02:42] will actually cause your model to lose accuracy because if you trained on two
+[02:46] BOS tokens and you do inference on one then your model template will be
+[02:50] incorrect um so please check this it's not just a llama 3 problem other models
+[02:55] like mistro and GMA also have problems like this so just be careful of this
+[02:59] issue so a very easy way to check if you have
+[03:03] double BOS tokens if you use the apply chat template um from hugging face if
+[03:08] you do the first one your chat template must have a BOS token otherwise it won't
+[03:12] add it um llama 3 does require a BOS token if you do the second one you're
+[03:17] actually having two BOS tokens if you do this so please do not add a BOS token to
+[03:22] the chat template the second issue we found was
+[03:26] you must not use the Llama 3 base model if you're using the Llama 3 template um
+[03:31] there are some untrained tokens in llama 3 instru um in llama 3 base the instruct
+[03:36] version actually has these tokens trained so please be careful when you
+[03:40] want to use the Llama 3 base model when you want to do your fine tuning because
+[03:43] some of these tokens will cause nans for your gradients these tokens include the
+[03:47] reserve special tokens from 0 to 250 the um end of the end of turn token the
+[03:52] start header and the end of header um and the graph I showed shows you the um
+[03:57] mean of the embeddings versus the other tokens and some of them actually are
+[04:01] zero so the Llama 3 team made some of these tokens go to zero purposefully
+[04:06] because these tokens are not actually used for the model um so just please
+[04:10] don't use these some of these tokens when you do fine tuning as well um if
+[04:14] you want to fix them set them to the mean of the entire
+[04:18] tokens and in unof we do this automatically as well for you um so we
+[04:22] showed some code where you can take the mean of the um train tokens and set them
+[04:27] for the untrained tokens just be careful don't do this like incorrectly as well
+[04:32] if you want to take the average of all the tokens don't just take the average
+[04:35] you must remove the untrained tokens from the average if you do not do that
+[04:39] you might actually have an incorrect average right if there's like 10,000
+[04:42] tokens which are untrained if you divide it by 10,000 plus the number of trained
+[04:47] tokens your average will be incorrect so um you have to do this more complicated
+[04:51] method of masking out the untrain tokens and then take the
+[04:56] average also reminder because of this issue the Lama 3 chat template will not
+[05:01] work for the base model I've known like many fine tuning people have used llama
+[05:05] 3 instruct um chat template for the base model and your fine tune will actually
+[05:09] be incorrect um you will get nans in your gradients and your whole fine tune
+[05:13] will be broken so please do not use the Llama 3 instruct chat template for the
+[05:17] Llama 3 base model only use this for the instruct model itself another way to fix
+[05:22] this is to actually train the LM head and the embed tokens which will actually
+[05:26] learn and remove the nans in your models another interesting fact and not just a
+[05:32] llama 3 problem but for other models is the pad token and the US token um must
+[05:38] not be the same if you do this the same your model will have infinite
+[05:43] Generations um the reason is because the pad token gets masked out during the
+[05:46] error um during the cross enty loss and if you use the same pad token as the E
+[05:52] token then your e token the end of sentence token will be masked out so
+[05:56] just be very very careful when you doine tuning to check what is the pad token
+[05:59] token ID and the US token ID for example if you look at feed3 they're the same so
+[06:05] technically feed3 when you do fine tuning it will be infinite Generations
+[06:10] so just be careful and look you know before you do the fine tune check what
+[06:14] is the EOS token and what is a pad token they must be
+[06:18] different for unof we also do this automatically we fix this for you um and
+[06:23] we essentially check if there is any unreserved if there is any unreserved
+[06:27] tokens and we just select one which is untrained if there is no untrained
+[06:31] tokens then we will add an extra pad token ourselves um be careful do not add
+[06:35] a pad token which has the same like vocabulary as your current vocabulary so
+[06:40] what we do is we actually check the tokens inside the vocabulary and add
+[06:44] like extra hashes to see you know to make a new pad
+[06:49] token another issue we found for fine shooting people is like when you finish
+[06:53] a fine tune you don't actually know how to export it to olama and that is
+[06:57] because the chat template for olama must be exactly the same as your fine tune um
+[07:01] and this was actually very complicated to do before and now we can actually
+[07:05] automatically generate the model file for you during the fine tune so we have
+[07:09] like two collab notebooks for you to use for AMA um one of them is the alpaca
+[07:13] data set and one of them's a you can upload a CSV file to make um a Lama work
+[07:19] after you finish fine tuning now there are some Community
+[07:23] contributions for llama 3 U bugs um there is like three of them the first
+[07:28] one is someone notice that you can only use CPU conversion and not GPU
+[07:32] conversion when you convert to ggw or llama CPP um so be you know be careful
+[07:37] when you convert to llama CPP that you must use the CPU version um I think the
+[07:41] main reason is because the Precision is different in a GPU than a CPU the CPU
+[07:46] when you do float 16 it's different from when the GPU does float 16 conversion so
+[07:50] just be careful on that as well another issue is remember we talked
+[07:55] about the double BOS tokens um through our community contribution um llama CPP
+[08:00] now has a warning for you to tell you that you're using wbos tokens so please
+[08:05] you know take heed of the warning and do not add double BOS tokens to your chat
+[08:10] template and when you do inference another point someone found
+[08:15] was adding a system prompt could make fine tuning much better um and so like
+[08:20] sometimes when you do inference on Lama 3 instruct if you add a actual system
+[08:24] prompt this could make your whole fine tuning better um I think for some people
+[08:28] when they add the system prompt you actually miss the system prompt like you
+[08:31] don't actually add one and so maybe try your fine tune with the system prompt
+[08:35] and you never know this could work so we have like a GitHub package um
+[08:40] which is open source um and you can click the button start free fine tune to
+[08:44] start your first free fin tune using unso we already pushed all the LMA 3 bug
+[08:48] fixes to our GitHub repo and so the start free fine tune button will
+[08:52] redirect you to a fixed collab notebook for all of these issues um feel free to
+[08:57] Star us as well we also like have a Discord Channel so if you have any
+[09:00] questions um you can ask you know any question that you like about our you
+[09:04] know how to define tuning talk about Ai and talk about our bugs as
+[09:08] well we also have like a blog post so blog posts about all our fixes about
+[09:14] Gemma um llama 3 V3 and more um for example we talked about continued
+[09:19] pre-training you can do continued pre-training using unso now we you can
+[09:23] train on the LM head and the embed tokens and we show that instead of just
+[09:27] training like that you need to reduce the learning rate of the LM head and the
+[09:30] embed tokens by 10 or you know maybe 5 to 10 and this will make your training
+[09:34] much better we also support four times longer context using onso um and this
+[09:39] also does not increase the time uh the time of completion so we make it uh one
+[09:45] to 2% slower but you get four times longer contacts using unso um and this
+[09:50] this was because like we used something called um offloading gradient
+[09:53] checkpointing where we offload the gradients to system Ram there are some
+[09:57] other systems which offload the gradients to the dis please do not do
+[10:01] that if you offload to dis then your your time of completion of your fine
+[10:04] tune will be extremely slow um so try to offload to a system Ram first and then
+[10:08] offload to disk although if you don't if you offload incorrectly you might
+[10:13] actually make this slower as well so your offloading must be non-blocking
+[10:16] calls and do not do blocking calls to the system
+[10:20] Ram yeah so I will show you um okay let's see if I can open up um let me go
+[10:33] to this
+[10:38] work okay I'm going to open up a collab notbook um for the oama one um
+[10:47] yes okay so for the olama collab notebook you can simply just install
+[10:53] unso over here um this is already for free for everyone to use um and
+[10:58] essentially don't for get when you do the Cod notebook you have to select a
+[11:01] Max sequence length um this this determines how long your model wants to
+[11:05] do long context fine tuning um you can set this to any number that you like but
+[11:09] remember your data set must match the max sequence length so for example if
+[11:13] you have if you want to set the max sequence length to like 10 million or 1
+[11:16] million um but your data set is only like 1 million tokens or like less try
+[11:20] to like not set that Max sequence left to be that large otherwise your model
+[11:24] cannot do fine tuning on Long sequence um load in 4bit does four-bit training
+[11:29] so this actually reduces memory usage by four times um if you do if you do it to
+[11:33] false your memory usage will explode so please do not try false um especially on
+[11:38] a free collab Tesla T4 um if you do false your memory usage might Skyrocket
+[11:43] to 16 GB so do not do that um you only should do this if you use more stronger
+[11:49] gpus we support like unsoft supports fine tuning or models including like
+[11:54] llama mistro Gemma V3 and more um so this area like the model name name over
+[11:59] here you can actually try to select any model name that you like um I don't
+[12:03] think so people know that unso can support other models other than the ones
+[12:06] we listed so please try to put any model like a hugging face model name in there
+[12:11] um and it should
+[12:14] work so for the get PFT model this is where you add the PFT low
+[12:18] adapters the r is the rank so we said it to be 16 but you can select any number
+[12:23] that you like for fine tuning um so we suggest you normally to use powers of
+[12:27] two but you can use any number like one 2 three like any number that you like
+[12:31] the larger the rank you select you can make the model learn more about your
+[12:35] data set so but if you add two large of a rank you might actually overfit your
+[12:38] data set and also your memory usage might Skyrocket again so we normally
+[12:42] suggest people to select 16 32 64 or 128 try not to select two large ranks um the
+[12:48] maximum rank you should select is the size of the dimension of the uh model
+[12:52] itself so if it's 496 set this to be 496 for the Target modules be careful um
+[12:59] you must do fine tuning on all linear layers right so qkv down up and a gate
+[13:05] some people have done fine tuning without doing some of these layers
+[13:09] please do not do that because this will cause your fine tune to be not optimal
+[13:13] and the Lowa Alpha there is actually a trick for this um normally speaking
+[13:17] select the alpha to be the same as a rank or larger we found that if you do
+[13:21] 16 * 2 so the rank times two this this can make your fine treating much better
+[13:26] you can also use use RS lower to be true to to set the rank automatically for you
+[13:31] to set the alpha automatically for you for the gradient checkpointing UNS slof
+[13:35] is the method which we showed that you can do long context fine tuning you can
+[13:38] also set this to be true um but your memory usage will increase
+[13:43] again we also show you how to do data preparation in aama collab notebook so
+[13:48] this one is we upload a Titanic CSV so the Titanic data set the goal was can
+[13:52] you predict if someone died or survived um if you're in the
+[13:55] Titanic and you get details about the person for example the age their like
+[14:00] Fair where did they Embark from and so on with our new cab notebook you have to
+[14:06] be very careful when you do Umama chat templates um because when you do fine
+[14:11] tuning you can only have two columns the instruction and the output but what
+[14:14] happens if your CSV has more than one like more than two columns the
+[14:17] instruction and output what we can do is you can merge The Columns into one
+[14:20] column and with unof now you can actually do that you can merge The
+[14:24] Columns into one
+[14:29] and also we show you that you can do customizable chat templates now so
+[14:32] previously if you want to do an alaca style fine tune you have to use
+[14:36] instruction input and response for the apaca style fine tuning but remember the
+[14:40] problem is if you want to Output to Ama or ggw you can only have two columns the
+[14:44] instruction and output right if you do chat TPT you you have to type something
+[14:48] and then the output comes along you can't have like three inputs right so so
+[14:53] what we do is you can actually customize your T chat template and you must
+[14:57] include the input and the output and you must do this repetition twice um some
+[15:02] people have asked me like why do you have to do two repetitions of this chat
+[15:05] template it's because there is dangling new lines um and we found this we found
+[15:10] a solution to this is you have to specify two iterations of your chat
+[15:15] template we also show examples of how to do the Llama 3 chat template using our
+[15:19] methodology um so you can see there is two iterations of the chat
+[15:23] template reminder if you don't use two iterations you actually it will error
+[15:27] out and this is the training methodologies
+[15:31] we normally suggest people to use a batch size of two gradient accumulation
+[15:34] of four remember the memory usage is only relevant to the batch size so try
+[15:39] not to set the batch size to be very large otherwise your memory usage will
+[15:41] explode instead set your gradient accumulation steps to be larger um so
+[15:46] the formula for the effective batch size is batch size times the gradient
+[15:49] accumulation so in this case it's 2 * 4 which is 8 set your learning rate to be
+[15:54] 2 e minus 4 or smaller maybe 2 eus 5
+[16:00] and after that you can also do inference on the model um so now you have to use
+[16:04] the apply chat template remember be careful of Double B tokens but we in
+[16:07] unsw fix this and finally you have to save this
+[16:12] tolama um and you know you have to install Lama first um saving now we now
+[16:18] support saving multiple ggw files so you don't actually have to save it to one
+[16:21] ggw file you can save it to multiple and we actually allow you to do this now um
+[16:25] before if you want to save to multiple GG files you have to wait 10 minutes
+[16:28] minutes extra you can now do this automatically by you know specifying
+[16:32] more than one format we also can show you the model
+[16:37] file which we created so you can actually copy paste the model file and
+[16:39] put this to custom like a custom oama as well um so the model file was the
+[16:44] complicated part when we had to automatically generate this so we have
+[16:47] like internal code to generate the modifier
+[16:51] automatically and finally when you want to do inference you can do low Lama to
+[16:54] do inference um and you know it works um in general so try that out uh the AMA
+[17:00] chat template notebook is in the slide so tinyurl.com unsoft 2 um and remember
+[17:06] the workshop slides which we did yesterday um is tinyurl.com unoff um and
+[17:12] don't forget to join our Discord Channel um if you have any questions um outside
+[17:15] you can ask questions and stuff like that um and yes like thanks for uh
+[17:19] thanks for coming I'm much appreciate it thanks a lot
+[17:26] [Music]

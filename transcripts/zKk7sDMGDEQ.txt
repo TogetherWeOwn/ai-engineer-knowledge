@@ -1,0 +1,266 @@
+# title: Benchmarking semantic code retrieval on Claude Code — Kuba Rogut, Turbopuffer
+# source: https://www.youtube.com/watch?v=zKk7sDMGDEQ
+# speaker: Kuba Rogut, Turbopuffer
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T08:39:58Z
+# sha256: 7446bd4febaa5cc9fd3125f4a18d9d75aecbf9a3a0d1280bcfddc62d068e256f
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:07] [music]
+[00:15] >> Hi everyone. Welcome to benchmarking semantic search or semantic code
+[00:18] retrieval on cloud code. My name is Kuba. I'm here from Turbo
+[00:22] Puffer. For those unfamiliar with Turbo Puffer, we are a serverless full text
+[00:25] and vector search database built from first principles on top of object
+[00:28] storage. We serve some of the fastest growing AI companies in the world and if
+[00:32] you'd like to know more about the talk or any question about Turbo Puffer or
+[00:35] anything, just find feel free to find me after.
+[00:38] So let's get started. So for those of you who are unaware,
+[00:42] cloud code by default or I mean yeah, by default doesn't use semantic code
+[00:45] search. There's actually a tweet from Boris. Those unfamiliar with Boris, he's
+[00:48] actually like the founding father of cloud code and he talks about how cloud
+[00:52] the early versions of cloud code did actually use semantic search with a
+[00:55] local vector DB, but they just kind of found agentic search which is actually
+[00:58] you know, grepping through your file system kind of worked better and you
+[01:01] know, seems to work simpler for for cloud code.
+[01:04] However, one of Turbo Puffer's customers actually
+[01:07] fun fact, one of our very first customer is Cursor
+[01:10] does use semantic code search and does index code bases into Turbo Puffer and
+[01:15] you may think like this seems like a lot of work and it kind of is, but the
+[01:18] reason they do this is because they see real performance gains because of this.
+[01:23] They have this amazing blog post about their semantic search. They also have
+[01:26] one about indexing code bases which I highly recommend as well.
+[01:29] But you can see on the right the kind of performance gains they see with their
+[01:32] composer model is like 24% increase in relative improvement in answer accuracy
+[01:37] and I think it's like 12 and a half or 13% across all models and you know, I
+[01:42] this benchmark came up before composer two, but you can probably imagine
+[01:46] there's some sort of similar performance gains with that that new model as well.
+[01:49] And in the bottom right you can see this is from to the same blog post. They talk
+[01:53] about how in they perform an online AB test where they found that adding
+[01:57] semantic either allowing or disallowing semantic code search led to like a 2.6%
+[02:03] increase in code retention in large code bases and then 2.2% decrease in
+[02:07] dissatisfied user requests. And you may also think like these numbers seem kind
+[02:11] of small like what 2.6% 2.2%? Well, keep in mind that you know, out of
+[02:16] 100 queries not all queries will ever really need semantic search or like
+[02:20] benefit from it. So these they even state in the blog post that
+[02:24] these numbers look small because not every you know, you can imagine a very
+[02:27] simple tool call or very simple query would not really use semantic search.
+[02:31] So what we think about here at Turbo Puffer
+[02:34] and why we kind of really think vector search and why Cursor probably sees this
+[02:39] like real performance gain is we think about how embeddings are cache compute
+[02:43] and you can also you know, what is what do you mean cache compute? This sounds
+[02:46] like a bunch of baloney you're throwing at me.
+[02:49] You know, if we were like walk through like a cloud code trace and like a
+[02:52] Cursor type trace of kind of the same thing, you can imagine that on the left
+[02:56] side this kind of like a you know, grepping through the file system or what
+[02:58] they call agentic search. How it just has like grep through this is for
+[03:02] finding metadata filtering and understanding it in your code base.
+[03:05] That's essentially grep through, read the files, grep through more if it
+[03:09] doesn't find the right things and again, this is repeated on every session across
+[03:13] you know, every agent running in for the same code base so
+[03:17] that even if you're asking the same question or trying to do the same thing
+[03:20] multiple times, you always have to do this compute again and you can see like
+[03:23] I mean in this case 6,000 tokens isn't a lot in one time, but across every
+[03:27] session and every agent this really starts to add up. And if we you know, on
+[03:30] the right of this is more of a like like Cursor style or Cursor level trace where
+[03:34] you have this upfront cost where you have to chunk embed and index the code
+[03:36] base, but then you would essentially have this cache of the semantic meaning
+[03:40] so that when a when a agent wants to understand you know, where or how does
+[03:45] metadata filtering work, it can simply query you know, how is
+[03:48] metadata filtered and get a lot get the chunks it needs and kind of the
+[03:52] understanding it needs a lot faster and with token savings and again,
+[03:56] this doesn't it's not a lot of savings in one time, but we all you know, we're
+[04:01] not really running one agent anymore. Like I'm running like three at one time.
+[04:04] So there's definitely some long-term
+[04:07] savings. So
+[04:09] what we did is we built a simple CLI tool for cloud code. We call it Turbo
+[04:13] Grep. It's essentially you can imagine it's
+[04:16] just a simple way of using a tree splitter library to
+[04:20] essentially parse through your code base,
+[04:21] chunk it, embed it using the Voyage code model and then upload it to Turbo
+[04:25] Puffer. This is just a simple
+[04:29] file system walk through. There is an open source library for the V1 version
+[04:32] and then soon the V2 version will be open sourced.
+[04:38] Here's a little video of example a tool call trace for a cloud code where
+[04:43] you'll see it will call the T Puffer tool. Now it's
+[04:47] called T Puffer search password reset token generator. This is in the Django
+[04:51] repo. This is one of the repos I was testing it on and you can see that it
+[04:55] gets the contents and then is able to kind of give the full
+[04:59] explanation to the user. And
+[05:02] you know, it's very easy to say like oh this works better, but the important
+[05:06] thing is obviously benchmark it. Let's see for real what what how much better
+[05:09] does it work? Cursor has their own internal
+[05:12] context bench and there's this paper this public paper called context bench
+[05:16] where essentially the benchmark is not really testing whether or not the coding
+[05:20] agent solved or didn't solve a problem. It tests when it in the process of
+[05:25] solving the problem, did it find certain files? Did it find certain lines and it
+[05:29] find certain symbols? Because they you know, they kind of have this this thesis
+[05:34] that like it you know, it's also important how you
+[05:37] get there not just like the end goal. The process really
+[05:40] matters for understanding like are agents actually looking for the right
+[05:43] files? So essentially it's a human labeled data set of like in order to
+[05:46] complete this task they the agent should have looked at this file, these few
+[05:50] lines and these few symbols in order to like actually complete the task well.
+[05:53] And I tested with three conditions. Essentially raw cloud code out of the
+[05:57] box. Then I tested it with cloud code with a
+[06:00] max of 50 line reads at a time and then the same thing with a windowed reads
+[06:05] with the T Puffer search tool. You may ask me like why this like 50 line read
+[06:10] thing limit? It's because it it became really
+[06:12] noisy really fast if it's just reading like long files. It's really hard to
+[06:15] like understand and get a difference because it all if
+[06:19] it just reads a whole like a thousand line file, it doesn't really make a lot
+[06:22] of difference in the numbers. So we'll start with the first result of
+[06:26] it. This is precision. Precision is essentially the
+[06:30] the measure of of how many files did it read like in its total process? How many
+[06:35] of them were actually golden files? So if there was if if cloud read 10 files
+[06:40] and eight of them were needed, it hits 80% precision. You can see the baseline
+[06:44] it hit like 65% precision, 33% on line precision and 43% on symbol and it kind
+[06:50] of goes up as we add windowed grep and then windowed grep plus semantic search
+[06:53] got it to like 87% file precision for example.
+[06:56] And this is also due to the fact like cloud code by default like it's a really
+[06:59] exploratory. It loves to read as much as it can and like try to read everything
+[07:03] for example and it kind of shows up in the 65% precision.
+[07:07] And you know, it's hard to like translate these
+[07:08] numbers, but a more like English or like human version of it is that you know,
+[07:12] cloud code one in every three file reads is actually just a completely wasted
+[07:16] file and with windowed grep it was one in
+[07:19] five reads was a irrelevant file and then with semantic search there's only
+[07:22] one in eight files was a you know, quote unquote wasted or irrelevant file and it
+[07:27] kind of like scales up as you kind of add these tools.
+[07:30] And you know, obviously this this is already like pretty good.
+[07:33] Then we have recall. Recall is essentially how many of the needed files
+[07:36] did it find? So for example, if there was 10 files in the task that it should
+[07:40] have found, if cloud found five of them five files in its total trajectory and
+[07:45] only three of them were actually these golden files, it would hit 30% recall.
+[07:49] By default again, cloud code actually does win the file
+[07:54] recall and again, part of this is because it just loves to explore every
+[07:57] single file it can. Then we have line recall where it drops
+[08:00] a lot more. This is kind of because it loved to read a lot of files,
+[08:05] but also read to really read a lot of files that didn't have a lot of
+[08:08] golden context lines. So you can kind of see that even though it did explore a
+[08:12] lot, it also kind of explored the wrong things a lot and then with grep and grep
+[08:15] plus semantic or windowed grep and windowed grep plus semantic search kind
+[08:18] of have the same recall. You can kind of see on the right like kind of the what
+[08:23] happened with the behavior between these three conditions.
+[08:26] And you may be thinking like well, you know, semantic search didn't really like
+[08:28] add improvements here. Like what what went wrong? Like actually some
+[08:31] decreases. And we can like dig in a little further into the recall numbers
+[08:34] for certain tasks. This is across 50 tasks by default, but if we break it
+[08:39] down into where semantic search won you know, quote unquote won and where just
+[08:42] like windowed grep won, we see some stark differences between like certain
+[08:46] tasks performed a lot better with semantic search
+[08:50] allowed and then certain tasks performed a lot
+[08:52] better with with no semantic search and this kind of proves
+[08:56] you know, certain tasks requires different types of tools. For example,
+[09:00] when semantic search won, it was really good at finding a lot of behavior
+[09:03] adjacent files that didn't have the same kind of keywords. For example, it was
+[09:06] like I think one example off top of my head was we're trying to like it was a
+[09:09] multi like first handle lots of different ORMs that have to like handle
+[09:13] across different libraries and it didn't by
+[09:16] default the keyword search didn't by default find all of them, but behaviors
+[09:19] semantic search was able to kind of like understand these are all related files.
+[09:23] And then grep won when it was really good at just the task was a lot of it
+[09:27] like tracing through imports and if it like was able to find the keywords in
+[09:31] like the first or second tool call, it was able to like just keyword search
+[09:34] through that and find the relevant files. So again, it's like two different
+[09:37] types of how to find files, but they kind of lead to like really different
+[09:41] results. So in summary like what does this mean?
+[09:45] Well, we like we saw semantic search like did boost precision quite a bit
+[09:49] and we like kind of understand like grep and semantic search kind of find
+[09:52] different code different ways. And an interesting thing to note as well
+[09:57] was um these numbers weren't as great as
+[10:00] Cursor's because part of like part of Claude code is it's
+[10:04] built for just grepping. Like that's that's what Anthropic kind of focuses
+[10:08] on. Like it's not built to under like to really understand like when to call
+[10:12] semantic search or how to call it. Uh we kind of like add as an extra tool and
+[10:15] it's like, "Hey, like here's this cool tool. You probably should use it
+[10:18] sometimes." But it's very hard for it to have a true understanding of when to use
+[10:22] it, why to use it uh versus like for example Cursor's composer they
+[10:26] understand this is a built-in tool that um
+[10:29] it knows when and how to use it and that's why they saw it's like 23 and 1/2
+[10:32] per uh percent uh performance gain. Uh so like in summary,
+[10:36] uh you know, we think long-term winners were like kind of provide these
+[10:39] lightweight tools to find the right context in various different ways. I
+[10:42] think it's something important to think about. Uh you can't just like grep
+[10:46] through everything unfortunately in a file system. Uh we think there's a lot
+[10:49] of different ways to access lots of different types of information. Uh and
+[10:52] the people that provide these like easy tools to provide to shrink down these
+[10:56] billion context windows into the right million uh will win in the long term.
+[11:01] Um that's the general talk. Thank you. If you have any questions, feel free to
+[11:04] come up. >> [applause]
+[11:07] >> I have my own idea of what semantic search is, but could you define what you
+[11:11] what's your definition is of semantic search?
+[11:13] >> Sure. Uh so this was just uh just doing vector search. It was just performing
+[11:16] vector search using embedding it using Voyage's code model and then just
+[11:20] embedding the the the query um query sentences or
+[11:25] query tokens and just sending them back to to Turbo puffer. Yeah.
+[11:29] Uh sorry, the uh embedding model Uh Voyage code three.
+[11:34] Okay. And which vector DB? Turbo puffer. Yeah.
+[11:38] >> Sorry. Uh no worries. Yeah, yeah. Yeah, for those for those who are unfamiliar
+[11:42] with Turbo puffer, we are the we are the vector database that powers companies
+[11:45] like Cursor, Anthropic, Notion. So when you use something like Cursor uh you
+[11:51] have by proxy used Turbo puffer. Um so you may know us just not by name, I
+[11:56] guess. I was just going to ask
+[12:00] You may not have a benchmark for this, but how does it perform
+[12:03] on code? Oh, that's that's tough. I mean
+[12:07] it's hard to say >> better or is semantic better if the
+[12:10] code's like a mess and you need to go and sort it out? Uh
+[12:13] so I think it works best when there's a lot of like comments on code uh because
+[12:18] it kind of finds that semantic meaning. >> like the documentation is kind of
+[12:22] inline. Yeah, if it's like inline documentation, that was like a big um
+[12:26] boost. I believe one of the repos I remember like looking through some
+[12:28] directories and like asking Claude be like, "Why did it perform so well here
+[12:32] versus not?" And it was one of it kind of explains me like
+[12:35] um when I was looking through as well like those with like really good
+[12:37] comments, for example, just like comments above the function, it's able
+[12:40] to like really understand a lot more cuz you you kind of give this context to the
+[12:43] model and the embedding model. So then it can like actually search better. Um
+[12:48] cuz that's that's part of it. Like the the embedding it and is not the hard
+[12:51] part. It's like figuring out what meaning really is of that chunk.
+[12:56] Yeah. Yeah, you may have you you've mentioned
+[13:00] some of it now, but of course semantic search is just similarity search. So if
+[13:04] your query it doesn't really match the format of what you're querying against
+[13:09] then you get some kind of innate distance. Do you do any kind of
+[13:12] preprocessing on what your of the target data before you
+[13:17] like do you do an parent-child where the parent is
+[13:20] query-ish and the child is the real code or how do you
+[13:23] >> In in this case it was just simple just just the code. Yeah, just the raw code
+[13:28] just as a thing, but I can't speak for like how these more
+[13:32] complicated and sophisticated customers use this, but I can imagine it's
+[13:35] definitely something of providing not just code level meaning, but
+[13:38] you know, as you said at least a parent-child relationship of like
+[13:40] authentication flow, like that could be a good query to do a similarity search
+[13:45] against, but the code itself is more like raw. Yeah.
+[13:48] Yeah. Like Cursor has their own embedding model, which I think kind of
+[13:50] helps with this of like how do you translate code into more of like a human
+[13:54] level query. And I mean they're kind of been experts on that. I can't speak for
+[13:58] how they do it, but I just know they do do it.
+[14:01] I think they actually do what you said like they create fake comments on top of
+[14:05] of your code and then embed the code with the comments. Yeah. So
+[14:10] that's how they can have like their high recall when they
+[14:15] So they add they kind of inject comments. Yes.
+[14:18] Yeah, it's something that I think definitely could work. Yeah.
+[14:21] In the back? Yeah. I was going to ask like how do you see
+[14:25] uh I guess the vector database kind of working with the partners
+[14:30] and how like when do you
+[14:32] code like long-term or need to reduce the size
+[14:37] I mean I think it depends. Like obviously the easiest way
+[14:41] like people love grepping because it's zero cost. Like if you're able to like
+[14:44] download everything to your local file system and just like grep through it,
+[14:46] like yeah, that works. Um I think vector DBs are built for actually like
+[14:51] multiplayer and like this like super maybe in a sense like hard to understand
+[14:55] or uh complicated relationships between lots of data. For example, like a
+[14:59] knowledge base like a Notion, like you can imagine kind of hard to like really
+[15:03] grep through that really easily on your local machine. Like it's in a sense best
+[15:06] to like have that vectorize uh for the agents. Um
+[15:09] and even stuff like we have customers doing stuff like with multimodal data.
+[15:12] You can't really grep through a video file. You can't grep through an audio
+[15:15] file. You can't grep through an an image file. Like maybe you can glob on the on
+[15:19] the file name, um but like get a true understanding of kind of multimodal data
+[15:22] as well is that something that we find a lot of customers are doing.
+[15:26] Um so it just kind of depends on the workload and
+[15:29] um I I yeah, if you if you're hitting like at some sort of even like miniature
+[15:35] scale like a vector DB kind of like helps offload a lot of this this work
+[15:38] into like you know, cache computer cache this semantic meaning.
+[15:44] Any other questions?
+[15:48] Okay. Thank you all. >> [applause]

@@ -1,0 +1,187 @@
+# title: How we taught agents to use good retrieval - Hanna Lichtenberg, Mixedbread AI
+# source: https://www.youtube.com/watch?v=1IdzkRVmWAA
+# speaker: Hanna Lichtenberg, Mixedbread AI
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T07:58:46Z
+# sha256: c606e2f9cec6c9a2439fa4389acfa0b08d218fb936581cd4a96e3cc956475e1f
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:00] Hey, today we're going to talk about how we taught agents to use good retrieval
+[00:05] or how we call it internally closing the Oracle gap with knowledge agents.
+[00:10] >> I'm Hannah. I'm an AI engineer at Mix bread and I'm leading the agentic search
+[00:15] at Mix bread. >> Yeah, I'm Amir. I'm the co-founder of
+[00:18] Mix bread and let's jump into it. So, we have seen over the past years with the
+[00:24] LLMs just getting better and better that the reasoning capabilities of the models
+[00:30] is growing exponentially. So, just think back how good GPT-3.5 was and how good
+[00:35] GPT-5.5 was, right? So, I can clearly exponential curve. But, if you look at
+[00:40] search over the last 20 years basically, we see that
+[00:45] it's improving, but it's improving very very slowly.
+[00:49] So, there's a huge gap between how basically LLMs and the reasoning is
+[00:55] evolving and how retrieval is evolving. But, the retrieval tools are the main
+[01:03] access pattern for this reasoning there to get the right knowledge and to be
+[01:07] truly useful beyond code like in legal work, in finance work and so on and so
+[01:12] forth. Internally, we call this gap happening right now between reasoning
+[01:16] and search the knowledge gap. And it's not just one obscure theory of ours. We
+[01:22] see that actually with real benchmarks and real tasks that this gap exists in
+[01:26] real world as well. Let's take two benchmarks here, BroSque Plus and
+[01:31] Office QA Pro. BroSque Plus is like a browsing benchmark where we have
+[01:37] pre-complex queries and a corpus of 100,000 documents and we just try to
+[01:42] answer these questions. It's like real world deep search task basically and
+[01:49] Office QA Pro which has the treasuries of the US
+[01:52] treasuries of the past um
+[01:55] 100 years basically and we ask really complex question over
+[02:00] this. Office QA Pro was created by Databricks and BrowseComp was created by
+[02:04] OpenAI and BrowseComp Plus is a version of it with a fixed size corpus while
+[02:09] BrowseComp was over the open web. And we see here's a Oracle performance
+[02:14] in dotted lines and Oracle means what is the maximum theoretical performance of
+[02:19] the models if you would put in the right documents with the question with with
+[02:25] the question. We see for Office for BrowseComp it's 93%
+[02:31] and for Office QA Pro it's 64%. And now we take something like Codex
+[02:36] with its default tools and want to see hey, what is the
+[02:39] performance this tools get right now? And you see there's a sharp drop in the
+[02:45] quality of the answers Codex produces. For BrowseComp it's nine points and for
+[02:50] Office QA Pro it's eight points. So we see that the models are extremely
+[02:55] capable if they would get the right documents but if you put them into
+[03:01] the noisy corpus the performance drops sharply.
+[03:05] Meaning that actually the bottleneck here is not the reasoning. It's actually
+[03:12] the access to the right knowledge it needs to answer this question. So we see
+[03:17] this knowledge gap in real world.
+[03:21] And if you would just drop in way better search using Mixbread with just a search
+[03:26] tool using latent interaction we can recover most of the performance. So for
+[03:31] BrowseComp the difference between the Oracle and the
+[03:34] uh GPT-5 with Mixbread is just three point and for Office QA Pro we even
+[03:39] almost completely closed the gap. With giving the model better search tool we
+[03:43] can recover most of the knowledge gap. But looking at the queries the model
+[03:49] asks or writes right now to the search system,
+[03:53] it gets super super interesting. So, here's an example query we found
+[03:58] uh during some benchmarking, which is senator woman questions billionaires not
+[04:03] a company then okay thank you staff will check hearing.
+[04:07] It's basically gibberish, right? If you have a search system which wants to have
+[04:10] neural questions or semantic question and just gets these keywords over
+[04:15] keywords, it gets confused. And the reason why the
+[04:19] models write these type of queries is they're mostly trained for coding task,
+[04:25] like for coding agents, which are then optimized for code base exploration
+[04:29] using tools like grep. And grep just tries to find regular expressions,
+[04:35] right? So, the model tries to just write as many expression it thinks are in the
+[04:39] document to find the right thing. The second thing is the models are trained
+[04:44] to use the web pretty efficiently. And
+[04:48] to use the web tools properly, which are highly optimized for humans, they try to
+[04:52] mimic human-like query patterns. So, just keyword on keyword on keyword. And
+[04:57] number three, obviously, is the benchmark bias. Most benchmarks we have
+[05:01] right now, like Beer, Nano Beer, use Caveman's style queries, which are
+[05:06] entity-based queries that structurally favor heavily BM25.
+[05:11] So, right now, the agent guesses the keywords to actually increase the
+[05:17] overlap between the query and documents and can't really use powerful search
+[05:21] tools properly. >> This motivated us to make our own search
+[05:26] agent, to teach it to use powerful search properly, especially to use the
+[05:32] right search tools for different use cases.
+[05:35] Um and to work beyond code search for knowledge work. And most importantly,
+[05:41] the agent should be precise, fast, and cheap. The first step for building this
+[05:45] agent was to define a very powerful harness.
+[05:50] Um [clears throat] our harness is fully built on a mixed back platform.
+[05:53] Our agent has four main search tools, which are overview search.
+[05:59] This is used as a very wide semantic search where the agent receives up to 50
+[06:05] retrieve chunks. Um and it sees only summaries of the
+[06:09] chunk contents to really have just like an overview of
+[06:13] the corpus every uh what exists and to not fill up the
+[06:18] context too much. Then there is the main semantic search
+[06:21] tool where the agent gets the full payload of
+[06:25] the top 10 retrieve chunks. Um
+[06:28] it has a filter chunks tool where it can sort sort and find chunks based on
+[06:34] metadata facets. And of course we also have a grep tool for the keyword match
+[06:39] searches. Our um agent loop, the harness itself is
+[06:44] very simple and short cuz the agent should be fast.
+[06:48] But we still wanted it to uh have a lot of exploration possibilities.
+[06:54] That's why we decided to um define that it has a maximum four search rounds, but
+[07:01] within each search round it can have parallel searches.
+[07:06] So it can start several search at that searches at once.
+[07:10] Um initially our agent sees the user query, but also
+[07:15] already um results from an initial semantic search
+[07:19] on the user query plus um hints on which metadata facets are available.
+[07:25] Um so that based on this preview of the corpus
+[07:29] the agent can start its search planning. It splits its search intent into maximum
+[07:34] four queries um which cover separate aspects. And
+[07:41] then for each query and each search intent, it will
+[07:45] pick the best tool. Um as you can see like an example here
+[07:51] on the right. Then when um the
+[07:55] results of the tools are returned to the agent via deduplicating chunks, so that
+[08:00] it's never seeing several chunks um several times to not fill up the
+[08:05] context. >> [snorts]
+[08:07] >> Um and yeah, the next search one can start,
+[08:11] and as soon as the agent has enough evidence to answer the user query, it
+[08:15] submits its ranking. Um yeah, we are just outputs all the chunks that are
+[08:21] relevant to the query in a plausible ranking.
+[08:25] So, why does this harness encourages better semantics queries and like better
+[08:30] use of search tools? Um there are five more main points for
+[08:35] this, which is first the goal framing. The
+[08:38] agent has to articulate articulate what evidence it needs before writing the
+[08:43] query. Um then the different tools are very
+[08:48] important, so it can really use semantic search only if it needs aspects, and
+[08:53] also only use a scrap when it needs exact keyword matching.
+[08:58] Um then the
+[09:00] way in which we frame the task of query uh writing is an important point. We
+[09:07] kind of trick the um model into not thinking it has to write the typical
+[09:12] BM25 base query by just instructing it to write one concise sentence describing
+[09:19] what it wants to find, instead of directly instructing write a
+[09:23] search query, so it cannot fall into this old pattern.
+[09:27] Um then we put also provide examples in a
+[09:31] prompt just to show the a few good queries and also how to divide an input
+[09:37] query into different aspects to explore um the corpus.
+[09:43] Yeah. What also helps is that we provide the
+[09:46] original original query semantic search results. So, it can see what the corpus
+[09:52] is about and really define um see the language, define where to dig deeper in
+[09:59] which aspect. The second important step into building
+[10:03] our own search agent was of course the training itself.
+[10:08] So, here for training, we just decided to have a very small LLM to make the
+[10:14] agent even faster. So, we are training the small agent um
+[10:19] to optimize the search strategy itself to have better tool choice,
+[10:24] um higher quality of semantic queries, more exploration ranking, and to be more
+[10:29] efficient. So, the first step in training is um
+[10:33] supervised fine-tuning with a larger teacher LLM.
+[10:37] And then we uh did on-policy reinforcement learning
+[10:41] with an own search reward. Our search reward
+[10:47] is a combination of both of a retrieval reward and a trajectory reward.
+[10:54] The retrieval reward um is based on like the metric result,
+[11:00] typical retrieval metric results like we call it NDCG, that's the agent's final
+[11:05] ranked list achieves. Plus also um
+[11:09] an LLM retrieval judging. We had thought like it gets several
+[11:14] rubrics where it decides um if the rubrics is hit or not, the rubric
+[11:19] is hit or not, which are if the agent result relevant for this
+[11:24] query, are all chunks relevant, and is the ranking itself plausible.
+[11:31] For the trajectory reward, we also using an LLM judge and here um
+[11:36] is the point to like really improve the tool queries, make it more efficient and
+[11:40] to um improve the quality of the queries.
+[11:46] Of course, like we have rubrics that are where the judge is deciding if the query
+[11:51] is really a natural sentence. Also, if the amount of exploration is
+[11:56] sufficient, is it too much or too less. Here you can see an example trajectory.
+[12:03] You see that in the beginning we have the initial search and the initial
+[12:07] metadata hints. Um then the agent did four parallel
+[12:11] searches in the first round and then a second round just a simple grep tool.
+[12:16] And here's an extract of um a trajectory.
+[12:21] Here we see the agent queries. Um the input query is on the left. This
+[12:27] is a very long query typical rambling style query from the Oblique
+[12:33] Congress benchmark. And yeah, we see the agent queries here
+[12:38] for the first semantic search tool. It's really a sentence describing what it
+[12:43] wants to find and not a weird keywordy added behind each other
+[12:49] formulation. The grep tools of course are like
+[12:54] typical keyword patterns, which is exactly as intended.
+[12:58] Our trained agent is not released yet, unfortunately. However, we have some
+[13:03] intermediate results. Here on the left side for the Oblique
+[13:07] Congress benchmark, we see that we achieved an NDCG of 10 at
+[13:12] 10 of 0.4, which is a huge jump um towards the model that performed best on
+[13:19] the paper of this benchmark, which is the GPT multi-hop agent,
+[13:24] and which achieves 0. 18.
+[13:28] On the right side, you can see the result of our beta version of the search
+[13:32] agent, which we have right now in production. It's the mixed better
+[13:37] genetic search. And this agent is top one on the
+[13:42] snowflakes match QA benchmark, achieving an accuracy of 93.4
+[13:48] when we give the Gemini 3.5 flash model our genetic search as search tool.
+[13:55] And this uh
+[13:58] this performance was also achieved while having way less effort than comparable
+[14:03] LLMs with other search agents. You can check out the match QA leaderboard.
+[14:09] These results show that there's still a lot of room for improvement when it
+[14:13] comes to huge language models and their search tools.
+[14:18] And if you want to be part of pushing the boundaries of retrieval even
+[14:22] further, um we are happy awaiting your
+[14:25] application.

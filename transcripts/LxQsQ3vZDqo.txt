@@ -1,0 +1,294 @@
+# title: Teaching Gemini to Speak YouTube: Adapting LLMs for Video Recommendations to 2B+DAU - Devansh Tandon
+# source: https://www.youtube.com/watch?v=LxQsQ3vZDqo
+# speaker: Devansh Tandon
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T11:49:42Z
+# sha256: c102ebe68baf9454d26c793fa1e219909c39e287be3b85e6dd5d1fa3f6f01930
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:00] [Music]
+[00:15] There's a lot of attention in terms of how LLMs are going to transform search.
+[00:19] Uh Google search is having a revolution. Chat GPT has a big chat interface.
+[00:24] Perplexity is a product that a lot of people use. Um, but I think
+[00:28] recommendations is uh probably a bigger problem that is underhyped because it's
+[00:35] kind of transparent to the user. Um, and I think the application of LLMs to
+[00:39] recommendations is going to be a bigger consumer application than search. Um, so
+[00:44] in terms of my talk, I just want to introduce the problem of YouTube
+[00:47] recommendations and then talk about how we've built large recommener models.
+[00:52] We're adapting Gemini for YouTube. how we build semantic ID and how we're using
+[00:56] that and then end with this recipe of how you might use an LLM to make a
+[01:01] recommendation system. Um to start why this is important. Um who here watches
+[01:08] YouTube every day. It's one of the biggest consumer apps in
+[01:12] the world. Um and a large majority of the watch time on YouTube is driven by
+[01:18] the recommendation system. Uh and we serve recommendations across home watch
+[01:22] next. We have a big shorts product and even a lot of our search results are
+[01:26] personalized in some way. Uh and so if you think about consumer applications of
+[01:32] LLMs, I think in terms of consumer engagement
+[01:36] and impact, recommendations is going to be a much bigger uh application than
+[01:43] than searches. And this is true of any consumer app with a billion doubt. Um,
+[01:49] the way I think about the recommendation problem is you're trying to learn this
+[01:52] function of you get a user and their context as input and you're trying to
+[01:59] give them a bunch of recommendations. Um, at YouTube we have a bunch of user
+[02:04] information like their demographics, their age, their gender, where they're
+[02:08] located. We have a lot of context about them. What are the last 100 videos they
+[02:12] watched? How deeply did they engage with them? What did they comment on? who are
+[02:17] they subscribed to and we use all of that to make uh video recommendations.
+[02:22] We've tried a lot of different modeling techniques here. Multi-headed rankers,
+[02:27] embedding models, sequencetose sequence transformers, there's a there's a long
+[02:31] history. Um and about two years ago, we started thinking how can we rethink this
+[02:37] recommendation system on top of Gemini, which has been making incredible
+[02:42] progress in modeling. how can we adapt that for YouTube?
+[02:47] And so we've built this system which we call LRM large recommener model uh where
+[02:53] we adapt Gemini for recommendations. So we start with this base Gemini
+[02:58] checkpoint um and then we are adapting it for YouTube recommendations teaching
+[03:04] it a lot of information about YouTube to get this kind of unified YouTube
+[03:09] specific checkpoint of Gemini which we call LRM.
+[03:14] Then we can align it for different recommendation related tasks like
+[03:18] retrieval and ranking um and basically make a small custom version of this
+[03:23] model for all of the major recommendation surfaces. Um and so this
+[03:28] is a model that we have launched in production at YouTube for a while in
+[03:31] terms of the retrieval system and we're experimenting a lot on the ranking side.
+[03:36] So I want to start with just kind of explaining how we built this YouTube and
+[03:39] Gemini model and then we'll talk about how we use it for retrieval.
+[03:44] The first step of this kind of a model is you have to develop a way to tokenize
+[03:49] videos. So when you uh
+[03:53] in terms of an LLM when you give it an input it it tokenizes that text and then
+[03:58] is predicting the next text token. Uh the ideal product we wanted to make was
+[04:02] we want to give this model an input of a number of video tokens and then just get
+[04:08] video tokens out that would be good recommendations. Um, we had to build
+[04:13] this because even with a million tokens of context, when you want to reason over
+[04:17] many videos, you have to compress that video representation in some way. Um,
+[04:22] and before we kind of settled on this approach, we tried a bunch of other
+[04:25] things like uh predicting search queries and retrieving videos through that or
+[04:29] trying to just uh recommend videos directly. And those solutions were just
+[04:34] not good enough. And so we built semantic ID which we actually wrote a
+[04:38] paper about last year uh and it was presented at Rexus. The way that this
+[04:43] semantic ID works is you take a video um you extract a number of features out of
+[04:48] it like the title, description, transcript, even the audio and video
+[04:52] frame level data. You put all of that into a multi-dimensional embedding. Um
+[04:58] and then you quantize it using RQVE to give every video uh a token. Um we've
+[05:05] written a pretty detailed paper about this if people are interested. But at a
+[05:08] high level, the way I think about this is we're making the atomic units for a
+[05:13] new language of YouTube videos. Um once we have these tokens, you can imagine
+[05:18] the whole corpus of billions of videos on YouTube gets organized around these
+[05:23] semantically meaningful tokens. And so you could imagine the first token
+[05:27] representing topics like music, gaming, sports. Within sports, you would have
+[05:31] different different sports and then you can uh get to volleyball. And so these
+[05:36] two volleyball videos would share some tokens in the prefix but also then have
+[05:40] a unique identifier. Um and this this I think in itself is is an interesting
+[05:46] milestone to move away from hashbased tokenization into a semantically
+[05:49] meaningful one. Um and we use this in production at YouTube.
+[05:54] Uh what we then tried to do is this process of what we call continued
+[05:59] pre-training where we're trying to take this model and have it understand both
+[06:03] English and this new YouTube language. And we do this in in two big steps. One
+[06:10] is around linking text and SID. Um and then the second step is around having it
+[06:15] understand sequences of watches and be able to reason across this video space.
+[06:19] And so some of the example training tasks that we're teaching this model,
+[06:24] you have this video, it's a tennis highlights video which has some semantic
+[06:27] ID and you can prompt it and say, "Hey, this video has title XYZ." And the model
+[06:33] starts to learn to output the title. Um, you could imagine a very similar thing
+[06:37] where you could say has creator or has topics and so on. And so you're
+[06:43] basically trying to connect text and this video token.
+[06:47] Then what we can try to do is we have a corpus of all the YouTube engagement
+[06:52] data, all the paths that users took through YouTube when they watch videos
+[06:56] together. Um, and you can prompt the model with things like a user has
+[06:59] watched the following videos ABCD. And you mask some of those videos and the
+[07:04] model starts to learn to predict those masks. And now it's starting to
+[07:08] understand what are videos that are watched together and make relationships
+[07:12] between videos on the basis of user engagement. Right? Um, after a bunch of
+[07:19] pre-training tasks like this, we get this really interesting model that can
+[07:23] reason across English and YouTube videos. And so this is an example from a
+[07:28] user's watch history. Um, and we find that this model can now reason across
+[07:34] these videos. So you could prompt it with things like, hey, video one is
+[07:38] interesting to tennis fans because it's about Wimbledon. Video two is
+[07:41] interesting for F1 because it's about the Spanish Grand Prix. Video three is
+[07:45] interesting to math fans because it's about pi. And then you prompt video four
+[07:49] is going to be interesting too. And the model starts to be able to understand
+[07:53] that it's interesting to technology fans because it's about AI. And this is just
+[07:58] based on the semantic ID uh definition of a video. It doesn't really have a lot
+[08:05] of other information uh to go off of. So I think this in itself is a very
+[08:09] interesting checkpoint that is starting to reason across English and YouTube.
+[08:15] Once we have this model, we think about how we can use this for different video
+[08:21] recommendation tasks at YouTube. And the first one that we focused on is
+[08:25] generative retrieval. And so here you could just construct a prompt for every
+[08:30] user and see what this model recommends. And so in this example, you have a user,
+[08:36] they would be a 24 year old woman in the US on Android. They're watching this
+[08:41] highlight video from the Olympics. Um, and they have some watch history of, you
+[08:47] know, 50 videos they've watched in the past, how they engaged with it. And you
+[08:52] can just construct a prompt like we have on the right with this user demographic
+[08:56] information, the context video, and have the model decode some video
+[09:00] recommendations as SIDs. We find that this gives really
+[09:06] interesting unique recommendations, especially for our hardest
+[09:10] recommendation tasks. So, in this example, when you're watching uh this
+[09:16] highlight from the Olympics, the production system before LRM would give
+[09:20] you other men's track races. Um, now with this new model, it's able to find
+[09:27] this unique connection between the user demographic and their past watch history
+[09:32] and find related women's uh races that we weren't able to recommend in the
+[09:38] past. And so we find that especially for users where we don't know as much about
+[09:44] them, we get very interesting and unique recommendations out of this strategy.
+[09:49] Um, and so we've experimented with this and launched it in a few places at
+[09:55] YouTube. The big findings from this is that LRM
+[09:58] is a very powerful model, but it's really expensive to serve. It it learns
+[10:03] very quickly. It's very training data efficient. Um, and it handles our
+[10:07] toughest Rex tasks, but the biggest limitation was that the serving costs
+[10:11] are too high, especially for the scale that YouTube operates at with billions
+[10:15] of users. And so, after we got our first experiments working, we spent a lot of
+[10:20] time just reducing the TPU serving cost. And, you know, we got 95% plus cost
+[10:25] savings to be able to actually launch this in production.
+[10:29] Um, one other strategy that we used which I think is kind of interesting is
+[10:34] we tried to turn this into an offline problem where it's the same prompt in
+[10:39] the same model. We just remove the personal personalized aspects of this
+[10:44] prompt and we wanted to build just an offline recommendations table where if
+[10:50] you're watching video A, what are the candid videos that would be good to
+[10:54] watch next? Um, and normally these unpersonalized recommendation models
+[10:59] just don't hold a candle to a personalized recommener. But because
+[11:05] this LRM is trained from a really big checkpoint, it actually gives us some
+[11:10] differentiated recommendations. Um and so in the YouTube context like we can
+[11:14] take our corpus of billions of videos, look at the head which represent a lot
+[11:18] of the watch time, do offline inference, um make this offline rex table and then
+[11:24] we can just do a simple lookup to serve some recommendations. Um and so this was
+[11:29] kind of a a complete way around our serving problems.
+[11:33] Um, I want to talk a bit about the challenges for YouTube. And I think in
+[11:38] some ways making an LLM based recommendation system is harder than
+[11:42] training an LLM. Um, one of the big differences is the vocabulary and size
+[11:48] of the corpus. Right? So for Gemini, if you're training an English LLM, your
+[11:52] vocabulary is about 100,000 words in the Oxford dictionary and they add about a
+[11:57] thousand words every year. Um at YouTube, if you imagine the library of
+[12:03] YouTube, it has billions of videos. We have 20 billion videos on YouTube, um
+[12:07] with millions added every day. Um and the freshness of videos is really
+[12:14] important, much more so than LLMs. So if you think about a new word that's added
+[12:18] to the English dictionary, word of 2023 was RZ. If your model Gemini doesn't
+[12:24] know about RZ, it can still answer 99% of questions that people would have.
+[12:29] Maybe it misses some jokes, maybe it misses some pop culture references.
+[12:33] But in the world of YouTube, if Taylor Swift drops a new music video, you have
+[12:39] to be able to recommend it within the next minutes or hours, otherwise a lot
+[12:43] of users are going to be upset. So even within this large corpus you have to
+[12:48] very quickly understand what are the videos that are important and start
+[12:51] recommending them to the right user. Um and so what we do with this LRM
+[12:56] recommener is we have to continuously pre-train it on the order of days and
+[13:01] hours which is very different than classical LLM pre-training like Gemini
+[13:06] which happens maybe like once in 3 to 6 months. Um and so in that way it's a
+[13:12] much harder problem. Uh and then the last part is scale. Um we have great
+[13:17] models in Gemini. Gemini Pro is incredible, but there's no way that you
+[13:21] can serve that to billions of daily active users. Um and so for YouTube, we
+[13:26] had to focus on the smaller, more efficient models like flash and and even
+[13:31] smaller checkpoints than that um just to be able to hit the latency and scale
+[13:35] requirements that we have. Um, so I kind of want to summarize the
+[13:40] journey that we've been on YouTube in this what I think of as a LM and Rexus
+[13:45] recipe that you can maybe adapt to your own application. And there's three major
+[13:49] steps to this, right? The first is you want to find a way to tokenize your
+[13:53] content. Um, just like LLM's tokenized text, you want to find you want to make
+[13:58] some essence of your content into an atomic token. Uh, one way to do that
+[14:03] which we've done is you find some rich representation, a bunch of features,
+[14:07] build an embedding and then find a way to tokenize or quantize it. And the
+[14:11] outcome of this is like you're making your own domain specific language.
+[14:16] The second step is you then want to adapt the LLM and basically make links
+[14:21] between English and your domain language uh and find training tasks that help you
+[14:27] reason across English and these new tokens you've built. And so the outcome
+[14:31] after this step in my mind is it's a bilingual LLM that can speak English and
+[14:36] natural language but it can also speak your domain specific language. Um and
+[14:41] then once you have this you can do the third step of prompting it with user
+[14:44] information where you can just construct personalized prompts with user
+[14:49] demographic user activity different actions um and then train task specific
+[14:54] or surface specific models and you have a generative recommendation system on
+[14:59] top of an LLM and there this is like a tweet size summary of maybe two years of
+[15:05] work. Um, maybe the last thing that I want to talk
+[15:10] about is kind of where I see this going. Um, and some possible future directions
+[15:15] for LLM and Rexus. I think the stage that we're at right now is that LMS are
+[15:20] just augmenting recommendations. They bring these magical recommendation
+[15:25] experiences. They enhance the quality, but they're largely invisible to users.
+[15:30] like your YouTube feed just got better, but you don't really know whether a
+[15:34] Gemini inference happened or not. Um, this is why I think the LLM application
+[15:39] of Rexus is very underhyped because users don't directly know what's
+[15:43] happening. Um, I think we're close to a world and we're experimenting with this.
+[15:48] If you have like we talked about a bilingual LLM across English and
+[15:52] recommendations, users can then talk to it in natural language. And I think
+[15:56] you're going to start to see experiences where users can steer recommendations to
+[16:00] their own goals. The recommener can explain why a candidate was recommended
+[16:06] to a user. Um, and users can start to align it towards their own goals
+[16:11] expressed in natural language. Um, and I think also the lines between search and
+[16:15] recommendation start to blur in this world. Um, and then maybe a hint of the
+[16:20] future is I think you're going to see recommendation and generative content
+[16:26] start to come together in the future where we're going to be recommending a
+[16:30] personalized version of a piece of content and in the future instead of
+[16:35] recommending content we may even start creating it and you can get to really
+[16:39] interesting end of one content that's generated for the user. Um, I think
+[16:44] we're a bit away from this, but it's going to come sooner than you expect
+[16:50] with all the advances happening in AI. Um, so yeah, thank you. I'll take any
+[16:56] questions.
+[17:01] Thank you, Danch. Um, we have time for a few questions.
+[17:05] Hi, great talk. Um uh one question on generally how you balance the learning
+[17:11] of the semantic ID embeddings within the model versus keeping the general
+[17:17] language capability not damaged by learning through for example a tokenized
+[17:22] user history which is a very second language very different from English.
+[17:27] Any uh high level takeaway that you can share?
+[17:31] That's a super interesting question. Um we've struggled with this a lot. Um in
+[17:37] terms of some of our early applications, we mostly cared just about
+[17:40] recommendation quality in which case we overindexed on speaking the semantic ID
+[17:45] language. And as you overtrain on more and more of those examples actually the
+[17:50] model forgets to speak English. Maybe it's reasoning in some intermediate
+[17:54] layers which finally end up in semantic ID language. Um we are trying a bunch of
+[18:00] things like you know with mixture of experts maybe we can have a few experts
+[18:04] that retain the text capability while other experts focus on the
+[18:10] semantic ID capability and so it's it's a balance and I think we're
+[18:16] going to shift more towards text as we try to build these interactive
+[18:19] experiences where uh text input from user is going to become more important.
+[18:23] Thank you. So during this process, did you learn
+[18:28] any uh any good suggestions for cold starting embeddings on these domain
+[18:35] specific uh tokens? Yeah. So the semantic one thing is
+[18:39] semantic ID training process is entirely unsupervised. We're not telling like
+[18:44] it's making its own quantization of the video corpus. when you sample to see
+[18:50] what the model is doing, we find that it's learning concepts like sports
+[18:53] versus movies and entertainment. But we didn't actually try to teach that
+[18:57] explicitly, which I think is very interesting. I think the second aspect
+[19:01] is because of semantic ID, we can warm start into a semantically meaningful
+[19:07] space. And what we find is performance for videos that were uploaded in the
+[19:11] last day or the last week uh gets much better because we're better
+[19:17] understanding this fresh and tail content.
+[19:19] Got it. Thank you. Hey, quick question. So when you said
+[19:25] you extract frames as part of making the semantic ID, are you just running a
+[19:30] video at let's say 3 to 30 fps? uh making a grid of them, running cig
+[19:36] and inserting that. We're just trying to sample video
+[19:40] frames. Um we we've tried a few different
+[19:45] approaches where like maybe we try to sample from like key moments in the
+[19:48] video. We actually have the engagement data if you've seen in the YouTube
+[19:52] player. Uh it can highlight what are the places where people had the most
+[19:56] engagement. So we try to sample from there. um you know given the scale we
+[20:01] can't sample a lot of video frames so we try to intelligently select it but we do
+[20:06] have video frames and over time I think we'll get more
+[20:09] in this way of selecting it are you able to highlight important things that are
+[20:15] based on small objects in a video pretty well
+[20:19] let's say it's a person in the distance that's of attention of this video
+[20:24] hard to say because like at the end all of this video information gets
+[20:28] compressed into eight tokens. So, it's probably learning something, but it's
+[20:35] hard to know exactly, you know, what it picked up from that video frame. Uh
+[20:41] yeah, so it it's unclear. Thank you.
+[20:45] Yeah. So, yeah, it was a pretty good talk. Uh
+[20:49] I have a question regarding pre-training. Okay. So uh did you also
+[20:54] feed in a user query and what they watched also as a pre-training data? If
+[21:00] yes then did you also use semantic ID for user as well in a pre-training or or
+[21:06] just semantic ID is only for for the videos. Yeah.
+[21:11] Yeah. So in this case we have only tokenized videos um and we focused more
+[21:17] on sequences of watches rather than search
+[21:22] query to what watch originated from that search query. You could imagine some
+[21:28] parallel work where you try to tokenize users and build some kind of user token
+[21:33] that represents like the last 500 watches that they have had and so on. Um
+[21:39] we've experimented with some stuff there. I think it's less far along. Um
+[21:43] but yeah, I think it's a very interesting like research direction to
+[21:46] do. So, so the pre-training was done on top
+[21:49] of existing Gemini pre-trained model, right?
+[21:52] Yeah, we basically take a Gemini checkpoint and then adapt it for this
+[21:57] YouTube purpose and get this like YouTube and Gemini LRM checkpoint.
+[22:03] Okay. Yeah. last. It would be cool to see cementing ID of videos to V3, you
+[22:08] know. Yeah.
+[22:11] Hey, uh I'm kind of curious how much uh improvement do we see compared to the
+[22:16] non LLM or more traditional recommendation system and when should we
+[22:20] use a more traditional one and when should we use LM based recommendation
+[22:23] system? Yeah, I I can't really share metrics
+[22:28] like I I was I can share everything except code and metrics, you know. Um,
+[22:32] and so we've given you as much conceptual steps of what we did. Maybe
+[22:36] what I'll say is I think it's been the biggest improvement to recommendation
+[22:40] quality we've seen in the last few years. So I do think it's quite
+[22:44] significant.
+[22:50] [Music]

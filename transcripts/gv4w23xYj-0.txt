@@ -1,0 +1,531 @@
+# title: How to Write Your First AI Eval - SallyAnn DeLucia, Arize AI
+# source: https://www.youtube.com/watch?v=gv4w23xYj-0
+# speaker: SallyAnn DeLucia, Arize AI
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-26T04:41:02Z
+# sha256: 7c2ce956ca981092c71d1dab5870548dbe3f3733985fe00e71a7c94455b75922
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:01] [music]
+[00:12] >> Um, before we get started, I just wanted to introduce myself. I'm Sally Ann, and
+[00:16] I'm head of product at Arize. Uh, been at Arize for like 4 years now. Um, one
+[00:20] of the first projects that I owned actually was building our AI agent Alex
+[00:24] into our platform. So, I've been dealing evals for a little while now, and uh,
+[00:29] even building a lot of our evals product. And so, I think the way that I
+[00:32] think about evals is that they're our primary signal for our agents. Um, and
+[00:37] that includes all of our evals at Arize. So, my goal today is you'll leave with
+[00:43] three things. Um, a clear definition of what an eval
+[00:46] is and what it isn't. Uh, being able to write your own criteria. So, I'm
+[00:51] hopefully going to be able to provide you with like a little bit of a recipe
+[00:54] uh, for how you can think about evals and how you can apply that for any of
+[00:58] your real agent scenarios. And then we're actually going to build a working
+[01:01] judge in Arize. Um, and I'll show you a little bit about the life cycle there
+[01:05] and how you can think about improving your evals over time.
+[01:09] So, this is a bit of our agenda. So, again, I'm going to give you a little
+[01:12] bit of context. I don't want to spend too much time in slides, but I want to
+[01:15] make sure everyone has a really solid foundation for what an eval is and how
+[01:18] you should think about it. Um, we're going to explore some data in Arize
+[01:22] together, um, write our criteria, and then we'll actually go build our eval.
+[01:26] That's the main part of our workshop today.
+[01:28] Um, and then I'll give you a little bit of like where you could take this for
+[01:31] what's next. Um, I love it to kind of have some like working sessions so
+[01:34] people can collaborate together. I'll try to like walk around the room, help
+[01:38] folks out. Um, and then I will show kind of like a one-pager that's in Notion
+[01:42] that you can kind of open and follow along as well.
+[01:47] So, just check the room a little bit. Who here has either like shipped a
+[01:50] chatbot or an agent, ever written an eval, or even just opened the Arize
+[01:54] product today? Anyone here? All right, we got a a few folks here.
+[01:59] So, I think this is going to be great for folks who maybe haven't done any of
+[02:02] this and even if you have, I think today should still be pretty helpful.
+[02:06] So, going to start off the context with like why I don't think vibe checks
+[02:11] actually scale. So, this is the vibes problem as I see it.
+[02:15] You know, you have Monday, you maybe change something to your prompt, you
+[02:18] ship it. It overall feels better. You don't really have a way to know, but
+[02:21] overall things are looking good. You know, Tuesday ship it, a week later
+[02:26] now that use case that you shipped a fix for is broken.
+[02:29] And then next week, as the problem continues to get worse and worse,
+[02:32] there's no way for anybody to prove whether something was fixed or that it's
+[02:36] actually failing. have vibes to go off of.
+[02:41] What you can't do without evals is you can't detect regressions when you change
+[02:45] a prompt. You can't objectively compare prompt or
+[02:49] even different model versions. You don't know if a new model is any better for
+[02:54] your use case and you can't actually put any official quality gates into CI as
+[02:58] you're shipping your agent. So, without evals it's you can imagine it's it's
+[03:03] pretty hard to actually know how your agent is
+[03:06] performing. A question I commonly get is is an eval
+[03:11] just a unit test? I think that there's a lot of comparison
+[03:15] of AI evals to like kind of traditional software tests and I do think that
+[03:20] they're a little bit different. Cuz first off, with a test you kind of just
+[03:23] have like one input and there's one correct output. You can also read all of
+[03:27] the logic in the code. With an AI agent, you actually cannot read any of that
+[03:32] logic. That actually comes out after in the form of traces.
+[03:36] And so, you kind of need to have this AI eval where you can look at like the
+[03:40] day-by-day itinerary in this travel planner example I have here,
+[03:44] the budget breakdown or multiple criteria basically. So, there's these
+[03:49] many valid outputs that you just can't have, you know, a more traditional unit
+[03:52] test on like you can with software.
+[03:56] So, basically how I like to think about this is traces are the logs for AI Um,
+[04:02] evals are actual tests. And I always say that uh uh I used to have a meme, I
+[04:06] didn't include it today, but the hard pill is you kind of need traces, you
+[04:09] need observability to actually do your evals.
+[04:13] So, this is an example here for why agents
+[04:16] make this harder. So, this is just a sample example of what like a trace
+[04:21] could look like. And for anybody in the room who's maybe not familiar with what
+[04:24] a trace is, um essentially it is all of the steps that an AI agent took to be
+[04:29] able to get an answer back to a response. So, a user says something and
+[04:32] then what I'm showing here in all of those spans is all the individual steps
+[04:36] the agent took uh to get that answer. So, in this example, there's like a
+[04:39] research agent that's going to go perform some research, uh maybe even do
+[04:43] like some tool calls there. You have, you know, your local agent that's maybe
+[04:46] retrieving something from a knowledge base. So, lots of back and forth are
+[04:50] happening. And this is where I mean you can see the logic of your agent. Um, and
+[04:54] we're going to explore some traces in the Arize UI just a little bit. Um, so
+[04:58] you can see there's lots of LM calls, lots of things composed together. And
+[05:03] so, you can imagine just having one single unit test like in software not
+[05:07] really going to accurately capture all the complexity that's in an agent and be
+[05:11] able to tell us how it's performing.
+[05:15] There's actually lots of different types of evals. Today, we're going to focus on
+[05:18] LM as a judge. Um, LM as a judge is where we take a secondary LLM and we ask
+[05:23] it to grade some aspect of our agent. Um, and so, there can be things like QA,
+[05:28] summarization, relevance, and then you get a label and
+[05:32] an explanation out of that. Explanations are really helpful. Explanations are
+[05:36] kind of like the the reasoning or the thinking behind providing a label. It
+[05:40] gives you a little bit of understanding and not just have to take a label at
+[05:43] face value. But, there's lots of different types of evals. I want to call
+[05:46] out decision models. Uh this is something that's pretty new. Uh if
+[05:50] anybody kind of took or was a part of the the Jevas a Job storm that happened
+[05:54] about 2 weeks ago and OpenAI just last week released their decision model API.
+[05:59] So, I think decision models are going to be a huge part of evals in the future.
+[06:03] Um, those are pretty cheap and fast and it's uh more like a question answer and
+[06:07] you just get like a probability and an output whether it's like a true or false
+[06:10] or a label. So, you don't get that explanation that you get with Elements
+[06:14] of AI Judge. The other type of eval is code. Uh,
+[06:18] these are really great for any deterministic tests. So, maybe you have
+[06:21] some eval criteria that's like checking if a word is in an output or making sure
+[06:27] that something's in JSON. Uh, that's going to be really great for code-based
+[06:31] evals. There's also things like Rouge and Blue scores that are popular code
+[06:35] evals. Um, annotations I do see as a form of
+[06:38] evaluation. This is where we're having uh you know, golden truths on golden
+[06:42] datasets. Um, sometimes they're synthetic as well. Um, agent as a judge
+[06:47] is a newer type of eval that we've seen maybe over the last 6 months.
+[06:51] Um, that's where we're going to take a full agent and evaluate something in a
+[06:54] different agent. I think this is really good for super complex um like success
+[06:59] criteria. Um, then we have user feedback and business metrics and those three at
+[07:02] the end are going to be more for your production use cases. But, you'll notice
+[07:06] the first four are something that you want to use across your life cycle in
+[07:10] development and production. Um, and that's pretty important because you want
+[07:13] this to be able to evolve with your use case and you don't want to like put a
+[07:17] lot of investment in something you're using in development and just throw it
+[07:20] away. Those evals can grow with you over time and it gives you that consistent um
+[07:24] performance.
+[07:29] All right, let's go ahead and look a little bit at the data. Um, so we're
+[07:33] going to pause here on this slide give everyone a few minutes to go and get
+[07:36] started. That QR code is going to be for the one-pager which has all of the
+[07:41] instructions for our workshop today. Um, but I want everyone here to go ahead
+[07:46] to go to you know, app.arise.com. Uh, we want to log into AX. So, if you
+[07:50] don't have an account um encourage you to make a free um account
+[07:54] today. Um, and then I'll go over the steps from there in just a second. Um,
+[07:59] and for anybody who already I guess might have an arise account, the next
+[08:01] step is going to be getting an API key from um a model provider. So, I'll pause
+[08:05] there uh walk around make sure nobody has any issues logging into the
+[08:09] platform. The question was, can you do you have to
+[08:12] use like can you use a custom endpoint? Do you have to use a a common provider
+[08:17] for step two? No, feel free to set up whatever LLM
+[08:20] provider you want. We'll just want something that we can make LLM calls to
+[08:23] so we can test our eval out. But yeah, step two basically go to your Anthropic
+[08:28] console, your OpenAI console, whatever provider of your choosing.
+[08:32] You can find your AI providers under settings in the product and we're just
+[08:36] going to want to go ahead and add that API key in. So, let me go to my laptop
+[08:41] here and show you all a little bit of how to
+[08:43] do this.
+[08:46] So, settings here in the nav.
+[08:49] You're going to go click into that and then under your account settings,
+[08:55] let me try to Cool.
+[08:58] You're going to come to AI providers. And you can see here we have a whole
+[09:03] bunch of different providers. So, just choose one
+[09:06] that is your favorite to use, Anthropic, OpenAI, Gemini, doesn't matter. Just
+[09:09] something that we can use to make API calls with.
+[09:20] And I encourage you to use the test integration button when you're doing
+[09:23] that just so we can make sure we have a working API key.
+[09:28] Yeah, for for folks you'll find the demo project. Sorry,
+[09:30] I'll go back. Just trying to make sure everyone has time to to catch up, but
+[09:35] you can access the demo project that we're going to use in one of two ways.
+[09:40] The first is on from this when you go to this tracing page here, you'll see see
+[09:45] demo project. I have the LLM agent. I know some folks
+[09:49] might have our older demo model there. Does not matter which one you have, you
+[09:53] should be able to do our exercise today. So,
+[09:55] we just want to be able to look at some traces.
+[09:58] And you know, you can expand the time if you want to see a little bit more data
+[10:02] there, but give everyone a few more minutes cuz I
+[10:06] only saw a handful of hands that got the AI provider. and to see what I can do to
+[10:10] see if I can get one that we can share really quickly,
+[10:14] too. All right, so if you have that travel
+[10:17] agent demo project opened, this is a travel planning agent. It
+[10:22] takes a request from a user and then can it make follow-up questions, call tools,
+[10:28] and basically returns a plan. What I think good looks like in product
+[10:32] terms is it answers the follow-up questions the user asked for and
+[10:36] respects the trip's days and budget. So, this is generally what a user request
+[10:40] looks like. You can see the destination, how long they want to go, what their
+[10:44] budget is, and what their kind of general travel style looks like.
+[10:48] And that's an example of what we might see from a user who goes to this travel
+[10:51] agent. So, I'd love for everyone to take a a
+[10:54] few minutes. We want to look at the traces. We kind of want to just take
+[10:58] inventory. What are users asking for? What did the agent tool do? What tools,
+[11:03] what are the answers? And then just kind of make note, was
+[11:06] this an answer that you would share? So, just want to kind of explore the data
+[11:10] and get familiar with it.
+[11:15] As yeah, open one or two traces and maybe start thinking a little bit
+[11:19] about what you'd want to measure as you're you're looking through the data
+[11:23] here. So, as an example, let me hop on over to the product. I explained mine to
+[11:28] last day. Let's go ahead and take a look at one of
+[11:31] these traces. So, you can see here,
+[11:34] this destination is for Prague, Czech Republic, for 3 days, $800 budget. The
+[11:40] user asked for an option that feels more local, less touristy.
+[11:45] We have some kind of our ideas here and then we can start to view the plan that
+[11:50] the the trip planning agent created. So, you have a detailed day one, day two,
+[11:56] day three. And if you want to see any additional, you know, attributes, any
+[12:00] additional data that we have, you can see that in attributes. And so, a little
+[12:04] bit of how to navigate our product here. So,
+[12:08] again, this is the trace tree. This is every individual step. If you want to
+[12:12] see the data that was passed in for a step, like for example, we want to see
+[12:16] the data that went into OpenAI to process our request, we can switch to
+[12:20] that span and then look at the input and output.
+[12:24] So, we're going to get to this in a little while, but we want to pay
+[12:27] attention to where the data lives and what data we think might be needed
+[12:31] to do any of our evals. So, we'll spend a few minutes here just exploring and
+[12:36] seeing what kind of insights we find. Getting some questions about where to
+[12:42] find the actual data here, so let me just show that one more time.
+[12:47] A lot of times in the new spaces it can be a little hidden, but
+[12:50] didn't want folks to spend too much time tracing today when we're here to talk
+[12:53] about evals. So, you'll just want to click the traces
+[12:57] option on the nav here. This will kind of prompt you to get started with the
+[13:01] rise, but we're just going to go to see demo project and then
+[13:05] you can see it in recently viewed from there.
+[13:08] And you can always expand the time to see a little bit more data there.
+[13:13] Has everyone generally had time to like find the project, take a a quick look?
+[13:20] See if you had nods, we'll give I know.
+[13:25] Like fix that.
+[13:29] All right. So, basically what I want folks to do now
+[13:33] before we get into the the next part of of this,
+[13:37] is just like look at the agent and think about how you would measure this agent
+[13:41] or success for this agent. Think of yourself as the product person,
+[13:44] engineer, any real stakeholder of this project and look at the traces, look at
+[13:49] how users are interacting with it, how it's responding, and start making kind
+[13:52] of like mental note of what the things are that you would measure. In the next
+[13:57] part of the workshop, we're actually going to start defining what that
+[13:59] criteria would be, but high-level as you're going through, think about some
+[14:03] of those things that you would measure. Yes, so the question was like how we
+[14:07] should think about reading a a trace here. So,
+[14:10] again for for anyone who may be just not familiar, a trace is essentially a
+[14:14] collection of all the steps an agent took to answer a user's question. So,
+[14:20] let's go ahead and open this one here. So, at the top we call that our root
+[14:24] span. Like the technical definition of that is
+[14:27] parent ID equals null. This means that this span here doesn't have anything
+[14:31] ahead of it. It just sits at the top. And this is usually where the input and
+[14:35] final output live. And then from there we have our
+[14:38] individual spans. So, each of these is what we call a span. I like to think of
+[14:43] it as a unit of work. So, let's take a look at this first collection of spans
+[14:47] here. So, from the root span the first thing that this agent did
+[14:52] along with calling some other agents it looks like called the research agent.
+[14:56] So, this is a what we call a multi-agent system where there's multiple agents
+[15:01] doing different tasks on behalf of the bigger agent. So, in this first one we
+[15:05] have the research agent and that is going to go ahead and call a tool. So,
+[15:09] each of these has like a type you can see it different icons. This is an agent
+[15:14] span. This is a tool span. Tool span that's going to be for getting external
+[15:19] data. So, you can imagine like in this one research
+[15:22] there's some essential info that we have to grab like things like weather or
+[15:27] sites or adequate things like that. And then from there we're going to use
+[15:32] an LLM. You can see here all of the inputs and outputs that actually went
+[15:36] into the LLM. So, this is your concise travel agent.
+[15:41] And this is using that information from that tool
+[15:44] to actually summarize that we can use it in a later step here. And so you can
+[15:48] just go down the trace tree just like that like one step at a time.
+[15:52] You can see how they all connect but each of these is going to be doing a
+[15:57] step or unit of work so that it can go ahead and answer. So, again the goal of
+[16:02] this application is to look at a user's request for a trip and plan it for them.
+[16:08] Give them an itinerary of things that they can do,
+[16:11] places they can stay all in accordance with their kind of preferences.
+[16:15] And so each of these spans is the units that were done to ultimately get this
+[16:20] final kind of itinerary. Any questions on
+[16:24] that? Happy to answer some questions about tracing while we're we're going
+[16:27] through this. >> Yeah, so the question is is like there's
+[16:30] two LLM spans. >> Yeah, so sometimes it's I'll go back and
+[16:34] look at the exact trace of what happened there.
+[16:36] Sometimes it's instrumentation of showing the the different like
+[16:40] the LLM like choosing the tool to use and
+[16:43] then actually like passing that information to the tool. So let's go
+[16:47] ahead and take a look at what happened here.
+[16:54] And some of this is just kind of part of instrumentation here.
+[16:58] So this looks like here this way and I think the first LLM call
+[17:03] chose the tool and then I think in this second LLM call
+[17:08] that's where the actual data of the tool was passed to the LLM to summarize. So
+[17:13] here it's kind of hard sometimes you have to
+[17:15] go down the trace to come back up. So this LLM span chose this tool and then
+[17:21] this LLM span summarized the output of the tool. So that tool went and grabbed
+[17:24] that like temperature data, destination data and then the second LLM basically
+[17:29] summarized it so that we can do kind of further work with it.
+[17:34] Yeah, great question. So the question for for everyone in case they couldn't
+[17:36] hear it is is that kind of root node making all of the decisions
+[17:40] or is there some flexibility with how that works? And there's a lot of
+[17:43] flexibility. It comes down to what your agent kind of infrastructure is. So you
+[17:47] can have what's known as kind of like a supervisor or an orchestrating agent and
+[17:51] a lot of times that will make a plan for the sub agents to follow
+[17:56] and then sometimes it's just passed kind of to an LLM with a set of tools and
+[18:00] each step is goes like one by one. So depends a little bit about like what
+[18:03] framework you're using, what your infra looks like and the general architecture
+[18:07] of your agent. In this case here this is a link graph
+[18:10] agent I believe. So we're not doing any like supervisor architecture really.
+[18:14] Just we have a a few like modular agents that are responsible for different
+[18:18] tasks. Great question. The question was like
+[18:21] what strategic frameworks we support with arise. We're agnostic to
+[18:24] frameworks. We have a bunch of what we call auto instrumenters available
+[18:29] through our tracing package open inference.
+[18:33] We don't have a preference of which framework we want to use. Our goal is to
+[18:36] be really flexible and provide you with really good observability and evals on
+[18:40] top of it. So I can link our docs
+[18:43] where you can see all the different frameworks that are supported.
+[18:49] Okay. Let's keep going a little bit here.
+[18:53] Sounds like everyone had some time to take a look at the traces, get
+[18:56] themselves familiar with the data here and hopefully was able to spot some
+[19:00] things that they would measure for the success. So
+[19:05] the first step of defining what your eval is is defining what good means.
+[19:10] This is sometimes tricky for folks to do. So I've kind of have this
+[19:15] little trick here for vague versus concrete criteria.
+[19:19] I generally like to just write down what good means but with really specific
+[19:25] criteria. So instead of just being like helpful, accurate, good response,
+[19:30] you want to get a little bit more specific. So answer that follows the
+[19:33] user's follow-ups, matches the requested number of days,
+[19:37] keeps totals within the stated budget. For this application those are all
+[19:41] really concrete criteria for what success looks like. And I
+[19:46] encourage you you know if you're ever building this for your application, you
+[19:48] know, sit down and and kind of think about what that criteria is.
+[19:53] Another helpful hint that I have is judge one quality
+[19:58] per eval. There's some exceptions to this. I like to point out that for
+[20:02] especially the decision models and agent as a judge, you can really get
+[20:05] away with you know doing multiple criteria in one. But for LM as a judge,
+[20:10] there's lots of research that shows that it really only does well with handling
+[20:13] one criteria at a time. So I think it's good practice to just think of one of
+[20:18] them and then add more evals over time. Building evals sets iterative thing. You
+[20:23] don't just build your evals and then like set it and forget and you're set
+[20:26] for the life of the application. You kind of have to iterate and so
+[20:30] um you know, when we're defining like what success looks like, I usually write
+[20:33] down a handful um and then kind of start to build those
+[20:36] and then over time we can add more and more.
+[20:39] Um I mentioned I worked on Alex, our AI agent um that lives in Arize and when I
+[20:43] first built evals, I had a very simple set. It was like QA correctness. I think
+[20:49] I had some like user frustration, and of course like jailbreak toxicity, those
+[20:54] types of safety evals. Um and now we have 32 evals that run um
+[20:59] on Alex. So you can see how you want to start with something small um and then
+[21:03] as your application gets usage, you can ground that in real production data and
+[21:07] then evolve your evals to see what else you might need to define success.
+[21:11] I see some questions over there. Yeah, so the question for the the group
+[21:15] is is a generic eval better than a more specific one?
+[21:19] I think it really depends. I think generally speaking, I say building a
+[21:22] specific eval for your use case is better. But what I would say is an eval
+[21:26] is better than no eval at all. So a lot of folks like at Arize, for example,
+[21:29] when they're getting started, we have an eval hub with a bunch of out-of-the-box
+[21:33] templates in it and they're really great for starting. We have things like QA
+[21:36] correctness, hallucination, uh session coherence, all sorts of
+[21:39] different evals and I think they're great for getting started, but the the
+[21:43] key is and we'll go through this a little bit today, is to kind of align
+[21:46] that to your use case um and then create more specific ones over time. So I think
+[21:51] basic ones and reusing them, especially across an org, are great because it's
+[21:54] better to have some evals, but then just make them more specific.
+[22:02] All right, so start with one, add more evals later.
+[22:05] Um I think in pairs or whoever the group of around you, um I would like to kind
+[22:09] of have y'all jot down some ideas. Um basically, there is six things we
+[22:14] want to write down. This is going to be really helpful for us actually building
+[22:18] our eval. Um so first, it's going to be the task.
+[22:21] Like what do you want this eval uh to be going off of, uh what success
+[22:26] looks like, what failure looks like, um,
+[22:29] what they're judging, like what the evals are actually supposed to judge
+[22:33] here in this evaluation, and then, you know, basically three bullets on what
+[22:38] pass would look like, um, and what fail looks like. And remember from this slide
+[22:42] over here, the more specific and concrete you can be, the better your
+[22:45] eval will be. So, we're going to use all of this, uh, all these notes that you're
+[22:48] writing to actually build our eval in the next step. So, the more specific we
+[22:53] can be, um, the better. And so, yeah, I think it's a great opportunity to kind
+[22:57] of chat with folks around you, see what you're thinking, what they noticed in
+[23:00] the traces, and I'll walk around and let me know if you have any questions.
+[23:04] I got a question over here that was like, um, the the way that the data
+[23:08] looks on the trace for this application is pretty specific. It has all like the
+[23:12] request info. Um, and the question was like, does that
+[23:15] come out of the box, or do I have to like build that specific to my use case,
+[23:18] right? That was the just guy, make sure. Um, and the question is is with our
+[23:21] out-of-the-box instrumentation, we kind of abstract kind of all of the tracing
+[23:25] best practices for you. So, there's a lot of common attributes that we send
+[23:29] in. So, things like input down value, or the input messages that we send to the
+[23:32] LLM, that's pretty standard, but what you can do is called, um, you know,
+[23:36] manual instrumentation or hybrid, which allows you to customize. So, uh, tracing
+[23:40] is really flexible. We want to make sure it's tailored and you get the
+[23:43] information you need for your use case, but we try to make it easy at the same
+[23:46] time. Um, and if you have, um, you know, your own applications that you want to
+[23:50] trace, on that kind of starter page was our like MPX evals, that call brings in
+[23:55] all of our skills, uh, which is the best way to do tracing these days. Let your
+[23:58] agent figure out how to instrument it, and you can kind of nudge it along. So,
+[24:02] highly recommend that if you're going to send in your own traces, uh, to evaluate
+[24:05] later. All right. I'm just going to click to
+[24:08] the next slide to show you an example of what this could look like, and then I
+[24:11] know there were some questions over here that I'm going to come to.
+[24:15] So, just going to show an example, um, here of like what your criteria you
+[24:20] generally want it to look like. Um, so, this is like the task that we
+[24:24] want to judge. User sends a follow-up about their trip. Uh, the success is
+[24:28] answers the follow-up directly using the trip's details. Failures is falls back
+[24:32] to a generic budget. And you can see here, this is the pass and fail. Some
+[24:37] folks asked me like why we want to have the bullets and why the one-liner's not
+[24:40] enough and uh, the reason for that is basically we're going to use this to
+[24:44] write um, our LLM prompt to do our LLM as a judge. So we want to be really
+[24:48] specific so the LLM um, can understand. The way that I like
+[24:52] to think about this is describing to like a coworker or, you know, a
+[24:55] stakeholder like what success looks like. You almost want to treat this
+[24:59] criteria uh, creation the same. So I'm going to answer a few more questions and
+[25:03] then we're going to move on to the next step. Uh, for folks who want to get a
+[25:06] little bit ahead of that, um, you can this is just describing make
+[25:11] sure that um, if you have too much in your criteria, you can cut it back, but
+[25:16] I think for the sake of time I'm going to move here. Um,
+[25:19] we want to go ahead and start building our eval. The first step is you're going
+[25:23] to want to go to those traces. Let me go there now and you're going to want to
+[25:28] select a few um, traces to actually add to your data
+[25:33] set. Um, so for example, say you wanted to
+[25:36] just go ahead and evaluate the input versus the itinerary. Like does the
+[25:41] itinerary have the general input? You would want to save all of these root
+[25:45] spans to a data set. Um, if you've decided you wanted to maybe test the
+[25:49] tool call and see if the tool call returns um, the right information that
+[25:54] it was supposed to, you would want to add in all of these tools uh, calls to
+[25:58] your data set. Um, we have filters here. It's the best way to identify data. Um,
+[26:03] so one really great example, if it's like root spans, you could do just
+[26:06] parent ID equals null or go off of the default traces. Um, and if you wanted to
+[26:11] do like a tool call for example that um, I think it was the essential tool,
+[26:16] you could also filter by name that way. Um, and then you would just want to grab
+[26:20] these or go from the span view to, you know, select those and add to a new data
+[26:26] set. So um, that's kind of the the next step and then we're going to head on
+[26:30] over um, to our playground to actually build
+[26:33] and test our eval. So, folks can head over there
+[26:37] while I answer some questions. And let me know if there any that come up for
+[26:41] adding to the data set and how you should think about filtering. I want to
+[26:44] show some folks kind of the next steps here for time cuz I know we don't have
+[26:49] that much left here.
+[26:52] So, everybody hopefully has been able to go through, write their criteria,
+[26:58] identify some spans for what they're building. And then this is essentially
+[27:04] kind of the first pass is what you probably saw,
+[27:07] which I'm going to do now live for everyone to kind of follow along with.
+[27:11] But we wanted to filter the spans you're judging. That's what we just walked
+[27:14] through. So, look through the traces, identify what span you need to evaluate,
+[27:19] build your filter, add those to a data set.
+[27:22] And now what we're going to do is go into our prompt playground. That's my
+[27:25] favorite place to go to actually test out our prompts here. So, you can go to
+[27:30] the playground. I already have one set up, but I'm going to go ahead and create
+[27:33] a new one. We have two types of playgrounds
+[27:37] in our product. We're going to use the prompt playground. That's great for
+[27:41] testing eval prompts or you know any LLM prompts for your agent. We do also have
+[27:46] an agent playground. That's for testing kind of your agent end to end here. So,
+[27:50] not so relevant for today. So, just give it a name. I'm going to do
+[27:55] AI engine evals. And then we can go ahead and create it.
+[28:00] So, if you were in our eval hub,
+[28:04] you were over here and you created an eval, you kind of have a slide over
+[28:09] that looks like this. You can go ahead in the playground, just
+[28:13] add that from the drop down here. So, you'll see your eval
+[28:18] pop up here. For anybody who's just starting the eval process, we're just
+[28:20] going to do blank eval. And you can actually just start writing your
+[28:24] template here. So, what you're going to basically do is
+[28:26] take all that criteria and turn that into a prompt. A lot of it should be
+[28:31] like paste. You can paste in those like bullets that you had as criteria, but um
+[28:36] um a lot of times you want to first give it kind of an intro, like you aren't
+[28:41] eval agent or an eval LLM uh looking at the output accuracy for your
+[28:48] application. Let me actually just load this one in. Okay, perfect. Um so,
+[28:54] I like to start my evals with an example of what the LLM is supposed to do. I I
+[28:59] always kind of center it in its job. You're evaluating whether an assistant's
+[29:03] output actually accurately captures the details requested
+[29:07] um or input in the or provided in the input. Um you then want to provide the
+[29:12] data. So, this is really important. When we're looking at those traces, there's
+[29:16] probably uh attributes that you want to identify. You don't
+[29:21] really need to worry about writing the specific names in your eval prompt. We
+[29:24] do something called variable mapping um that allows you to connect it to your
+[29:28] exact data. Uh the benefit of that is that your evals can be flexible. Like,
+[29:31] if you've running on a data set calls it one thing, and then your traces call it
+[29:35] something different, rather than you need to update every eval, you can just
+[29:38] update the task where it's being used. So, don't worry too much about the name
+[29:42] of the variable. Um and then this is an example of what I
+[29:46] have written for mine. Um these are the check-in particulars.
+[29:50] Those are things like those three bullet points for pass and fail.
+[29:55] Um and then here I have mark only correct if, you know, the output is
+[29:59] consistent with the input, incorrect if there's a wrong destination, property
+[30:02] type, whatever it is, that's going to be incorrect. Um and under params here,
+[30:08] you'll see if you set it up in the task, that's where we have the labels. This
+[30:11] one here is just correct or incorrect, but you can have, you know, a
+[30:15] multi-label problem. Maybe you do correct, incorrect, partially correct. I
+[30:19] have use cases in Alex where it's actually relevant to me to know when
+[30:23] something is somewhat correct, but not fully.
+[30:25] Um you can also do things like not applicable.
+[30:28] Um so, lots of flexibility. The eval will return only one label, um
+[30:33] and then you have some things here around the optimization direction, which
+[30:37] says like is good or is correct the good thing or is a lower
+[30:42] score a good thing and then explanations. Again, those are kind of
+[30:46] the reasoning for why the template or by the eval gave a certain response.
+[30:53] And then what you're going to want to do is load in your data set. So those spans
+[30:58] that you created and saved your data set, you can load them in. And now what
+[31:01] we're in the spot to do is actually start testing our eval.
+[31:04] We have all those inputs and outputs that are here.
+[31:08] If you need to map them to different variables, mine happen to be the same,
+[31:11] but you can do that here. And so now what you can do is actually
+[31:16] start to run. I'm going to run with 41 mini, that seems good to me.
+[31:21] And we'll actually start to see the output of our eval right here in the
+[31:25] playground. And this is a great spot to just start iterating on your eval
+[31:29] template. Look at the response, you know, kind of see if there's something
+[31:33] that you agree with or disagree and then you can adjust the prompt and then
+[31:37] continue to run it over time. So that's going to be what we do for the next
+[31:41] little bit here is try to get to a template in a good spot.
+[31:45] And then what you can do is save that off
+[31:48] here in this little button here, save evaluator, and then that will be
+[31:51] available to use across the platform for either our demo project
+[31:56] or for any application that you build and bring into our eyes after. So
+[32:00] I'm going to walk around, help some folks write their templates and then I
+[32:03] have just, you know, one or two slides here to to close us out. I did want to
+[32:08] kind of point out that we do have some tools to help you. I had everybody write
+[32:12] out their criteria and write their eval and test it, but we do have Alex in the
+[32:16] platform that can help you with that. So I
+[32:19] definitely recommend helping or having Alex help you, especially after you've
+[32:23] done kind of your initial eval pass. It can actually run the playground for you,
+[32:27] look at the results, update the prompt and repeat. So that's really helpful for
+[32:31] when you're writing evals. Um
+[32:35] pulling out a little bit of the the remainder of the loop here. So we spent
+[32:39] a lot of time on the second loop our second step today,
+[32:43] um where you instrument, you write your eval,
+[32:45] um but then what the rest of the loop looks like is we have things like
+[32:48] signal. That's our managed agent in the platform that is able to look at your
+[32:51] traces, find issues for you, even make fixes.
+[32:55] Um so this becomes signal that our managed agents can then consume and
+[32:58] ultimately help improve your application.
+[33:02] Um these are some things I think good teams do next, alignment. Um alignment
+[33:07] is going to be the process of like annotating all of those examples that we
+[33:10] added to our data set, and then going to run that eval and seeing if
+[33:16] um it matches the human feedback. Um online evals will be essentially us
+[33:21] putting that into a task and have it running continuously over our traces. So
+[33:25] what that means in our eyes, every time you send in a trace, we'll evaluate it
+[33:28] according to all your evals, and then that automatically gets posted, and then
+[33:32] you can use that to actually monitor your application.
+[33:36] Um a key everybody to walk away here with is that every stakeholder evaluates
+[33:41] the agent. This is not just one kind of role's job. You really want to get
+[33:45] everybody in the room who has some kind of stake in the agent and have them
+[33:49] basically define what success looks like according to their outcomes. So uh
+[33:53] product, eng, support, um experts, um security, those are all folks. And then
+[33:59] um the key differences between like an metric and an eval is like a metric
+[34:03] tells you that something might be broken, but evals tell you what the
+[34:06] actual failure mode is. So you really want to use both there.
+[34:11] Um and then I think what might be fun to try next is we do have all these new
+[34:14] decision judges. Um and so I think it's always interesting to take your elements
+[34:18] as a judge, you know, convert it to a decision judge question, um and then
+[34:21] maybe compare the performance there, uh see which one might be better. Um and
+[34:26] yeah. And then again, start small, 20 traces
+[34:30] maybe, one dimension, one judge, you know, read the explanations, iterate
+[34:34] over it, and then you can expand to more and more evals.
+[34:39] Um and just some resources, we have some docs, um, evaluate your LLM as a judge,
+[34:43] your judge docs. Uh, we do have some deep dives on like the decision model
+[34:47] benchmarking. So, I think somebody had a question of like, when should I use LLM
+[34:51] as a judge, when should I use judge? I think that's a really great use uh, case
+[34:55] and uh, yeah, I'll be hanging out for the rest of the day. Arize has a booth
+[34:59] in the expo starting at I believe 4:00 today. So, if you want to learn more
+[35:02] about evals, see a little bit more of our product, definitely come find us.
+[35:06] Um, and if there are any questions, um, happy to answer them and thanks so
+[35:09] much for joining me today.

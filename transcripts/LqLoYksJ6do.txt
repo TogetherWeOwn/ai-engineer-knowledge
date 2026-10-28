@@ -1,0 +1,344 @@
+# title: We Gave an Agent Production Code Access and Then Tried to Sleep at Night — Moritz Johner, Form3
+# source: https://www.youtube.com/watch?v=LqLoYksJ6do
+# speaker: Moritz Johner, Form3
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T07:16:50Z
+# sha256: 1118e5b10c3bfe57f8c140edc0b95354f06842c86709033dbd06e0813bef1861
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:01] [music]
+[00:13] >> Thanks everyone for joining in. Um thanks for the great intro, by the
+[00:15] way. Um So, yeah.
+[00:17] My talk today is about um so titles we give in Asia production code access
+[00:22] and then try to sleep at night. Um so, it's mostly around dependency dependency
+[00:28] patching, which is probably the most glamorous problem in software
+[00:33] engineering. I guess everyone did it here at some point in the past.
+[00:36] Um it really is like vacuuming. Like everyone loves it, can't wait to do do
+[00:41] it again next week. Now, at our scale, we have thousands of repositories and it
+[00:45] really is a backlog that never empties and
+[00:48] you close 10 issues today and you know next week 20 more will arrive and you
+[00:52] have to deal with them. So, naturally you think, "Sure.
+[00:57] Let's just automate it. Dependabot exists.
+[01:00] Renovate exists. Problem solved, right?" It isn't.
+[01:04] Cuz these tools were really built for a world where fixing a CVE
+[01:09] means um um looking at the manifest in a
+[01:12] repository and just now bumping a version to the next version
+[01:16] and that's it. Um but our world is much more complicated than that, at least
+[01:20] nowadays in our world since we have containers.
+[01:22] So, the first problem is that the vulnerable thing isn't necessarily the
+[01:26] thing that these tools can see. For instance, the CVE might live in an
+[01:30] OS package that you use in your base image.
+[01:32] It's not in your Dockerfile. It's just in the base image.
+[01:36] Or if your Dockerfile pulls down a binary during the build process,
+[01:40] it may see the URL, which might contain a version number, but it has no idea how
+[01:44] to act on it. So, they can only look at the manifest, patch the manifest, but
+[01:49] everything else is just simply invisible.
+[01:52] Now, the second problem is patches never happen in isolation.
+[01:57] So, when we look at the Go code base, sometimes you want to bump the Go
+[02:00] runtime to the next minor version. When you do that, sometimes you might
+[02:04] have to also bump the Go linter cuz the version are just intertwined. You have
+[02:08] to bump both of them at at the same time.
+[02:11] So, when you bump the linter, that sometimes introduces new linting rules,
+[02:14] which then invalidates the code base, and you're left with this
+[02:18] big mess. Now, these old tools, quote unquote old tools, Dependabot,
+[02:23] well, they just bump the Go runtime version, create a PR, and walk away, and
+[02:27] you're just left with this mess, and you need to figure out
+[02:30] how to fix that.
+[02:36] So, you don't really have a like a patching problem, you also have like a
+[02:39] reasoning problem that you um need to address here.
+[02:44] You really want to have a tool that looks at the CVE and understands the
+[02:47] full surface of it. Where does the CVE actually live?
+[02:50] And needs to figure out what else needs to move in order to um get to a green
+[02:54] CI.
+[02:57] So, that's basically what we did. Um we built Patch Pilot.
+[03:01] We pushed to production, and eventually Infosec um came around the
+[03:05] corner ask a very reasonable question, is this automation, or is it a supply
+[03:08] chain incident waiting to happen?
+[03:12] A useful coding agent is a supply chain actor, whether you
+[03:16] plan for that or not. That's the thesis of this talk, basically.
+[03:20] It's not agents are dangerous, or agents are fine. It's the moment where you give
+[03:24] an agent um production credentials in order to like
+[03:28] be useful, it really becomes a supply chain actor,
+[03:31] just like an engineer in your department. And you should apply similar
+[03:35] or the same guardrails uh for the agent just as you do for engineers.
+[03:40] Now, this is a case study. We built this, we ran it in production. Infosec
+[03:44] pushed back in several places. They were right.
+[03:46] Um I just want to present to you what we came up with in the end. Um it's nothing
+[03:50] new, it's nothing fancy. Um I just want to share
+[03:53] share what we did and then hopefully have a discussion afterwards to see how
+[03:57] we all figured this out together.
+[04:01] Now, patch pilot has two layers. One, it's a simple go application that is
+[04:05] deterministic. It's boring. It just does orchestration. It discovers vulnerable
+[04:10] artifacts. So, artifacts that's our OCI images.
+[04:14] That's what we have in production. That's what we ship to our customers and
+[04:17] that's the thing that we really care about.
+[04:20] So, the go app discovers those, scans the images,
+[04:24] and figures out which image is built by which repository.
+[04:28] Because we need that link in order to later then work on the repositories.
+[04:34] And this deterministic part is very boring on purpose. It's very simple.
+[04:38] And inside that, we spawn agents. Now, these agents are there for the for
+[04:43] the reasoning. For instance, when we see a CI failure, we just tell the agent,
+[04:46] "Look, that's a CI failure. Please figure out what else to do in this
+[04:49] case." It could be that CI failed because a
+[04:53] previous change that we did. It could also be
+[04:56] a flaky CI. It could be an infrastructure failure, just a simple
+[04:59] timeout that just, you know, caused the CI failure. And
+[05:03] then then we would just need to retry and do nothing else in that case.
+[05:08] Now, let's have a look at it how it looks end-to-end.
+[05:12] So, first and foremost, a little bit of color coding. I hope you can see this.
+[05:15] So, the green bits, that's our deterministic part, our go application.
+[05:19] And the yellow ones, that's the agent. Um
+[05:23] So, first we start with the with the assessment. That's just a
+[05:26] simple manifest, a simple JSON file which contains a list of images and the
+[05:30] CVEs that it found for these particular images.
+[05:33] Um It will then moves on and downloads the
+[05:36] repository it's supposed to work on, um clones it into a local directory and
+[05:41] creates another directory inside it where it then shoves
+[05:44] all the context for the agent inside there. That's a prompt with which has
+[05:48] like 2,000 words or so. Um it's the assessment manifest, um a
+[05:53] couple of other things for like communicating with the agent.
+[05:59] And then simply we simply invoke the CVE remediation agent, which is like the
+[06:03] first bit. Um the first agentic part that we
+[06:05] invoke, which is supposed to do the the smallest effective change set.
+[06:09] And it should only fix the CVEs which are tied to the findings. It shouldn't
+[06:13] just, you know, bump the dependencies to the latest and greatest version. That's
+[06:16] just that interest introduces unnecessary
+[06:20] risk, which we want to avoid. So just bump to the version that actually fixes
+[06:24] the CVE and um nothing more. And at the very end, the agent then of
+[06:30] course should um just verify its own work. Should ensure that the Dockerfile
+[06:34] is able to build, should um rescan the image that it has built, and all of that
+[06:37] stuff.
+[06:40] Um so the CVE remediation agent actually just modifies files on the file system.
+[06:44] It doesn't commit, it doesn't push, it doesn't create a PR, it doesn't watch
+[06:47] the CI itself. It just modifies files on the file system.
+[06:52] And once it's done, it hands back control to the controller, to the
+[06:56] deterministic bit, which then
+[06:59] quickly vets the changes for, you know, some nonsense in there in there. For
+[07:03] instance, like um empty files or some binaries that the
+[07:08] agent might create because agents are really dumb. They mess up, you know,
+[07:12] some bash commands that are piped together, which then could um create
+[07:16] empty files. Or they just, you know, compile the
+[07:18] application and leave the binary inside the repository, which is nonsense. So we
+[07:22] got to take care of that. And then we commit it, we push it, we create a PR,
+[07:27] um and then we watch CI. And once CI is green, cool, we just send
+[07:32] over Slack notifications and we're done. Um in case there's a CI failure, we just
+[07:36] move to the next agentic bit, which um should then just remediate the PR
+[07:41] failure. To do that, we just give it all the
+[07:44] context that it needs. So, CI logs, workflow metadata that we need, and
+[07:50] everything else that is needed to work on this
+[07:53] on the CI failure. And then we invoke it. And this PR
+[07:56] remediation agent just simply should do the minimum effort fixes. It kind of
+[08:01] LLMs LLMs kind of tend to just revert the previous changes that it did. So, we
+[08:06] got to tell it to not do this. And again, it should just verify its own
+[08:09] work. And this then goes on in loop, create
+[08:12] and watch the PR, watch CI, fixes the CI failure,
+[08:17] and so on and so forth, until we hit like a
+[08:19] a maximum retry. And then we send that over to a to a
+[08:24] human in case there's like the limit is reached. We then just
+[08:28] simply tell the tell the human to take a look at this particular issue.
+[08:32] Cuz then that needs manual remediation.
+[08:36] There's one more thing that I want to share here, which is that at the end of
+[08:40] every agent invocation, we ask the agent to do a very short and simple
+[08:44] retrospective. What went well, what went wrong, what tools are missing, and what
+[08:48] kind of context would help the next time it would be invoked.
+[08:52] And this really helps us to understand what the agent is doing and what is what
+[08:55] is missing out. Um
+[08:58] Now, the observability for the agent in bits, that's still like an open issue
+[09:02] and being built by the community at the moment. That's just how we deal
+[09:06] dealt with this with this particular issue.
+[09:08] Um So, yeah. That really helps us to
+[09:11] understand this at scale because then we can just aggregate all this all that
+[09:14] information across the PRs, condense it down, and then we can see um what we
+[09:18] need to fix. We usually saw like two kinds of issues. One is an
+[09:22] infrastructure-related issue. It could be um
+[09:25] network failures, or that the agent didn't have enough permissions in order
+[09:29] to like clone a repository, um or it could be some complexity issue related
+[09:34] with the repository. Some repositories are just
+[09:37] hard to deal with and hard to reason about without having
+[09:40] the the context that the agent needs. Then we just need to either modify the
+[09:45] system prompt of the agent or we then have repository-specific instructions um
+[09:50] that we then just feed um to our agent to work on this issue.
+[09:55] I brought a screenshot here with me. Um I had to redact a lot of stuff cuz it's
+[10:00] an actual like production kind of screenshot and
+[10:03] you know, in finance you don't want to share this kind of information, but um
+[10:07] yeah, that's what I what I got out. So, here at the top where the arrow is,
+[10:11] that's a very simple bit. We just bump the the base image that we're using from
+[10:15] the Go line that simply a dependabot can do. That's boring. At the bottom we can
+[10:19] see that the agent uh updated libcrypto3 and libssl3.
+[10:24] So, um yeah.
+[10:26] I also have like a short diff um that I want to quickly showcase what the agent
+[10:31] did. Um you can see here on the left-hand
+[10:33] side that it that these um bottom two
+[10:37] Can I just go there? Here. That we have these two packages here
+[10:40] that it actually removed in the process because these packages um have been
+[10:43] pinned previously. It then just removed those because they have been fixed by
+[10:47] the actual base image. So, to be honest, if I were tasked with this
+[10:52] kind of task, I probably would have missed that. So, I'm like glad that the
+[10:55] agent um fixed that and is a good good engineer here.
+[10:59] So, and that's it. So, we started with a bunch of CVEs. We scanned artifacts, um
+[11:04] remediated remediated this the CVEs and the findings, and now we have a proper
+[11:08] working um um PR that then just needs to be
+[11:12] reviewed by a human and approved and merged.
+[11:15] So, to make that work, um we gave Patch Pilot a couple of things.
+[11:19] We gave it GitHub access, um read and write access to clone the repository, to
+[11:24] commit, and to push changes, to open up PR, to download the CI logs, and trigger
+[11:29] CI. We also gave it OCR registry credentials in order to list images in
+[11:33] the in the registry to figure out, you know, what images are available, which
+[11:36] are latest. Um we gave it tools like a go run time, python run time, a bunch of
+[11:41] linters, static libs, a bash shell, network access, and all of
+[11:45] that. Um
+[11:48] So, this is what we gave the whole application. But again, we had like two
+[11:51] layers, the deterministic part and the agentic part. And we also applied the
+[11:55] split for the credentials also for the two different layers.
+[11:59] So, here's the thing about the capability
+[12:01] list. The dangerous ones, the get up right access, um and trigger UCI is
+[12:05] something that we did not give the agent. Instead, we pushed um that
+[12:09] functionality out to the deterministic part cuz that's the thing that we can
+[12:13] reason about and we can rely on that um you know, it just does these kind of
+[12:19] kind of actions and we do not give um the agent these kinds of credentials cuz
+[12:23] that then fundamentally fundamentally limits the blast radius of
+[12:28] when in case the agent gets um prompt injected prompt injected.
+[12:33] So, that boundary really matters for the prompt injection case because you
+[12:37] probably didn't see it in the screenshot earlier, but there was like 70,000 lines
+[12:40] of code that were changed in that small PR.
+[12:43] Um that's really like a lot of changes that come in just by bumping a couple of
+[12:46] dependencies. Um and the attack surface is really
+[12:50] really really wide. Um So, what we did to mitigate that, I
+[12:55] guess like prompt injection itself isn't solved and we cannot really solve it.
+[12:58] All we can do is just to limit the blast radius in case that happens.
+[13:02] Um what we did is to do a little bit of prompt steering because we know what
+[13:06] kind of directories or files contain untrusted um un untrusted um
+[13:11] information, untrusted context. We just tell the agent, look,
+[13:15] the vendor directory, just don't trust that. Or the CI logs which live in that
+[13:19] file or in that subdirectory, you know, be sure that you don't, you know, be an
+[13:23] idiot. Um there's another thing that we did um,
+[13:28] which worked quite well, which is that we, um,
+[13:32] we essentially implemented an end-to-end test where we created a repository and
+[13:36] sent patch patch pilot added to just work on it.
+[13:40] Um, I guess that's what people call eval's
+[13:43] today and then we just, um, ensure that it isn't, um,
+[13:48] prompt injected. So, we have like a deprecated function in there in the in
+[13:51] our crafted repository which tries to recruit the agent to do some malicious
+[13:55] stuff or we have a migration guide where it deprecated function, um,
+[13:59] points at and all of that. So, we try to like, you know, remediate these kinds
+[14:04] of, um, issues that we know about. But still there um, unknown, um,
+[14:08] injection vectors which we aren't aware of yet. Um, so that's why, you know, we
+[14:12] still have to pray a little bit. But at least we don't like build the
+[14:15] whole system on on hope.
+[14:20] Now, that's the bit that kept me awake at night. Um,
+[14:26] Now, sandboxes look great on a slide. You just draw a box, put the agent in it
+[14:30] and you feel secure, right? So, the problem is that at some point the
+[14:34] agent really wants to, um, verify its own work. When it works with
+[14:39] Docker files, it wants to build a Docker container. It might also want to run a
+[14:43] Docker container in order to figure out what package versions are available and
+[14:46] so on. So, naturally you give it that Docker
+[14:49] socket. At that point, it's more or less game
+[14:52] over for you, um, because the agent can then simply just spawn a privileged
+[14:56] container, escape out of it and then, you know, read environment variables of
+[15:00] other processes, read the memory of other processes, can plant SSH keys,
+[15:04] it's game over for you essentially at this point.
+[15:09] We run it like that in production at some point. Um, it didn't feel good. We
+[15:12] moved off of that, um, and we evaluated all the other obvious
+[15:16] options in like the Linux sphere Linux bubble when it comes to like sandboxing.
+[15:21] There's a lot of technologies out there like landlock, bubble wrap, seccomp, u
+[15:24] notify, fence, and a lot of functions that we have for unprivileged Docker
+[15:28] builds, um Kaniko, uh buildkit, and and what else.
+[15:32] But, they don't really compose well with containers, and none of them really can
+[15:35] contain a Docker socket or a Docker um demon that runs on a host.
+[15:42] So, let me share a design that we came up with, which is still like in its in
+[15:45] its infancy. Um It's the same pattern. You just draw a
+[15:50] box, but instead of calling it a sandbox, it's just a micro VM. In our
+[15:53] case, we're using um using [clears throat] Firecracker to have a
+[15:56] like a proper isolation mechanism. And then we put the agent in, we put the
+[16:00] Docker socket in, and then the Docker socket is powered by its own kernel in
+[16:04] this case. Um which is good because that really
+[16:07] solves the issue with with the um Docker daemon or the agent
+[16:12] trying to escape the sandbox. In this case, everything is just contained
+[16:16] within that micro VM, which is good. There's another thing that is um
+[16:21] worth mentioning in this case. Again, we have this two-tier architecture, this
+[16:25] two layers, the agentic bit and the deterministic bit.
+[16:28] And we also want to apply network policies to these two worlds separately.
+[16:34] For the deterministic bit, we just know what kind of um
+[16:37] um network access it requires in order to function properly. It needs GitHub
+[16:41] access and what else. For the agent, we don't really know in advance. It kind of
+[16:44] depends off on the kind of repository or language um it works on. When it uses
+[16:50] Java, it needs like a completely different ecosystem it works with
+[16:53] compared to Python or Go. Um so, that's why we really want to need
+[16:57] to apply different network policies. Um so, that's what you can do. You can just
+[17:01] set up a DNS and TCP forwarder inside that micro VM.
+[17:05] But, other than that, just, you know, cut it completely off from the host
+[17:08] system. And then everything has to flow through this um through this Vsock,
+[17:12] which then um hands all the network packets to a host
+[17:16] process which then applies the network policies to
+[17:19] um to all the outgoing packets. And then you can apply, you know, rules based on
+[17:23] host names, based on target ports, side ranges, whatever you like.
+[17:29] If you really want to go wild, you can just, you know, set up a custom CA,
+[17:32] plant it into the micro VM, and then do all sorts of like TLS man-in-the-middle
+[17:36] control. Which is really hard to do, especially
+[17:40] when it comes to the Docker socket, but um
+[17:42] we're not going to dive into this one yet.
+[17:45] So, my take on agent sandboxing is this, that
+[17:50] the existing agent that we have today with Codex and Cloud, they come with
+[17:54] their own sandbox, but in my opinion, it's worthless, especially when you give
+[17:58] it um a a Docker socket access. It's just really
+[18:03] yeah, it's not going to be able to contain that.
+[18:07] Other agents like Open Code or Pi, they just don't have a sandbox because it's
+[18:11] not implemented um or it's just not there by design.
+[18:15] So, my take is that you really have to create a environment for an agent where
+[18:20] you can just put it in and give it everything that it needs, um so it has
+[18:24] like all the freedom to work on a particular issue that it's supposed to
+[18:27] do. Um
+[18:32] but there's still a gap. So, the diagram that I've just shown you
+[18:35] isn't something unique. It's just a VM with a little bit of plumbing in there.
+[18:39] You can just wipe code, it's not not a big deal, honestly.
+[18:42] Um you can even go down sta- downstairs to the vendor booths and just, you know,
+[18:46] talk to the vendors there. You have like a lot of sandbox as a service that you
+[18:50] can easily consume. Some of which really lack in
+[18:54] functionality, especially in that regards to like containing a Docker
+[18:57] socket or having a proper network access controls. That's still lacking, but it
+[19:02] differs from vendor to vendor. I also recently saw the um micro sandbox
+[19:06] project, um which has now run for, I think, like
+[19:10] three or four months or so, maybe even longer, um which really is would be my
+[19:15] choice if I would build patch pilot today again because it comes with all
+[19:20] the batteries included, network access controls, um all of that. So, keep that
+[19:24] in mind if you really want to build this. Um
+[19:26] it's an open source project. It has It has a community. It's currently funded
+[19:30] by YC. Um so, we really don't really know
+[19:33] how it how it goes in the next couple of months. We're going to see um if they're
+[19:36] able to gather enough traction to to keep the open source project afloat.
+[19:40] Let's see. So, the gap isn't the tool doesn't
+[19:44] exist. All the tools do exist, but most of them
+[19:47] are still in the beta phase. And there's still a big gap to, you
+[19:51] know, getting actual enterprise traction and getting all the features, all the
+[19:55] bells and whistles that you need in order to deploy it into a proper
+[19:58] enterprise environment. And I think that's something that we need to work
+[20:01] on. Sure, now we got a sandbox. Cool. That's
+[20:04] nice, but we still need like a lot of orchestration on top of it, which is
+[20:07] something that you can take from a vendor. There are also like
+[20:10] a couple of open source project at the moment which are working on this.
+[20:13] There's the Kubernetes um agent sandbox uh special interest group that's working
+[20:18] on this. There's um open sandbox which also working on this to integrate these
+[20:21] kind of things. So, um keep that in mind if you really want
+[20:24] to, you know, contain an agent in a production environment. It's not there
+[20:27] yet. It's beta. It's very early in the in the phase.
+[20:30] We're going to see how it goes.
+[20:35] All right. If you take one thing from this, um the blast radius of an agent is
+[20:39] an architecture decision. We didn't um
+[20:42] give the agent the credential that it needs um in order to, you know, trigger
+[20:45] CI or push to GitHub or open a PR. That's just
+[20:49] simply not needed. You can just push that functionality in functionality into
+[20:52] a deterministic layer. Um that kind of really limits the blast
+[20:56] radius of an agent. So, that choice, what's that what's
+[21:00] deterministic and what's agentic, that really is, you know, your security model
+[21:04] in this case.
+[21:07] All right. Um
+[21:10] that was it for me. I just have like one last word, which is just an invitation
+[21:13] to the community just to talk about the things that I just mentioned. Um I think
+[21:17] tomorrow there's a a dedicated uh sandbox panel where a lot of talks are
+[21:21] just around the sandbox thingy. And surely I want to know from you guys
+[21:25] how you run agents in production just to learn and to have a discussion about
+[21:28] that in order to, you know, bring the community on and just just figure it out
+[21:32] um all together. Thank you.
+[21:36] >> [applause]
+[21:54] [music]

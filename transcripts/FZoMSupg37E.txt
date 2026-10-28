@@ -1,0 +1,271 @@
+# title: Securing Agents with Open Standards — Bobby Tiernay and Kam Sween, Auth0
+# source: https://www.youtube.com/watch?v=FZoMSupg37E
+# speaker: Bobby Tiernay and Kam Sween, Auth0
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T12:09:38Z
+# sha256: 08a954b2f41bb293f1c762804d2fb825e1eb31004cfedec9339199db03302c48
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:01] [Music]
+[00:14] Hi everybody. I'm Bobby. This is Cam. And uh we're both engineers here at
+[00:19] OPZero. and we've both been working a lot in this uh the AI space lately um
+[00:26] trying to come up with clear ways for identity and access control that's
+[00:31] designed for a world where agents are center stage. So that's included our
+[00:35] work on our oforgi platform, our ozero mcp server and our own firstparty agent
+[00:41] called tenant security manager. And just like everyone here, we're learning from
+[00:45] the community as well as we do this. just the main thing is trying to get to
+[00:49] grips with what delegation and access means in a world where agents are acting
+[00:54] on users behalf. Um and today we want to share some of those lessons that we've
+[00:59] learned in this journey. And um what's actually worked, what hasn't worked, and
+[01:04] a few practical ways that you can get started with identity and access right
+[01:08] from the start. But uh I had to splash this slide
+[01:12] because we were show we were told we could have opinions as long as we showed
+[01:15] it. So here we go. To kick things off, let's talk about uh the security
+[01:21] challenges of smarter agents. Um as they start to do more things in the real
+[01:25] world and once they're moving behind beyond chat and actually doing things in
+[01:30] the in the real world cracks are starting to appear and it's pretty clear
+[01:34] secrets end up in prompts, scopes get too broad and troubleshooting gets
+[01:39] really really hard when you don't have the right visibility. So agents are out
+[01:44] there making decisions, taking actions on behalf of users, but it's very easy
+[01:49] to lose track of what's really going on. Uh things might look fine on the
+[01:53] surface, right up until there's a security incident and you realize you
+[01:57] don't have enough data to trace what actually happened.
+[02:01] This is where a lot of the genai risks begin. The OASP OASP calls it excessive
+[02:07] agency, but really that's just a fancy way of saying giving agents too much
+[02:11] access without guardrails. And access here means calling APIs, pulling data,
+[02:16] using tokens, touching credentials and keys. If that access isn't scoped,
+[02:22] monitored, and tied to a real user, you're wide open to abuse and unintended
+[02:26] behavior. And there's other OASP risks, too, like sensitive data exposure. But
+[02:31] that often comes back to the same root cause. If a agent reaches into something
+[02:35] they shouldn't, it's usually because no one told it not to. And if you've been
+[02:40] listening to the talks here, it's pretty clear that agents aren't just responding
+[02:43] to prompts anymore. They're actually doing real things, calling APIs, kicking
+[02:48] off workflows, changing your systems. And that means they're moving through
+[02:52] your stack, touching real user data, interacting with real external systems.
+[02:58] And it all needs to happen under the right context. Not just on behalf of
+[03:02] your app, but on behalf of your users, individuals.
+[03:07] Here's what this looks like in practice. Uh on the left, you see a pattern that's
+[03:11] very common. And an agent calling an API using a shared uh key pulled from an
+[03:16] environmental variable. Um that key probably gets reused across users,
+[03:21] environments, maybe even different services. It works, but it's fragile.
+[03:26] You can't tell who did what and rotating uh secrets and keys is manual and risky
+[03:31] and the axis is way too broad. On the right, things are looking better.
+[03:35] Instead of a shared static key, the agent asks your backend for a token
+[03:40] that's just for the one user and one API. The backend uses something like
+[03:44] token exchange to hand out shortlived token and the agent can safely use that.
+[03:49] Now you've got a real record of who did what and you can easily rotate tokens,
+[03:54] support multiple upstream systems and manage up uh all this in a centralized
+[04:00] way. And we've seen that this approach scales much better even if you have
+[04:04] dozens or hundreds of agents. It's a small tweak in your flow, but a big step
+[04:09] up in how you handle risk. So we've talked about the secrets and
+[04:14] shared credentials problem, but underneath it all is identity. If your
+[04:18] agent doesn't have identity, it doesn't matter how well you scope your tokens or
+[04:21] rotate tokens, you still have don't have real control here. And identity is what
+[04:25] connects actions to users. It lets you understand what happened, trace the
+[04:30] activity, and decide what should happen next. But before we talk about
+[04:34] delegation and scope, we need to get identity right. So if identity is the
+[04:39] part we're often missing, the next question is who's the agent actually
+[04:43] working for? If you don't have a clear answer, chances are it's just running as
+[04:46] a service account. And that's how you get the confused deputy problem that
+[04:50] you've been hearing a lot about uh this week. The agent has access, but it
+[04:54] doesn't know who it's acting for, what it should avoid. The fix is to anchor
+[04:58] that behavior into real users using standard flows like OOTH 2.1, RAR, uh,
+[05:04] and token exchange to tightly control what the agent can do. um that includes
+[05:10] refreshing tokens properly properly and preserving upstream identity. And here's
+[05:15] how it works in practice. When an agent needs to act, it doesn't grab a key from
+[05:19] a static config. Instead, it uh asks your backend for help. The backend
+[05:23] reaches into a vault, fetches a credential, and uses token exchange to
+[05:27] uh to to mint a token that's shortlived just for this user and API. That token
+[05:33] never sits with the agent. It's handed off, used, and gone. And this keeps your
+[05:38] agent focused on doing its job, not carrying around secrets. And it lines up
+[05:42] with familiar OASH standards. So you're not inventing the wheel, which you
+[05:45] should never do with identity. And let's shift gears now to the rag systems. When
+[05:51] you're using rag, you're not just handing data to the model. You're making
+[05:54] choices about what it sees. And not every user should unlock the same data
+[05:58] context. This is where fine grain authorization matters. You don't want
+[06:02] the agent deciding access inside your LLM. You want that enforced much earlier
+[06:07] at the retrieval layer where policy enforcement enforcement can kick in. So
+[06:13] you want to do this so that none of your sensitive data leaks out and you keep
+[06:18] your company and your users secure. Um early we covered how to scope access
+[06:24] which agent can see. But sometimes that's not enough. You also need to
+[06:28] control when and how that access is provisioned. That's where client
+[06:33] initiated back channel authentication which is a mouthful or SIBA comes in.
+[06:38] Instead of showing a UI, the agent sends a request to the authorization server.
+[06:43] The server reaches out to the user on a trusted device via something like a push
+[06:47] notification and then the user decides whether to approve, deny, or ask for
+[06:52] more information. Um, this pattern is really great for agents running in the
+[06:57] background or in scenarios where there's no screen to direct a user to. And Cam's
+[07:02] going to show the demo where this really comes to life. So, keep this flow in the
+[07:05] back of your mind when you see that. And of course, we can't talk about secure
+[07:10] agent execution without talking about MCP. Um, MCP servers are showing up
+[07:15] everywhere these days. What started as local standard IO input on your on your
+[07:20] laptop is quickly turning into a core part of remote distributed systems. And
+[07:25] once you put it on the network, security can't be an afterthought. This pattern
+[07:30] here uses um OOTH 2.1 flow. The user signs in through the browser. MCP server
+[07:37] handles the token minting behind the scenes. Agent gets scoped and bound up
+[07:41] front and the token is issued. Client never exposes thirdparty credentials.
+[07:46] The key takeaway is that when every tool in action runs on a shared server, the
+[07:50] need for solid guarantees about who's making each request and doing what
+[07:54] they're actually doing becomes critical. All right. So to bring this all
+[07:57] together, Cam's going to show what this looks like in practice. He's going to go
+[08:00] through the the SIBA flow and example. Cam, over to you. Sweet. Thanks, Bobby.
+[08:05] Um, a lot of talking points. This is not going to be a challenging demo. Uh, so
+[08:10] thanks for outlining some of the uh security and identity challenges that
+[08:12] are facing production grade uh API agent or AI agents. Building on that overview,
+[08:17] um you can actually find this demo uh alongside of a ton of other really great
+[08:20] working demos um at the following URL that I've got highlighted in the
+[08:24] package. JSON of this little application. Um, for our scenario, we're
+[08:28] going to do a a local AI trading assistant that's going to make local
+[08:31] tool calls to a broker service in order to buy stock, right? Uh, we tried to
+[08:34] make this as applicable as possible. Uh, the AI agent is going to initiate the
+[08:38] request, but the user is going to have to explicitly approve it before uh, it's
+[08:42] executed. I don't have enough screen, so I'm going to pull another one up. This
+[08:44] will be really fun. Bear with me. All right. So, um, this is going to really,
+[08:48] um, emphasize three critical components for us. So we're going to have user
+[08:52] identification and context which is going to identify the user so that the
+[08:55] agent can act on their behalf. Uh we're going to use the token vault to prevent
+[08:59] us from embedding any kind of like you know secrets or uh sensitive data inside
+[09:03] of our actual code. And then we're going to use SIBA or client initiated back
+[09:06] channel authentication uh to request user consent before the agent executes
+[09:10] sensitive actions. It's worth highlighting uh this is going to require
+[09:13] an identity provider that supports SIBA. Um you know our Ozero is the company we
+[09:17] work for. Um but importantly like SIBO is part of the OIDC specification. So
+[09:21] this is going to become more ubiquitous over time. Uh so taking a look at the
+[09:24] app that's driving this demo. Um zoom out a couple here. Cattle love
+[09:31] Intelligj. I'm gonna hide this too. There we go. Okay. So we're using a
+[09:36] pretty simple TypeScript CLI application. Anybody speak TypeScript in
+[09:39] the room? Show of hands. Few. Okay. All right. Uh the Python demo will come
+[09:43] later. Um so um this is basically just going to expose a command line interface
+[09:48] on uh for the user uh which is configured with a stock trading um tool.
+[09:53] Let me make sure that a couple of prerexs that I need are true.
+[09:59] Bear with me one second.
+[10:04] All right. Um I do not see what I'm looking for,
+[10:09] but that should be fine hopefully. Um so um rolling back um in a more mature
+[10:15] mature trading environment it would probably look something like this. Um so
+[10:18] you'll have this user who's going to specify you know buy some stock um at a
+[10:22] certain threshold which will get dispensed as a user action that'll
+[10:25] interface with your um chatbot. there'd be some sort of polling system that
+[10:29] would be capable of understanding what like the real-time value of that stock
+[10:32] trade is over time and then it would um at the time where whatever threshold is
+[10:36] defined at that point it would then execute the trade and prior to executing
+[10:40] the trade it would dispatch a SIBO request to make sure that the user is
+[10:42] able to authenticate that right at the at the last mile. Um now with today's
+[10:46] stock volatility being what it is, it'd be a real challenge to define any
+[10:49] reliable trade rule based on vibes and truth social posts. So we're going to
+[10:52] allide certain elements of this stack. That was a joke. I hope you enjoyed
+[10:56] that. Um, let's stay on the script now. Um, so we're going to take a look at the
+[11:00] actual application. So this is the primary agent configuration and runtime
+[11:04] definition. Um, inside of this stack, you can see it's bifurcated into two
+[11:08] primary methods. You've got the generate messages method, which is basically the
+[11:11] handler that's interfacing between the LLM and the user. Here we're passing in
+[11:15] this buy tool, which we're going to dig into a little bit more. Um, then
+[11:18] subsequent to that, you have the main method, which is going to run on the
+[11:21] main thread. Here's where we're going to define the context and bind it to a
+[11:24] particular thread for this particular session. This is going to give us the
+[11:27] ability to um durably identify who uh who is using this particular um uh
+[11:34] session. Um so within that let's take a look at
+[11:37] the actual tool call. Um so here we have the definition of a tool call and uh
+[11:44] this application u you'll note that it's wrapped in two higher order component uh
+[11:48] functions. So there's this use device flow. taking a look at that. Um, this is
+[11:52] basically how it is um that we are uh bootstrapping the OIDC uh wrapper within
+[11:58] this application. That's going to enable us to have an OC client bootstrap for
+[12:02] the application. This enables me to use access tokens on behalf of a user
+[12:05] basically. So there's a whole lot of configuration that goes into that.
+[12:08] Stepping back, there's another handler this use SBA um I order component. So
+[12:12] this is basically going to enable um this application to um intercept a tool
+[12:17] call in which we want the user to be able to approve or deny behavior and
+[12:20] that's really the heart of SIBA. It's also where we provide configuration
+[12:24] information to our identity provider about how we're going to use the
+[12:26] resources. So in our case we're using a blocking call back down here um which is
+[12:32] going to um actually pause the application while it's running in order
+[12:35] to wait for the approval. Um, you could wire this up with an asynchronous flow
+[12:39] or polling or however you wanted to. Um, but for the sake of this demo, this was
+[12:42] a lot easier. Uh, one last thing that I'll highlight here, uh, inside of the
+[12:46] buy tool call, uh, the way that we're handling credentials here on line 28.
+[12:50] Um, this prevents us from embedding, um, client secrets directly inside of the
+[12:54] code, which is a nice utility, uh, method in Ozero. We call this our token
+[12:58] vault. Uh, it's dissimilar from like um, like one password or like a credential
+[13:02] manager. This is managing tokens, not credentials. So, just a little bit of a
+[13:05] note there. So, let's get these services running. Uh, fingers crossed we don't
+[13:08] run into uh any super fun Wi-Fi issues. May the Wi-Fi gods be forever on our
+[13:14] side as that comes up. Um, so even with local AI agents, identity matters,
+[13:19] especially when you're using um multiple users with multiple agents involved um
+[13:23] or if the agent has access to, you know, user data or user files, right? So, it's
+[13:28] crucial to know who the um who is interacting with what and at what time.
+[13:31] uh especially like once compliance gets into this, it gets a lot more um robust.
+[13:36] So, we're uh not using a fully stateful service to preserve and persist the
+[13:39] user's identity. Um so, instead, we're going to authenticate the user through
+[13:42] the UI. So, you'll notice that um little blurb will pop up. After that, when the
+[13:45] AI agent needs to perform a sensitive action like executing a trade, we're
+[13:48] going to rely on SIBA. That means no additional userfacing UI is required
+[13:52] after the user has given us their tokens. And I'll give you a little bit
+[13:55] of a demo of that. So we're definitely aware that identity standards like OOTH
+[13:59] 2, OIDC, SIBA, these are not always top of mind or super interesting for
+[14:03] developers when you're building great applications. That's why we're
+[14:05] highlighting that there are solutions to these problems. There's open standards
+[14:08] that are evolving over time. Um and a lot of those are live today. Um so that
+[14:12] can be something to be thought of uh in the progenation of an application
+[14:16] instead of as an afterthought. So one thing that we run into repeatedly while
+[14:19] building this demo is determining just how much complexity is needed to
+[14:22] effectively showcase um you know these sorts of scenarios. Um, please let us
+[14:26] know how we struck that balance. Uh, you can email Bobby directly. Uh, he loves
+[14:30] feedback. All right. Uh, so now for the fun part. Let's try and buy some stocks
+[14:34] with this. Uh, if the Wi-Fi gods are on our side. So, um, buy me 10 stocks
+[14:40] of SECO, just some company. So, what this is going to do, um, is the LLM is
+[14:45] going to process the intent and it's going to select the buy stock tool. The
+[14:48] agent is going to send, uh, I love Wi-Fi. It's my favorite thing. Um let's
+[14:54] see if there isn't a way around. Um I can just sort of talk through this at a
+[15:00] high level. We'll take a look at um this piece of our demo. So um what would have
+[15:07] you know ideally happened is we would execute that trade because we have
+[15:10] bootstrapped our middleware inside of this application. It would prompt me to
+[15:13] log in and once I logged in then the agent would have tokens to use on my
+[15:17] behalf as a user. That would then execute a trade. It's not actually
+[15:20] executing a trade. I have like a local trade service running. So, you're not
+[15:22] missing many highlights, don't worry. Um, and then once the trade um or once I
+[15:28] authenticated, then SIBO would immediately dispatch a notification to
+[15:31] Odd Zero's back end and it would blow up my phone and I would get a little
+[15:34] notification that's like, hey, would you like to approve and authorize this
+[15:38] trade? One nice thing about the notification that I get is it's not just
+[15:41] going to tell me, hey, something happened. Would you like to approve it?
+[15:44] And I'm just going to be left generically in the middle of the ether
+[15:46] trying to figure out where this notification came from. It's actually
+[15:48] going to say this agent tried to do this action, which in this case is purchasing
+[15:52] 10 shares of something on your behalf. Would you like to approve that
+[15:56] downstream flow? And then I have the autonomy as an end user to to determine
+[16:00] whether or not I'm going to advance that flow or cancel that flow. U one other
+[16:04] thing that I would have shown is once I've authenticated the agent to act on
+[16:07] my behalf, subsequent trades no longer need me um in the loop outside of the
+[16:10] SIBO flow. So once I've authentic or yeah, once I've authenticated in the
+[16:14] authorization flow is then just dispatched to SIBO, which is pretty
+[16:17] cool. Um, so going back to my notes, let me see how many things that I missed. A
+[16:23] bunch of things, but that's okay. Um, so in summary, we saw well kind of I talked
+[16:28] through how an agent can identify and act on behalf of a specific user, how to
+[16:31] store and access credentials securely, um, and how to use SIBA to get explicit
+[16:35] user approval for high-risisk actions like trading without a browser to be
+[16:39] required. Um, so these patterns are live. Um, they exist in defined
+[16:43] standards like OIDC, SIBA, um, rich authorization requests, ozero, um,
+[16:47] developer previews have like, um, attempts at a lot of these things or
+[16:51] actual production versions of a lot of these things. So I'd encourage you guys
+[16:53] to check some of those things out. Um, and some of these are GA like our, uh,
+[16:57] SA I believe is GA or at least in early access um, inside of our platform. So
+[17:00] that's pretty cool. Um, thanks. That's, uh, my demo. All right. So just moving
+[17:05] back here, if you go to the next slide. Cool.
+[17:10] As Cam was saying, like we're trying to make this easier for for developers. Um,
+[17:15] the standards are great. It means you're not reinventing things over and over
+[17:19] again, but there's still a lot of building blocks that you would have to
+[17:22] build. The Ozuro, other platforms have similar things, but we're we're trying
+[17:27] to wrap this all up in a nice experience for developers. So, the async user
+[17:31] confirmation with SBA is like a very key component here. uh as well as calling
+[17:36] APIs on BAP users, things like token exchange and token vault as well as fine
+[17:41] grain authorization for rag. You don't have to use our platform for this. We
+[17:45] have open FGA that can snap into this type of thing as well. Um and user
+[17:51] authentication and authorization generally is is something that we do we
+[17:56] think deeply about. And with that, here's what you can take with you.
+[18:02] There's a nice QR code and we'd love to talk to anyone who's struggling with
+[18:06] these challenges, what you've hit uh in your in your in your day-to-day life.
+[18:12] Just come talk to us after the talk. Um I'm I'm also part of the open MCP spec
+[18:18] uh driving some of those discussion as well. We're very interested in improving
+[18:22] that for everybody. So it's not just about Ozero working with other um open
+[18:27] source libraries like MCP O which is another great thing. So very deeply
+[18:32] interested in this space. Thanks. Thank you.
