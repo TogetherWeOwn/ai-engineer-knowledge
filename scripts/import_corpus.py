@@ -17,7 +17,7 @@ Privacy model: only allowlisted fields are copied. Generated prose
 (summaries, techniques, mechanisms) is scrubbed sentence by sentence; any
 sentence written relative to the reader's own organization is dropped.
 Before anything is written, every output is scanned by a fail-closed gate.
-An optional ``--private-terms`` JSON file, kept outside the repository, adds
+A required ``--private-terms`` JSON file, kept outside the repository, adds
 local sentence terms, deny regexes and deny literals. A transcript that hits
 the gate is held back for manual review; captions are never edited. Any other
 hit aborts the import without writing.
@@ -621,13 +621,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--src", required=True, type=Path, help="local corpus directory")
     parser.add_argument("--out", required=True, type=Path, help="repository checkout to write into")
     parser.add_argument("--exported-at", required=True, help="UTC timestamp, YYYY-MM-DDTHH:MM:SSZ")
-    parser.add_argument("--private-terms", type=Path,
+    parser.add_argument("--private-terms", required=True, type=Path,
                         help="local JSON {sentence_terms, deny_regexes, deny_literals}; never commit it")
     parser.add_argument("--include-machine-transcripts", action="store_true",
                         help="also publish Whisper transcripts (needs the machine-transcript label contract)")
     args = parser.parse_args(argv)
-    private = json.loads(args.private_terms.read_text(encoding="utf-8")) if args.private_terms else {}
     try:
+        private = json.loads(args.private_terms.read_text(encoding="utf-8"))
+        if not isinstance(private, dict) or not any(private.get(k) for k in ("sentence_terms", "deny_regexes", "deny_literals")):
+            raise ValueError("--private-terms must define at least one sentence term, deny regex or deny literal")
         report = run(args.src, args.out, args.exported_at, private, args.include_machine_transcripts)
     except (ImportError_, OSError, ValueError) as exc:
         print(json.dumps({"status": "error", "error": str(exc)}), file=sys.stderr)

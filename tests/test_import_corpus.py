@@ -330,3 +330,17 @@ def test_repo_catalog_preserves_frozen_identities() -> None:
     assert digest == catalog["id_list_sha256"] == FROZEN_ID_LIST_SHA256
     assert catalog["frozen"] is True
     assert not GENERIC_LEAKS.search(raw)
+
+
+def test_cli_refuses_to_export_without_private_policy(tmp_path: Path) -> None:
+    src = make_corpus(tmp_path)
+    out = tmp_path / "out"
+    with pytest.raises(SystemExit) as exc:
+        ic.main(["--src", str(src), "--out", str(out), "--exported-at", "2026-10-28T00:00:00Z"])
+    assert exc.value.code == 2
+    assert not out.exists() or not any(out.rglob("*.json"))
+    empty = tmp_path / "policy.json"
+    empty.write_text(json.dumps({"sentence_terms": [], "deny_regexes": [], "deny_literals": []}), encoding="utf-8")
+    assert ic.main(["--src", str(src), "--out", str(out), "--exported-at", "2026-10-28T00:00:00Z",
+                    "--private-terms", str(empty)]) == 2
+    assert not out.exists() or not any(out.rglob("*.json"))
