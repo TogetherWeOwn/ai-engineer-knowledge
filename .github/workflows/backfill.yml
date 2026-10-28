@@ -4,8 +4,8 @@ name: backfill
 # published_at, using the repo-scoped YOUTUBE_API_KEY. Manual dispatch only.
 # Single writer (concurrency group); stages analysis/*.json explicitly, never
 # anything else. Exit 1 (incomplete coverage) still commits partial progress
-# so the next dispatch continues; exit 2 (error) commits nothing new because
-# the script validates before writing.
+# so the next dispatch continues. Exit 2 or an unexpected exit never commits:
+# a filesystem error can leave per-file progress that needs inspection.
 on:
   workflow_dispatch:
 
@@ -33,6 +33,7 @@ jobs:
           python3 scripts/backfill_publish_dates.py | tee /tmp/backfill-report.json
           echo "exit_code=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
       - name: Commit analysis dates
+        if: steps.backfill.outputs.exit_code == '0' || steps.backfill.outputs.exit_code == '1'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"

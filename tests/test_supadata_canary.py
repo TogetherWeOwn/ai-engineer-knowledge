@@ -521,3 +521,32 @@ def test_unsafe_vid_rejected(tmp_path: Path, monkeypatch) -> None:
         env={KEY_NAME: SENTINEL_KEY},
         urlopen=FakeUrlopen(lambda u, i: FakeResponse(200, b"{}")))
     assert code == 2, stderr
+
+
+@pytest.mark.parametrize("labels", [
+    ["machine transcript (Whisper; no YouTube captions)"],
+    [UNVERIFIED_LABEL, "machine transcript (Whisper; no YouTube captions)"],
+    [UNVERIFIED_LABEL, "  machine transcript (Whisper; no YouTube captions)  "],
+    [UNVERIFIED_LABEL, UNVERIFIED_LABEL],
+    ["not " + UNVERIFIED_LABEL],
+])
+def test_only_one_exact_caption_label_is_a_canary_reference(tmp_path, monkeypatch, labels):
+    """Machine or ambiguous provenance cannot authorize native-caption ingestion."""
+    vids = corpus(tmp_path)
+    path = tmp_path / "transcripts" / f"{vids[0]}.txt"
+    text = path.read_text().replace(
+        f"# {UNVERIFIED_LABEL}", "\n".join(f"# {label}" for label in labels))
+    path.write_text(text)
+    fake = FakeUrlopen(lambda _url, _index: FakeResponse(200, transcript_payload(BODY_WORDS)))
+    code, stdout, stderr = run_cli(
+        monkeypatch, "--root", str(tmp_path), "--vids", ",".join(vids),
+        env={KEY_NAME: SENTINEL_KEY}, urlopen=fake)
+    assert code == 1, stderr
+    report = result_json(stdout, stderr)
+    assert report["overall"] == "fail"
+    assert report["failures"] == [vids[0]]
+    entry = next(v for v in report["videos"] if v["vid"] == vids[0])
+    assert entry["reference_ok"] is False
+    assert entry["fetch_ok"] is False
+    assert entry["detail"] == "invalid_reference"
+    assert len(fake.calls) == 4, "a machine/ambiguous reference must not be fetched"

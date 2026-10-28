@@ -110,11 +110,17 @@ def load_instances(root: Path) -> list[dict]:
         if not video_id:
             print(f"warning: skipping {path.name}: no video id or URL", file=sys.stderr)
             continue
-        talk_date = parse_date(
+        raw_date = (
             payload.get("talk_date")
             or payload.get("published_at")
             or payload.get("publish_date")
         )
+        talk_date = parse_date(raw_date)
+        if raw_date and talk_date is None:
+            print(
+                f"warning: {path.name}: unparseable talk date; treating as undated",
+                file=sys.stderr,
+            )
         techniques = payload.get("techniques") or []
         if not isinstance(techniques, list):
             print(f"warning: skipping {path.name}: techniques is not a list", file=sys.stderr)
