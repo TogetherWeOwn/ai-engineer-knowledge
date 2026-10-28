@@ -6,8 +6,9 @@ the AI Engineer channel. `scripts/import_corpus.py` exported it once from
 the research catalog. That was a one-shot migration with no LLM re-read, and
 it does not reproduce the clustering.
 
-**Frozen identities.** Every technique `id` is kept unchanged and in its
-original order. A generator may read this file but must never write it.
+**Frozen identities.** The import kept every technique `id` unchanged and in
+its original order. The identity digest below verifies the set of IDs, not
+their order. A generator may read this file but must never write it.
 New videos attach to existing IDs, and any new identity needs an explicit,
 validated extension path (see `docs/analysis-schema.md`). The root
 `catalog.json` belongs to the legacy generator. It is a different file.
@@ -98,8 +99,8 @@ The same import writes one analysis file per video. It contains:
   - `evidence_quote` and `evidence_quote_verification`, which is one of
     `normalized-exact`, `ordered-ellipsis-pieces` or `not-found-in-captions`.
     A quote that is not found is set to `null`;
-  - `evidence_timestamp`: the `[mm:ss]` of the first caption line the quote
-    matched.
+  - `evidence_timestamp`: the `[mm:ss]` or `[h:mm:ss]` timestamp of the first
+    caption line the quote matched.
 - `confidence`, on a few files only (a string).
 - `truncated`, `analyzed_at`, and `analyzer` (the model family).
 - `transcript_file`, `transcript_sha256` and `retrieved_at`. These equal the

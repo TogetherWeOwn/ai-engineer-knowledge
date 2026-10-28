@@ -345,6 +345,8 @@ def project_analysis(raw: dict, transcript: dict, caption: Caption, scrub: Scrub
     vid = raw["vid"]
     takeaways = []
     for item in raw.get("takeaways") or []:
+        if not isinstance(item, dict):
+            raise ImportError_(f"{vid}: takeaway must be an object")
         quote = item.get("evidence_quote")
         method, stamp = caption.verify(quote)
         stats[method or "not-found-in-captions"] = stats.get(method or "not-found-in-captions", 0) + 1

@@ -472,3 +472,33 @@ def test_incomplete_source_never_changes_existing_output(tmp_path, damage):
     with pytest.raises(ic.ImportError_):
         run_import(src, out)
     assert tree_bytes(out) == before
+
+
+def test_all_held_transcripts_preserve_existing_publication(tmp_path):
+    src = make_corpus(tmp_path)
+    out = tmp_path / 'out'
+    run_import(src, out)
+    before = tree_bytes(out)
+    with pytest.raises(ic.ImportError_, match='no transcripts eligible for export'):
+        run_import(src, out, private={'deny_literals': ['# takedown: rights holders']})
+    assert tree_bytes(out) == before
+
+
+def test_malformed_takeaway_is_reported_without_changing_publication(tmp_path, capsys):
+    src = make_corpus(tmp_path)
+    out = tmp_path / 'out'
+    run_import(src, out)
+    before = tree_bytes(out)
+    path = src / 'analysis' / 'VIDAAAA0001.json'
+    data = json.loads(path.read_text())
+    data['takeaways'] = ['not an object']
+    path.write_text(json.dumps(data))
+    policy = tmp_path / 'policy.json'
+    policy.write_text(json.dumps({'deny_literals': ['unrelated forbidden marker']}))
+    code = ic.main(['--src', str(src), '--out', str(out), '--exported-at', '2025-10-25T00:00:00Z',
+                    '--private-terms', str(policy)])
+    error = json.loads(capsys.readouterr().err)
+    assert code == 2
+    assert error['status'] == 'error'
+    assert 'takeaway' in error['error']
+    assert tree_bytes(out) == before
