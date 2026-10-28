@@ -40,6 +40,7 @@ import json
 import os
 import re
 import sys
+import tempfile
 import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
@@ -144,8 +145,10 @@ class Scrubber:
 
     def text(self, value, field: str):
         """Drop company-relative sentences; None when nothing remains."""
+        if value is None:
+            return None
         if not isinstance(value, str):
-            return value
+            raise ImportError_(f"{field}: expected a string or null")
         kept, dropped = [], 0
         for sentence in SENTENCE_SPLIT.split(value.strip()):
             if not sentence:
@@ -159,6 +162,8 @@ class Scrubber:
         return " ".join(kept) if kept else None
 
     def texts(self, values, field: str) -> list:
+        if values is not None and not isinstance(values, list):
+            raise ImportError_(f"{field}: expected a list of strings")
         out = []
         for value in values or []:
             cleaned = self.text(value, field)
@@ -319,13 +324,15 @@ def build_transcript(vid: str, raw: dict, retrieved_at: str, machine_model: str 
     header.append(f"# channel: {CHANNEL_CREDIT}")
     machine = raw.get("source") == "whisper"
     if machine:
-        header.append("# caption_track: none (no YouTube captions)")
+        header.append("# caption_track: none")
         header.append(f"# transcriber: {machine_model or 'faster-whisper'}")
     else:
         header.append(f"# caption_track: {caption_track(raw.get('track', ''))}")
     header.append(f"# retrieved_at: {retrieved_at}")
     header.append(f"# sha256: {sha256_text(raw['body'])}")
     header.append(f"# {MACHINE_LABEL if machine else CAPTION_LABEL}")
+    if machine:
+        header.append("# unverified")
     header.append(f"# takedown: {TAKEDOWN}")
     return "\n".join(header) + "\n" + raw["body"]
 
@@ -340,8 +347,74 @@ def analyzer_name(model) -> str | None:
     return re.sub(r"-\d{4}$", "", model.rsplit("/", 1)[-1])
 
 
+def project_fields(value, shape, field: str, *, nullable=True):
+    """Validate complete exported shapes and recursively discard unlisted keys.
+
+    A field allowlist is not a privacy boundary if a scalar can contain an
+    arbitrary object. Lists describe their element shape; dictionaries enumerate
+    public keys. Unknown research-only keys are deliberately never traversed.
+    """
+    if value is None and nullable:
+        return None
+    if isinstance(shape, dict):
+        if not isinstance(value, dict):
+            raise ImportError_(f"{field}: expected an object")
+        return {key: project_fields(value[key], child, f"{field}.{key}")
+                for key, child in shape.items() if key in value}
+    if isinstance(shape, list):
+        if not isinstance(value, list):
+            raise ImportError_(f"{field}: expected a list")
+        return [project_fields(item, shape[0], field + "[]", nullable=False) for item in value]
+    types = shape if isinstance(shape, tuple) else (shape,)
+    if type(value) not in types:
+        raise ImportError_(f"{field}: unexpected field type")
+    return value
+
+
+TAKEAWAY_FIELDS = {key: str for key in
+                  ("area", "technique", "what_they_do", "evidence_quote", "numbers", "confidence")}
+ANALYSIS_FIELDS = {**{key: str for key in ("vid", "title", "talk_summary", "confidence", "analyzed_at", "model")},
+                   "truncated": bool, "takeaways": [TAKEAWAY_FIELDS]}
+SOURCE_FIELDS = {
+    **{key: str for key in ("record_id", "vid", "talk", "url", "source", "quote", "timestamp", "timestamp_end",
+                           "quote_verification", "input_technique", "input_area", "mechanism_in_source")},
+    "quote_match_score": (int, float), "matching_occurrences": int,
+    **{key: bool for key in ("requires_confirmation", "quote_is_verbatim_original", *SOURCE_FLAGS)},
+    "additional_original_excerpts": [{key: str for key in ("quote", "timestamp", "timestamp_end")}],
+}
+TECHNIQUE_FIELDS = {
+    **{key: str for key in ("id", "title", "area", "source", "evidence_level")},
+    **{key: int for key in ("source_count", "source_record_count", "deep_read_source_count", "triage_only_source_count")},
+    "quote_evidence": {key: int for key in ("normalized-exact", "ordered-ellipsis-pieces",
+                                            "fuzzy-location-needs-confirmation", "manual-original-excerpt")},
+    "mechanism": {"summary": str, "representative_explanation": str, "representative_record_id": str,
+                  "variants": [{"title": str, "source_record_ids": [str]}]},
+    "expected_benefit": {key: str for key in ("cost", "speed", "quality", "reliability", "certainty")},
+    "risk": {"level": str, "failure_modes": [str], "mitigation": str},
+    "how_to_measure_success": {"metrics": [str], "acceptance": str},
+    "reported_measurements": [{"text": str, "source_record_ids": [str]}],
+    "sources": [SOURCE_FIELDS],
+}
+CATALOG_FIELDS = {
+    **{key: str for key in ("schema_version", "title", "generated_at")},
+    "areas": [str], "counts": {key: int for key in COUNT_KEYS}, "scope": {"source_scope": str},
+    "methodology": {
+        **{key: str for key in METHODOLOGY_KEYS if key != "classification_review"},
+        "classification_review": {
+            "assignment_methods": {key: int for key in ("curated-name-rule", "manual-semantic-review",
+                                                         "curated-mechanism-rule", "tfidf-nearest-same-area")},
+            "manual_assignment_changes": int, "manual_conflict_resolution": str,
+        },
+    },
+    "validation": {"validated_at": str, "independent_checks": int, "failures": int,
+                   "verified": [str], "remaining_limits": [str]},
+    "techniques": [TECHNIQUE_FIELDS],
+}
+
+
 def project_analysis(raw: dict, transcript: dict, caption: Caption, scrub: Scrubber,
                      stats: dict, published_at) -> dict:
+    raw = project_fields(raw, ANALYSIS_FIELDS, "analysis", nullable=False)
     vid = raw["vid"]
     takeaways = []
     for item in raw.get("takeaways") or []:
@@ -401,6 +474,7 @@ def scrub_tree(value, scrub: Scrubber, field: str):
 
 
 def project_source(src: dict, scrub: Scrubber, captions: dict, stats: dict) -> dict:
+    src = project_fields(src, SOURCE_FIELDS, "catalog.source", nullable=False)
     out = {k: src[k] for k in SOURCE_KEEP if k in src}
     caption = captions.get(src.get("vid"))
     quote = src.get("quote")
@@ -476,8 +550,7 @@ def project_technique(tech: dict, scrub: Scrubber, captions: dict, stats: dict) 
 
 def project_catalog(raw: dict, raw_bytes: bytes, exported_at: str, scrub: Scrubber,
                     captions: dict, stats: dict) -> dict:
-    if not isinstance(raw, dict):
-        raise ImportError_("catalog must be an object")
+    raw = project_fields(raw, CATALOG_FIELDS, "catalog", nullable=False)
     techniques = raw.get("techniques")
     if not isinstance(techniques, list) or not techniques:
         raise ImportError_("catalog techniques must be a non-empty list")
@@ -537,14 +610,54 @@ def dump_json(payload, indent: int) -> str:
 
 def existing_published_at(path: Path):
     try:
-        value = json.loads(path.read_text(encoding="utf-8")).get("published_at")
-    except (OSError, ValueError, AttributeError):
+        existing = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
         return None
-    return value if isinstance(value, str) and value else None
+    except (OSError, ValueError) as exc:
+        raise ImportError_(f"{path.name}: unreadable existing analysis metadata") from exc
+    if not isinstance(existing, dict):
+        raise ImportError_(f"{path.name}: existing analysis metadata must be an object")
+    value = existing.get("published_at")
+    if value is not None and (not isinstance(value, str) or not value):
+        raise ImportError_(f"{path.name}: invalid existing published_at")
+    return value
+
+
+def validate_private_policy(private):
+    if not isinstance(private, dict):
+        raise ImportError_("--private-terms must be an object")
+    for field in ("sentence_terms", "deny_regexes", "deny_literals"):
+        values = private.get(field, [])
+        if not isinstance(values, list) or any(not isinstance(v, str) or not v.strip() for v in values):
+            raise ImportError_(f"--private-terms {field} must be a list of nonempty strings")
+    try:
+        for pattern in private.get("deny_regexes", []):
+            re.compile(pattern, re.I)
+    except re.error as exc:
+        raise ImportError_("--private-terms deny_regexes contains an invalid regex") from exc
+
+
+def atomic_write(target: Path, text: str):
+    """A failed write must leave the previously published file intact."""
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", newline="\n",
+                                         dir=target.parent, prefix=f".{target.name}.",
+                                         suffix=".tmp", delete=False) as handle:
+            temporary = Path(handle.name)
+            if handle.write(text) != len(text):
+                raise OSError("incomplete output write")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, target)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
 
 
 def run(src: Path, out: Path, exported_at: str, private: dict, include_machine: bool) -> dict:
     parse_z(exported_at)
+    validate_private_policy(private)
     scrub = Scrubber(private.get("sentence_terms", []))
     gate = Gate(private.get("deny_regexes", []), private.get("deny_literals", []))
     tdir = src / "transcripts"
@@ -605,6 +718,8 @@ def run(src: Path, out: Path, exported_at: str, private: dict, include_machine: 
     analyses = 0
     for path in source_paths["analysis"]:
         raw = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(raw, dict):
+            raise ImportError_(f"{path.name}: analysis must be an object")
         vid = raw.get("vid")
         if not isinstance(vid, str) or vid != path.stem:
             raise ImportError_(f"{path.name}: vid does not match filename")
@@ -665,8 +780,7 @@ def run(src: Path, out: Path, exported_at: str, private: dict, include_machine: 
     for rel, text in sorted(files.items()):
         target = out / rel
         target.parent.mkdir(parents=True, exist_ok=True)
-        with open(target, "w", encoding="utf-8", newline="\n") as handle:
-            handle.write(text)
+        atomic_write(target, text)
 
     report.update({
         "status": "ok",
@@ -692,7 +806,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         private = json.loads(args.private_terms.read_text(encoding="utf-8"))
-        if not isinstance(private, dict) or not any(private.get(k) for k in ("sentence_terms", "deny_regexes", "deny_literals")):
+        validate_private_policy(private)
+        if not any(private.get(k) for k in ("sentence_terms", "deny_regexes", "deny_literals")):
             raise ValueError("--private-terms must define at least one sentence term, deny regex or deny literal")
         report = run(args.src, args.out, args.exported_at, private, args.include_machine_transcripts)
     except (ImportError_, OSError, ValueError) as exc:

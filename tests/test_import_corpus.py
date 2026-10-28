@@ -535,3 +535,345 @@ def test_invalid_catalog_cannot_create_initial_publication(tmp_path, techniques)
     with pytest.raises(ic.ImportError_):
         run_import(src, out)
     assert tree_bytes(out) == {}
+
+
+def change_json(path, keys, value):
+    data = json.loads(path.read_text(encoding="utf-8"))
+    parent = data
+    for key in keys[:-1]:
+        parent = parent[key]
+    parent[keys[-1]] = value
+    path.write_text(json.dumps(data), encoding="utf-8")
+
+
+@pytest.mark.parametrize("keys", [
+    ("talk_summary",), ("title",), ("confidence",), ("analyzed_at",),
+    ("takeaways", 0, "area"), ("takeaways", 0, "technique"),
+    ("takeaways", 0, "what_they_do"), ("takeaways", 0, "numbers"),
+    ("takeaways", 0, "confidence"), ("takeaways", 0, "evidence_quote"),
+])
+@pytest.mark.parametrize("value", [
+    {"private_mapping": "The zebracorn initiative advances quietly."},
+    ["The zebracorn initiative advances quietly."], 7, True,
+])
+def test_analysis_field_shapes_cannot_bypass_privacy(tmp_path, capsys, keys, value):
+    src = make_corpus(tmp_path)
+    out = tmp_path / "out"
+    run_import(src, out)
+    before = tree_bytes(out)
+    change_json(src / "analysis" / "VIDAAAA0001.json", keys, value)
+    policy = tmp_path / "policy.json"
+    policy.write_text(json.dumps({"sentence_terms": ["zebracorn"]}))
+    assert ic.main(["--src", str(src), "--out", str(out), "--exported-at", "2025-10-25T00:00:00Z",
+                    "--private-terms", str(policy)]) == 2
+    assert json.loads(capsys.readouterr().err)["status"] == "error"
+    assert tree_bytes(out) == before
+
+
+@pytest.mark.parametrize("keys", [
+    ("techniques", 0, "mechanism", "summary"),
+    ("techniques", 0, "mechanism", "representative_explanation"),
+    ("techniques", 0, "mechanism", "variants", 0, "title"),
+    ("techniques", 0, "reported_measurements", 0, "text"),
+    ("techniques", 0, "expected_benefit", "cost"),
+    ("techniques", 0, "risk", "mitigation"),
+    ("techniques", 0, "risk", "failure_modes"),
+    ("techniques", 0, "how_to_measure_success", "metrics"),
+    ("techniques", 0, "how_to_measure_success", "acceptance"),
+    ("techniques", 0, "sources", 0, "input_technique"),
+    ("techniques", 0, "sources", 0, "mechanism_in_source"),
+    ("scope", "source_scope"), ("validation", "verified"),
+])
+def test_catalog_prose_field_shapes_cannot_bypass_privacy(tmp_path, keys):
+    src = make_corpus(tmp_path)
+    out = tmp_path / "out"
+    run_import(src, out)
+    before = tree_bytes(out)
+    change_json(src / "synthesis" / "catalog.json", keys,
+                {"private_mapping": "The zebracorn initiative advances quietly."})
+    with pytest.raises(ic.ImportError_):
+        run_import(src, out, private={"sentence_terms": ["zebracorn"]})
+    assert tree_bytes(out) == before
+
+
+def test_string_private_sentence_is_still_scrubbed(tmp_path):
+    src = make_corpus(tmp_path)
+    change_json(src / "analysis" / "VIDAAAA0001.json", ("talk_summary",),
+                "The zebracorn initiative advances quietly.")
+    out = tmp_path / "out"
+    run_import(src, out, private={"sentence_terms": ["zebracorn"]})
+    assert json.loads((out / "analysis" / "VIDAAAA0001.json").read_text())["talk_summary"] is None
+
+
+@pytest.mark.parametrize("field", ["sentence_terms", "deny_regexes", "deny_literals"])
+@pytest.mark.parametrize("value", ["zebracorn", {"zebracorn": True}, 9, True, None,
+                                  [""], ["   "], [7], [None], [False], [[]], [{}],
+                                  ["valid", ""]])
+def test_malformed_policy_is_rejected_before_any_write(tmp_path, capsys, field, value):
+    src = make_corpus(tmp_path)
+    change_json(src / "analysis" / "VIDAAAA0001.json", ("talk_summary",),
+                "The zebracorn initiative advances quietly.")
+    out = tmp_path / "out"
+    run_import(src, out)
+    before = tree_bytes(out)
+    policy = tmp_path / "policy.json"
+    # A valid second field must not mask a malformed/empty entry in this one.
+    data = {"deny_literals": ["unrelated forbidden marker"]}
+    data[field] = value
+    policy.write_text(json.dumps(data))
+    assert ic.main(["--src", str(src), "--out", str(out), "--exported-at", "2025-10-25T00:00:00Z",
+                    "--private-terms", str(policy)]) == 2
+    error = json.loads(capsys.readouterr().err)
+    assert error["status"] == "error"
+    assert "--private-terms" in error["error"] and field in error["error"]
+    assert tree_bytes(out) == before
+
+
+def test_invalid_policy_regex_is_a_clean_cli_error(tmp_path, capsys):
+    src = make_corpus(tmp_path)
+    policy = tmp_path / "policy.json"
+    policy.write_text(json.dumps({"deny_regexes": ["["]}))
+    out = tmp_path / "out"
+    assert ic.main(["--src", str(src), "--out", str(out), "--exported-at", "2025-10-25T00:00:00Z",
+                    "--private-terms", str(policy)]) == 2
+    assert json.loads(capsys.readouterr().err)["status"] == "error"
+    assert tree_bytes(out) == {}
+
+
+@pytest.mark.parametrize("damage", ["truncated", "not-object", "unreadable", "invalid-date-type"])
+def test_unreadable_existing_metadata_is_not_treated_as_absent(tmp_path, monkeypatch, capsys, damage):
+    src = make_corpus(tmp_path)
+    out = tmp_path / "out"
+    run_import(src, out)
+    path = out / "analysis" / "VIDAAAA0001.json"
+    if damage == "truncated":
+        path.write_text('{"published_at":')
+    elif damage == "not-object":
+        path.write_text('[]')
+    elif damage == "invalid-date-type":
+        change_json(path, ("published_at",), {"date": "2025-06-01T12:00:00Z"})
+    before = tree_bytes(out)
+    original_read = Path.read_text
+
+    def fail_read(self, *args, **kwargs):
+        if damage == "unreadable" and self == path:
+            raise PermissionError("injected unreadable existing analysis")
+        return original_read(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", fail_read)
+    policy = tmp_path / "policy.json"
+    policy.write_text(json.dumps({"deny_literals": ["unrelated forbidden marker"]}))
+    assert ic.main(["--src", str(src), "--out", str(out), "--exported-at", "2025-10-25T00:00:00Z",
+                    "--private-terms", str(policy)]) == 2
+    assert json.loads(capsys.readouterr().err)["status"] == "error"
+    assert tree_bytes(out) == before
+
+
+@pytest.mark.parametrize("failure", ["raise", "short-count"])
+def test_partial_write_preserves_backfilled_metadata_and_cleans_temp(tmp_path, monkeypatch, capsys, failure):
+    import builtins
+    import io
+
+    src = make_corpus(tmp_path)
+    out = tmp_path / "out"
+    run_import(src, out)
+    path = out / "analysis" / "VIDAAAA0001.json"
+    change_json(path, ("published_at",), "2025-06-01T12:00:00Z")
+    before = tree_bytes(out)
+    original_open = builtins.open
+    original_io_open = io.open
+    failed = False
+
+    class ShortWrite:
+        def __init__(self, handle):
+            self.handle = handle
+
+        def __enter__(self):
+            self.handle.__enter__()
+            return self
+
+        def __exit__(self, *args):
+            return self.handle.__exit__(*args)
+
+        def __getattr__(self, name):
+            return getattr(self.handle, name)
+
+        def write(self, text):
+            nonlocal failed
+            if not failed:
+                failed = True
+                self.handle.write(text[:12])
+                self.handle.flush()
+                if failure == "raise":
+                    raise OSError("injected short write")
+                return 12
+            return self.handle.write(text)
+
+    def intercepted(opener):
+        def open_file(file, mode="r", *args, **kwargs):
+            handle = opener(file, mode, *args, **kwargs)
+            # Match the sibling temp too, rather than prescribing its name.
+            destination = Path(os.readlink(f"/proc/self/fd/{handle.fileno()}"))
+            if destination.parent == path.parent and any(c in mode for c in "wax"):
+                return ShortWrite(handle)
+            return handle
+        return open_file
+
+    policy = tmp_path / "policy.json"
+    policy.write_text(json.dumps({"deny_literals": ["unrelated forbidden marker"]}))
+    with monkeypatch.context() as patch:
+        patch.setattr(builtins, "open", intercepted(original_open))
+        patch.setattr(io, "open", intercepted(original_io_open))
+        code = ic.main(["--src", str(src), "--out", str(out), "--exported-at", "2025-10-25T00:00:00Z",
+                        "--private-terms", str(policy)])
+    assert failed, "Fault must reach a real output write"
+    assert code == 2
+    assert json.loads(capsys.readouterr().err)["status"] == "error"
+    assert tree_bytes(out) == before, "A failed file write must not truncate an existing publication or leave temp files"
+    run_import(src, out)
+    assert json.loads(path.read_text())["published_at"] == "2025-06-01T12:00:00Z"
+
+
+def test_selective_hold_rerun_removes_both_previously_public_files(tmp_path):
+    src = make_corpus(tmp_path)
+    out = tmp_path / "out"
+    run_import(src, out)
+    held_transcript = out / "transcripts" / "VIDAAAA0001.txt"
+    held_analysis = out / "analysis" / "VIDAAAA0001.json"
+    assert held_transcript.is_file() and held_analysis.is_file()
+    retained = out / "transcripts" / "-VIDBBBB002.txt"
+    retained_bytes = retained.read_bytes()
+    report = run_import(src, out, private={"deny_literals": ["seventy five"]})
+    assert report["status"] == "ok" and report["transcripts"] == 1
+    assert "leak gate" in report["held"]["VIDAAAA0001"]
+    assert not held_transcript.exists()
+    assert not held_analysis.exists()
+    assert retained.read_bytes() == retained_bytes
+    catalog = json.loads((out / "data" / "catalog.json").read_text())
+    assert all(s["transcript_file"] is None for t in catalog["techniques"] for s in t["sources"])
+
+
+def test_source_publication_date_cannot_override_backfilled_date(tmp_path):
+    src = make_corpus(tmp_path)
+    out = tmp_path / "out"
+    run_import(src, out)
+    target = out / "analysis" / "VIDAAAA0001.json"
+    change_json(target, ("published_at",), "2025-06-01T12:00:00Z")
+    change_json(src / "analysis" / "VIDAAAA0001.json", ("published_at",), "2099-01-01T00:00:00Z")
+    run_import(src, out)
+    assert json.loads(target.read_text())["published_at"] == "2025-06-01T12:00:00Z"
+
+
+def test_source_publication_date_cannot_inject_fresh_import_date(tmp_path):
+    src = make_corpus(tmp_path)
+    change_json(src / "analysis" / "VIDAAAA0001.json", ("published_at",), "2099-01-01T00:00:00Z")
+    out = tmp_path / "out"
+    run_import(src, out)
+    assert "published_at" not in json.loads((out / "analysis" / "VIDAAAA0001.json").read_text())
+
+
+def test_imported_machine_transcript_conforms_to_documented_provenance(tmp_path):
+    from test_transcript_conformance import validate_transcript
+
+    out = tmp_path / "out"
+    run_import(make_corpus(tmp_path), out, include_machine=True)
+    path = out / "transcripts" / "VIDWHSP0003.txt"
+    assert validate_transcript(path) == []
+    fields = header_fields(split_header(path.read_text())[0])
+    assert fields["caption_track"] == "none"
+
+
+@pytest.mark.parametrize("keys, value", [
+    (("truncated",), {"private_mapping": "zebracorn"}),
+    (("takeaways",), {"private_mapping": "zebracorn"}),
+])
+def test_analysis_container_shapes_are_validated(tmp_path, keys, value):
+    src = make_corpus(tmp_path)
+    change_json(src / "analysis" / "VIDAAAA0001.json", keys, value)
+    out = tmp_path / "out"
+    with pytest.raises(ic.ImportError_):
+        run_import(src, out)
+    assert tree_bytes(out) == {}
+
+
+@pytest.mark.parametrize("keys", [
+    ("title",), ("schema_version",), ("generated_at",), ("areas",),
+    ("counts", "raw_input_records"), ("validation", "independent_checks"),
+    ("techniques", 0, "source"), ("techniques", 0, "source_count"),
+    ("techniques", 0, "quote_evidence", "normalized-exact"),
+    ("techniques", 0, "mechanism", "representative_record_id"),
+    ("techniques", 0, "mechanism", "variants", 0, "source_record_ids"),
+    ("techniques", 0, "risk", "level"),
+    ("techniques", 0, "reported_measurements", 0, "source_record_ids"),
+    ("techniques", 0, "sources", 0, "record_id"),
+    ("techniques", 0, "sources", 0, "talk"),
+    ("techniques", 0, "sources", 0, "input_area"),
+    ("techniques", 0, "sources", 0, "matching_occurrences"),
+    ("techniques", 0, "sources", 0, "requires_confirmation"),
+    ("methodology", "loading"),
+])
+def test_catalog_metadata_shapes_cannot_smuggle_nested_prose(tmp_path, keys):
+    src = make_corpus(tmp_path)
+    out = tmp_path / "out"
+    run_import(src, out)
+    before = tree_bytes(out)
+    change_json(src / "synthesis" / "catalog.json", keys,
+                {"private_mapping": "The zebracorn initiative advances quietly."})
+    with pytest.raises(ic.ImportError_):
+        run_import(src, out, private={"sentence_terms": ["zebracorn"]})
+    assert tree_bytes(out) == before
+
+
+def test_structured_methodology_is_allowlisted_recursively(tmp_path):
+    src = make_corpus(tmp_path)
+    change_json(src / "synthesis" / "catalog.json", ("methodology", "classification_review"),
+                {"manual_assignment_changes": 2, "private_mapping": "A sensitive mapping.",
+                 "assignment_methods": {"manual-semantic-review": 3, "private_mapping": 99}})
+    out = tmp_path / "out"
+    run_import(src, out)
+    review = json.loads((out / "data" / "catalog.json").read_text())["methodology"]["classification_review"]
+    assert review == {"manual_assignment_changes": 2, "assignment_methods": {"manual-semantic-review": 3}}
+
+
+
+def test_failed_atomic_replace_preserves_backfilled_analysis(tmp_path, monkeypatch):
+    src = make_corpus(tmp_path)
+    out = tmp_path / "out"
+    run_import(src, out)
+    target = out / "analysis" / "VIDAAAA0001.json"
+    change_json(target, ("published_at",), "2025-06-01T12:00:00Z")
+    before = tree_bytes(out)
+    attempted = []
+    replace = os.replace
+
+    def fail_replace(source, destination):
+        if Path(destination) == target:
+            attempted.append(Path(source))
+            assert Path(source).parent == target.parent
+            # The complete serialized document exists before replacement.
+            assert json.loads(Path(source).read_text())["published_at"] == "2025-06-01T12:00:00Z"
+            raise OSError("injected replace failure")
+        return replace(source, destination)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(os, "replace", fail_replace)
+        with pytest.raises(OSError, match="injected replace failure"):
+            run_import(src, out)
+    assert len(attempted) == 1
+    assert not attempted[0].exists()
+    assert tree_bytes(out) == before
+    run_import(src, out)
+    assert json.loads(target.read_text())["published_at"] == "2025-06-01T12:00:00Z"
+
+
+@pytest.mark.parametrize("raw", [[], "not an object", None])
+def test_non_object_analysis_is_a_clean_error_before_writes(tmp_path, capsys, raw):
+    src = make_corpus(tmp_path)
+    (src / "analysis" / "VIDAAAA0001.json").write_text(json.dumps(raw))
+    policy = tmp_path / "policy.json"
+    policy.write_text(json.dumps({"sentence_terms": ["zebracorn"]}))
+    out = tmp_path / "out"
+    assert ic.main(["--src", str(src), "--out", str(out), "--exported-at", "2025-10-25T00:00:00Z",
+                    "--private-terms", str(policy)]) == 2
+    assert json.loads(capsys.readouterr().err)["status"] == "error"
+    assert tree_bytes(out) == {}
