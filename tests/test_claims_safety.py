@@ -115,3 +115,60 @@ def test_old_unknown_evidence_prevents_age_proof_even_after_dated_support(tmp_pa
     assert run_generator(tmp_path, "--relations", str(path)).returncode == 0
     assert current_claim(tmp_path)[0]["valid_from"] is None
     assert not list((tmp_path / "kb" / "history").glob("*.md"))
+
+
+def test_late_support_cannot_rewrite_previously_archived_evidence(tmp_path: Path) -> None:
+    seed_corpus(tmp_path)
+    assert run_generator(tmp_path).returncode == 0
+    add_followup(tmp_path, "2025-02-01T00:00:00Z")
+    path = proposals(tmp_path, "refines")
+    assert run_generator(tmp_path, "--relations", str(path)).returncode == 0
+    history_before = {p.name: p.read_bytes() for p in (tmp_path / "kb" / "history").glob("*.md")}
+    log_before = (tmp_path / "kb" / "log.md").read_bytes()
+    # Backdated support arrives after supersession was already recorded.
+    late = add_followup(tmp_path, "2025-01-20T00:00:00Z")
+    second_vid = "FOLLOWUP002"
+    late.update(vid=second_vid, source=f"https://www.youtube.com/watch?v={second_vid}")
+    write_json(tmp_path / "analysis" / f"{second_vid}.json", late)
+    add_followup(tmp_path, "2025-02-01T00:00:00Z")
+    path = proposals(tmp_path, "supports", vid=second_vid)
+    assert run_generator(tmp_path, "--relations", str(path)).returncode == 0
+    current, _ = current_claim(tmp_path)
+    assert current["valid_from"] == "2025-02-01T00:00:00Z"
+    assert {p.name: p.read_bytes() for p in (tmp_path / "kb" / "history").glob("*.md")} == history_before
+    assert (tmp_path / "kb" / "log.md").read_bytes() == log_before
+
+
+def test_display_title_edit_does_not_rewrite_or_duplicate_history(tmp_path: Path) -> None:
+    catalog = seed_corpus(tmp_path)
+    assert run_generator(tmp_path).returncode == 0
+    add_followup(tmp_path, "2025-02-01T00:00:00Z")
+    path = proposals(tmp_path, "refines")
+    assert run_generator(tmp_path, "--relations", str(path)).returncode == 0
+    history_before = {p.name: p.read_bytes() for p in (tmp_path / "kb" / "history").glob("*.md")}
+    log_before = (tmp_path / "kb" / "log.md").read_bytes()
+    catalog["techniques"][0]["title"] = "A clearer display title"
+    write_json(tmp_path / "data" / "catalog.json", catalog)
+    assert run_generator(tmp_path).returncode == 0
+    assert current_claim(tmp_path)[0]["title"] == "A clearer display title"
+    assert {p.name: p.read_bytes() for p in (tmp_path / "kb" / "history").glob("*.md")} == history_before
+    assert (tmp_path / "kb" / "log.md").read_bytes() == log_before
+
+
+@pytest.mark.parametrize("mutation", [{"mechanism": []},
+                                       {"mechanism": {"variants": 7}},
+                                       {"mechanism": {"variants": {"title": "not a list"}}}])
+def test_malformed_catalog_mechanism_has_a_structured_atomic_error(tmp_path: Path, mutation) -> None:
+    catalog = seed_corpus(tmp_path)
+    catalog["techniques"][0].update(mutation)
+    write_json(tmp_path / "data" / "catalog.json", catalog)
+    assert_rejected_without_writes(tmp_path, "--candidates")
+
+
+def test_quote_at_a_different_timestamp_is_not_attested_by_a_label(tmp_path: Path) -> None:
+    catalog = seed_corpus(tmp_path)
+    catalog["techniques"][0]["sources"][0]["timestamp"] = "59:59"
+    write_json(tmp_path / "data" / "catalog.json", catalog)
+    assert run_generator(tmp_path).returncode == 0
+    _, body = current_claim(tmp_path)
+    assert "more than 75%" not in body
