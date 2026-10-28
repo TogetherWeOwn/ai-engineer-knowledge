@@ -3,12 +3,13 @@
 Distilled, generic techniques from [AI Engineer](https://www.youtube.com/@aiDotEngineer)
 talks, for people and AI readers.
 
-**Status: draft scaffold under correction, not an accepted knowledge bundle.**
-The existing generator and its legacy fixture tests implement the initial
-contract, not the corrected one below. Do not run that generator over the real
-frozen catalog: it currently replaces `catalog.json`. No real corpus is
-published yet. The publication workflow is intentionally discovery-only until
-the corrected generator and independent acceptance checks are ready.
+**Status: corrected offline generator implemented; real publication acceptance is incomplete.**
+The generator reads the frozen catalog without changing it and publishes the
+corrected contract below under `kb/`. Legacy `video_id/techniques` inputs use
+an isolated compatibility adapter; real `vid/takeaways` inputs cannot fall back
+to it. The independent fixture suite passes, but does not establish real
+publication-date coverage. The publication workflow remains discovery-only;
+no caption ingestion, live refresh or site deployment is enabled by this change.
 
 ## First data deliverable: publish dates
 
@@ -43,7 +44,7 @@ not verified yet.
 
 ## Corrected bundle contract
 
-The bundle will live under `kb/` and target
+The generated bundle lives under `kb/` and targets
 [OKF 0.2](https://github.com/GoogleCloudPlatform/open-knowledge-format/blob/ad30107c31c06aec8a7d5636e0d1058118604e6f/SPEC.md).
 
 - Identity is the existing `catalog.json` cluster ID (475 frozen clusters),
@@ -103,8 +104,21 @@ analysis. Downstream company application stays outside this repo.
 ## Develop
 
 Install test dependencies outside the checkout, then run `python3 -m pytest -q`.
-The suite covers the legacy generator, offline publish-date CLI contract,
-caption canary and manual-workflow safety. Metadata HTTP is faked; these
-checks do not establish live coverage or a successful live canary. The
-corrected-bundle acceptance suite remains pending; a green suite does not
-establish the real-corpus acceptance criteria above.
+The suite covers frozen-ID migration, OKF output, validated relations,
+immutable history, offline freshness, legacy compatibility, publish-date
+backfill, caption canary and workflow safety. Metadata HTTP is faked; these
+checks do not establish live coverage or a successful live canary.
+
+```sh
+# Work on a scratch COPY of the imported corpus, never the source checkout.
+python3 scripts/generate_claims.py --root /path/to/corpus
+python3 scripts/generate_claims.py --root /path/to/corpus --check
+KB_ACCEPTANCE_ROOT=/path/to/corpus python3 -m pytest tests/test_real_corpus_acceptance.py -q
+```
+
+The six real-corpus tests are opt-in and otherwise report skipped. The import
+snapshot `ec78d8f` yields 475/475 frozen claims, passes OKF and transcript/hash
+conformance, and preserves all input bytes. It has **0/1398** dated videos:
+its >=95% publication-date gate fails. Fixture success must not be represented
+as full corpus or publication acceptance. Backfill real metadata before
+re-running that gate; never substitute retrieval/analysis times.
