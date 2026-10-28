@@ -100,6 +100,13 @@ def tokens(value: str) -> set[str]:
     return set(normalized(value).split()) - STOP_WORDS
 
 
+def timestamp_seconds(value: str) -> int:
+    seconds = 0
+    for component in value.split(":"):
+        seconds = seconds * 60 + int(component)
+    return seconds
+
+
 def load_catalog(root: Path, payloads: list[tuple[str, object]]) -> list[dict] | None:
     data_path = safe_path(root, "data/catalog.json")
     root_path = safe_path(root, "catalog.json")
@@ -115,6 +122,10 @@ def load_catalog(root: Path, payloads: list[tuple[str, object]]) -> list[dict] |
                      for _, data in payloads)
     if payload is None:
         require(not real_input, "missing_catalog", "Real analyses require a frozen source catalog.")
+        identified_legacy = any(isinstance(data, dict) and
+                                ("video_id" in data or "video_url" in data) for _, data in payloads)
+        require(not payloads or identified_legacy, "unidentified_analysis_schema",
+                "Unidentified or corrupt analyses cannot select the legacy publication adapter.")
         return None
     require(isinstance(payload, dict) and isinstance(payload.get("techniques"), list)
             and bool(payload["techniques"]), "invalid_catalog", "Catalog requires nonempty technique rows.")
@@ -133,10 +144,16 @@ def load_catalog(root: Path, payloads: list[tuple[str, object]]) -> list[dict] |
                 "invalid_catalog", "Catalog rows need display titles.")
         require(isinstance(row.get("sources"), list) and bool(row["sources"]),
                 "invalid_catalog", "Catalog rows need evidence sources.")
+        mechanism = row.get("mechanism", {})
+        require(isinstance(mechanism, dict), "invalid_catalog", "Mechanism must be an object.")
+        variants = mechanism.get("variants", [])
+        require(isinstance(variants, list) and all(isinstance(variant, dict) for variant in variants),
+                "invalid_catalog", "Mechanism variants must be a list of objects.")
         for source in row["sources"]:
             require(isinstance(source, dict) and isinstance(source.get("vid"), str)
-                    and SAFE_VID.fullmatch(source["vid"]) is not None,
-                    "invalid_catalog_source", "Catalog sources need safe video identities.")
+                    and SAFE_VID.fullmatch(source["vid"]) is not None
+                    and isinstance(source.get("record_id", ""), str),
+                    "invalid_catalog_source", "Catalog sources need safe video and record identities.")
         rows.append(row)
     return sorted(rows, key=lambda row: row["id"])
 
@@ -171,7 +188,8 @@ class Evidence:
             require(isinstance(relative, str) and relative.startswith("transcripts/"),
                     "invalid_transcript_path", "Transcript references must stay under transcripts/.")
             path = safe_path(self.root, relative)
-            header, body = {}, []
+            header, body, spans = {}, [], defaultdict(list)
+            offset, current_time = 0, None
             if path.is_file():
                 in_header = True
                 for line in path.read_text(encoding="utf-8").splitlines():
@@ -185,8 +203,19 @@ class Evidence:
                             header["machine"] = True
                     else:
                         in_header = False
-                        body.append(re.sub(r"^\[\d+(?::\d+){1,2}\]\s*", "", line))
-            self.transcripts[vid] = header, normalized("\n".join(body))
+                        match = re.match(r"^\[(\d+(?::[0-5]\d){1,2})\]\s*", line)
+                        if match:
+                            current_time = timestamp_seconds(match.group(1))
+                            line = line[match.end():]
+                        text = normalized(line)
+                        if text:
+                            if body:
+                                offset += 1  # Normalized lines are joined with one space.
+                            spans[current_time].append((offset, offset + len(text)))
+                            body.append(text)
+                            offset += len(text)
+            header["timestamp_spans"] = spans
+            self.transcripts[vid] = header, " ".join(body)
         return self.transcripts[vid]
 
     def source(self, vid: str) -> dict:
@@ -205,7 +234,7 @@ class Evidence:
             ("evidence_quote", "evidence_quote_verification", "evidence_timestamp") if takeaway
             else ("quote", "quote_verification", "timestamp"))
         label = record.get(verification_key)
-        if (label not in {"normalized-exact", "ordered-ellipsis-pieces", "manual-original-excerpt"}
+        if (not isinstance(label, str) or label not in {"normalized-exact", "ordered-ellipsis-pieces", "manual-original-excerpt"}
                 or record.get("requires_confirmation") or record.get("quote_is_verbatim_original") is False):
             return None
         quote = record.get(quote_key)
@@ -219,16 +248,28 @@ class Evidence:
         if header.get("native_labels") != 1 or header.get("machine"):
             return None
         pieces = re.split(r"\.{3}|…", quote) if label == "ordered-ellipsis-pieces" else [quote]
-        start = 0
-        for piece in pieces:
-            text = normalized(piece)
-            if not text:
-                continue
-            location = (" " + body + " ").find(" " + text + " ", start)
-            if location < 0:
-                return None
-            start = location + len(text) + 1
-        return f"> {public_text(quote).replace(chr(10), chr(10) + '> ')}\n> — {timestamp} [^{vid}]"
+        pieces = [normalized(piece) for piece in pieces if normalized(piece)]
+        if not pieces:
+            return None
+        # Locate the FIRST piece in the declared timestamp's caption segment,
+        # not just anywhere in the talk. A label is not proof of its location.
+        spans = header["timestamp_spans"].get(timestamp_seconds(timestamp), [])
+        padded = " " + body + " "
+        starts = []
+        for lower, upper in spans:
+            location = padded.find(" " + pieces[0] + " ", lower)
+            if lower <= location < upper:
+                starts.append(location)
+        for location in starts:
+            start = location + len(pieces[0]) + 1
+            for piece in pieces[1:]:
+                location = padded.find(" " + piece + " ", start)
+                if location < 0:
+                    break
+                start = location + len(piece) + 1
+            else:
+                return f"> {public_text(quote).replace(chr(10), chr(10) + '> ')}\n> — {timestamp} [^{vid}]"
+        return None
 
 
 def candidate_report(rows: list[dict], analyses: dict[str, dict]) -> dict:
@@ -309,10 +350,34 @@ def parse_document(text: str) -> dict:
     except ValueError:
         raise PublicationError("invalid_existing_claim", "Existing claims need the generated JSON-compatible YAML format.") from None
     require(isinstance(metadata, dict) and isinstance(metadata.get("id"), str)
-            and isinstance(metadata.get("generated"), dict)
+            and isinstance(metadata.get("title"), str) and bool(metadata["title"].strip())
+            and isinstance(metadata.get("area"), str) and metadata.get("type") == "technique"
+            and isinstance(metadata.get("status"), str) and metadata["status"] in {"stable", "deprecated"}
+            and isinstance(metadata.get("generated"), dict) and bool(metadata["generated"].get("by"))
             and instant(metadata["generated"].get("at")) is not None
             and instant(metadata.get("stale_after")) is not None,
             "invalid_existing_claim", "Existing claim lifecycle metadata is not usable.")
+    for key in ("valid_from", "valid_to"):
+        require(key in metadata and (metadata[key] is None or instant(metadata[key]) is not None),
+                "invalid_existing_claim", "Existing claim dates must be aware instants or null.")
+    require("superseded_by" in metadata and
+            ((metadata["status"] == "stable" and metadata["valid_to"] is None and metadata["superseded_by"] is None)
+             or (metadata["status"] == "deprecated" and isinstance(metadata["superseded_by"], str)
+                 and bool(metadata["superseded_by"]))),
+            "invalid_existing_claim", "Existing claim lifecycle is inconsistent.")
+    sources = metadata.get("sources")
+    require(isinstance(sources, list) and bool(sources), "invalid_existing_claim", "Retained claims need evidence sources.")
+    ids = set()
+    for source in sources:
+        require(isinstance(source, dict) and isinstance(source.get("id"), str)
+                and SAFE_VID.fullmatch(source["id"]) is not None and source["id"] not in ids
+                and source.get("resource") == f"https://www.youtube.com/watch?v={source['id']}"
+                and isinstance(source.get("analysis_file"), str)
+                and source["analysis_file"].startswith("analysis/")
+                and all(key in source for key in ("title", "author", "last_modified"))
+                and (source["last_modified"] is None or instant(source["last_modified"]) is not None),
+                "invalid_existing_claim", "Retained source metadata is invalid or ambiguous.")
+        ids.add(source["id"])
     return {"frontmatter": metadata, "body": body.lstrip("\n")}
 
 
@@ -328,9 +393,9 @@ def semantic(claim: dict) -> dict:
     return {"frontmatter": metadata, "body": claim["body"]}
 
 
-def fingerprint(claim: dict) -> str:
-    return hashlib.sha256(json.dumps(semantic(claim), sort_keys=True,
-                                    ensure_ascii=False).encode("utf-8")).hexdigest()
+def relation_event_id(proposal: dict) -> str:
+    """A supersession event is its validated decision, not mutable display prose."""
+    return hashlib.sha256(json.dumps(proposal, sort_keys=True).encode("utf-8")).hexdigest()[:20]
 
 
 def stamp(claim: dict, at: datetime, existing: dict | None) -> None:
@@ -411,7 +476,7 @@ def add_relation(claim: dict, row: dict, proposal: dict, evidence: Evidence,
     if eligible:
         archived = copy.deepcopy(claim)
         old = archived["frontmatter"]
-        revision = fingerprint(archived)[:20]
+        revision = relation_event_id(proposal)
         old.update(id=f"{row['id']}--{revision}", status="deprecated", valid_to=iso(new_time),
                    superseded_by=row["id"])
         metadata.update(valid_from=iso(new_time), sources=[source])
@@ -456,9 +521,13 @@ def update_log(existing: str, events: list[tuple[str, str]]) -> str:
                     "invalid_log", "Existing log date headings must be ISO dates.")
         elif current and line.strip():
             groups[current].append(line)
+    recorded = {line.split("`", 2)[1] for lines in groups.values() for line in lines
+                if line.startswith("- `") and line.count("`") >= 2}
     for day, entry in events:
-        if not any(entry in lines for lines in groups.values()):
+        event_id = entry.split("`", 2)[1]
+        if event_id not in recorded:
             groups[day].append(entry)
+            recorded.add(event_id)
     lines = ["# Supersession log", ""]
     for day, entries in sorted(groups.items(), reverse=True):
         lines += [f"## {day}", "", *sorted(set(entries)), ""]
@@ -567,15 +636,17 @@ def generate(root: Path, *, candidates=False, check=False, relations: Path | Non
     candidate_ids = {(row["vid"], row["takeaway_index"]): set(row["candidate_ids"])
                      for row in report["candidates"]} if report else {}
     accepted = validate_proposals({"schema_version": 1, "proposals": prior}, candidate_ids)
-    if relations is not None:
-        require(not relations.is_symlink(), "unsafe_path", "Relation inputs cannot be symlinks.")
-        incoming = validate_proposals(load_json(relations), candidate_ids)
-        accepted = validate_proposals({"schema_version": 1, "proposals": accepted + incoming}, candidate_ids)
     def order(proposal: dict):
         timestamp = instant(analyses[proposal["vid"]]["payload"].get("published_at"))
         return (timestamp or datetime.min.replace(tzinfo=timezone.utc), proposal["vid"],
                 proposal["takeaway_index"], proposal["catalog_id"], proposal["relation"])
-    accepted.sort(key=order)
+    if relations is not None:
+        require(not relations.is_symlink(), "unsafe_path", "Relation inputs cannot be symlinks.")
+        incoming = validate_proposals(load_json(relations), candidate_ids)
+        # Persist application order. Backdated evidence arriving later must not
+        # reorder decisions that already produced an immutable history revision.
+        incoming.sort(key=order)
+        accepted = validate_proposals({"schema_version": 1, "proposals": accepted + incoming}, candidate_ids)
     by_identity = defaultdict(list)
     for proposal in accepted:
         by_identity[proposal["catalog_id"]].append(proposal)
@@ -589,7 +660,13 @@ def generate(root: Path, *, candidates=False, check=False, relations: Path | Non
             if archived:
                 old = archived["frontmatter"]
                 relative = f"kb/history/{old['id']}.md"
-                stamp(archived, now, existing.get(relative))
+                if relative in existing:
+                    # Frozen revisions are evidence, not a cache to regenerate
+                    # after a title edit or a later source metadata backfill.
+                    archived = existing[relative]
+                    old = archived["frontmatter"]
+                else:
+                    stamp(archived, now, None)
                 documents[relative] = archived
                 old_vids = ", ".join(source["id"] for source in old["sources"])
                 events.append((old["valid_to"][:10],
