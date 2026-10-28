@@ -431,3 +431,31 @@ def test_short_quote_can_span_continuation_lines_at_same_timestamp(tmp_path, bod
     write_json(catalog_path, catalog)
     assert run_generator(tmp_path).returncode == 0
     assert quote in current_claim(tmp_path)[1]
+
+
+@pytest.mark.parametrize("marker", ["#  machine transcript (Whisper; no YouTube captions)",
+                                    "#\tmachine transcript (Whisper; no YouTube captions)",
+                                    "# Machine transcript (Whisper; no YouTube captions)"])
+def test_machine_marker_variants_withhold_quote_from_generated_claim(tmp_path, marker):
+    catalog = seed_corpus(tmp_path)
+    quote = "Distinctive evidence for this claim"
+    replace_context_caption(tmp_path, catalog, f"[00:01] {quote}\n", quote)
+    path = tmp_path / "transcripts" / f"{CONTEXT_VID}.txt"
+    path.write_text(path.read_text().replace("# auto/author captions, unverified", marker + "\n# auto/author captions, unverified"))
+    result = run_generator(tmp_path)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert quote.encode() not in b"\n".join(generated_snapshot(tmp_path).values())
+
+
+@pytest.mark.parametrize("quote,allowed", [
+    (" ".join(["word"] * 50), True),
+    (" ".join(["word"] * 51), False),
+    ("x" * 500, True),
+    ("x" * 501, False),
+])
+def test_quote_length_exact_boundaries(tmp_path, quote, allowed):
+    catalog = seed_corpus(tmp_path)
+    replace_context_caption(tmp_path, catalog, f"[00:01] {quote}\n", quote)
+    result = run_generator(tmp_path)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (quote.encode() in b"\n".join(generated_snapshot(tmp_path).values())) is allowed

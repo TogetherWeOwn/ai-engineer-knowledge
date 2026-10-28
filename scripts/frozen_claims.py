@@ -204,7 +204,7 @@ class Evidence:
                     header[key] = value.strip()
                 if line == "# auto/author captions, unverified":
                     header["native_labels"] = header.get("native_labels", 0) + 1
-                if line.startswith("# machine transcript"):
+                if line[1:].strip().casefold().startswith("machine transcript"):
                     header["machine"] = True
                 index += 1
             require(header.get("source") == f"https://www.youtube.com/watch?v={vid}",

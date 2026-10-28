@@ -388,7 +388,7 @@ def build_derived(claims: dict[str, dict]) -> dict[str, str]:
             1 for _, claim in areas[area] if claim["frontmatter"]["status"] == "active"
         )
         llms_lines.append(f"- [{area}](areas/{area}.md): {count} active")
-    derived["llms.txt"] = "\n".join(llms_lines) + "\n"
+    derived["llms.txt"] = "\n".join(llms_lines).rstrip() + "\n"
 
     full_parts = ["# AI Engineer Knowledge Base — all active techniques", ""]
     for _, claim in ordered_claims:
