@@ -233,6 +233,37 @@ def test_analysis_projection_is_allowlisted_and_verified(tmp_path: Path) -> None
     assert data["retrieved_at"] == header["retrieved_at"]
 
 
+@pytest.mark.parametrize("body, quote", [
+    ("[00:01] Improving reliability with these tools.\n",
+     "reliability with these tool"),
+    ("[00:01] Improving unreliability with these tools.\n",
+     "reliability with these tools"),
+    ("[00:01] Improving reliability with careful evaluation of all these tools.\n",
+     "improving reliability with ... all these tool"),
+])
+def test_quote_verification_rejects_partial_words(body, quote):
+    assert ic.Caption(body).verify(quote) == (None, None)
+
+
+def test_quote_verification_finds_complete_match_after_partial_match():
+    caption = ic.Caption(
+        "[00:01] Improving unreliability with these tools.\n"
+        "[00:09] Improving reliability with these tools.\n"
+    )
+    assert caption.verify("reliability with these tools") == ("normalized-exact", "00:09")
+
+
+def test_catalog_quote_verification_rejects_partial_words():
+    captions = {"VIDAAAA0001": ic.Caption("[00:01] Improving unreliability with these tools.\n")}
+    source = {"vid": "VIDAAAA0001", "quote": "reliability with these tools",
+              "quote_verification": "normalized-exact", "additional_original_excerpts": [
+                  {"quote": "reliability with these tools", "timestamp": "00:01"}]}
+    projected = ic.project_source(source, ic.Scrubber([]), captions, {})
+    assert projected["quote"] is None
+    assert projected["quote_verification"] == "not-found-in-published-transcript"
+    assert "additional_original_excerpts" not in projected
+
+
 def test_existing_published_at_is_preserved(tmp_path: Path) -> None:
     src = make_corpus(tmp_path)
     out = tmp_path / "out"
@@ -334,6 +365,49 @@ def test_repo_analysis_links_to_transcripts() -> None:
             failures.append(path.name)
         if any(not isinstance(t.get("confidence"), str) for t in data["takeaways"]):
             failures.append(path.name)
+    assert not failures, failures[:10]
+
+
+def test_repo_evidence_quotes_match_complete_transcript_words():
+    captions = {p.stem: ic.normalize(split_header(p.read_text(encoding="utf-8"))[1])
+                for p in REPO_TRANSCRIPTS}
+    failures = []
+
+    def check(vid, quote, location, ellipsis=False):
+        pieces = re.split(r"\.\.\.|…", quote) if ellipsis else [quote]
+        start = 0
+        for piece in pieces:
+            normalized = ic.normalize(piece)
+            if not normalized:
+                continue
+            match = re.search(r"(?<!\w)" + re.escape(normalized) + r"(?!\w)",
+                              captions.get(vid, "")[start:])
+            if not match:
+                failures.append(location)
+                return
+            start += match.end()
+
+    for path in REPO_ANALYSES:
+        analysis = json.loads(path.read_text(encoding="utf-8"))
+        for index, takeaway in enumerate(analysis["takeaways"]):
+            quote = takeaway["evidence_quote"]
+            method = takeaway["evidence_quote_verification"]
+            if method == "not-found-in-captions":
+                assert quote is None, (path.name, index)
+            else:
+                assert method in ("normalized-exact", "ordered-ellipsis-pieces")
+                assert isinstance(quote, str) and ic.normalize(quote), (path.name, index)
+                check(analysis["vid"], quote, (path.name, index),
+                      ellipsis=method == "ordered-ellipsis-pieces")
+    if REPO_CATALOG.exists():
+        catalog = json.loads(REPO_CATALOG.read_text(encoding="utf-8"))
+        for technique in catalog["techniques"]:
+            for source in technique["sources"]:
+                location = (technique["id"], source["record_id"])
+                if source.get("quote") is not None:
+                    check(source["vid"], source["quote"], location)
+                for excerpt in source.get("additional_original_excerpts", []):
+                    check(source["vid"], excerpt["quote"], location)
     assert not failures, failures[:10]
 
 

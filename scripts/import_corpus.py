@@ -213,6 +213,12 @@ class Caption:
                 hi = mid - 1
         return self.stamps[lo] if self.stamps else None
 
+    def find(self, normalized: str, start: int = 0) -> int:
+        """Locate a normalized phrase without matching only part of a word."""
+        pattern = re.compile(r"(?<!\w)" + re.escape(normalized) + r"(?!\w)")
+        match = pattern.search(self.text, start)
+        return match.start() if match else -1
+
     def verify(self, quote):
         """Return (method, timestamp) or (None, None)."""
         if not isinstance(quote, str):
@@ -220,7 +226,7 @@ class Caption:
         whole = normalize(quote)
         if len(whole.split()) < MIN_QUOTE_WORDS:
             return None, None
-        pos = self.text.find(whole)
+        pos = self.find(whole)
         if pos >= 0:
             return "normalized-exact", self.stamp_at(pos)
         pieces = [normalize(p) for p in re.split(r"\.\.\.|\u2026", quote)]
@@ -229,7 +235,7 @@ class Caption:
             return None, None
         start, first = 0, None
         for piece in pieces:
-            pos = self.text.find(piece, start)
+            pos = self.find(piece, start)
             if pos < 0:
                 return None, None
             first = pos if first is None else first
@@ -396,7 +402,7 @@ def project_source(src: dict, scrub: Scrubber, captions: dict, stats: dict) -> d
     caption = captions.get(src.get("vid"))
     quote = src.get("quote")
     if isinstance(quote, str) and caption is not None and normalize(quote):
-        found = caption.text.find(normalize(quote)) >= 0
+        found = caption.find(normalize(quote)) >= 0
     else:
         found = False
     stats["source_quote_found" if found else "source_quote_not_found"] = \
@@ -407,7 +413,7 @@ def project_source(src: dict, scrub: Scrubber, captions: dict, stats: dict) -> d
     excerpts = []
     for excerpt in src.get("additional_original_excerpts") or []:
         q = excerpt.get("quote")
-        if isinstance(q, str) and caption is not None and normalize(q) and caption.text.find(normalize(q)) >= 0:
+        if isinstance(q, str) and caption is not None and normalize(q) and caption.find(normalize(q)) >= 0:
             excerpts.append({k: excerpt[k] for k in ("quote", "timestamp", "timestamp_end") if k in excerpt})
     if excerpts:
         out["additional_original_excerpts"] = excerpts
