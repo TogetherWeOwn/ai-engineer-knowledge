@@ -2,9 +2,9 @@ name: backfill
 
 # Live C6 publish-date backfill: YouTube videos.list -> analysis/*.json
 # published_at, using the repo-scoped YOUTUBE_API_KEY. Manual dispatch only.
-# Single writer (concurrency group); stages analysis/*.json explicitly, never
-# anything else. Exit 1 (incomplete coverage) still commits partial progress
-# so the next dispatch continues. Exit 2 or an unexpected exit never commits:
+# Single writer (concurrency group); stages analysis/*.json and the regenerated
+# frozen bundle explicitly. Exit 1 (incomplete coverage) still commits consistent
+# partial progress so the next dispatch continues. Exit 2 or an unexpected exit never commits:
 # a filesystem error can leave per-file progress that needs inspection.
 on:
   workflow_dispatch:
@@ -34,11 +34,14 @@ jobs:
           set +e
           python3 scripts/backfill_publish_dates.py | tee /tmp/backfill-report.json
           echo "exit_code=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
-      # GITHUB_TOKEN pushes do not trigger CI. Verify the changed checkout
-      # here, before committing; either failure prevents the push.
+      # Publication dates feed claim source metadata and valid_from. Regenerate
+      # before checking freshness, then commit the consistent tree together.
+      # GITHUB_TOKEN pushes do not trigger CI, so verify here before committing;
+      # a generation, test or freshness failure prevents the push.
       - name: Validate backfilled checkout
         if: steps.backfill.outputs.exit_code == '0' || steps.backfill.outputs.exit_code == '1'
         run: |
+          python3 scripts/generate_claims.py
           pytest -q
           python3 scripts/generate_claims.py --check
       - name: Commit analysis dates
@@ -46,7 +49,10 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add analysis/*.json
+          git add -- analysis/*.json
+          if [ -d kb ]; then
+            git add -- kb/ llms.txt llms-full.txt
+          fi
           if git diff --cached --quiet; then
             echo "No date changes to commit."
           else

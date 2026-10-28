@@ -7,6 +7,7 @@ import os
 import re
 import runpy
 import subprocess
+import sys
 import urllib.error
 import urllib.request
 import urllib.response
@@ -15,6 +16,11 @@ from pathlib import Path
 
 import pytest
 
+from test_backfill_acceptance import (
+    KEY_NAME as BACKFILL_KEY, SENTINEL_KEY as BACKFILL_SENTINEL,
+    FakeUrlopen as BackfillUrlopen, requested_ids, run_cli as run_backfill_cli,
+    videos_list_payload,
+)
 from test_claims_acceptance import (
     CONTEXT_ID, CONTEXT_VID, NEW_VID, add_followup, current_claim,
     generated_snapshot, proposals, run_generator, seed_corpus, write_json,
@@ -229,6 +235,107 @@ def test_backfill_verifies_changed_checkout_before_commit():
     assert "pytest pyyaml" in install
 
 
+@pytest.mark.parametrize("unresolved,expected_code", [(set(), 0), ({CONTEXT_VID}, 1)])
+def test_backfill_workflow_pushes_dates_with_fresh_generated_bundle(tmp_path, monkeypatch,
+                                                                  unresolved, expected_code):
+    """A real date update must not be blocked by, or pushed with, stale claims."""
+    root = tmp_path / "checkout"
+    root.mkdir()
+    seed_corpus(root, date=None)
+    # Execute the actual generator from the workflow shell in this fixture repo.
+    scripts = Path(__file__).resolve().parents[1] / "scripts"
+    (root / "scripts").symlink_to(scripts, target_is_directory=True)
+    assert run_generator(root).returncode == 0
+    assert run_generator(root, "--check").returncode == 0
+    before_bundle = generated_snapshot(root)
+    before_transcripts = {p.name: p.read_bytes() for p in (root / "transcripts").glob("*.txt")}
+    before_analyses = {p.name: json.loads(p.read_text()) for p in (root / "analysis").glob("*.json")}
+
+    def git(*args, cwd=root):
+        result = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True,
+                                timeout=30)
+        assert result.returncode == 0, result.stdout + result.stderr
+        return result.stdout.strip()
+
+    git("init", "--initial-branch=main")
+    git("config", "user.name", "Workflow Test")
+    git("config", "user.email", "workflow-test@example.invalid")
+    git("config", "commit.gpgsign", "false")
+    git("add", ".")
+    git("commit", "-m", "fixture: undated generated bundle")
+    baseline = git("rev-parse", "HEAD")
+    remote = tmp_path / "remote.git"
+    git("init", "--bare", str(remote))
+    git("remote", "add", "origin", str(remote))
+    git("push", "--set-upstream", "origin", "main")
+
+    fetched_date = "2025-01-01T00:00:00Z"
+    fake = BackfillUrlopen(lambda url, _: videos_list_payload(
+        {vid: fetched_date for vid in requested_ids(url) if vid not in unresolved}))
+    code, stdout, stderr = run_backfill_cli(
+        monkeypatch, "--root", str(root), env={BACKFILL_KEY: BACKFILL_SENTINEL}, urlopen=fake)
+    assert code == expected_code, stdout + stderr
+    assert json.loads(stdout)["updated_files"] == 2 - len(unresolved)
+    stale = run_generator(root, "--check")
+    assert stale.returncode == 1, "the fixture must reproduce the stale-tree backfill failure"
+    assert "llms-full.txt" in json.loads(stale.stdout)["stale"]
+
+    # These unrelated local outputs must never enter the backfill commit.
+    (root / "canary-report.json").write_text('{"status": "unrelated"}\n')
+    (root / "state").mkdir()
+    (root / "state/missing_transcripts.json").write_text('[]\n')
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "python3").symlink_to(sys.executable)
+    # Avoid recursively running this entire suite from inside its own test.
+    # The generator, backfill, Git index, commit and local push remain real;
+    # separate regressions verify pytest/generator failures prevent commits.
+    pytest_stub = bin_dir / "pytest"
+    pytest_stub.write_text('#!/bin/sh\ntest "$#" = 1 && test "$1" = -q\n')
+    pytest_stub.chmod(0o755)
+    env = {k: os.environ[k] for k in ("PATH", "HOME", "LANG") if k in os.environ}
+    env["PATH"] = f"{bin_dir}:{env['PATH']}"
+    steps = workflow("backfill")["jobs"]["backfill"]["steps"]
+    validation = next(s for s in steps if s.get("name") == "Validate backfilled checkout")
+    commit = next(s for s in steps if s.get("name") == "Commit analysis dates")
+    for step in (validation, commit):
+        assert step["if"] == (
+            "steps.backfill.outputs.exit_code == '0' || steps.backfill.outputs.exit_code == '1'")
+    shell = validation["run"] + "\n" + commit["run"]
+    result = subprocess.run(["bash", "-e", "-o", "pipefail", "-c", shell], cwd=root,
+                            env=env, capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert run_generator(root, "--check").returncode == 0
+    metadata, _ = current_claim(root)
+    expected_date = None if CONTEXT_VID in unresolved else fetched_date
+    assert metadata["valid_from"] == expected_date
+    assert {s["last_modified"] for s in metadata["sources"]} == {expected_date}
+    after_bundle = generated_snapshot(root)
+    changed_bundle = {name for name in after_bundle if after_bundle[name] != before_bundle.get(name)}
+    assert "llms-full.txt" in changed_bundle
+    changed_analyses = {f"analysis/{filename}" for filename, original in before_analyses.items()
+                        if original["vid"] not in unresolved}
+    committed = set(git("diff", "--name-only", baseline, "HEAD").splitlines())
+    assert committed == changed_analyses | changed_bundle
+    assert git("rev-parse", "main", cwd=remote) == git("rev-parse", "HEAD")
+    assert git("diff", "HEAD") == "", "all tracked date and generated changes must be committed"
+    assert git("ls-files", "canary-report.json", "state/missing_transcripts.json") == ""
+    assert {p.name: p.read_bytes() for p in (root / "transcripts").glob("*.txt")} == before_transcripts
+    for filename, original in before_analyses.items():
+        updated = json.loads((root / "analysis" / filename).read_text())
+        expected = dict(original)
+        if original["vid"] not in unresolved:
+            expected["published_at"] = fetched_date
+        assert updated == expected
+    # A second run must not create a redundant commit or churn output timestamps.
+    published_head = git("rev-parse", "HEAD")
+    replay = subprocess.run(["bash", "-e", "-o", "pipefail", "-c", shell], cwd=root,
+                            env=env, capture_output=True, text=True, timeout=30)
+    assert replay.returncode == 0, replay.stdout + replay.stderr
+    assert git("rev-parse", "HEAD") == published_head
+    assert generated_snapshot(root) == after_bundle
+
+
 def test_refresh_preserves_read_only_discovery_as_artifact():
     document = workflow("refresh")
     steps = document["jobs"]["discovery"]["steps"]
@@ -251,15 +358,21 @@ def test_machine_transcript_documented_format_conforms(tmp_path):
     assert validate_transcript(path) == []
 
 
-@pytest.mark.parametrize("failing_command", ["pytest", "python3"])
-def test_backfill_validation_failure_stops_before_commit_or_push(tmp_path, failing_command):
+@pytest.mark.parametrize("failing_command,failing_args", [
+    ("pytest", "-q"),
+    ("python3", "scripts/generate_claims.py"),
+    ("python3", "scripts/generate_claims.py --check"),
+])
+def test_backfill_validation_failure_stops_before_commit_or_push(tmp_path, failing_command,
+                                                               failing_args):
     steps = workflow("backfill")["jobs"]["backfill"]["steps"]
     validation = next(s for s in steps if s.get("name") == "Validate backfilled checkout")
     commit = next(s for s in steps if s.get("name") == "Commit analysis dates")
     for executable in ("pytest", "python3", "git"):
         path = tmp_path / executable
         path.write_text('#!/bin/sh\nprintf "%s\\n" "' + executable + ' $*" >> "$CALLS"\n'
-                        + ("exit 1\n" if executable == failing_command else "exit 0\n"))
+                        + (f'if [ "$*" = "{failing_args}" ]; then exit 1; fi\n'
+                           if executable == failing_command else "") + "exit 0\n")
         path.chmod(0o755)
     calls = tmp_path / "calls"
     env = dict(os.environ, PATH=f"{tmp_path}:{os.environ['PATH']}", CALLS=str(calls))

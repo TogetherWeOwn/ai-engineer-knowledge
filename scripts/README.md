@@ -6,8 +6,12 @@
   string verbatim. `--check` is offline; `--dry-run` fetches without
   writing. All output is JSON. See root README for exits, the >=95%
   coverage gate and the repo-scoped key requirement. Live runs go through
-  the manual `backfill` workflow (single writer, stages `analysis/*.json`
-  only).
+  the manual `backfill` workflow (single writer). After exit 0 or 1, it
+  regenerates claims, runs the tests and checks freshness before committing
+  `analysis/*.json` together with the frozen bundle (`kb/`, `llms.txt`,
+  `llms-full.txt`) when present. Partial coverage still publishes consistent
+  date progress, then reports exit 1; generation or validation failures never
+  commit or push. Other inputs and local artifacts are not staged.
 - `supadata_canary.py` — five-video canary gate: fetches
   `mode=native&lang=en` captions and compares each against its conforming
   `transcripts/<vid>.txt` reference (>=0.98 word similarity, HTTP 200, no
