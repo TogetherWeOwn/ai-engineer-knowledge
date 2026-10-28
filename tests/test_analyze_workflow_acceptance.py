@@ -14,9 +14,11 @@ scripts/analyze_transcript.py. The gate's >=95% behavior belongs to its existing
 tests, not this file. No provider, model, or repository-secret name is selected.
 """
 
+import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -264,6 +266,7 @@ if name in ("python", "python3"):
     if args and args[0] in ("-", "-c"):
         source = sys.stdin.read() if args[0] == "-" else args[1]
         sys.argv = args if args[0] == "-" else ["-c"] + args[2:]
+        sys.path.insert(0, str(Path.cwd()))
         exec(compile(source, "<workflow-inline>", "exec"), {"__name__": "__main__"})
         sys.exit(0)
     # Installation is not the behavior under test and must not contact PyPI.
@@ -278,7 +281,54 @@ sys.exit(97)
 '''
 
 
-def exercise(data, job, tmp_path, *, video=VID, gate_exit=0, publication=False):
+def writer_fixture(workspace, damage=None):
+    """Independent, synthetic pinned checkout and downloaded artifact, not model output."""
+    body = "[00:05] Trim payload fields.\n"
+    digest = hashlib.sha256(body.encode()).hexdigest()
+    header = {"title": "Synthetic educational talk", "source": f"https://www.youtube.com/watch?v={VID}",
+              "speaker": "Casey Example", "channel": "Example channel", "caption_track": "auto",
+              "retrieved_at": "2026-08-20T10:15:00Z", "sha256": digest}
+    transcript = "\n".join(f"# {k}: {v}" for k, v in header.items())
+    (workspace / "transcripts" / f"{VID}.txt").write_text(transcript + "\n# auto/author captions, unverified\n" + body)
+    identity = "frozen-payload"
+    catalog = {"frozen": True, "technique_count": 1,
+               "id_list_sha256": hashlib.sha256((identity + "\n").encode()).hexdigest(),
+               "techniques": [{"id": identity, "title": "Trim payload fields", "mechanism": {}}]}
+    (workspace / "data" / "catalog.json").write_text(json.dumps(catalog))
+    provenance = {"vid": VID, "source": header["source"], "transcript_file": f"transcripts/{VID}.txt",
+                  "transcript_sha256": digest, "retrieved_at": header["retrieved_at"],
+                  "published_at": "2026-07-01T00:00:00Z"}
+    original = dict(provenance, talk_summary="Old publication must not be mistaken for the artifact.")
+    (workspace / "analysis" / f"{VID}.json").write_text(json.dumps(original))
+    document = dict(provenance, **{k: header[k] for k in ("title", "speaker", "channel", "caption_track")},
+                    talk_summary="A new generic educational takeaway.",
+                    takeaways=[{"area": "context-engineering", "technique": "Trim payload fields",
+                                "what_they_do": "Trim payload fields.", "evidence_quote": "Trim payload fields.",
+                                "evidence_timestamp": "00:05", "numbers": None, "confidence": "high",
+                                "evidence_quote_verification": "normalized-exact"}],
+                    relations=[{"takeaway_index": 0, "relation": "supports", "catalog_id": identity}],
+                    truncated=False, analyzer="generic-transcript-analyzer.v1", analyzed_at="2026-08-21T00:00:00Z")
+    artifact = workspace / "_analysis_artifact"
+    artifact.mkdir()
+    rejected = dict(document)
+    if damage == "date":
+        rejected["published_at"] = "2099-01-01T00:00:00Z"
+    elif damage == "provenance":
+        rejected["transcript_sha256"] = "0" * 64
+    elif damage == "extra-path":
+        (artifact / "unexpected.json").write_text("{}")
+    elif damage == "quote":
+        rejected = json.loads(json.dumps(document))
+        rejected["takeaways"][0]["evidence_quote"] = "An invented quote."
+    else:
+        assert damage is None
+    (artifact / f"{VID}.json").write_text(json.dumps(rejected))
+    (workspace / "scripts").mkdir()
+    shutil.copyfile(ROOT / "scripts" / "analyze_transcript.py", workspace / "scripts" / "analyze_transcript.py")
+    return original, document
+
+
+def exercise(data, job, tmp_path, *, video=VID, gate_exit=0, publication=False, artifact_damage=None):
     name = input_name(data)
     workspace = tmp_path / "checkout"
     workspace.mkdir(exist_ok=True)
@@ -289,6 +339,8 @@ def exercise(data, job, tmp_path, *, video=VID, gate_exit=0, publication=False):
     (workspace / "data" / "catalog.json").write_text('{"frozen":true}\n')
     (workspace / "kb" / "index.md").write_text("Generator-owned.\n")
     (workspace / "analysis" / f"{VID}.json").write_text('{"vid":"VIDAAAA0001"}\n')
+    if publication:
+        writer_fixture(workspace, artifact_damage)
     for command in ("python", "python3", "git", "pip", "pip3", "curl", "wget", "gh", "ssh", "scp", "rsync"):
         path = workspace / "bin" / command
         path.write_text(CLI_STUB)
@@ -310,9 +362,9 @@ def exercise(data, job, tmp_path, *, video=VID, gate_exit=0, publication=False):
         for key, value in context.get("env", {}).items():
             env[key] = render(value, name, video, env)
     results = []
+    # Execute every writer run block in order, including real artifact validation
+    # and materialization. A failed step prevents later staging/commit/push steps.
     selected = run_steps(job)
-    if publication:
-        selected = [step for step in selected if re.search(r"\bgit\s+(?:-[^\n]+\s+)?add\b", step["run"])]
     assert selected, "The workflow must expose executable analysis/publication run blocks"
     for step in selected:
         local_env = env.copy()
@@ -418,3 +470,30 @@ def test_all_repository_workflow_actions_are_pinned_to_full_commit_shas():
             for step in steps(job):
                 if 'uses' in step:
                     assert re.fullmatch(r'[^@]+@[0-9a-f]{40}', step['uses']), str(path)
+
+
+
+def test_writer_steps_revalidate_and_materialize_valid_artifact_before_staging(tmp_path):
+    data = workflow()
+    _, job = publication_jobs(data)[0]
+    workspace, calls, results = exercise(data, job, tmp_path, publication=True)
+    assert all(result.returncode == 0 for result in results), "\n".join(result.stderr for result in results)
+    artifact = json.loads((workspace / "_analysis_artifact" / f"{VID}.json").read_text())
+    published = json.loads((workspace / "analysis" / f"{VID}.json").read_text())
+    assert published == artifact, "The writer must materialize the downloaded, revalidated document"
+    staged = [call for call in calls if call["kind"] == "git" and "add" in call["args"]]
+    assert len(staged) == 1 and staged[0]["args"] == ["add", "--", f"analysis/{VID}.json"]
+
+
+@pytest.mark.parametrize("damage", ["date", "provenance", "quote", "extra-path"])
+def test_writer_rejects_artifacts_before_any_git_staging(tmp_path, damage):
+    data = workflow()
+    _, job = publication_jobs(data)[0]
+    workspace, calls, results = exercise(data, job, tmp_path, publication=True, artifact_damage=damage)
+    assert any(result.returncode != 0 for result in results), "Invalid artifact must fail the writer job"
+    assert not any(call["kind"] == "git" for call in calls), "Rejected artifact must not reach git add, commit or push"
+    published = json.loads((workspace / "analysis" / f"{VID}.json").read_text())
+    assert published["talk_summary"] == "Old publication must not be mistaken for the artifact."
+    assert published["published_at"] == "2026-07-01T00:00:00Z"
+    assert (workspace / "analysis" / "OTHER000001.json").read_text() == "{}\n"
+    assert not list((workspace / "analysis").glob("*.tmp"))
