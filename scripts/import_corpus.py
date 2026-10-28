@@ -476,7 +476,17 @@ def project_technique(tech: dict, scrub: Scrubber, captions: dict, stats: dict) 
 
 def project_catalog(raw: dict, raw_bytes: bytes, exported_at: str, scrub: Scrubber,
                     captions: dict, stats: dict) -> dict:
-    techniques = raw.get("techniques") or []
+    if not isinstance(raw, dict):
+        raise ImportError_("catalog must be an object")
+    techniques = raw.get("techniques")
+    if not isinstance(techniques, list) or not techniques:
+        raise ImportError_("catalog techniques must be a non-empty list")
+    for technique in techniques:
+        if not isinstance(technique, dict) or any(
+            not isinstance(technique.get(key), str) or not technique[key].strip()
+            for key in ("id", "title", "area")
+        ):
+            raise ImportError_("catalog techniques require non-empty id, title and area")
     ids = [t["id"] for t in techniques]
     if len(ids) != len(set(ids)):
         raise ImportError_("catalog technique IDs are not unique")
@@ -611,6 +621,19 @@ def run(src: Path, out: Path, exported_at: str, private: dict, include_machine: 
     raw_bytes = catalog_path.read_bytes()
     catalog = project_catalog(json.loads(raw_bytes), raw_bytes, exported_at, scrub, captions,
                               report["source_quotes"])
+    published_catalog = out / "data" / "catalog.json"
+    if published_catalog.exists():
+        published = json.loads(published_catalog.read_text(encoding="utf-8"))
+        if not isinstance(published, dict) or published.get("frozen") is not True:
+            raise ImportError_("existing catalog is not a frozen catalog")
+        existing = published.get("techniques")
+        if not isinstance(existing, list) or not existing or any(
+            not isinstance(item, dict) or not isinstance(item.get("id"), str)
+            for item in existing
+        ):
+            raise ImportError_("existing frozen catalog has invalid technique IDs")
+        if [item["id"] for item in existing] != [item["id"] for item in catalog["techniques"]]:
+            raise ImportError_("source catalog does not preserve frozen technique ID sequence")
     files["data/catalog.json"] = dump_json(catalog, 1)
 
     for rel, text in files.items():

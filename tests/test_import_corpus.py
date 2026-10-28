@@ -502,3 +502,36 @@ def test_malformed_takeaway_is_reported_without_changing_publication(tmp_path, c
     assert error['status'] == 'error'
     assert 'takeaway' in error['error']
     assert tree_bytes(out) == before
+
+@pytest.mark.parametrize("techniques", [[], None, "missing", "truncated", "reordered"])
+def test_invalid_source_catalog_preserves_published_tree(tmp_path, techniques):
+    src = make_corpus(tmp_path)
+    out = tmp_path / "out"
+    run_import(src, out)
+    before = tree_bytes(out)
+    path = src / "synthesis" / "catalog.json"
+    catalog = json.loads(path.read_text(encoding="utf-8"))
+    if techniques == "missing":
+        del catalog["techniques"]
+    elif techniques == "truncated":
+        catalog["techniques"] = catalog["techniques"][:1]
+    elif techniques == "reordered":
+        catalog["techniques"].reverse()
+    else:
+        catalog["techniques"] = techniques
+    path.write_text(json.dumps(catalog), encoding="utf-8")
+    with pytest.raises(ic.ImportError_):
+        run_import(src, out)
+    assert tree_bytes(out) == before
+
+@pytest.mark.parametrize("techniques", [[], None, [{}], [{"id": "", "title": "x", "area": "x"}]])
+def test_invalid_catalog_cannot_create_initial_publication(tmp_path, techniques):
+    src = make_corpus(tmp_path)
+    path = src / "synthesis" / "catalog.json"
+    catalog = json.loads(path.read_text(encoding="utf-8"))
+    catalog["techniques"] = techniques
+    path.write_text(json.dumps(catalog), encoding="utf-8")
+    out = tmp_path / "out"
+    with pytest.raises(ic.ImportError_):
+        run_import(src, out)
+    assert tree_bytes(out) == {}
