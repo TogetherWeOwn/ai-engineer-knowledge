@@ -25,6 +25,23 @@ FROZEN_ID_LIST_SHA256 = "72caeca5055237e6dbd261a741f23aaf01476a9f0093f5340940be9
 REQUIRED_HEADER = ("title", "source", "channel", "caption_track", "retrieved_at", "sha256", "takedown")
 GENERIC_LEAKS = re.compile(r"/home/|/Users/|/srv/private|\.ts\.net\b|\b192\.168\.\d|"
                            r"\bsynthetic/[a-z]+-v?\d", re.I)
+CAPTION_HEADER = "# auto/author captions, unverified"
+MACHINE_HEADER = "# machine transcript (Whisper; no YouTube captions)"
+
+
+def has_one_provenance_label(lines):
+    return sum(line in (CAPTION_HEADER, MACHINE_HEADER) for line in lines) == 1
+
+
+@pytest.mark.parametrize("lines, valid", [
+    ([CAPTION_HEADER], True),
+    ([MACHINE_HEADER], True),
+    ([], False),
+    ([CAPTION_HEADER, MACHINE_HEADER], False),
+    ([CAPTION_HEADER, CAPTION_HEADER], False),
+])
+def test_provenance_label_contract(lines, valid):
+    assert has_one_provenance_label(lines) is valid
 
 
 def split_header(text: str):
@@ -188,8 +205,8 @@ def test_machine_transcript_needs_flag_and_never_claims_captions(tmp_path: Path)
     assert "VIDWHSP0003" not in report["held"]
     text = (out / "transcripts" / "VIDWHSP0003.txt").read_text(encoding="utf-8")
     lines, _ = split_header(text)
-    assert "# " + ic.MACHINE_LABEL in lines
-    assert ic.CAPTION_LABEL not in text
+    assert "# machine transcript (Whisper; no YouTube captions)" in lines
+    assert "# auto/author captions, unverified" not in lines
 
 
 def test_analysis_projection_is_allowlisted_and_verified(tmp_path: Path) -> None:
@@ -295,7 +312,7 @@ def test_repo_transcripts_have_required_header() -> None:
             failures.append((path.name, missing))
         elif fields["sha256"] != hashlib.sha256(body.encode("utf-8")).hexdigest():
             failures.append((path.name, "sha256"))
-        elif "# " + ic.CAPTION_LABEL not in lines and "# " + ic.MACHINE_LABEL not in lines:
+        elif not has_one_provenance_label(lines):
             failures.append((path.name, "label"))
         elif body.startswith("#") or not body.strip() or GENERIC_LEAKS.search(text):
             failures.append((path.name, "body"))

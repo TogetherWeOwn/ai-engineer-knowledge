@@ -91,6 +91,8 @@ def reference_problems(path: Path, vid: str, text: str) -> tuple[list[str], str]
         problems.append("sha256 does not match the caption body")
     if UNVERIFIED_LABEL not in header:
         problems.append("header lacks the unverified-captions label")
+    if "machine transcript (Whisper; no YouTube captions)" in header:
+        problems.append("machine transcripts cannot be caption canary references")
     if not body.strip():
         problems.append("caption body is empty")
     _ = path

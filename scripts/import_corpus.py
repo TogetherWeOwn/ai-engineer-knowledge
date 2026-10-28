@@ -46,7 +46,7 @@ from pathlib import Path
 WATCH_PREFIX = "https://www.youtube.com/watch?v="
 CHANNEL_CREDIT = "AI Engineer (https://www.youtube.com/@aiDotEngineer)"
 CAPTION_LABEL = "auto/author captions, unverified"
-MACHINE_LABEL = "machine transcript (Whisper; no YouTube captions), unverified"
+MACHINE_LABEL = "machine transcript (Whisper; no YouTube captions)"
 TAKEDOWN = "rights holders may open an issue on this repository to have this file removed"
 EXPORT_VERSION = "public-1"
 VIDEO_ID = re.compile(r"[A-Za-z0-9_-]{6,64}")
@@ -543,7 +543,7 @@ def run(src: Path, out: Path, exported_at: str, private: dict, include_machine: 
             raise ImportError_(f"unsafe transcript name: {path.name}")
         raw = parse_raw_transcript(path)
         if raw.get("source") == "whisper" and not include_machine:
-            report["held"][vid] = "machine transcript (label contract pending)"
+            report["held"][vid] = "machine transcript (use --include-machine-transcripts)"
             continue
         if raw.get("retrieved_at"):
             retrieved_at = iso_z(parse_z(raw["retrieved_at"]))

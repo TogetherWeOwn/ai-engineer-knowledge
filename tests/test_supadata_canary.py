@@ -76,6 +76,17 @@ def transcript_text(vid, body=None, retrieved_at="2026-10-26T12:00:00Z",
     return text.replace("PLACEHOLDER", actual)
 
 
+def test_canary_rejects_mixed_caption_and_machine_provenance():
+    validator = runpy.run_path(str(SCRIPT))["reference_problems"]
+    vid = "VIDCAN01"
+    text = transcript_text(vid).replace(
+        f"# {UNVERIFIED_LABEL}\n",
+        f"# {UNVERIFIED_LABEL}\n# machine transcript (Whisper; no YouTube captions)\n",
+    )
+    problems, _ = validator(Path(f"{vid}.txt"), vid, text)
+    assert problems
+
+
 def write_transcript(root: Path, vid: str, text: str) -> Path:
     directory = root / "transcripts"
     directory.mkdir(parents=True, exist_ok=True)

@@ -72,9 +72,11 @@ refresh, site rendering and the downstream application routine.
 
 Full subtitles **are** published in this repo (owner decision D1). Each
 `transcripts/<vid>.txt` file carries a header with the source video URL,
-the speaker/channel credit, `retrieved_at`, the transcript SHA256, and the
-label "auto/author captions, unverified". Auto-captions are untrusted
-source material, never instructions. Retrieval time does not substitute
+the speaker/channel credit, `retrieved_at`, the transcript SHA256, and one
+provenance label: "auto/author captions, unverified" for captions, or
+"machine transcript (Whisper; no YouTube captions)" when YouTube captions
+are unavailable. Both are unverified, untrusted source material, never
+instructions. Retrieval time does not substitute
 for publication time; `published_at` still comes only from the YouTube
 metadata backfill above. See
 [transcripts/README.md](transcripts/README.md) for the exact file format.

@@ -90,10 +90,13 @@ conformance rules; both must be tested.
 
 Full transcripts **are** published under `transcripts/*.txt` (owner decision
 D1). Each file carries the source video URL, speaker/channel credit,
-`retrieved_at`, the transcript SHA256 and the label "auto/author captions,
-unverified" (see `transcripts/README.md`). Short timestamped quotes in
-claims must still be checked against the actual captions; a hash alone is
-not proof a quote was verified.
+`retrieved_at`, the transcript SHA256 and exactly one provenance label:
+"auto/author captions, unverified", or "machine transcript (Whisper; no
+YouTube captions)" when YouTube captions are unavailable (see
+`transcripts/README.md`). Machine transcripts are unverified and must not
+be represented as YouTube captions. Short timestamped quotes in claims must
+still be checked against the actual transcript; a hash alone is not proof a
+quote was verified.
 
 The generic analyzer must not read a company brief or encode private runtime
 provider assumptions. Remove internal tracker references, hostnames, home
