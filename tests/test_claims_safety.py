@@ -9,7 +9,7 @@ import pytest
 from test_claims_acceptance import (
     CONTEXT_ID, CONTEXT_VID, NEW_VID, add_followup,
     assert_rejected_without_writes, current_claim, generated_snapshot,
-    proposals, run_generator, seed_corpus, snapshot, write_json,
+    proposals, run_generator, seed_corpus, snapshot, write_json, write_transcript,
 )
 
 
@@ -109,6 +109,7 @@ def test_old_unknown_evidence_prevents_age_proof_even_after_dated_support(tmp_pa
     second = add_followup(tmp_path, "2025-04-15T00:00:00Z")
     second_vid = "FOLLOWUP002"
     second.update(vid=second_vid, source=f"https://www.youtube.com/watch?v={second_vid}")
+    write_transcript(tmp_path, second, second["takeaways"][0]["evidence_quote"])
     write_json(tmp_path / "analysis" / f"{second_vid}.json", second)
     add_followup(tmp_path, "2025-01-15T00:00:00Z")
     path = proposals(tmp_path, "contradicts", vid=second_vid)
@@ -129,6 +130,7 @@ def test_late_support_cannot_rewrite_previously_archived_evidence(tmp_path: Path
     late = add_followup(tmp_path, "2025-01-20T00:00:00Z")
     second_vid = "FOLLOWUP002"
     late.update(vid=second_vid, source=f"https://www.youtube.com/watch?v={second_vid}")
+    write_transcript(tmp_path, late, late["takeaways"][0]["evidence_quote"])
     write_json(tmp_path / "analysis" / f"{second_vid}.json", late)
     add_followup(tmp_path, "2025-02-01T00:00:00Z")
     path = proposals(tmp_path, "supports", vid=second_vid)
