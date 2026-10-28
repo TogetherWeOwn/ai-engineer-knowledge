@@ -6,8 +6,13 @@ egress path matches future automation.
 
 ## Gate (all must hold)
 
-- Exactly 5 videos, each with a conforming `transcripts/<vid>.txt` reference
-  (D1 header rules in `transcripts/README.md`).
+- Exactly 5 videos, each with a conforming **YouTube-caption**
+  `transcripts/<vid>.txt` reference (D1 header rules in
+  `transcripts/README.md`). Each must contain exactly one complete
+  `# auto/author captions, unverified` line. Machine-only, mixed, duplicate
+  or missing provenance labels fail the reference gate before fetching that
+  video. A Whisper transcript may conform to the corpus contract when no
+  captions exist, but it is never a native-caption canary reference.
 - Each fetch is `GET /v1/youtube/transcript` with `videoId`, `lang=en`,
   `mode=native`, `text=true` and the repo secret `SUPADATA_API_KEY` in the
   `x-api-key` header.

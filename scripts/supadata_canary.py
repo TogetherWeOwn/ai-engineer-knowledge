@@ -32,6 +32,7 @@ MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 VIDEO_ID = re.compile(r"[A-Za-z0-9_-]{1,64}")
 WATCH_PREFIX = "https://www.youtube.com/watch?v="
 UNVERIFIED_LABEL = "auto/author captions, unverified"
+MACHINE_LABEL = "machine transcript (Whisper; no YouTube captions)"
 TIMESTAMP_TOKEN = re.compile(r"^\[?\(?<?\d{1,2}:\d{2}(:\d{2})?([.,]\d+)?\]?\)?>?$")
 ARROW_TOKEN = re.compile(r"^-->$")
 NORMALIZATION = (
@@ -89,8 +90,9 @@ def reference_problems(path: Path, vid: str, text: str) -> tuple[list[str], str]
         problems.append("sha256 is not a 64-character hex digest")
     elif digest.group(1).lower() != hashlib.sha256(body.encode("utf-8")).hexdigest():
         problems.append("sha256 does not match the caption body")
-    if UNVERIFIED_LABEL not in header:
-        problems.append("header lacks the unverified-captions label")
+    comments = [line[1:].strip() for line in header_lines]
+    if comments.count(UNVERIFIED_LABEL) != 1 or MACHINE_LABEL in comments:
+        problems.append("canary reference requires exactly one caption label and no machine label")
     if not body.strip():
         problems.append("caption body is empty")
     _ = path

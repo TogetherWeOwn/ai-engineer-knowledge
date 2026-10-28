@@ -90,10 +90,20 @@ conformance rules; both must be tested.
 
 Full transcripts **are** published under `transcripts/*.txt` (owner decision
 D1). Each file carries the source video URL, speaker/channel credit,
-`retrieved_at`, the transcript SHA256 and the label "auto/author captions,
-unverified" (see `transcripts/README.md`). Short timestamped quotes in
-claims must still be checked against the actual captions; a hash alone is
-not proof a quote was verified.
+`retrieved_at`, the transcript SHA256 and exactly one complete provenance line:
+`# auto/author captions, unverified` for YouTube captions, or
+`# machine transcript (Whisper; no YouTube captions)` for Whisper output only
+when no YouTube caption track exists. Both labels together, duplicate labels
+and missing labels fail conformance (see `transcripts/README.md`). Do not
+replace available captions with machine output. Short timestamped quotes in
+claims must still be checked against the actual captions, or source audio
+for a machine transcript; a hash alone is not proof a quote was verified.
+
+Corpus conformance and caption-canary eligibility are separate gates. The
+canary requires exactly one caption label and rejects machine, mixed or
+ambiguous provenance, even if the text happens to match native captions.
+Admitting a labeled machine transcript to the corpus never authorizes bulk
+caption retrieval.
 
 The generic analyzer must not read a company brief or encode private runtime
 provider assumptions. Remove internal tracker references, hostnames, home
