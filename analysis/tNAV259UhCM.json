@@ -1,0 +1,73 @@
+{
+  "vid": "tNAV259UhCM",
+  "title": "From 15% to 90% GPU Utilization: Fix the Data Pipeline, Not the Model",
+  "source": "https://www.youtube.com/watch?v=tNAV259UhCM",
+  "talk_summary": "A multimodal SFT training pipeline was GPU-starved (15% utilization) because data loading, preprocessing, and transport were serial and synchronous. Adding concurrency, prefetching, zero-copy object references, and spread scheduling raised utilization to ~90% and gave 50% extra throughput at scale.",
+  "takeaways": [
+    {
+      "area": "orchestration-multi-agent",
+      "technique": "Prefetch work ahead of the consumer",
+      "what_they_do": "A background producer fills a queue ahead of the trainer so data is ready on demand instead of fetched when requested.",
+      "evidence_quote": null,
+      "evidence_quote_verification": "not-found-in-captions",
+      "numbers": "data fetch/processing per batch dropped to ~0s; wait ratio 85% -> 20%",
+      "confidence": "medium"
+    },
+    {
+      "area": "sandbox-infra",
+      "technique": "Match concurrency primitive to bottleneck",
+      "what_they_do": "They chose async IO for network fetches and process workers for CPU-bound image work rather than one lever everywhere.",
+      "evidence_quote": "we need to match our bottleneck. Not simply going with a lever that's worked for us before",
+      "evidence_quote_verification": "normalized-exact",
+      "evidence_timestamp": "08:04",
+      "numbers": "25% speedup from concurrency alone",
+      "confidence": "medium"
+    },
+    {
+      "area": "sandbox-infra",
+      "technique": "Zero-copy object references instead of passing payloads",
+      "what_they_do": "Samples carry a pointer to a shared object store rather than being pickled/copied between processes.",
+      "evidence_quote": "Each sample carries a object reference which is just a pointer to the data",
+      "evidence_quote_verification": "normalized-exact",
+      "evidence_timestamp": "11:27",
+      "numbers": "eliminated extraneous put_object calls; comm cost and wait ratio down",
+      "confidence": "medium"
+    },
+    {
+      "area": "orchestration-multi-agent",
+      "technique": "Spread scheduling to avoid single-node bottleneck",
+      "what_they_do": "Ray colocated workers by default, saturating one NIC; spreading workers across nodes plus zero-copy retrieval fixed it at scale.",
+      "evidence_quote": "it's easy to bottleneck one machine before you move to another machine",
+      "evidence_quote_verification": "normalized-exact",
+      "evidence_timestamp": "13:55",
+      "numbers": "50% additional throughput at scale from two flags",
+      "confidence": "medium"
+    },
+    {
+      "area": "evals",
+      "technique": "Ablate across the scaling ladder",
+      "what_they_do": "Flags that showed no benefit small-scale had a synergistic effect at large scale, so they tested at both sizes.",
+      "evidence_quote": "config can do poorly at a small scale but can do really good at a larger scale",
+      "evidence_quote_verification": "normalized-exact",
+      "evidence_timestamp": "14:46",
+      "numbers": "neither flag helped small-scale; together +50% at scale",
+      "confidence": "medium"
+    },
+    {
+      "area": "orchestration-multi-agent",
+      "technique": "Profile the baseline to find the real bottleneck",
+      "what_they_do": "They used flame graphs to discover time was in S3 loads, not the model, before optimizing.",
+      "evidence_quote": "profiling your baseline helps you move the needle",
+      "evidence_quote_verification": "normalized-exact",
+      "evidence_timestamp": "16:33",
+      "numbers": "baseline 85% of time on data acquisition",
+      "confidence": "high"
+    }
+  ],
+  "truncated": false,
+  "analyzed_at": "2026-10-23T20:02:11Z",
+  "analyzer": "deepseek-v4.1-flash",
+  "transcript_file": "transcripts/tNAV259UhCM.txt",
+  "transcript_sha256": "975bc07bb2a1afbb551f5846a218a77aa4fb30e8f114acecaa3639bfd518e37a",
+  "retrieved_at": "2026-10-22T03:43:22Z"
+}

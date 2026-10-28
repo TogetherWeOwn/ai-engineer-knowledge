@@ -1,0 +1,74 @@
+{
+  "vid": "SHvwutPSeZg",
+  "title": "Judge a Transaction by the Company It Keeps — Somya Rai & MD Sharique, EXL",
+  "source": "https://www.youtube.com/watch?v=SHvwutPSeZg",
+  "talk_summary": "EXL describes adding a graph neural network (GNN) over transaction/user/merchant edges to a fraud-detection pipeline, feeding GNN embeddings into the existing XGBoost model rather than replacing it, yielding ~27-33% relative TPR lift at fixed alert rate and 3ms P99 serving. The transferable engineering lessons are about leakage-by-construction, neighborhood-preserving sampling, multi-statistic aggregation, and caching precomputed embeddings to hit latency.",
+  "takeaways": [
+    {
+      "area": "evals",
+      "technique": "Leakage control by construction (disjoint time-split graphs)",
+      "what_they_do": "Each calendar month is its own disjoint graph with no cross-boundary edges, and every scalar/vocabulary is fit on the training month only then frozen, so train/val/test and future leakage are impossible by design rather than caught by post-hoc audit.",
+      "evidence_quote": "Each calendar month is its own disjoint graph. No edge overcrosses the boundary.",
+      "evidence_quote_verification": "normalized-exact",
+      "evidence_timestamp": "08:35",
+      "numbers": "4 leakage properties verified by construction",
+      "confidence": "medium"
+    },
+    {
+      "area": "context-engineering",
+      "technique": "Multi-statistic aggregation instead of mean pooling",
+      "what_they_do": "When collapsing a variable-size neighbor set into a fixed vector, they concatenate mean, max, and std rather than averaging, because a single dangerous outlier gets diluted by mean pooling.",
+      "evidence_quote": "Average those four together and you get 0.32. ... Take the max instead and it comes through untouched. 0.92.",
+      "evidence_quote_verification": "ordered-ellipsis-pieces",
+      "evidence_timestamp": "12:18",
+      "numbers": "mean 0.32 vs max 0.92 on a 3-normal/1-fraud-ring example",
+      "confidence": "medium"
+    },
+    {
+      "area": "sandbox-infra",
+      "technique": "Precompute and cache embeddings; keep per-request work O(1) in graph size",
+      "what_they_do": "They precompute per-layer representations for users/merchants offline into a low-latency store, then at request time only run the new transaction's own two-layer forward pass plus the classifier head, so nothing scaling with graph size runs per request.",
+      "evidence_quote": "Nothing that scales with graph size runs per request.",
+      "evidence_quote_verification": "normalized-exact",
+      "evidence_timestamp": "17:53",
+      "numbers": "2.3ms median, 3.1ms P99; footprint cut ~20x (60GB to 2-3GB) by caching only user/merchant embeddings",
+      "confidence": "medium"
+    },
+    {
+      "area": "orchestration-multi-agent",
+      "technique": "Neighborhood-preserving sampling (don't trim connected entities)",
+      "what_they_do": "Instead of aggressive class-ratio downsampling that severs edges, they keep each selected user's full transaction history and never cap fraud users, handling imbalance downstream with balanced batch sampling.",
+      "evidence_quote": "If you trim a genuine user's history to hit a class ratio, you break the connectivity their neighbors depend on.",
+      "evidence_quote_verification": "normalized-exact",
+      "evidence_timestamp": "07:25",
+      "numbers": "training-time avg user degree 11.5-14 matches inference",
+      "confidence": "low"
+    },
+    {
+      "area": "model-routing",
+      "technique": "Add a learned layer, keep the existing model as the head",
+      "what_they_do": "They did not replace XGBoost; the GNN produces embeddings that feed the same gradient-boosted model, isolating the gain to the added representation layer.",
+      "evidence_quote": "We did not replace XG post. We fed it.",
+      "evidence_quote_verification": "normalized-exact",
+      "evidence_timestamp": "04:13",
+      "numbers": "27-33% relative TPR lift over baseline at same alert rate",
+      "confidence": "low"
+    },
+    {
+      "area": "other",
+      "technique": "Pin math-library thread pools before heavy libraries load",
+      "what_they_do": "They pin math library thread pools to one before heavy libraries load, which alone cut latency dramatically, plus warm the model at startup so the first request isn't slow.",
+      "evidence_quote": "We pin math library thread pulls to one before the heavy libraries even load. That alone is the difference between 30 milliseconds and one.",
+      "evidence_quote_verification": "normalized-exact",
+      "evidence_timestamp": "18:01",
+      "numbers": "30ms to 1ms from thread pinning alone",
+      "confidence": "low"
+    }
+  ],
+  "truncated": false,
+  "analyzed_at": "2026-10-23T20:01:26Z",
+  "analyzer": "deepseek-v4.1-flash",
+  "transcript_file": "transcripts/SHvwutPSeZg.txt",
+  "transcript_sha256": "cf1d7804dd8ae7b792284a5442e247a6cf97f33f53792ee5d2bf286323ae7e2b",
+  "retrieved_at": "2026-10-22T02:59:32Z"
+}

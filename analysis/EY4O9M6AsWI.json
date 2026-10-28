@@ -1,0 +1,74 @@
+{
+  "vid": "EY4O9M6AsWI",
+  "title": "Dream Machine: Scaling to 1m users in 4 days — Keegan McCallum, Luma AI",
+  "source": "https://www.youtube.com/watch?v=EY4O9M6AsWI",
+  "talk_summary": "Luma AI's infra lead recounts scaling Dream Machine from 500 to ~9,000 H100s in days, replacing brittle Triton serving with a decoupled PyTorch-based pull-queue architecture, and fixing work starvation with SLO-percentage-based fair scheduling. The transferable core is queue/scheduling design and immutable versioned model rollouts, not GPU specifics.",
+  "takeaways": [
+    {
+      "area": "orchestration-multi-agent",
+      "technique": "SLO-percentage fair scheduling for work queues",
+      "what_they_do": "Instead of naive priority order (which starves low tiers) or raw aging, they rank queued jobs by the percentage of their tier's SLO already consumed, so a 1-min-waiting API job competes equally with a 10-min-waiting free job.",
+      "evidence_quote": "we ranked the jobs by the percentage of their SLO um that they that they were at",
+      "evidence_quote_verification": "normalized-exact",
+      "evidence_timestamp": "13:01",
+      "numbers": "free-tier users previously waited 7-9 hours under naive priority",
+      "confidence": "high"
+    },
+    {
+      "area": "sandbox-infra",
+      "technique": "Decoupled pull-based workers over shared queue + storage",
+      "what_they_do": "CPU workers and GPU workers are decoupled; any worker anywhere connects to Redis and distributed storage (SeaweedFS) over Tailscale and pulls from a global queue, so new capacity needs no special provisioning.",
+      "evidence_quote": "you can actually run the GPUs anywhere as long as you can connect to Reddus and our distributed storage",
+      "evidence_quote_verification": "normalized-exact",
+      "evidence_timestamp": "07:04",
+      "numbers": "scaled 500 -> ~5,000 H100s in 6 hours, later ~9,000 total",
+      "confidence": "medium"
+    },
+    {
+      "area": "orchestration-multi-agent",
+      "technique": "Dispatch limitation / back-pressure cap per cluster",
+      "what_they_do": "They cap how many jobs can sit in the 'pulled but not yet picked up by a worker' state per cluster, so one cluster's CPU workers don't hoard jobs that another cluster could process.",
+      "evidence_quote": "you can put a limitation on like how many jobs are in that state so that you can avoid this this issue",
+      "evidence_quote_verification": "normalized-exact",
+      "evidence_timestamp": "08:25",
+      "numbers": null,
+      "confidence": "medium"
+    },
+    {
+      "area": "sandbox-infra",
+      "technique": "Immutable versioned model/env repo with YAML active pointer",
+      "what_they_do": "Each model is a folder in object storage with immutable versioned subfolders containing checkpoints and the full Python environment; a root YAML names the active version, and workers hot-swap versions without restarting.",
+      "evidence_quote": "you have a simple YAML file in the root of the model folder that lets you define which one's active",
+      "evidence_quote_verification": "normalized-exact",
+      "evidence_timestamp": "13:58",
+      "numbers": null,
+      "confidence": "medium"
+    },
+    {
+      "area": "model-routing",
+      "technique": "Avoid wasteful cold-start autoscaling for heavy models",
+      "what_they_do": "Because models are 10-20 submodels with long compile/warmup, traditional autoscaling wastes 10-20 min of GPU time per cold start; they keep warm pools and scale on the training cluster instead.",
+      "evidence_quote": "traditional autoscaling is super wasteful. You're wasting, you know, 10 20 minutes of GPU time just warming things up",
+      "evidence_quote_verification": "normalized-exact",
+      "evidence_timestamp": "08:59",
+      "numbers": "10-20 minutes wasted per cold start",
+      "confidence": "low"
+    },
+    {
+      "area": "other",
+      "technique": "Product-defined SLOs as the aging function",
+      "what_they_do": "Rather than engineers guessing an aging curve, the product team defines worst-case acceptable wait per tier, and that config drives scheduling thresholds (e.g., promote at 50% of SLO).",
+      "evidence_quote": "this is a product problem and it really comes down to how long worst case are you okay with different tiers waiting",
+      "evidence_quote_verification": "normalized-exact",
+      "evidence_timestamp": "11:58",
+      "numbers": null,
+      "confidence": "medium"
+    }
+  ],
+  "truncated": false,
+  "analyzed_at": "2026-10-23T20:19:54Z",
+  "analyzer": "deepseek-v4.1-flash",
+  "transcript_file": "transcripts/EY4O9M6AsWI.txt",
+  "transcript_sha256": "25ecd6a215478df7721d45c490de7d4120613bb58bbd37906b4b2b9bb658ae46",
+  "retrieved_at": "2026-10-22T11:44:30Z"
+}
