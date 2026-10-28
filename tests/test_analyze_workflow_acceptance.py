@@ -409,3 +409,12 @@ def test_dash_leading_video_ids_reach_the_analyzer_as_one_argument():
     parser = argparse.ArgumentParser()
     parser.add_argument("--vid")
     assert parser.parse_args(['--vid=-561cZmir5Q']).vid == "-561cZmir5Q"
+
+
+def test_all_repository_workflow_actions_are_pinned_to_full_commit_shas():
+    for path in sorted(WORKFLOW.parent.glob('*.yml')):
+        data = yaml.load(path.read_text(encoding='utf-8'), Loader=yaml.BaseLoader)
+        for job in data.get('jobs', {}).values():
+            for step in steps(job):
+                if 'uses' in step:
+                    assert re.fullmatch(r'[^@]+@[0-9a-f]{40}', step['uses']), str(path)

@@ -28,7 +28,8 @@ by ``backfill_publish_dates.py``) is carried over.
 
 Usage:
   uv run --no-project --python 3.12 -- python -I scripts/import_corpus.py \\
-      --src <corpus dir> --out <checkout> --exported-at 2026-10-28T03:00:00Z
+      --src <corpus dir> --out <checkout> --exported-at 2026-10-28T03:00:00Z \\
+      --private-terms <local policy.json>
 """
 
 from __future__ import annotations
@@ -535,6 +536,20 @@ def run(src: Path, out: Path, exported_at: str, private: dict, include_machine: 
     scrub = Scrubber(private.get("sentence_terms", []))
     gate = Gate(private.get("deny_regexes", []), private.get("deny_literals", []))
     tdir = src / "transcripts"
+    adir = src / "analysis"
+    source_paths = {}
+    for directory, pattern in ((tdir, "*.txt"), (adir, "*.json")):
+        if not directory.is_dir():
+            raise ImportError_(f"missing source directory: {directory}")
+        paths = sorted(directory.glob(pattern))
+        if not paths:
+            raise ImportError_(f"empty source directory: {directory}")
+        source_paths[directory.name] = paths
+        source_names = {path.name for path in paths}
+        missing = sorted(path.name for path in (out / directory.name).glob(pattern)
+                         if path.name not in source_names)
+        if missing:
+            raise ImportError_(f"incomplete {directory.name} source: missing {len(missing)} existing files")
     run_log = load_run_log(tdir / "run.log")
     models = load_manifest_models(tdir / "manifest.jsonl")
     report = {"retrieved_at": {"run_log": 0, "mtime": 0, "header": 0}, "held": {}, "quotes": {},
@@ -543,7 +558,7 @@ def run(src: Path, out: Path, exported_at: str, private: dict, include_machine: 
     files: dict[str, str] = {}
     transcripts: dict[str, dict] = {}
     captions: dict[str, Caption] = {}
-    for path in sorted(tdir.glob("*.txt")):
+    for path in source_paths["transcripts"]:
         vid = path.stem
         if not VIDEO_ID.fullmatch(vid) or path.is_symlink():
             raise ImportError_(f"unsafe transcript name: {path.name}")
@@ -572,8 +587,11 @@ def run(src: Path, out: Path, exported_at: str, private: dict, include_machine: 
         transcripts[vid] = {"sha256": sha256_text(raw["body"]), "retrieved_at": retrieved_at}
         captions[vid] = Caption(raw["body"])
 
+    if not transcripts:
+        raise ImportError_("no transcripts eligible for export")
+
     analyses = 0
-    for path in sorted((src / "analysis").glob("*.json")):
+    for path in source_paths["analysis"]:
         raw = json.loads(path.read_text(encoding="utf-8"))
         vid = raw.get("vid")
         if not isinstance(vid, str) or vid != path.stem:
@@ -596,9 +614,24 @@ def run(src: Path, out: Path, exported_at: str, private: dict, include_machine: 
     for rel, text in files.items():
         if rel.startswith("transcripts/"):
             continue
-        problems = gate.problems(text)
+        # Scan decoded keys and values as well as serialized output. JSON escaping
+        # can otherwise hide whitespace or punctuation from policy patterns.
+        def strings(value):
+            if isinstance(value, str):
+                yield value
+            elif isinstance(value, dict):
+                for key, child in value.items():
+                    yield key
+                    yield from strings(child)
+            elif isinstance(value, list):
+                for child in value:
+                    yield from strings(child)
+
+        problems = set(gate.problems(text))
+        for value in strings(json.loads(text)):
+            problems.update(gate.problems(value))
         if problems:
-            raise ImportError_(f"leak gate blocked {rel}: {','.join(problems)}")
+            raise ImportError_(f"leak gate blocked {rel}: {','.join(sorted(problems))}")
 
     for pattern in ("transcripts/*.txt", "analysis/*.json"):
         for stale in out.glob(pattern):

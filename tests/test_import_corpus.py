@@ -435,3 +435,40 @@ def test_cli_refuses_to_export_without_private_policy(tmp_path: Path) -> None:
     assert ic.main(["--src", str(src), "--out", str(out), "--exported-at", "2026-10-28T00:00:00Z",
                     "--private-terms", str(empty)]) == 2
     assert not out.exists() or not any(out.rglob("*.json"))
+
+
+def test_decoded_json_strings_are_scanned_before_any_write(tmp_path):
+    src = make_corpus(tmp_path)
+    path = src / 'analysis' / 'VIDAAAA0001.json'
+    data = json.loads(path.read_text())
+    data['talk_summary'] = 'A confidential\nproject was discussed.'
+    path.write_text(json.dumps(data))
+    out = tmp_path / 'out'
+    out.mkdir()
+    (out / 'existing.txt').write_text('unchanged')
+    before = tree_bytes(out)
+    with pytest.raises(ic.ImportError_, match='leak gate'):
+        run_import(src, out, private={'deny_regexes': [r'confidential\s+project']})
+    assert tree_bytes(out) == before
+
+
+@pytest.mark.parametrize('damage', ['missing_transcripts', 'missing_analysis', 'empty_transcripts', 'empty_analysis', 'partial_transcripts', 'partial_analysis'])
+def test_incomplete_source_never_changes_existing_output(tmp_path, damage):
+    src = make_corpus(tmp_path)
+    out = tmp_path / 'out'
+    run_import(src, out)
+    before = tree_bytes(out)
+    import shutil
+    if damage.startswith('missing_'):
+        shutil.rmtree(src / damage.removeprefix('missing_'))
+    elif damage.startswith('empty_'):
+        directory = src / damage.removeprefix('empty_')
+        for path in directory.glob('*.txt' if directory.name == 'transcripts' else '*.json'):
+            path.unlink()
+    elif damage == 'partial_transcripts':
+        (src / 'transcripts' / 'VIDAAAA0001.txt').unlink()
+    else:
+        (src / 'analysis' / 'VIDAAAA0001.json').unlink()
+    with pytest.raises(ic.ImportError_):
+        run_import(src, out)
+    assert tree_bytes(out) == before
