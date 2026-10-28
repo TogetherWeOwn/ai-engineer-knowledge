@@ -24,6 +24,12 @@ paused pending real publication-date coverage and the separate live gates.
   YouTube Data API v3 `videos.list` -> `snippet.publishedAt`, stored verbatim.
   Missing dates remain missing until resolved. Date-only or timezone-naive values are not
   adequate for coverage or supersession.
+- `transcript_file` must reference an existing transcript under `transcripts/`.
+  Before using its speaker or quotes, the generator requires a unique header
+  `source` equal to the analysis video's canonical watch URL. Both the unique
+  header `sha256` and analysis `transcript_sha256` must match the exact UTF-8
+  body, including its original newlines. Missing or mismatched joins reject
+  the complete request before any output writes, including in `--check`.
 - Transcript SHA256 and `retrieved_at` are public provenance; retrieval time
   does not substitute for publication time. Keep the source video URL, title
   and speaker when available; do not invent missing metadata.

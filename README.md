@@ -39,8 +39,9 @@ is atomic per file, not transactional across the corpus; rerun `--check` after
 a filesystem failure. Use one writer per corpus snapshot.
 
 A free, repo-scoped `YOUTUBE_API_KEY` is required for live metadata lookup.
-No key is included in this repo; live backfill and real-corpus coverage are
-not verified yet.
+No key is included in this repo. A live metadata backfill on a scratch copy
+of the import was verified on 2026-10-28 (see Develop); those data changes must
+be integrated separately before the checked-in corpus can claim coverage.
 
 ## Corrected bundle contract
 
@@ -116,9 +117,15 @@ python3 scripts/generate_claims.py --root /path/to/corpus --check
 KB_ACCEPTANCE_ROOT=/path/to/corpus python3 -m pytest tests/test_real_corpus_acceptance.py -q
 ```
 
-The six real-corpus tests are opt-in and otherwise report skipped. The import
-snapshot `ec78d8f` yields 475/475 frozen claims, passes OKF and transcript/hash
-conformance, and preserves all input bytes. It has **0/1398** dated videos:
-its >=95% publication-date gate fails. Fixture success must not be represented
-as full corpus or publication acceptance. Backfill real metadata before
-re-running that gate; never substitute retrieval/analysis times.
+The six real-corpus tests are opt-in and otherwise report skipped. The unchanged
+import snapshot `ec78d8f` has **0/1398** dated videos and fails the >=95% gate.
+On 2026-10-28, the existing backfill script fetched genuine `snippet.publishedAt`
+metadata for **1398/1398** videos in a scratch copy using 28 `videos.list`
+requests. Only `published_at` changed in those analyses; all transcript and
+frozen-catalog bytes were preserved. Regeneration yielded 475/475 frozen claims
+and all six real-corpus tests passed, including OKF and transcript/hash joins.
+Generation replay changed zero files and offline `--check` passed. This is
+scratch-corpus evidence, not a claim that the unchanged import, remote CI,
+live refresh, caption canary or site publication is accepted. Integrate the
+genuine date backfill before re-running the gate on the imported branch;
+never substitute retrieval/analysis times.

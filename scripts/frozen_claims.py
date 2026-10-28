@@ -188,32 +188,45 @@ class Evidence:
             require(isinstance(relative, str) and relative.startswith("transcripts/"),
                     "invalid_transcript_path", "Transcript references must stay under transcripts/.")
             path = safe_path(self.root, relative)
+            require(path.is_file(), "missing_transcript", "Every evidence source needs its referenced transcript.")
+            # Hash the exact UTF-8 body, including newlines, before normalization.
+            # read_text() would silently translate CRLF and hide byte changes.
+            lines = path.read_bytes().decode("utf-8").split("\n")
             header, body, spans = {}, [], defaultdict(list)
+            index = 0
+            while index < len(lines) and lines[index].startswith("#"):
+                line = lines[index].rstrip("\r")
+                key, sep, value = line[1:].strip().partition(":")
+                if sep:
+                    key = key.strip()
+                    require(key not in header, "ambiguous_transcript_header",
+                            "Transcript header fields must not be duplicated.")
+                    header[key] = value.strip()
+                if line == "# auto/author captions, unverified":
+                    header["native_labels"] = header.get("native_labels", 0) + 1
+                if line.startswith("# machine transcript"):
+                    header["machine"] = True
+                index += 1
+            require(header.get("source") == f"https://www.youtube.com/watch?v={vid}",
+                    "transcript_source_mismatch", "Transcript source must match its analysis video identity.")
+            digest = hashlib.sha256("\n".join(lines[index:]).encode("utf-8")).hexdigest()
+            for recorded in (header.get("sha256"), analysis.get("transcript_sha256")):
+                require(isinstance(recorded, str) and re.fullmatch(r"[0-9a-fA-F]{64}", recorded) is not None
+                        and recorded.lower() == digest, "transcript_hash_mismatch",
+                        "Transcript body must match both header and analysis SHA256 values.")
             offset, current_time = 0, None
-            if path.is_file():
-                in_header = True
-                for line in path.read_text(encoding="utf-8").splitlines():
-                    if in_header and line.startswith("#"):
-                        key, sep, value = line[1:].strip().partition(":")
-                        if sep:
-                            header[key.strip()] = value.strip()
-                        if line == "# auto/author captions, unverified":
-                            header["native_labels"] = header.get("native_labels", 0) + 1
-                        if line.startswith("# machine transcript"):
-                            header["machine"] = True
-                    else:
-                        in_header = False
-                        match = re.match(r"^\[(\d+(?::[0-5]\d){1,2})\]\s*", line)
-                        if match:
-                            current_time = timestamp_seconds(match.group(1))
-                            line = line[match.end():]
-                        text = normalized(line)
-                        if text:
-                            if body:
-                                offset += 1  # Normalized lines are joined with one space.
-                            spans[current_time].append((offset, offset + len(text)))
-                            body.append(text)
-                            offset += len(text)
+            for line in lines[index:]:
+                match = re.match(r"^\[(\d+(?::[0-5]\d){1,2})\]\s*", line)
+                if match:
+                    current_time = timestamp_seconds(match.group(1))
+                    line = line[match.end():]
+                text = normalized(line)
+                if text:
+                    if body:
+                        offset += 1  # Normalized lines are joined with one space.
+                    spans[current_time].append((offset, offset + len(text)))
+                    body.append(text)
+                    offset += len(text)
             header["timestamp_spans"] = spans
             self.transcripts[vid] = header, " ".join(body)
         return self.transcripts[vid]
