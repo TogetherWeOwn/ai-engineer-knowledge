@@ -49,3 +49,14 @@ def test_backfill_commits_only_success_or_incomplete_coverage():
     assert commit.get("if") == (
         "steps.backfill.outputs.exit_code == '0' || steps.backfill.outputs.exit_code == '1'"
     ), "error or unexpected exit status must never stage or push analysis changes"
+
+
+def test_workflow_action_refs_are_full_commit_shas():
+    import re
+    for path in sorted((ROOT / '.github' / 'workflows').glob('*.yml')):
+        document = yaml.safe_load(path.read_text())
+        for job in document.get('jobs', {}).values():
+            for step in job.get('steps', []):
+                uses = step.get('uses')
+                if uses and not uses.startswith('./'):
+                    assert re.fullmatch(r'[^@]+@[0-9a-f]{40}', uses), (path, uses)

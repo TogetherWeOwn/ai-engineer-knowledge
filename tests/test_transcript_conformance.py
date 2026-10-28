@@ -96,11 +96,15 @@ def validate_transcript(path: Path) -> list:
     elif digest.group(1).lower() != hashlib.sha256(body.encode("utf-8")).hexdigest():
         problems.append("sha256 does not match the caption body")
 
-    native = re.search(rf"^#\s*{re.escape(UNVERIFIED_LABEL)}\s*$", header, re.M)
-    machine = re.search(
-        rf"^#\s*{re.escape(MACHINE_LABEL)}(?P<unverified>,\s*unverified)?\s*$",
+    native_labels = list(re.finditer(rf"^#[ \t]*{re.escape(UNVERIFIED_LABEL)}[ \t]*$", header, re.M))
+    machine_labels = list(re.finditer(
+        rf"^#[ \t]*{re.escape(MACHINE_LABEL)}(?P<unverified>,[ \t]*unverified)?[ \t]*$",
         header, re.M,
-    )
+    ))
+    native = native_labels[0] if native_labels else None
+    machine = machine_labels[0] if machine_labels else None
+    if len(native_labels) + len(machine_labels) > 1:
+        problems.append("header must contain exactly one provenance label")
     if machine:
         if native:
             problems.append("machine transcript must not also claim to be native captions")
@@ -267,3 +271,16 @@ def test_transcripts_readme_documents_format() -> None:
     readme = (TRANSCRIPTS / "README.md").read_text(encoding="utf-8").lower()
     for token in ("source:", "retrieved_at", "sha256", "unverified"):
         assert token in readme, f"transcripts/README.md must document {token}"
+
+
+@pytest.mark.parametrize('machine', [False, True])
+def test_duplicate_provenance_labels_are_rejected(tmp_path, machine):
+    if machine:
+        text = machine_transcript_text().replace(
+            f'# {MACHINE_LABEL}, unverified',
+            f'# {MACHINE_LABEL}, unverified\n# {MACHINE_LABEL}, unverified')
+        vid = 'ySYLsoAhXmg'
+    else:
+        text = transcript_text(extra=(f'# {UNVERIFIED_LABEL}',))
+        vid = 'VIDDEMO01'
+    assert validate_transcript(write_transcript(tmp_path, vid, text))
