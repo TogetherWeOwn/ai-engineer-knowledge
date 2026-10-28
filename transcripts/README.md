@@ -12,7 +12,9 @@ Each file starts with a `#`-comment header carrying:
 - exactly one provenance label, on its own line:
   - `# auto/author captions, unverified` for YouTube captions; or
   - `# machine transcript (Whisper; no YouTube captions)` only for a Whisper
-    transcript of a video with no YouTube caption track.
+    transcript of a video with no YouTube caption track. This exact label also
+    requires a separate `# unverified` header line (alternatively append
+    `, unverified` to the machine label).
 
 Never include both labels, duplicate a label, or present Whisper output as
 YouTube captions. Use real captions verbatim when a caption track exists.

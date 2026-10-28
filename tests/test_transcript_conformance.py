@@ -64,6 +64,13 @@ def validate_transcript(path: Path) -> list:
         return [f"unreadable as utf-8 text: {exc}"]
     header_lines, body = split_header(text)
     header = "\n".join(header_lines)
+    fields = []
+    for line in header_lines:
+        key, separator, _ = line[1:].strip().partition(":")
+        if separator:
+            fields.append(key.strip())
+    if len(fields) != len(set(fields)):
+        problems.append("header fields must not be duplicated")
 
     source = re.search(r"^#\s*source:\s*(\S+)\s*$", header, re.M)
     if not source:
@@ -101,6 +108,10 @@ def validate_transcript(path: Path) -> list:
         rf"^#[ \t]*{re.escape(MACHINE_LABEL)}(?P<unverified>,[ \t]*unverified)?[ \t]*$",
         header, re.M,
     ))
+    recognized_machine_lines = {match.group(0) for match in machine_labels}
+    if any(line[1:].strip().casefold().startswith("machine transcript")
+           and line not in recognized_machine_lines for line in header_lines):
+        problems.append("unrecognized machine transcript marker")
     native = native_labels[0] if native_labels else None
     machine = machine_labels[0] if machine_labels else None
     if len(native_labels) + len(machine_labels) > 1:

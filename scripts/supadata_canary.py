@@ -22,7 +22,7 @@ import re
 import sys
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 ENDPOINT = "https://api.supadata.ai/v1/youtube/transcript"
 KEY_NAME = "SUPADATA_API_KEY"
@@ -39,6 +39,13 @@ NORMALIZATION = (
     "drop #-header lines; drop timestamp/--> tokens; lowercase; "
     "strip punctuation; split on whitespace"
 )
+
+
+class NoRedirect(HTTPRedirectHandler):
+    """Never forward the authenticated request, even to another HTTPS host."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
 
 
 class CanaryError(Exception):
@@ -61,6 +68,13 @@ def reference_problems(path: Path, vid: str, text: str) -> tuple[list[str], str]
     problems = []
     header_lines, body = split_reference(text)
     header = "\n".join(header_lines)
+    fields = []
+    for line in header_lines:
+        key, separator, _ = line[1:].strip().partition(":")
+        if separator:
+            fields.append(key.strip())
+    if len(fields) != len(set(fields)):
+        problems.append("header fields must not be duplicated")
     source = re.search(r"^#\s*source:\s*(\S+)\s*$", header, re.M)
     if not source:
         problems.append("header lacks a 'source:' line")
@@ -91,8 +105,9 @@ def reference_problems(path: Path, vid: str, text: str) -> tuple[list[str], str]
     elif digest.group(1).lower() != hashlib.sha256(body.encode("utf-8")).hexdigest():
         problems.append("sha256 does not match the caption body")
     comments = [line[1:].strip() for line in header_lines]
-    if comments.count(UNVERIFIED_LABEL) != 1 or MACHINE_LABEL in comments:
-        problems.append("canary reference requires exactly one caption label and no machine label")
+    if (comments.count(UNVERIFIED_LABEL) != 1
+            or any(comment.casefold().startswith("machine transcript") for comment in comments)):
+        problems.append("canary reference requires exactly one caption label and no machine marker")
     if not body.strip():
         problems.append("caption body is empty")
     _ = path
@@ -113,7 +128,7 @@ def normalize_words(body: str) -> list[str]:
 def word_similarity(reference: list[str], fetched: list[str]) -> float:
     if not reference or not fetched:
         return 0.0
-    return SequenceMatcher(None, reference, fetched).ratio()
+    return SequenceMatcher(None, reference, fetched, autojunk=False).ratio()
 
 
 def fetch_caption(vid: str, key: str) -> tuple[int | None, str | None, str]:
@@ -122,7 +137,7 @@ def fetch_caption(vid: str, key: str) -> tuple[int | None, str | None, str]:
     request = Request(ENDPOINT + "?" + query,
                       headers={"x-api-key": key, "Accept": "application/json"})
     try:
-        with urlopen(request, timeout=30) as response:
+        with build_opener(NoRedirect()).open(request, timeout=30) as response:
             status = getattr(response, "status", 200)
             raw = response.read(MAX_RESPONSE_BYTES + 1)
     except HTTPError as exc:
@@ -228,8 +243,16 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(report, indent=2, sort_keys=True))
         return 0 if report["overall"] == "pass" else 1
     except CanaryError as exc:
-        print(json.dumps({"schema": "supadata-canary.v1", "status": "error",
-                          "code": exc.code, "next_action": exc.next_action}, sort_keys=True))
+        report = {"schema": "supadata-canary.v1", "status": "error",
+                  "code": exc.code, "next_action": exc.next_action}
+        if args.out is not None and exc.code != "report_write_failed":
+            try:
+                args.out.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            except OSError:
+                report = {"schema": "supadata-canary.v1", "status": "error",
+                          "code": "report_write_failed",
+                          "next_action": "Inspect the --out path permissions; the gate result was not recorded."}
+        print(json.dumps(report, sort_keys=True))
         return 2
 
 

@@ -92,7 +92,13 @@ relations for a source/claim pair fail. `new` is deliberately rejected until an
 explicit catalog-extension path exists. Accepted decisions persist on current
 claims in the `relations` extension, so ordinary generation and `--check` do
 not require re-supplying the proposal file. Decisions retain application order;
-late backdated support cannot rewrite previously archived evidence.
+late backdated support cannot rewrite previously archived evidence. Applied
+outcomes persist in `relation_transitions` (decision ID to supersession instant,
+or null for an append). Date corrections update source metadata but never
+reclassify these outcomes or move an established lifecycle boundary. Older
+bundles recover outcomes from retained revisions before recording the extension.
+Prior decisions still require valid analysis, takeaway and catalog references;
+only incoming proposals must pass the editable-text candidate heuristic.
 
 The real-input CLI returns one JSON report. Exit 0 means current/generated or
 successful candidate discovery, 1 means stale in `--check`, and 2 means a
@@ -137,6 +143,11 @@ and missing labels fail conformance (see `transcripts/README.md`). Do not
 replace available captions with machine output. Short timestamped quotes in
 claims must still be checked against the actual captions, or source audio
 for a machine transcript; a hash alone is not proof a quote was verified.
+The generator withholds machine-transcript quotes and excerpts longer than
+50 whitespace-delimited words or 500 characters. It never truncates them.
+Every normalized quote piece must fit within the declared timestamp segment
+(including continuation lines); a match extending into another segment is not
+valid evidence for that timestamp.
 
 Corpus conformance and caption-canary eligibility are separate gates. The
 canary requires exactly one caption label and rejects machine, mixed or

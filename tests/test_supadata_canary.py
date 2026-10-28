@@ -141,7 +141,10 @@ def run_cli(monkeypatch, *argv, env=None, urlopen=None):
             else:
                 monkeypatch.setenv(name, value)
     if urlopen is not None:
-        monkeypatch.setattr(urllib.request, "urlopen", urlopen)
+        # The dedicated opener disables redirects. Stub only its transport seam;
+        # redirect-handler behavior has a separate offline HTTP-handler test.
+        monkeypatch.setattr(urllib.request.OpenerDirector, "open",
+                            lambda self, request, timeout=None: urlopen(request, timeout=timeout))
     monkeypatch.setattr(sys, "argv", ["supadata_canary.py", *argv])
     stdout, stderr = io.StringIO(), io.StringIO()
     try:

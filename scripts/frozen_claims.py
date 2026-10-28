@@ -73,11 +73,11 @@ def instant(value) -> datetime | None:
         return None
     try:
         parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError:
+        if parsed.tzinfo is None or parsed.utcoffset() is None:
+            return None
+        return parsed.astimezone(timezone.utc)
+    except (ValueError, OverflowError):
         return None
-    if parsed.tzinfo is None or parsed.utcoffset() is None:
-        return None
-    return parsed.astimezone(timezone.utc)
 
 
 def iso(value: datetime | None) -> str | None:
@@ -252,7 +252,10 @@ class Evidence:
             return None
         quote = record.get(quote_key)
         timestamp = record.get(timestamp_key)
-        if not isinstance(quote, str) or not quote.strip() or not isinstance(timestamp, str):
+        # Short excerpts only: a verification label does not authorize copying
+        # an entire talk into a claim. Withhold, never truncate or paraphrase.
+        if (not isinstance(quote, str) or not quote.strip() or len(quote) > 500
+                or len(quote.split()) > 50 or not isinstance(timestamp, str)):
             return None
         if not re.fullmatch(r"\d+(?::[0-5]\d){1,2}", timestamp):
             return None
@@ -264,20 +267,21 @@ class Evidence:
         pieces = [normalized(piece) for piece in pieces if normalized(piece)]
         if not pieces:
             return None
-        # Locate the FIRST piece in the declared timestamp's caption segment,
-        # not just anywhere in the talk. A label is not proof of its location.
-        spans = header["timestamp_spans"].get(timestamp_seconds(timestamp), [])
+        # Every piece must fit inside the declared timestamp's segment, not
+        # merely start there. Adjacent continuation lines share that segment;
+        # repeated timestamp values separated by another segment do not.
+        spans = []
+        for lower, upper in header["timestamp_spans"].get(timestamp_seconds(timestamp), []):
+            if spans and lower == spans[-1][1] + 1:
+                spans[-1] = (spans[-1][0], upper)
+            else:
+                spans.append((lower, upper))
         padded = " " + body + " "
-        starts = []
         for lower, upper in spans:
-            location = padded.find(" " + pieces[0] + " ", lower)
-            if lower <= location < upper:
-                starts.append(location)
-        for location in starts:
-            start = location + len(pieces[0]) + 1
-            for piece in pieces[1:]:
+            start = lower
+            for piece in pieces:
                 location = padded.find(" " + piece + " ", start)
-                if location < 0:
+                if location < lower or location + len(piece) > upper:
                     break
                 start = location + len(piece) + 1
             else:
@@ -474,17 +478,24 @@ def initial_claim(row: dict, evidence: Evidence) -> tuple[dict, dict[str, list[s
 
 
 def add_relation(claim: dict, row: dict, proposal: dict, evidence: Evidence,
-                 quotes: dict[str, list[str]], what: str) -> tuple[dict | None, str]:
-    """Append evidence, or supersede only after proving the current 30-day gap."""
+                 quotes: dict[str, list[str]], what: str, *,
+                 transition: dict | None = None) -> tuple[dict | None, str]:
+    """Prove a new transition once; replay its persisted outcome thereafter."""
     metadata = claim["frontmatter"]
     vid, index = proposal["vid"], proposal["takeaway_index"]
     source = evidence.source(vid)
     takeaway = evidence.analyses[vid]["payload"]["takeaways"][index]
     old_times = [instant(value["last_modified"]) for value in metadata["sources"]]
     new_time = instant(source["last_modified"])
-    eligible = (proposal["relation"] in {"refines", "contradicts"}
-                and new_time is not None and all(old_times)
-                and new_time - max(old_times) >= timedelta(days=30))
+    if transition is not None:
+        # Dates may be corrected later. They must update source metadata, not
+        # undo a committed lifecycle transition or create a retroactive one.
+        new_time = instant(transition["superseded_at"])
+        eligible = new_time is not None
+    else:
+        eligible = (proposal["relation"] in {"refines", "contradicts"}
+                    and new_time is not None and all(old_times)
+                    and new_time - max(old_times) >= timedelta(days=30))
     archived = None
     if eligible:
         archived = copy.deepcopy(claim)
@@ -522,6 +533,37 @@ def read_existing(root: Path) -> tuple[dict[str, dict], list[dict]]:
             if document["frontmatter"].get("status") == "stable":
                 decisions.extend(relations)
     return documents, decisions
+
+
+def persisted_transitions(documents: dict[str, dict]) -> dict[str, dict]:
+    """Read immutable outcomes; migrate older bundles from retained revisions.
+
+    An accepted relation without a retained revision was an append, even if
+    corrected source dates would make it eligible for supersession today.
+    """
+    result = {}
+    for document in documents.values():
+        metadata = document["frontmatter"]
+        if metadata["status"] != "stable":
+            continue
+        proposals = metadata.get("relations", [])
+        recorded = metadata.get("relation_transitions")
+        ids = {relation_event_id(proposal) for proposal in proposals}
+        require(recorded is None or (isinstance(recorded, dict) and set(recorded) == ids),
+                "invalid_existing_relations", "Persisted outcomes must match accepted relations.")
+        for proposal in proposals:
+            event_id = relation_event_id(proposal)
+            history = documents.get(f"kb/history/{proposal['catalog_id']}--{event_id}.md")
+            archived_at = history["frontmatter"]["valid_to"] if history else None
+            at = recorded[event_id] if recorded is not None else archived_at
+            require((at is None or (isinstance(at, str) and instant(at) is not None))
+                    and (at is None) == (history is None)
+                    and (not history or (at == archived_at
+                         and history["frontmatter"]["superseded_by"] == proposal["catalog_id"]
+                         and proposal["relation"] in {"refines", "contradicts"})),
+                    "invalid_existing_relations", "Persisted outcomes and retained revisions must agree.")
+            result[event_id] = {"superseded_at": at}
+    return result
 
 
 def update_log(existing: str, events: list[tuple[str, str]]) -> str:
@@ -642,13 +684,19 @@ def generate(root: Path, *, candidates=False, check=False, relations: Path | Non
         for source in row["sources"]:
             evidence.source(source["vid"])
     existing, prior = read_existing(root)
-    report = candidate_report(rows, analyses) if candidates or prior or relations is not None else None
+    report = candidate_report(rows, analyses) if candidates or relations is not None else None
     if candidates:
         require(relations is None, "invalid_mode", "Candidate discovery cannot apply relations.")
         return report, 0
     candidate_ids = {(row["vid"], row["takeaway_index"]): set(row["candidate_ids"])
                      for row in report["candidates"]} if report else {}
-    accepted = validate_proposals({"schema_version": 1, "proposals": prior}, candidate_ids)
+    # Previously accepted decisions need valid references, not a new lexical
+    # match against editable display prose. New proposals still use candidates.
+    catalog_ids = {row["id"] for row in rows}
+    references = {(vid, index): catalog_ids for vid, record in analyses.items()
+                  for index in range(len(record["payload"]["takeaways"]))}
+    accepted = validate_proposals({"schema_version": 1, "proposals": prior}, references)
+    transitions = persisted_transitions(existing)
     def order(proposal: dict):
         timestamp = instant(analyses[proposal["vid"]]["payload"].get("published_at"))
         return (timestamp or datetime.min.replace(tzinfo=timezone.utc), proposal["vid"],
@@ -659,7 +707,7 @@ def generate(root: Path, *, candidates=False, check=False, relations: Path | Non
         # Persist application order. Backdated evidence arriving later must not
         # reorder decisions that already produced an immutable history revision.
         incoming.sort(key=order)
-        accepted = validate_proposals({"schema_version": 1, "proposals": accepted + incoming}, candidate_ids)
+        accepted = validate_proposals({"schema_version": 1, "proposals": accepted + incoming}, references)
     by_identity = defaultdict(list)
     for proposal in accepted:
         by_identity[proposal["catalog_id"]].append(proposal)
@@ -668,8 +716,12 @@ def generate(root: Path, *, candidates=False, check=False, relations: Path | Non
     events = []
     for row in rows:
         claim, quotes, what = initial_claim(row, evidence)
+        outcomes = {}
         for proposal in by_identity[row["id"]]:
-            archived, what = add_relation(claim, row, proposal, evidence, quotes, what)
+            event_id = relation_event_id(proposal)
+            archived, what = add_relation(claim, row, proposal, evidence, quotes, what,
+                                           transition=transitions.get(event_id))
+            outcomes[event_id] = archived["frontmatter"]["valid_to"] if archived else None
             if archived:
                 old = archived["frontmatter"]
                 relative = f"kb/history/{old['id']}.md"
@@ -687,6 +739,7 @@ def generate(root: Path, *, candidates=False, check=False, relations: Path | Non
                                f"{proposal['relation']}; {old_vids} → {proposal['vid']}; "
                                f"[retained revision](history/{old['id']}.md)."))
         claim["frontmatter"]["relations"] = by_identity[row["id"]]
+        claim["frontmatter"]["relation_transitions"] = outcomes
         relative = f"kb/{row['area']}/{row['id']}.md"
         stamp(claim, now, existing.get(relative))
         documents[relative] = claim
