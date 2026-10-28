@@ -2,25 +2,34 @@
 
 ## Implementation status
 
-The publish-date backfill accepts the real analysis envelope below. The
-legacy `scripts/generate_claims.py` still expects the initial
-`video_id/techniques` fixture contract; it is not the migration adapter and
-must not run on the frozen source catalog. Bundle generation remains paused
-until the real catalog schema is inspected and independent acceptance tests
-cover the corrected behavior.
+The publish-date backfill and `scripts/generate_claims.py` accept the real
+envelope below. The generator prefers `data/catalog.json`, with a source
+`catalog.json` fallback, and never rewrites either catalog or any analysis or
+transcript. It migrates one claim per frozen cluster into `kb/`. The old
+`video_id/techniques` fixture contract is isolated in `scripts/legacy_claims.py`
+and cannot process real analyses without their catalog. Publication remains
+paused pending real publication-date coverage and the separate live gates.
 
 ## Real input envelope
 
 - `vid`: string video ID. The backfill groups records by this field.
-- `takeaways`: preserve the actual corpus value and structure. The backfill
-  does not reinterpret it; a sanitized real sample is required before writing
-  the claim migration adapter.
+- `takeaways`: preserve the actual corpus list of objects. The generator uses
+  `technique` and `what_they_do` for candidates; verified `evidence_quote`,
+  `evidence_quote_verification` and `evidence_timestamp` may supply evidence.
+  `apply_to_us`, `expected_effect` and other private mapping fields are never
+  projected. Generic expected effects come from the catalog's `expected_benefit`.
 - `confidence`: preserve its actual string value. Do not coerce it into a
   fabricated numeric score.
 - `published_at`: full ISO 8601 datetime with a UTC offset, backfilled from
   YouTube Data API v3 `videos.list` -> `snippet.publishedAt`, stored verbatim.
   Missing dates remain missing until resolved. Date-only or timezone-naive values are not
   adequate for coverage or supersession.
+- `transcript_file` must reference an existing transcript under `transcripts/`.
+  Before using its speaker or quotes, the generator requires a unique header
+  `source` equal to the analysis video's canonical watch URL. Both the unique
+  header `sha256` and analysis `transcript_sha256` must match the exact UTF-8
+  body, including its original newlines. Missing or mismatched joins reject
+  the complete request before any output writes, including in `--check`.
 - Transcript SHA256 and `retrieved_at` are public provenance; retrieval time
   does not substitute for publication time. Keep the source video URL, title
   and speaker when available; do not invent missing metadata.
@@ -61,8 +70,44 @@ malformed/unsupported relations. New identities require an explicit validated
 extension path, never a silent rename of a frozen cluster.
 
 Only `refines` and `contradicts` from a source at least **30 days newer** than
-the current evidence can supersede it. Supports appends. Unknown dates cannot
-supersede. Retain all revisions and record supersessions in `kb/log.md`.
+the newest current evidence can supersede it. Supports appends. Any unresolved
+current source date prevents proof of the gap; date-only and naive values stay
+unknown. All old evidence and timestamped quotes are retained in immutable
+`kb/history/` revisions. Supersessions have stable decision IDs and are recorded
+in `kb/log.md`; replays do not duplicate them or churn generation clocks.
+
+```sh
+python3 scripts/generate_claims.py --root /path/to/corpus --candidates
+python3 scripts/generate_claims.py --root /path/to/corpus --relations /path/to/relations.json
+python3 scripts/generate_claims.py --root /path/to/corpus --check
+```
+
+Candidate output is read-only JSON with rows
+`{vid, takeaway_index, candidate_ids}`. Mechanism and variant text is matched
+using deterministic lexical overlap, not just area or video membership.
+Proposals are `{schema_version: 1, proposals: [{vid, takeaway_index, catalog_id,
+relation}]}`. Indices must be nonnegative integers (not booleans); source IDs,
+indices, relations and catalog candidates are all code-validated. Conflicting
+relations for a source/claim pair fail. `new` is deliberately rejected until an
+explicit catalog-extension path exists. Accepted decisions persist on current
+claims in the `relations` extension, so ordinary generation and `--check` do
+not require re-supplying the proposal file. Decisions retain application order;
+late backdated support cannot rewrite previously archived evidence. Applied
+outcomes persist in `relation_transitions` (decision ID to supersession instant,
+or null for an append). Date corrections update source metadata but never
+reclassify these outcomes or move an established lifecycle boundary. Older
+bundles recover outcomes from retained revisions before recording the extension.
+Prior decisions still require valid analysis, takeaway and catalog references;
+only incoming proposals must pass the editable-text candidate heuristic.
+
+The real-input CLI returns one JSON report. Exit 0 means current/generated or
+successful candidate discovery, 1 means stale in `--check`, and 2 means a
+structured validation/IO error. Validation and output-path preflight complete
+before any write; rejected inputs never partially publish. Symlinked inputs
+and output targets are rejected. Successful file replacement is atomic **per
+file**, not transactional across the bundle: use one writer and run `--check`
+after filesystem interruption. No network, model, credentials or date guessing
+is involved in candidate discovery, migration, relation validation or checking.
 
 ## Target OKF bundle
 
@@ -98,6 +143,11 @@ and missing labels fail conformance (see `transcripts/README.md`). Do not
 replace available captions with machine output. Short timestamped quotes in
 claims must still be checked against the actual captions, or source audio
 for a machine transcript; a hash alone is not proof a quote was verified.
+The generator withholds machine-transcript quotes and excerpts longer than
+50 whitespace-delimited words or 500 characters. It never truncates them.
+Every normalized quote piece must fit within the declared timestamp segment
+(including continuation lines); a match extending into another segment is not
+valid evidence for that timestamp.
 
 Corpus conformance and caption-canary eligibility are separate gates. The
 canary requires exactly one caption label and rejects machine, mixed or

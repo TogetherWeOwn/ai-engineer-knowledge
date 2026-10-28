@@ -1,0 +1,27 @@
+# retrieval-code-navigation
+
+## Techniques and revisions
+
+- [Supply a compact repository architecture and dependency map](architecture-map.md) — `architecture-map` (stable)
+- [Chunk and index sources along semantic or structural boundaries](chunking-indexing.md) — `chunking-indexing` (stable)
+- [Reuse proven sibling-repository patterns with provenance](cross-repo-learning.md) — `cross-repo-learning` (stable)
+- [Use bounded graph expansion and relationship ranking for genuinely multi-hop questions](graph-ranking.md) — `graph-ranking` (stable)
+- [Retrieve incident history and decision rationale alongside current code](historical-rationale.md) — `historical-rationale` (stable)
+- [Fuse lexical, semantic, graph and co-change retrieval](hybrid-retrieval.md) — `hybrid-retrieval` (stable)
+- [Update indexes incrementally from versioned source changes rather than rebuilding per session](index-update-events.md) — `index-update-events` (stable)
+- [Start retrieval with lexical search and deterministic file evidence](lexical-retrieval.md) — `lexical-retrieval` (stable)
+- [Preserve layout and non-text evidence when plain text retrieval is insufficient](modality-preserving-retrieval.md) — `modality-preserving-retrieval` (stable)
+- [Use explicit history windows with deterministic backfill when a query needs older evidence](retrieval-backfill.md) — `retrieval-backfill` (stable)
+- [Track evidence coverage and do not stop at the first plausible file](retrieval-coverage.md) — `retrieval-coverage` (stable)
+- [Separate retrieval misses from reasoning failures with oracle-gap analysis](retrieval-diagnostics.md) — `retrieval-diagnostics` (stable)
+- [Measure retrieval coverage, relevance, grounding and cost on real file-finding tasks](retrieval-evaluation.md) — `retrieval-evaluation` (stable)
+- [Filter retrieval by current version, authority and access rights](retrieval-freshness-access.md) — `retrieval-freshness-access` (stable)
+- [Ground claims in cited authoritative evidence and abstain when unsupported](retrieval-grounding.md) — `retrieval-grounding` (stable)
+- [Generate focused retrieval queries and broaden only after misses](retrieval-query.md) — `retrieval-query` (stable)
+- [Rerank retrieved evidence only when the residual benefit is established](retrieval-reranking.md) — `retrieval-reranking` (stable)
+- [Choose exact, lexical, semantic, graph or filtered retrieval according to the question](retrieval-router.md) — `retrieval-router` (stable)
+- [Use LSP, AST and dependency graphs for exact code navigation](semantic-code-navigation.md) — `semantic-code-navigation` (stable)
+- [Measure and improve metadata quality used to filter and join retrieved evidence](source-metadata-quality.md) — `source-metadata-quality` (stable)
+- [Normalize and validate heterogeneous source documents before retrieval](source-normalization.md) — `source-normalization` (stable)
+- [Extract reusable search metadata offline and validate tags before treating them as facts](validated-metadata-extraction.md) — `validated-metadata-extraction` (stable)
+- [Retrieve the exact installed dependency source and version-matched official documentation](version-matched-dependency-docs.md) — `version-matched-dependency-docs` (stable)

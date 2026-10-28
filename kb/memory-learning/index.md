@@ -1,0 +1,25 @@
+# memory-learning
+
+## Techniques and revisions
+
+- [Prioritize uncertain and high-impact cases for labeling](active-labeling.md) — `active-labeling` (stable)
+- [Reuse versioned site-specific browser procedures instead of rediscovering every flow](browser-procedure-memory.md) — `browser-procedure-memory` (stable)
+- [Choose hot-state persistence and cache lifetimes from recovery and freshness requirements](cache-lifetime-sla.md) — `cache-lifetime-sla` (stable)
+- [Resolve entity identity before creating duplicate graph or memory nodes](entity-resolution.md) — `entity-resolution` (stable)
+- [Turn recurring failures and review feedback into versioned regression assets](failure-learning.md) — `failure-learning` (stable)
+- [Distill task-specific behavior only from validated traces with a maintenance case](local-distillation.md) — `local-distillation` (stable)
+- [Consolidate repeated experiences into concise versioned knowledge](memory-consolidation.md) — `memory-consolidation` (stable)
+- [Retain structured episodes and outcomes for later recall](memory-events.md) — `memory-events` (stable)
+- [Score recalled memories for usefulness and harmful influence](memory-feedback.md) — `memory-feedback` (stable)
+- [Use compact indexed memory layouts only when recall quality and provenance survive](memory-layout-efficiency.md) — `memory-layout-efficiency` (stable)
+- [Maintain memory, retrieval and skills with ownership, tested recovery and versioned changes](memory-lifecycle-governance.md) — `memory-lifecycle-governance` (stable)
+- [Keep provenance and evidence links on memory and learned rules](memory-provenance.md) — `memory-provenance` (stable)
+- [Scope memory by task, tenant, role and authority](memory-scope.md) — `memory-scope` (stable)
+- [Attach timestamps, validity and supersession to remembered facts](memory-temporal.md) — `memory-temporal` (stable)
+- [Gate memory writes and learned knowledge changes against poisoning and regressions](memory-write-gates.md) — `memory-write-gates` (stable)
+- [Persist refuted hypotheses and rejected candidates to prevent repeated anchoring](negative-hypothesis-memory.md) — `negative-hypothesis-memory` (stable)
+- [Convert temporary expert capacity into owned tests, checklists, examples and deterministic rules](permanent-assets.md) — `permanent-assets` (stable)
+- [Learn scoped preferences from approved edits and overrides, not generic persona adjectives](preference-learning.md) — `preference-learning` (stable)
+- [Retain detailed corrections, explanations and interventions alongside scalar scores](rich-feedback-retention.md) — `rich-feedback-retention` (stable)
+- [Represent entities, observations and relationships explicitly for structured retrieval](semantic-entity-graph.md) — `semantic-entity-graph` (stable)
+- [Promote repeated successful trajectories into tested routines](trace-to-routines.md) — `trace-to-routines` (stable)

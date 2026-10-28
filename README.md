@@ -3,13 +3,13 @@
 Distilled, generic techniques from [AI Engineer](https://www.youtube.com/@aiDotEngineer)
 talks, for people and AI readers.
 
-**Status: draft scaffold under correction, not an accepted knowledge bundle.**
-The existing generator and its legacy fixture tests implement the initial
-contract, not the corrected one below. Do not run that generator over the real
-frozen catalog: it currently replaces `catalog.json`. The imported corpus is
-published, but the corrected knowledge bundle is not yet ready. The publication
-workflow is intentionally discovery-only until
-the corrected generator and independent acceptance checks are ready.
+**Status: corrected offline generator implemented; real publication acceptance is incomplete.**
+The generator reads the frozen catalog without changing it and publishes the
+corrected contract below under `kb/`. Legacy `video_id/techniques` inputs use
+an isolated compatibility adapter; real `vid/takeaways` inputs cannot fall back
+to it. The imported corpus passes the offline real-corpus checks described
+below. The publication workflow remains discovery-only;
+no caption ingestion, live refresh or site deployment is enabled by this change.
 
 ## First data deliverable: publish dates
 
@@ -39,12 +39,12 @@ is atomic per file, not transactional across the corpus; rerun `--check` after
 a filesystem failure. Use one writer per corpus snapshot.
 
 A free, repo-scoped `YOUTUBE_API_KEY` is required for live metadata lookup.
-No key is included in this repo; live backfill and real-corpus coverage are
-not verified yet.
+No key is included in this repo. The checked-in import includes the metadata
+backfill verified on 2026-10-28; see Develop for offline coverage checks.
 
 ## Corrected bundle contract
 
-The bundle will live under `kb/` and target
+The generated bundle lives under `kb/` and targets
 [OKF 0.2](https://github.com/GoogleCloudPlatform/open-knowledge-format/blob/ad30107c31c06aec8a7d5636e0d1058118604e6f/SPEC.md).
 
 - Identity is the existing `catalog.json` cluster ID (475 frozen clusters),
@@ -104,8 +104,26 @@ analysis. Downstream company application stays outside this repo.
 ## Develop
 
 Install test dependencies outside the checkout, then run `python3 -m pytest -q`.
-The suite covers the legacy generator, offline publish-date CLI contract,
-caption canary and manual-workflow safety. Metadata HTTP is faked; these
-checks do not establish live coverage or a successful live canary. The
-corrected-bundle acceptance suite remains pending; a green suite does not
-establish the real-corpus acceptance criteria above.
+The suite covers frozen-ID migration, OKF output, validated relations,
+immutable history, offline freshness, legacy compatibility, publish-date
+backfill, caption canary and workflow safety. Metadata HTTP is faked; these
+checks do not establish live coverage or a successful live canary.
+
+```sh
+# Work on a scratch COPY of the imported corpus, never the source checkout.
+python3 scripts/generate_claims.py --root /path/to/corpus
+python3 scripts/generate_claims.py --root /path/to/corpus --check
+KB_ACCEPTANCE_ROOT=/path/to/corpus python3 -m pytest tests/test_real_corpus_acceptance.py -q
+```
+
+The six real-corpus tests are opt-in and otherwise report skipped. The unchanged
+import snapshot `ec78d8f` has **0/1398** dated videos and fails the >=95% gate.
+On 2026-10-28, the existing backfill script fetched genuine `snippet.publishedAt`
+metadata for **1398/1398** videos in a scratch copy using 28 `videos.list`
+requests. Only `published_at` changed in those analyses; all transcript and
+frozen-catalog bytes were preserved. Regeneration yielded 475/475 frozen claims
+and all six real-corpus tests passed, including OKF and transcript/hash joins.
+The dated analyses and regenerated bundle are now included in this import;
+the six opt-in checks and offline freshness check also pass against it. This
+is not a claim that remote CI, live refresh, caption canary or site publication
+is accepted. Never substitute retrieval/analysis times for publication dates.

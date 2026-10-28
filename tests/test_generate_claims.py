@@ -325,3 +325,8 @@ def test_hex_title_round_trips_as_a_string(tmp_path: Path) -> None:
     claim, _ = read_claim(tmp_path / "claims" / "observability" / "trace-first-debugging.md")
     assert claim["title"] == "0x10"
     assert isinstance(claim["title"], str)
+
+
+def test_empty_router_has_no_trailing_blank_line(tmp_path: Path) -> None:
+    assert run_generator(tmp_path).returncode == 0
+    assert not (tmp_path / "llms.txt").read_bytes().endswith(b"\n\n")

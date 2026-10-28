@@ -6,8 +6,12 @@
   string verbatim. `--check` is offline; `--dry-run` fetches without
   writing. All output is JSON. See root README for exits, the >=95%
   coverage gate and the repo-scoped key requirement. Live runs go through
-  the manual `backfill` workflow (single writer, stages `analysis/*.json`
-  only).
+  the manual `backfill` workflow (single writer). After exit 0 or 1, it
+  regenerates claims, runs the tests and checks freshness before committing
+  `analysis/*.json` together with the frozen bundle (`kb/`, `llms.txt`,
+  `llms-full.txt`) when present. Partial coverage still publishes consistent
+  date progress, then reports exit 1; generation or validation failures never
+  commit or push. Other inputs and local artifacts are not staged.
 - `supadata_canary.py` — five-video canary gate: fetches
   `mode=native&lang=en` captions and compares each against its conforming
   `transcripts/<vid>.txt` reference (>=0.98 word similarity, HTTP 200, no
@@ -17,11 +21,18 @@
 - `check_rss.py` — legacy RSS discovery. It currently checks public caption
   filenames; its missing-file list is not an ingestion queue. It fetches no
   captions. Provenance-based discovery is pending.
-- `generate_claims.py` — initial scaffold only, **not the corrected generator**.
-  It uses slug identities and overwrites `catalog.json`; do not run it over
-  the frozen 475-cluster catalog or on real imported data.
+- `generate_claims.py` — offline frozen-catalog migration and publication CLI.
+  `frozen_claims.py` validates and projects real `vid/takeaways` inputs into
+  `kb/`, `llms.txt` and `llms-full.txt`. Source catalogs, analyses and transcripts
+  are never changed. `--candidates` returns read-only JSON; `--relations FILE`
+  validates the entire proposal set before publication; `--check` detects
+  stale outputs without repair. See `docs/analysis-schema.md` for the proposal
+  envelope, lifecycle rules and error/atomicity boundaries.
+- `legacy_claims.py` — isolated compatibility adapter for the initial
+  `video_id/techniques` fixture contract only. Do not invoke it on real input;
+  the main CLI prevents that fallback when a real `vid` or frozen catalog exists.
 
-The next migration is one-shot from the actual catalog, not a nonexistent
+Migration is one-shot from the actual frozen catalog, not a nonexistent
 synthesis builder. Public analysis prompts must be generic. The planned
 caption source is Supadata native/en, canary-gated on five videos with >=98%
 word similarity; TranscriptAPI then Apify are fallbacks subject to authorized

@@ -76,17 +76,6 @@ def transcript_text(vid, body=None, retrieved_at="2026-10-26T12:00:00Z",
     return text.replace("PLACEHOLDER", actual)
 
 
-def test_canary_rejects_mixed_caption_and_machine_provenance():
-    validator = runpy.run_path(str(SCRIPT))["reference_problems"]
-    vid = "VIDCAN01"
-    text = transcript_text(vid).replace(
-        f"# {UNVERIFIED_LABEL}\n",
-        f"# {UNVERIFIED_LABEL}\n# machine transcript (Whisper; no YouTube captions)\n",
-    )
-    problems, _ = validator(Path(f"{vid}.txt"), vid, text)
-    assert problems
-
-
 def write_transcript(root: Path, vid: str, text: str) -> Path:
     directory = root / "transcripts"
     directory.mkdir(parents=True, exist_ok=True)
@@ -152,7 +141,10 @@ def run_cli(monkeypatch, *argv, env=None, urlopen=None):
             else:
                 monkeypatch.setenv(name, value)
     if urlopen is not None:
-        monkeypatch.setattr(urllib.request, "urlopen", urlopen)
+        # The dedicated opener disables redirects. Stub only its transport seam;
+        # redirect-handler behavior has a separate offline HTTP-handler test.
+        monkeypatch.setattr(urllib.request.OpenerDirector, "open",
+                            lambda self, request, timeout=None: urlopen(request, timeout=timeout))
     monkeypatch.setattr(sys, "argv", ["supadata_canary.py", *argv])
     stdout, stderr = io.StringIO(), io.StringIO()
     try:

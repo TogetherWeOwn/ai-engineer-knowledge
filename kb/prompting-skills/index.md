@@ -1,0 +1,26 @@
+# prompting-skills
+
+## Techniques and revisions
+
+- [Consolidate verified lessons instead of appending every failure to one ever-growing rules file](anti-bloat-instructions.md) — `anti-bloat-instructions` (stable)
+- [Continue from an explicitly corrected artifact while preserving the original trace and provenance](artifact-corrections.md) — `artifact-corrections` (stable)
+- [Keep instructions concise, explicit and free of redundant narration](concise-instructions.md) — `concise-instructions` (stable)
+- [Place concise procedural guidance at the decision boundary where it is needed](decision-boundary-guidance.md) — `decision-boundary-guidance` (stable)
+- [Use representative examples that demonstrate the exact intended behavior](examples-as-contracts.md) — `examples-as-contracts` (stable)
+- [Declare required tool-use behavior and verify it in runtime evidence](explicit-tool-discipline.md) — `explicit-tool-discipline` (stable)
+- [Use stable high-information instruction ordering and verify its actual effect](instruction-ordering.md) — `instruction-ordering` (stable)
+- [Specify qualitative intent before imposing cosmetic numerical output constraints](outcome-over-format.md) — `outcome-over-format` (stable)
+- [Move repeatable prompt instructions into executable interfaces when prose stops improving outcomes](prompt-cost-ceiling.md) — `prompt-cost-ceiling` (stable)
+- [Version prompts and skills with regression fixtures and rollback](prompt-version-testing.md) — `prompt-version-testing` (stable)
+- [Adapt prompt formatting to actual endpoint behavior while retaining provider-independent task policy](provider-prompt-adapters.md) — `provider-prompt-adapters` (stable)
+- [Load role-specific procedural guidance without imposing every policy on every phase](role-specific-guidance.md) — `role-specific-guidance` (stable)
+- [Route folder and path-scoped instructions deterministically with explicit precedence](scoped-instructions.md) — `scoped-instructions` (stable)
+- [Supply security-focused examples without treating prompts as the enforcement boundary](security-prompt-templates.md) — `security-prompt-templates` (stable)
+- [Use explicit reasoning checkpoints only where they improve the task](selective-reasoning.md) — `selective-reasoning` (stable)
+- [Use one versioned policy and rubric across planning, building and review](shared-policy-rubric.md) — `shared-policy-rubric` (stable)
+- [Give each skill one coherent capability with linked references and scripts](skill-modularity.md) — `skill-modularity` (stable)
+- [Measure actual skill invocation, cost and outcomes rather than counting installed skills](skills-adoption-telemetry.md) — `skills-adoption-telemetry` (stable)
+- [Bundle deterministic scripts and known facts into skills rather than recomputing them with an LLM](skills-deterministic-scripts.md) — `skills-deterministic-scripts` (stable)
+- [Maintain a curated versioned skills library with provenance, ownership and controlled overrides](skills-library-governance.md) — `skills-library-governance` (stable)
+- [Discover skills by trigger and load detailed procedures on demand](skills-progressive-loading.md) — `skills-progressive-loading` (stable)
+- [Generate reusable skills from authoritative source procedures and verify their contracts](skills-source-generation.md) — `skills-source-generation` (stable)

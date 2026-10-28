@@ -1,0 +1,28 @@
+# context-engineering
+
+## Techniques and revisions
+
+- [Maintain a small authoritative set of reusable company and repository context assets](canonical-anchor-assets.md) — `canonical-anchor-assets` (stable)
+- [Inject the host clock and explicit time windows instead of relying on model time knowledge](clock-grounding.md) — `clock-grounding` (stable)
+- [Validate compaction and pruning against evidence loss](compaction-fidelity.md) — `compaction-fidelity` (stable)
+- [Separate instructions, facts, hypotheses and untrusted evidence in context](context-boundaries.md) — `context-boundaries` (stable)
+- [Use the actual served context capacity and preserve full-source reads when required](context-capacity.md) — `context-capacity` (stable)
+- [Measure context composition and remove irrelevant payloads without an arbitrary window cap](context-composition.md) — `context-composition` (stable)
+- [Deduplicate repeated evidence while preserving distinct sources and lineage](context-deduplication.md) — `context-deduplication` (stable)
+- [Reset or hand off context with a verified state packet](context-handoff.md) — `context-handoff` (stable)
+- [Gate context by task relevance without mistaking relevance filtering for authorization](context-relevance-gating.md) — `context-relevance-gating` (stable)
+- [Synthesize supported cross-document relationships rather than concatenating independent summaries](cross-document-synthesis.md) — `cross-document-synthesis` (stable)
+- [Rank decisive evidence first while retaining accessible full provenance](decisive-evidence-ordering.md) — `decisive-evidence-ordering` (stable)
+- [Provide a shared domain vocabulary and business ontology as authoritative context](domain-vocabulary.md) — `domain-vocabulary` (stable)
+- [Keep bulk evidence in queryable files, not repeated prompt payloads](external-bulk-context.md) — `external-bulk-context` (stable)
+- [Provide a task-specific starting context pack](initial-context-pack.md) — `initial-context-pack` (stable)
+- [Validate input completeness before reasoning](input-fidelity.md) — `input-fidelity` (stable)
+- [Preserve the original winning request and final intent across handoffs](instruction-fidelity.md) — `instruction-fidelity` (stable)
+- [Label direct observations separately from interpretations and generated hypotheses](observation-vs-inference.md) — `observation-vs-inference` (stable)
+- [Persist plans, decisions and progress outside the conversation](persistent-work-state.md) — `persistent-work-state` (stable)
+- [Place task-local instructions at deliberate boundaries around long source documents](prompt-placement.md) — `prompt-placement` (stable)
+- [Acquire decisive source evidence before spending additional reasoning effort](retrieval-before-reasoning.md) — `retrieval-before-reasoning` (stable)
+- [Refresh concise goals and constraints at meaningful boundaries](scope-reminders.md) — `scope-reminders` (stable)
+- [Use verified domain expertise to narrow the search space before adding model sophistication](scoped-domain-context.md) — `scoped-domain-context` (stable)
+- [Return explicit observed state diffs after actions rather than only prose success claims](state-diff-feedback.md) — `state-diff-feedback` (stable)
+- [Perform exhaustive enumeration, filtering and aggregation in code](think-in-code.md) — `think-in-code` (stable)
