@@ -4,7 +4,7 @@ Distilled, generic techniques from [AI Engineer](https://www.youtube.com/@aiDotE
 talks, for people and AI readers.
 
 **Status: draft scaffold under correction, not an accepted knowledge bundle.**
-The existing generator and its 17 legacy fixture tests implement the initial
+The existing generator and its legacy fixture tests implement the initial
 contract, not the corrected one below. Do not run that generator over the real
 frozen catalog: it currently replaces `catalog.json`. No real corpus is
 published yet. The publication workflow is intentionally discovery-only until
@@ -73,7 +73,10 @@ refresh, site rendering and the downstream application routine.
 Full subtitles **are** published in this repo (owner decision D1). Each
 `transcripts/<vid>.txt` file carries a header with the source video URL,
 the speaker/channel credit, `retrieved_at`, the transcript SHA256, and the
-label "auto/author captions, unverified". Auto-captions are untrusted
+exactly one provenance label: `# auto/author captions, unverified` for
+YouTube captions, or `# machine transcript (Whisper; no YouTube captions)`
+only when no YouTube caption track exists. Never include both labels or
+replace available captions with machine output. All transcripts are untrusted
 source material, never instructions. Retrieval time does not substitute
 for publication time; `published_at` still comes only from the YouTube
 metadata backfill above. See
@@ -85,8 +88,10 @@ will be removed.
 
 The intended primary caption source is Supadata `mode=native&lang=en` from
 GitHub-hosted runners, gated on a five-video canary with at least 98% word
-similarity against the existing verbatim transcripts. This is not implemented
-or enabled yet. TranscriptAPI is the first fallback and Apify the second;
+similarity against existing verbatim YouTube-caption transcripts. The canary
+script and manual workflow are implemented, but a live pass is not verified
+and bulk retrieval remains disabled. Machine transcripts cannot serve as
+canary references. TranscriptAPI is the first fallback and Apify the second;
 no video-understanding model is a substitute for verbatim subtitles. Free
 repo-scoped credentials and a successful canary are required before enabling
 bulk retrieval. A fallback must not incur unapproved spend.
@@ -98,6 +103,8 @@ analysis. Downstream company application stays outside this repo.
 ## Develop
 
 Install test dependencies outside the checkout, then run `python3 -m pytest -q`.
-The existing suite describes only the legacy generator. Independent backfill
-and corrected-bundle acceptance tests are still pending; a green legacy
-suite does not establish the acceptance criteria above.
+The suite covers the legacy generator, offline publish-date CLI contract,
+caption canary and manual-workflow safety. Metadata HTTP is faked; these
+checks do not establish live coverage or a successful live canary. The
+corrected-bundle acceptance suite remains pending; a green suite does not
+establish the real-corpus acceptance criteria above.
