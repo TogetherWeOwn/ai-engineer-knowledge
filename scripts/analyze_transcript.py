@@ -193,7 +193,9 @@ def parse_captions(raw: bytes, vid: str):
     body = b"".join(lines[index:])
     source = f"https://www.youtube.com/watch?v={vid}"
     if (header.get("source") != source or header.get("sha256") != hashlib.sha256(body).hexdigest()
-            or "# auto/author captions, unverified" not in labels):
+            or [label for label in labels if label in ("# auto/author captions, unverified",
+                                                       "# machine transcript (Whisper; no YouTube captions)")]
+            != ["# auto/author captions, unverified"]):
         reject("invalid_provenance")
     aware_timestamp(header.get("retrieved_at"))
     text(header.get("speaker") or header.get("channel"), maximum=1000)
@@ -208,9 +210,9 @@ def parse_captions(raw: bytes, vid: str):
             reject("invalid_captions")
         stamp, caption = match.groups()
         caption_time(stamp)
-        if not caption.strip() or stamp in spans:
+        if not caption.strip():
             reject("invalid_captions")
-        spans[stamp] = caption
+        spans.setdefault(stamp, []).append(caption)
     if not spans:
         reject("invalid_captions")
     return header, body.decode("utf-8"), spans
@@ -301,8 +303,9 @@ def validate_extraction(proposal, spans, secret):
         quoted_words = words(quote)
         if not 1 <= len(quoted_words) <= MAX_QUOTE_WORDS or stamp not in spans:
             reject("unverified_quote")
-        caption_words = words(spans[stamp])
         if not any(caption_words[i:i + len(quoted_words)] == quoted_words
+                   for caption in spans[stamp]
+                   for caption_words in [words(caption)]
                    for i in range(len(caption_words) - len(quoted_words) + 1)):
             reject("unverified_quote")
     public_text(proposal, secret)

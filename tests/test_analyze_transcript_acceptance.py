@@ -850,3 +850,61 @@ def test_failed_atomic_replace_keeps_old_analysis_and_cleans_temporary_files(cor
 
     monkeypatch.setattr(os, "replace", denied_replace)
     assert_rejected(invoke(corpus, monkeypatch), corpus, before, ["extract", "relate"])
+
+
+def test_repeated_caption_timestamp_checks_each_span_without_joining(corpus, monkeypatch):
+    body = '[00:05] Trim payload fields.\n[00:05] Expand graph neighbors.\n'
+    corpus.captions(body=body)
+    proposed = extraction()
+    proposed['takeaways'][1]['evidence_timestamp'] = '00:05'
+    result = invoke(corpus, monkeypatch, extract=proposed)
+    assert result.status == 0, result.stdout + result.stderr
+    bad = extraction()
+    bad['takeaways'] = [takeaway(quote='fields Expand', timestamp='00:05')]
+    result = invoke(corpus, monkeypatch, extract=bad)
+    assert result.status != 0
+
+
+@pytest.mark.parametrize('extra', [
+    '# machine transcript (Whisper; no YouTube captions)',
+    '# auto/author captions, unverified',
+])
+def test_conflicting_or_duplicate_provenance_rejected(corpus, monkeypatch, extra):
+    raw = corpus.caption.read_text(encoding='utf-8')
+    corpus.caption.write_text(raw.replace('# auto/author captions, unverified\n',
+                                          '# auto/author captions, unverified\n' + extra + '\n'), encoding='utf-8')
+    before = snapshot(corpus.base)
+    result = invoke(corpus, monkeypatch, check=True)
+    assert_rejected(result, corpus, before, [])
+
+
+def test_publication_rejects_extra_artifact(corpus, tmp_path):
+    spec = importlib.util.spec_from_file_location('publication_analyzer_sut', SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    artifact = tmp_path / 'artifact'
+    artifact.mkdir()
+    (artifact / f'{VID}.json').write_text('{}')
+    (artifact / 'unexpected.json').write_text('{}')
+    before = snapshot(corpus.root)
+    with pytest.raises(module.AnalysisError, match='unexpected_artifact_path'):
+        module.validate_publication(corpus.root, VID, artifact)
+    assert snapshot(corpus.root) == before
+
+
+def test_publication_revalidates_relations_of_an_untrusted_artifact(corpus, monkeypatch, tmp_path):
+    # The writer job must not trust relations in the uploaded artifact (forged catalog ids).
+    before = snapshot(corpus.base)
+    doc = assert_published(invoke(corpus, monkeypatch), corpus, before)
+    spec = importlib.util.spec_from_file_location('publication_relations_sut', SCRIPT)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    forged = json.loads(json.dumps(doc))
+    assert forged["relations"], "fixture must publish at least one relation"
+    forged["relations"][0]["relation"] = "supports"
+    forged["relations"][0]["catalog_id"] = "forged-not-a-candidate"
+    artifact = tmp_path / 'artifact'
+    artifact.mkdir()
+    (artifact / f'{VID}.json').write_text(json.dumps(forged))
+    with pytest.raises(module.AnalysisError, match='out_of_candidate_id'):
+        module.validate_publication(corpus.root, VID, artifact)

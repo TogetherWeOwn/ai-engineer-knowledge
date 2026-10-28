@@ -24,7 +24,7 @@ transport substitutions in the acceptance suite are not production authorization
 ## Offline usage
 
 ```sh
-python3 scripts/analyze_transcript.py --root . --vid qZj7sqmidqA --check
+python3 scripts/analyze_transcript.py --root . --vid=qZj7sqmidqA --check
 ```
 
 `--check` is read-only and needs no credentials or network. It validates:

@@ -246,9 +246,12 @@ if name in ("python", "python3"):
         sys.exit(int(os.environ["TEST_GATE_EXIT"]))
     if args and args[0].endswith("analyze_transcript.py"):
         record("analysis")
-        if "--vid" not in args:
+        vids = [a.split("=", 1)[1] for a in args if a.startswith("--vid=")]
+        if "--vid" in args:
+            vids.append(args[args.index("--vid") + 1])
+        if len(vids) != 1:
             sys.exit(2)
-        video = args[args.index("--vid") + 1]
+        video = vids[0]
         if not re.fullmatch(r"[A-Za-z0-9_-]{11}", video):
             sys.exit(2)
         root = Path(args[args.index("--root") + 1]) if "--root" in args else Path.cwd()
@@ -344,7 +347,7 @@ def test_real_analysis_shell_runs_coverage_before_one_video(tmp_path):
     assert sequence and sequence[0] == "coverage"
     live = [call for call in calls if call["kind"] == "analysis" and "--check" not in call["args"]]
     assert len(live) == 1
-    assert live[0]["args"][live[0]["args"].index("--vid") + 1] == VID
+    assert f"--vid={VID}" in live[0]["args"]
 
 
 def test_failed_coverage_cannot_reach_analysis_or_publication(tmp_path):
@@ -387,3 +390,22 @@ def test_publication_shell_stages_only_the_selected_analysis_despite_decoys(tmp_
                 assert paths == [f"analysis/{VID}.json"], "Never stage a directory, glob, catalog/kb or unrelated files"
                 staged.extend(paths)
     assert staged, "A no-op publication stub must not make the allowlist test pass"
+
+
+def test_all_actions_are_pinned_to_full_commit_shas():
+    data = workflow()
+    for job in data['jobs'].values():
+        for step in steps(job):
+            if 'uses' in step:
+                assert re.fullmatch(r'[^@]+@[0-9a-f]{40}', step['uses'])
+
+
+def test_dash_leading_video_ids_reach_the_analyzer_as_one_argument():
+    # 21 of the published IDs start with '-'; `--vid "$X"` makes argparse read them as a flag.
+    text = WORKFLOW.read_text()
+    assert '--vid "$VIDEO_ID"' not in text
+    assert text.count('--vid="$VIDEO_ID"') == 2
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--vid")
+    assert parser.parse_args(['--vid=-561cZmir5Q']).vid == "-561cZmir5Q"
