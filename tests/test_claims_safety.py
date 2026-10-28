@@ -172,3 +172,26 @@ def test_quote_at_a_different_timestamp_is_not_attested_by_a_label(tmp_path: Pat
     assert run_generator(tmp_path).returncode == 0
     _, body = current_claim(tmp_path)
     assert "more than 75%" not in body
+
+
+@pytest.mark.parametrize("mutation", [{"sources": []}, {"sources": [None]},
+                                       {"status": "active"}, {"title": None}])
+def test_corrupted_history_fails_closed_with_a_structured_error(tmp_path: Path, mutation) -> None:
+    seed_corpus(tmp_path)
+    assert run_generator(tmp_path).returncode == 0
+    add_followup(tmp_path, "2025-02-01T00:00:00Z")
+    path = proposals(tmp_path, "refines")
+    assert run_generator(tmp_path, "--relations", str(path)).returncode == 0
+    history = next(p for p in (tmp_path / "kb" / "history").glob("*.md") if p.name != "index.md")
+    block, body = history.read_text()[4:].split("\n---\n", 1)
+    metadata = json.loads(block)
+    metadata.update(mutation)
+    history.write_text("---\n" + json.dumps(metadata) + "\n---\n" + body)
+    assert_rejected_without_writes(tmp_path, "--check")
+
+
+def test_ambiguous_corrupt_inputs_do_not_fall_back_to_legacy_publication(tmp_path: Path) -> None:
+    analysis = tmp_path / "analysis"
+    analysis.mkdir()
+    (analysis / "broken.json").write_text('{"vid":')
+    assert_rejected_without_writes(tmp_path)
