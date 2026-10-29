@@ -629,6 +629,35 @@ def test_malformed_policy_is_rejected_before_any_write(tmp_path, capsys, field, 
     assert tree_bytes(out) == before
 
 
+@pytest.mark.parametrize("key", ["sentence_term", "Sentence_terms", "deny_literal", "extra"])
+def test_unknown_policy_key_is_rejected_before_any_write(tmp_path, capsys, key):
+    # A misspelled rule must not be silently ignored while a valid sibling satisfies the check.
+    src = make_corpus(tmp_path)
+    change_json(src / "analysis" / "VIDAAAA0001.json", ("talk_summary",),
+                "The zebracorn initiative advances quietly.")
+    out = tmp_path / "out"
+    run_import(src, out)
+    before = tree_bytes(out)
+    policy = tmp_path / "policy.json"
+    policy.write_text(json.dumps({"deny_literals": ["unrelated forbidden marker"], key: ["zebracorn"]}))
+    assert ic.main(["--src", str(src), "--out", str(out), "--exported-at", "2025-10-25T00:00:00Z",
+                    "--private-terms", str(policy)]) == 2
+    error = json.loads(capsys.readouterr().err)
+    assert error["status"] == "error"
+    assert "--private-terms" in error["error"] and key in error["error"]
+    assert tree_bytes(out) == before
+
+
+def test_non_string_manifest_model_is_ignored(tmp_path):
+    manifest = tmp_path / "manifest.jsonl"
+    manifest.write_text("\n".join([
+        json.dumps({"id": "a", "ok": True, "model": {"name": "large"}}),
+        json.dumps({"id": "b", "ok": True, "model": "large-v3"}),
+        json.dumps(["not", "an", "object"]),
+    ]))
+    assert ic.load_manifest_models(manifest) == {"b": "large-v3"}
+
+
 def test_invalid_policy_regex_is_a_clean_cli_error(tmp_path, capsys):
     src = make_corpus(tmp_path)
     policy = tmp_path / "policy.json"

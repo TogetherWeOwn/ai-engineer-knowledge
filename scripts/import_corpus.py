@@ -308,7 +308,9 @@ def load_manifest_models(path: Path) -> dict[str, str]:
                 record = json.loads(line)
             except ValueError:
                 continue
-            if record.get("ok") and record.get("model"):
+            if not isinstance(record, dict):
+                continue
+            if record.get("ok") and isinstance(record.get("model"), str) and record["model"]:
                 models[record["id"]] = record["model"]
     return models
 
@@ -623,10 +625,16 @@ def existing_published_at(path: Path):
     return value
 
 
+POLICY_FIELDS = ("sentence_terms", "deny_regexes", "deny_literals")
+
+
 def validate_private_policy(private):
     if not isinstance(private, dict):
         raise ImportError_("--private-terms must be an object")
-    for field in ("sentence_terms", "deny_regexes", "deny_literals"):
+    unknown = sorted(set(private) - set(POLICY_FIELDS))
+    if unknown:
+        raise ImportError_(f"--private-terms has unknown keys: {', '.join(unknown)}")
+    for field in POLICY_FIELDS:
         values = private.get(field, [])
         if not isinstance(values, list) or any(not isinstance(v, str) or not v.strip() for v in values):
             raise ImportError_(f"--private-terms {field} must be a list of nonempty strings")
