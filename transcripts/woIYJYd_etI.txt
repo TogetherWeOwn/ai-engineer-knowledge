@@ -1,0 +1,759 @@
+# title: What Is an Inference Engine, Anyway? — Charles Frye, Modal
+# source: https://www.youtube.com/watch?v=woIYJYd_etI
+# speaker: Charles Frye, Modal
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T04:11:45Z
+# sha256: 94b38e54d76fa70ae29fc6d7799ddb25c4f7093df0cead51b1921d496b702544
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:12] All right. Um, so I'm going to go ahead and get started while people get seated.
+[00:19] Um, we got a pretty tight turnaround. A lot of really wonderful workshops at
+[00:23] this event. Um, so I want to make sure we have plenty of time. Uh so I prepared
+[00:29] for 10 or 15 minutes of questions and I think it'd be best especially given this
+[00:34] is a workshop if people just interrupted me as I was going raise your hand and
+[00:39] I'll call on you and answer your question. Um and so just like let's keep
+[00:44] this interactive. Um I think it's it's better that way. Um, and it seems like
+[00:49] talked to a couple of people, it seems like we got a lot of folks here who know
+[00:52] their who know their inference, uh, know their engines, and so we can get a a
+[00:57] sophisticated conversation going. Um, so the title of this talk is what is
+[01:04] an inference engine anyway? And the goal is to sort of peel back some of the
+[01:10] layers that are behind APIs and uh what is go actually going on inside of the
+[01:16] code that runs your inference uh when you run it yourself. So roughly
+[01:22] you know there tokens go in tokens come out um and a lot of the time you get to
+[01:27] avoid thinking about what happens in between. Um there's this really high
+[01:31] quality open source software out there for running your uh running your
+[01:35] language or multimodal model inference. You've got SGA, VLM, Tensor RTLM. Many
+[01:42] people write similar things to these in-house. Uh they design these these uh
+[01:48] engines that like at a high level just taking in some
+[01:53] tokens putting out some tokens is not that hard. Um you can write something
+[01:57] like this in using PyTorch and hugging face transformers in like an hour or two
+[02:02] especially if you're good with agents. Um but making it uh extremely high
+[02:06] performance so that you can produce tokens with good tokconomics is the
+[02:11] challenging part. Um and that d like sort of drives the design and
+[02:15] architecture of these systems. Um so just as like a very quick sketch
+[02:22] um before we jump back to the high level and talk about why why we're here. Um
+[02:27] the uh these are generally architected as a
+[02:31] set of communicating processes. One that does IO does HTTP or RPC serving and
+[02:38] responds to the outside world. Um and then uh there's a little bit of pre and
+[02:44] postprocessing with tokenizers and detokenizers. uh and this wraps uh the
+[02:49] sort of core of the system where the real work gets done um in sort of two
+[02:55] pieces. One a sort of scheduler that like defines and schedules work to run
+[03:01] on the accelerator, usually a GPU. Um and then the actual code that runs on
+[03:07] the GPU. Um and so this these two components in the bottom right here are
+[03:13] where the sort of majority of the performance sensitive work gets done and
+[03:17] where the complicated problems are. [snorts] Um so that's where we'll spend
+[03:21] the majority of our time uh discussing.
+[03:27] Um, all right. So, with that stage set, um, I think, uh, I've been to AI
+[03:34] engineer since it was the summit and talked about, uh, running, uh, running
+[03:39] inference, uh, every time. And the answer to this question gets better and
+[03:44] better each time. Uh, the question of like why inference and why you should
+[03:48] care about it, why you should think about being uh, an inference engineer
+[03:52] who operates inference engines. um our uh fearless leader and uh uh
+[04:00] one-man conference army Sean Wang uh tweeted recently uh that everybody in AI
+[04:05] infrastructure the boring stuff uh like inference engines not the sexy research
+[04:10] stuff um is finally getting filthy rich um and so what uh I think he's pointing
+[04:16] to here is there's tremendous demand uh for these uh to run inference uh there's
+[04:22] demand at the labs there's demand within companies who want to own their own
+[04:27] stacks. There's demand to set up and rethink the infrastructure stack and all
+[04:32] of this wraps this core inference workload.
+[04:36] Um but Sean is also pointing out that a lot of what people have been thinking
+[04:39] about up to this point um is sort of the research side, the production of models.
+[04:44] So um why not, you know, why not think about training? Why not go to the
+[04:48] training engines uh talk with your precious time? I think the fundamental
+[04:53] reason why this is such a critical place uh for engineering work to get done and
+[04:58] why it's such an like cool place to work as an engineer is that in the end
+[05:03] training is a cost center and inference is a revenue center. Um so when you
+[05:08] train models um it turns out um people have not generally been able to make
+[05:13] businesses work where they sell model weights to people directly. Um and so
+[05:17] you can't really turn a training setup into like a proper self-supporting
+[05:22] system. Uh but uh inference once you have a model um is something that people
+[05:27] will pay for. People will pay for a system to you know take in their tokens
+[05:32] and their context to produce new tokens, produce software for them, whatever. Um
+[05:37] there's a lot of opportunities to do inference. we have set up where there
+[05:41] are a small number of essentially model foundaries who produce foundation models
+[05:45] that are then deployed and customized by inference engineers.
+[05:50] Um and then even for training inference has uh snuck its way in. A lot of the
+[05:56] post-training adaptation of these foundation models requires that you
+[06:00] generate samples from the model uh in inference and a lot of the same
+[06:04] technologies come to play. A lot of the same concerns are present. Um, and then
+[06:08] finally, sort of more selfishly as an engineer, there's like right now
+[06:12] inference is still very new, even though we're years into this new technology.
+[06:17] Um, and so you end up kind of straddling the whole stack from application
+[06:21] architecture uh through linear algebra down to like electrons and hardware. So
+[06:26] it's a an engineer's playground. Um, so we'll see a lot of that as we go.
+[06:32] Um I'll maybe in the interest of time since we kind of had to get started very
+[06:35] quickly I'll skip over this but I've been working on inference for a couple
+[06:38] of years mostly uh at modal um since coming from the sort of training world
+[06:43] before that um and helping a lot of teams sort of deploy and optimize their
+[06:46] inference on hundreds or thousands of GPUs on the modal platform. Um I've also
+[06:50] been making a lot of uh inference applications myself. This is a little
+[06:54] art piece that I made. Um, we uh uh had it in the uh Legion of Honor just this
+[07:00] past week. Um, this art piece takes what it sees, passes it through a vision
+[07:06] language model, one of the Quenes running on uh uh served via the SGA
+[07:12] inference engine and running on modal. Um, it takes that input and it describes
+[07:16] it as though it were an art piece. So, it produces one of these little museum
+[07:19] placard uh type things. And as everybody knows, you're not art until somebody
+[07:24] writes one of these little placards to describe what you've done. Um, so I
+[07:27] pointed it I pointed it at the line on the way in. Um, and it came up with a
+[07:30] cute little description. Anyway, so this is the kind of, you know, uh, sort of in
+[07:34] the middle of the set of inference applications between the lowest latency
+[07:39] and the uh, highest throughput applications that get deployed.
+[07:43] Um so uh I'll start by talking in more detail about those workloads like what
+[07:48] workloads land on these inference engines and then jump quickly jump move
+[07:52] from that quickly into architecture how these engines are designed some of the
+[07:56] key techniques uh that fit within that architecture to make their uh improve
+[08:00] their performance. Um and then lastly, a key piece for making these things work
+[08:05] in production, observability and uh like debugability of these engines for
+[08:11] correctness and for performance. All right, so let's start with workloads
+[08:15] really quick. Um uh I like to break things down into kind of three pieces.
+[08:20] There's chatbot plus, which is like the original killer app of inference,
+[08:24] something like chat gypt or clawed code. there's a person waiting on the other
+[08:28] side interacting with this inference system and providing additional context.
+[08:32] Um the plus uh indicates that not only does it talk to a person, it also
+[08:37] probably interacts with external systems via tool calls. Um then you have
+[08:41] background agents. They often do similar tasks to something like clawed code. Um
+[08:46] but they do it in the background, not directly in response to a person. So
+[08:49] something like Devon, Ramp inspect, uh OpenClaw or Herbies for a non-coding
+[08:54] case of a background agent. Um so uh this is uh characterized by a similar
+[09:00] sort of affordances or workloads but a different performance profile. And then
+[09:05] lastly data processors. Um these generally run relatively small models.
+[09:09] They take unstructured data like a PDF and they turn it into structured data.
+[09:14] Um they extract some information from it. Um usually the sort of thing you
+[09:18] might insert in a database. This is something like the uh reductto document
+[09:22] processing platform or something like Fathom that takes a a video and extracts
+[09:27] the transcript. Um okay so under the hood what do these
+[09:34] uh workloads look like? Um you send in some tokens from a client uh that goes
+[09:39] to some server somewhere. Um for now we're going to focus on cloud deployment
+[09:43] of inference because that's where the majority of it happens right now.
+[09:46] Obviously in the future a lot of these inference engines are going to end up
+[09:49] running on people's uh machines like in a couple of years. Um yeah, go ahead.
+[09:58] >> The size of the screen >> brightness of the screen. Um yeah, so
+[10:04] the question was about adjusting the brightness. I'm not sure if we can uh
+[10:07] fix that. That's what I get for making dark mode slides, but yeah. Um yeah. All
+[10:13] right. So a client submits um an input uh and then it's processed by our engine
+[10:18] running on a server somewhere. Um first we process the input tokens in the
+[10:23] prefill phase and then we generate the output tokens in the decode phase. Um,
+[10:28] and so we have uh one uh one prefill uh run uh does a forward pass through the
+[10:36] model and then multiple decode runs to produce one or a few tokens at a time
+[10:40] and then once we're done return them to the user or generate a tool call and
+[10:44] interact with an external system. Um so with these work these both the
+[10:53] external interface and this sort of internal pre-filled decode split defines
+[10:57] these uh the sort of metrics that you care about for a workload that sort of
+[11:01] tells you how to deploy your inference engine and and how to measure its
+[11:05] success and performance. So you have something like queries per second in and
+[11:09] queries per second produced. Um this one pretty tricky to think about uh under
+[11:14] control of your users. um uh you probably have a better time thinking of
+[11:19] it uh at the engine level thinking of how many queries per second you can
+[11:22] handle per replica of your inference engine. Um and then you have aggregate
+[11:26] demand coming from users. Uh then with those queries you want to look at how
+[11:30] many tokens there are per query um input and output aka prefill and decode. Um so
+[11:38] this one is tricky because it's not only under control of users but it's also
+[11:42] under the control of a model. Uh so the determination of when to finish
+[11:46] processing a query is not under your deterministic control. It's under the
+[11:49] control of the model inside the inference engine. Um so this is
+[11:53] something not both of those sources of nondeterminism means you need to kind of
+[11:57] like measure this benchmark it to get it. Um and then uh when we do our
+[12:02] processing we uh we produce some intermediate artifacts that we want to
+[12:06] cache in the KV cache. Uh and then the degree to which that cache is reusable
+[12:11] is a key component of the definition of our workload. Um this is also mostly
+[12:16] under control of users but you can get like depending on the workload there's
+[12:20] actually like pretty uh relatively fixed patterns of of prefix reuse. Um uh and
+[12:26] then finally coming from the application layer um you have some uh latency budget
+[12:32] some SLO of like how quickly you want to return tokens. That could be how quickly
+[12:37] you finish something like the prefill phase and have your first tokens ready
+[12:41] to send to users. Or it can be how quickly you can generate each set of
+[12:45] tokens during your decodes and get them back to users. So that's your time to
+[12:49] first token and your time per output token or inter token latency. Uh so this
+[12:55] is going to be the like primary constraint that you operate under. Okay.
+[12:59] Um, and we can map those back onto our application archetypes. Uh, like chatbot
+[13:05] plus background agent, really high prefix reuse. There's some interactivity
+[13:08] going on whether that's a person or an agent. Um, the chatbot plus generally
+[13:13] has relatively short decodes, relatively short outputs of tens to hundreds of
+[13:17] tokens. Um, and a very tight latency tolerance on that. Like a person uh
+[13:21] wants to see something in a few hundred milliseconds at the very most, or they
+[13:25] get bored, uh, they get angry, they turn away. Um, with a background agent, you
+[13:29] maybe have a few minutes to produce a PR, right? Um, if it's as high quality
+[13:33] as an engineer, maybe as like what would be produced by a good software engineer,
+[13:36] maybe you have a few hours. Um, and so there's not as tight of a of a budget on
+[13:40] your milliseconds of network overhead or whatever. Um, and then with a data
+[13:44] processor, you generally have very low prefix reuse. Um, you are seeing
+[13:49] different documents each time. There's maybe a system prompt, but it's
+[13:52] generally small relative to the other inputs. Um, and then you have a very
+[13:56] short decode. you're producing some structured object that's generally short
+[14:00] relative to the input. Um the structured version is shorter than the unstructured
+[14:04] version. Um and then the demand here is less on latency generally and more on
+[14:09] aggregate throughput because you're generally like ripping through a
+[14:13] database backfill type job in a lot of these.
+[14:17] All right. Um and so maybe just want to call out uh like now that we've looked
+[14:23] through this you could see that like even though at the application layer
+[14:27] this feels like kind of one it's one single workload from the perspective of
+[14:32] the user once you start drilling down into what the engine is doing it really
+[14:35] feels like there's two subworkloads going on. there's the like workload to
+[14:40] do your prefills to do the processing of input prompts. Um, and then there's work
+[14:44] to do the decodes to produce the outputs. Um, and these uh they sort of
+[14:51] operate semi-independently inside the engine. Um, and so need like a sort of
+[14:56] like different perspective and they follow often like different code paths.
+[15:00] Um, and they're sort of defined by the fact that the per user in the decode
+[15:05] phase, you do you're doing far less arithmetic, far less math per uh per
+[15:11] decode per user than you would do in the prefill phase, which is a lot like much
+[15:16] higher arithmetic intensity, a lot more uh uh a lot more math per request. Um,
+[15:22] and so that's your fundamental constraint, but also the sort of space
+[15:25] in which you operate in configuring an engine and then like adding features or
+[15:29] um, adjusting the engine behavior to serve these two things.
+[15:34] Okay, so I wanted to make sure we're all on the same page about some of the core
+[15:38] stuff about what these engines are actually doing before we peel open uh,
+[15:42] the insides and start looking at them. So what is the architecture of an
+[15:46] inference engine? Um so um this is a little little diagram showing at a high
+[15:52] level what an inference engine does. So the goal of an inference server is to
+[15:56] take an HTTP request or a gRPC request and turn it into an HTTP response to the
+[16:02] client. Um and so it does that by passing through all these things down
+[16:06] here. Um so the idea in this diagram um is that if you follow any set of arrows
+[16:12] you get the same thing. So uh you can sort of peel back a layer of the arrows
+[16:17] and look inside and say all right so what what is the the inference server
+[16:21] does this high level thing what's the next level down the inference engine is
+[16:25] the sort of like interesting part of it is the is the part that is not doing the
+[16:29] HTTP serving because we aren't in one of those situations where HTTP serving is
+[16:33] the hard part is your bottleneck it's not like a proxy um it's uh it's a this
+[16:38] is a case where you're handling tens hundreds maybe thousands at most of
+[16:44] requests and responses per replica and so general purpose hardware just you
+[16:49] know kind of eats this for lunch. Um so the real interesting stuff is all at the
+[16:53] layer below this. Um so at the top is your like your server IO for HTTP
+[16:57] requests. At the bottom is the actual engine and it's like collection of
+[17:00] processes. Um and you can kind of break this out into three pieces. The request
+[17:05] comes in expressed using like sort of human friendly um or external
+[17:11] representations. So you have Unicode strings, you have PNG images, you have
+[17:16] MP4 videos or WebRTC streams. Um, and these need to be pre-processed before
+[17:21] they can get passed to the actual inference. So they get turned into
+[17:24] collections of tokens. um which then get mapped into tensors on the GPU and then
+[17:30] we can actually do the inference part of the inference engine which takes you
+[17:35] know in the simplest case it takes a tensor with K entries in it and gives
+[17:39] you a tensor with K plus one entries in it and these are machine learning models
+[17:44] that predict the next token they guess what would the next entry in this big
+[17:48] tensor look like um based off of the data I've seen in training whether
+[17:52] that's data from the internet or data from what a helpful agent would do or RL
+[17:58] data um whatever that you learn to predict this next tensor entry. So
+[18:02] that's the core right there. Um and that is what is wrapped by the rest of the
+[18:06] inference engine. Um so then we have post-processing on the side here. So
+[18:10] post-processing turns that new tensor into a response. Uh and that's generally
+[18:15] done by this detokenizer that goes back to the sort of like token space first
+[18:20] and then uh and then back to our um back to the human and external system
+[18:25] friendly representation in the response so it can be returned to the user.
+[18:31] question.
+[18:34] >> Could you explain the difference between the inference server and the inference
+[18:38] engine and where does >> Great question. Yeah. So the question
+[18:44] was what is the difference between an inference server and an inference engine
+[18:47] and where does something like VLM lie? Um so inference server uh means that
+[18:53] you've wrapped some like input output around the core operations of like
+[18:58] taking requests and turning them into responses. Uh so VLM has both of these
+[19:03] like VLM operates as a an HTTP or gRPC server. Um and then you the engine layer
+[19:12] is sort of like part of the VLM or suing SDK as like VLM.
+[19:18] Um so most deployments are look like are deployed as a server with like a single
+[19:25] request single response kind of interface um as depicted here. Um yeah,
+[19:30] does that answer your question? Yeah. Um cool. Um I said this earlier but some
+[19:37] people have come in since like please interrupt raise your hand with questions
+[19:40] if I'm like if there's anything confusing or if you'd want to dive
+[19:43] deeper. Yeah. >> Rom.
+[19:50] >> Yeah. So the question from Rustom is is this like a stateful or stateless uh
+[19:55] workload? So the answer is it is stateless [snorts] if you don't care
+[20:02] about performance. Um it's stateful once you do care about performance which is
+[20:06] pretty much every case. So and the primary state that you accumulate over
+[20:10] time for requests is the KV cache of like previously computed things for for
+[20:16] a previous request attached to some notion of session. um and that handling
+[20:22] things like sessions actually lives outside of the inference
+[20:25] server/inference engine in general. So the an individual engine replica can
+[20:30] track this KV cache but is up to the wrapping layer which might be something
+[20:34] like Nvidia Dynamo or LMD to handle like defining what a session means. So it's
+[20:41] like the clients in that architecture sort of define the the sessions. Um and
+[20:45] that is where a lot of the trickiness comes in. Um, so we won't talk too much
+[20:48] about that because it's kind of outside the there's enough to talk about with
+[20:50] engines um already, but yeah, uh, come find me afterwards um, if you want to
+[20:55] talk about that layer. Um, right. So this diagram, we also
+[21:02] talked about it previously, but I just want to return to it now that we've seen
+[21:04] a little bit more. So this outer layer is our server IO process. This um, is
+[21:10] this is specifically SGA's architecture. There's some slight differences with
+[21:13] VLM, but this server IO process communicates with the outside world and
+[21:18] then with our pre-processing and post-processing. Those things
+[21:21] communicate with auler process um which is the one that defines and schedules
+[21:26] work onto the GPU, handles things like queuing. Um and then the not ready for
+[21:32] that yet. Um, and then the one or more processes that are sort of closely tied
+[21:38] to the GPU are the ones that do the real work of doing the inference.
+[21:43] Um, so the yeah, so the key things to pull out here is that if you are an old
+[21:48] school ML person who's been in this world for a long time, the model forward
+[21:52] passes layer is the one that you're familiar with. This is where the vast
+[21:55] majority of the sort of like PyTorch uh and similar code shows up. Um and this
+[22:01] is the pl like the GPU or the accelerator in general is the component
+[22:07] that costs the most um and is capable of the most work like paflop per second
+[22:12] scale operations. So this is where the like hardcore shave a shave a microcond
+[22:19] performance engineering is focused. Uh but critically thisuler process out here
+[22:24] or it's equivalent in another architecture is your is the bottleneck
+[22:29] to that component. Um and so this is it's generally operates um it is
+[22:36] literally singlethreaded in implementations we'll talk about but is
+[22:39] also like semantically it's single threaded. It's this one thing that is
+[22:42] defining somebody has to define the work that happens on the on the GPU. somebody
+[22:46] has to manage a bunch of resources there and there's some some fiddly like tricky
+[22:52] things to do concurrently. And so this becomes this uh like
+[22:57] semantically singlethreaded uh like point of control that can
+[23:02] potentially despite the fact that it's not doing much it's not doing as many
+[23:06] operations uh as the work on the GPU it actually becomes your bottleneck. It's
+[23:11] the sort of gatekeeper to the GPU. And so this is the other place where the
+[23:15] majority of like performance engineering and care needs to go in the design and
+[23:20] operation of an inference engine. Um so we'll see more on that as we go but but
+[23:25] that's like the high level takeaway about these things.
+[23:28] >> So is the solution to that bottleneck
+[23:36] problem? Uh yeah so the question was is the solution to that bottleneck to you
+[23:41] know operate the schedulers in parallel or um uh or to improve some of the
+[23:47] external components that consume from it. I think the current state of affairs
+[23:52] is that this is not reached the like that you
+[23:58] can operate these server processes in Python and you just have to be faster on
+[24:04] the host side than the GPU side and there's not the like complexity increase
+[24:11] that you get from trying to manage like locks or coordination on the GPU
+[24:17] resources is much that complex lexity increase is much greater than the gain
+[24:22] um because even if you were able to get it down to a microscond the work
+[24:26] wouldn't start happening until the previous work on the GPU had finished
+[24:30] and that's you know depends on the particular
+[24:34] workload but you're talking generally tens of milliseconds to hundreds of
+[24:38] milliseconds and so the like um yeah there are general most of the time you
+[24:45] can get around it we we'll talk a little bit more about this so maybe ask again
+[24:48] once we get to if if that wasn't satisfying. Um
+[24:53] but yeah, great question. More good questions, please. Okay. Um so then just
+[24:57] looking at that was like the architecture diagram that you think of
+[25:00] as your like engineering. Um let's look at the like life of a request in this
+[25:04] architecture. So the um the server like receives an input from the outside
+[25:10] world. It says okay, we've got a request. um it sends it to the tokenizer
+[25:14] to prepare or pre-process this request that then goes into the scheduler that
+[25:19] decides like okay how many resources is this thing going to consume what
+[25:22] resources are available um and then that runs this core loop of creating um
+[25:30] batches of requests to go in the model runners. So generally most of the
+[25:34] accelerators like benefit from operating on multiple requests in parallel. Um so
+[25:40] especially GPUs but also TPUs and and many others. So you want to collect a
+[25:45] bunch of requests together and run them. Um if you're a database person you might
+[25:49] imagine like I'm g I'm about to run a sequential scan so I might as well grab
+[25:52] like three or four queries that are all going to like read this entire table and
+[25:57] do all of their um like you know do all their queries at once. Um because the
+[26:02] hard part is that like sequential scan of loading the entire table. Um so
+[26:06] there's a similar thing going on here. Um uh so this core loop operates over
+[26:11] and over again start a batch and outputs the like uh the tokens and the
+[26:15] probability distribution over tokens the the logits. Um that comes from the the
+[26:20] model runner or runners. Um so that operates um sort of continually. Uh and
+[26:27] then as tokens are ready uh they can be passed to the detokenizer to be like
+[26:33] turned back into a proper response to the outside world and then sent back to
+[26:37] the server.
+[26:41] So yeah, this is what's interesting about this stuff is that it is simple
+[26:44] relative to what's going on inside databases, file systems, uh like web
+[26:49] servers. Um, partly because it's fairly new, but partly because there's just
+[26:54] this core bit at the middle that you just want to operate at maximum speed.
+[26:57] Yeah. Question.
+[27:03] >> The question was, is there communication between the tokenizer and the
+[27:06] detokenizer? Um, to my knowledge, there is no direct
+[27:10] communication between the tokenizer and the detokenizer in SG lang. Um, in VLM,
+[27:16] they actually live inside the same process. the um manager, the engine
+[27:20] manager. And so like it'll be a little harder to determine if there's any
+[27:24] communication there. Um but in general, they actually don't need to communicate
+[27:27] with each other. They just need to operate essentially the same um system
+[27:31] for mapping from like inputs to uh tokens or tokens to outputs. Yeah. Did
+[27:36] that answer your question? >> Yeah.
+[27:47] I'm not sure
+[28:06] >> Right. So the the question was about basically maintaining coherence between
+[28:09] the tokenizer and the detokenizer and how would you handle maybe like
+[28:12] ambiguous um like ambiguous inputs. Um the answer is that yeah they they run
+[28:19] the same like underlying li like underlying libraries like the usually
+[28:23] like the tokenizers library from hugging face. Um and the I would say the
+[28:30] tokenization part is the one that is harder than the detokenization part. the
+[28:36] detoization part is like a little bit more entirely under under the control of
+[28:40] the person implementing the the detokenizer. Um yeah. Um
+[28:46] >> software
+[28:50] >> yes. So the question was does the software allow the tokenizer and
+[28:53] detokenizer to always make the same decisions? I would say yes. I'm trying
+[28:58] I'm like trying to make sure that I'm not overpromising here. Um but I don't
+[29:02] think you need communication between them to ensure that the same decisions
+[29:04] are made. Yeah. Question. Sorry, the person. Yeah.
+[29:12] >> Yes.
+[29:21] >> Right. So first pointing out that the tokenizer can be um parallelized and
+[29:27] generally is like multiple processes um and yet you still see longer time to
+[29:32] first token uh if you have longer input sequences. So why is that? Um so
+[29:39] the answer is that processing a longer sequence of tokens takes longer inside
+[29:44] of this core loop. Um so it's the like primary driver. Um if you have a 100,000
+[29:49] tokens that will take let's call it 10 times 10,000 tokens. Um once you get to
+[29:54] a certain uh size it's basically linear in the input sequence size. Um then in a
+[29:59] like running inference engine there's also effects from like you break up the
+[30:03] input tokens into multiple pieces and run them as separate batches. So you can
+[30:07] also get additional if there's like queuing and congestion that adds more to
+[30:12] the um uh processing of a uh of a long batch um than to a short batch. You
+[30:19] experience the queueing delay multiple times possibly. Um but maybe the one
+[30:23] underlying um point to clarify like producing the first token means
+[30:28] producing the first output token not the tokenization process. Um and then
+[30:33] finally not a part of the question but something I wanted to point out. It is
+[30:37] interesting that you generally have multiple deto tokenizer processes um and
+[30:41] one dtokenizer in the sgang architecture at least. Um and the answer there is
+[30:45] that input tokens are come in at like a much higher rate than output tokens are
+[30:51] produced. Um and that's related to the fact that prefill can operate at much
+[30:55] like higher rates of total tokens per second than decode can in general. Um,
+[31:00] and so you there isn't as much pressure on the detokenizer component of the
+[31:03] system to operate like at the as quickly. Um, and it's also in some it's
+[31:08] bottlenecking your response to the user, but it's not bottlenecking the core
+[31:12] model forward pass resource. So it's also like off the hot path a little bit.
+[31:18] Um, yeah.
+[31:27] >> Yeah. So the question was how much of the latency comes from this part in the
+[31:30] tokenizer versus this part in the core loop. This is going to depend on your
+[31:33] workload. Um I would say there was a nice thing from
+[31:40] uh who was that Cruso I think um that pointed out that the existing tokenizers
+[31:47] generally don't show up as a bottleneck if you have models that are let's call
+[31:53] it like 20 billion parameters total or or above. um and that and if you but if
+[32:00] you are operating a smaller model and you're operating on very large input
+[32:03] contexts then it can show up as a as a bottleneck. So that's maybe a good rough
+[32:07] guide. I would say like I actually have not had to think about the tokenizer
+[32:13] latency very much. It's generally been prefills and substantially decodes that
+[32:18] are your the like latency bottleneck. And so decodes if you're producing 1,000
+[32:23] output tokens a second, each one is like one millisecond on average. Um and the
+[32:29] um but up to like 10 milliseconds, 20 milliseconds um or even more if you have
+[32:35] a um lower decode throughput like a large that you're running at lower
+[32:40] interactivity. And so that very the tokenizers are definitely millisecond
+[32:45] scale or less and only happens once um per request. Yeah. Also notable that
+[32:52] nobody talks about tokenizer caching. People talk about KV caching but not
+[32:55] tokenizer caching even though you could do it. Um I'm going to keep going just
+[32:59] to make sure we get through more stuff but these have been great questions and
+[33:01] so if it's still relevant please ask. Um another important question to ask wait
+[33:06] why are we doing multipprocessing? The key reason is they want we want separate
+[33:09] threads of control for each subcomponent for our server IO for our tokenization
+[33:13] and detokenization for each model runner. Um we want them to be able to
+[33:17] sort of operate as independently of each other as possible. Um they are many of
+[33:23] them the tokenizer and the detokenizer are doing relatively computensive work
+[33:27] relative to most of what happens maybe in a in a in a web server. Um the model
+[33:32] runner is um like interfacing with the GPU or accelerator. It interacts with
+[33:39] that in a way that's kind of similar to the way you would interact with a nick
+[33:43] um in like a web server, which is to say you offload work onto it. Um and uh so
+[33:48] that one you you're giving it its own event loop. Maybe in theory that could
+[33:52] be part of like a broader event loop. Um uh but it's uh certainly like cleaner to
+[33:59] have these separate threads of control and optimize their uh you know optimize
+[34:02] their latencies and there's not sufficient uh interprocess communication
+[34:06] to require them to like say live in the same thread. Um but why not threads uh
+[34:11] for each of these instead of processes um and one of the fundamental reasons is
+[34:16] that Python is single threaded per process. This has recently started to
+[34:20] change. there's still a lot of work for compatibility and performance to be done
+[34:24] there. Um so that uh because Python has a global interpreter lock for all the
+[34:28] threads in the same process, you would like frequently block on that. Um so
+[34:32] it's so that is another reason to sort of split these up. Um but that just uh
+[34:37] begs the question um uh or I guess begets the question why Python um and
+[34:43] the answer is Python has excellent model or GPU support. Uh so it's like easy to
+[34:48] run code on accelerators with Python. So specifically for that model um uh model
+[34:54] for pass component um and so wait but why wait why does Python have excellent
+[34:59] support here? Partly it's that it's a great language for researchers because
+[35:02] it's like ease of use and these uh models are still coming out of a sort of
+[35:06] researchy data sciency environment. But there's a deeper reason which is that
+[35:09] Python has really has kept like really deep C and C++ interop as one of its
+[35:15] core design principles and that allows for like much easier communication uh
+[35:19] with these accelerators and uh with like accelerated code in general um than uh
+[35:25] like a maybe equally ergonomic language like JavaScript. Um but why not like
+[35:30] rewrite it in Rust? Um the model worker processes again they're just trying to
+[35:36] like tell the GPU what to do. So you could like the code on the GPU is
+[35:40] written in a compiled language and and like carefully optimized like to within
+[35:44] an inch of its life. Um but the model worker processes are just organizing
+[35:48] that and there's a few tricks like CUDA graphs um that like really just pull all
+[35:53] the work out of the worker processes and into sort of fast stuff running on the
+[35:57] GPU. Um but there is theuler on the other hand. So theuler just needs to
+[36:03] stay faster than that work. Um, but as GPUs get faster and as the amount of
+[36:07] work on the GPU goes down, the pressure on theuler component goes up. Um, so
+[36:11] this is actually like a pretty good target for a rewrite it and rust type
+[36:14] moment. Um, because this part is host side. It has to manipulate a small
+[36:19] number of GPU resources, but it doesn't necessarily have to know stuff about
+[36:22] models and pietorrch. Um, and so it's like a thinner rewrite. It's like
+[36:27] specific per engine. um and uh uh and host side only. So like in the sort of
+[36:34] arc of future inference engines, I'd expect it to be a big target um making
+[36:38] that faster now that the the sort of iterative development speed is slowing
+[36:42] down a bit. Okay, so now let's look inside of the
+[36:47] like what what is going on inside of these components. Um
+[36:52] um mostly mostly focused on the um the model forward pass piece. So at the very
+[36:58] we're going sort of like inside out. So at the very bottom there are kernels
+[37:02] that run operations for as part of the model architecture in general. Um these
+[37:08] are mostly deferred by the engine which is to say like the engine doesn't
+[37:11] implement all of the kernels for every operation it needs to support. Um it has
+[37:16] backends that implement the uh these kernels and it consumes them from
+[37:20] external libraries of kernels. This is one reason why there isn't much
+[37:24] differentiation between the engines on sort of raw GPU performance. Um, it's
+[37:29] mostly about how good are you at getting out of the way of the GPU. Um, there are
+[37:33] a few special kernels per engine like tree attention for treebased speculators
+[37:37] and SG lang. Um, and so there's like little bits where an engine will have a
+[37:41] specific kernel, but like if it's useful, if it's popular, it ends up in
+[37:45] some kernel libraries so it can be used in lots of places and then they consume
+[37:48] it from an external library. Um then uh the kernels are selected by this sort of
+[37:56] model forward pass code that does control flow of and sort of like
+[38:00] selection of which kernels to operate. Um and this is this is implemented in
+[38:05] each engine in general and it's implemented per model like if you want
+[38:08] to add support for a new model architecture this needs to be
+[38:11] implemented in each engine. um there's generally a reference implementation
+[38:14] that comes from a library like transformers um but that is
+[38:19] insufficiently optimized um the like the setup there. So there's um I guess in
+[38:25] suang and vlm there is now a path where you can just use that transformers
+[38:28] implementation and they'll maybe do a little bit tiny bit of surgery to see
+[38:32] what they can automatically kernel fuse or automatically optimize or rewrite. Um
+[38:37] but in general for most things people want to run you're going to go through
+[38:40] this hand handwritten as handwritten as software is these days uh path for um
+[38:45] like selecting which kernels to run. Um then uh wrapping those model forward
+[38:52] passes is our batch construction to select the inputs to that model forward
+[38:56] pass. Um this is kind of one of the primary sources of special sauce per
+[39:02] engine. you need to set up this um this sort of like queuing setup. Um so you
+[39:08] might want to be able to for example not operate separate prefill and decode cues
+[39:12] but operate one sort of queue where you can mix prefill and decodes together. Um
+[39:17] that might have some performance implications. So you might also want to
+[39:20] be able to like dynamically switch whether you're running pure prefills,
+[39:23] pure decodes or mixes. Um and then you want to do this I think in the ideal
+[39:28] operation of an inference server there is no queuing. Um, so as somebody who
+[39:32] operates these things, I like I treat queuing as a problem. Um, but the engine
+[39:37] should be able to kind of do it. Um, or may maybe it's too extreme to say that
+[39:41] queuing is a problem, but um, you don't want this to be a like yeah a growing
+[39:46] queue. Um, you want it to be flushed as quickly as possible. Um, and then lastly
+[39:51] wrapping that you have uh detokenization and tokenization. Um, this is like
+[39:56] mostly boring I'll say. um it's like solved in the existing tokenization
+[40:00] libraries outside of the engine. I think the exception to this being multimodal
+[40:04] inputs and outputs um we now have pretty good open weights multimodal input
+[40:09] models. Um and if you take a look at some traces you'll see that there's like
+[40:13] still many operate opportunities for optimization on this path. Um,
+[40:18] tokenization of an image is just like a harder problem than tokenization of a um
+[40:24] of a string of Unicode bytes like conditioned on already having a a
+[40:28] tokenizer. There's more more work to be done. You might need like ffmpeg for
+[40:33] instance to like pull out raw frames to go in to something that turns it into a
+[40:37] tensor. Um, and so yeah, so that is maybe the most interesting part there.
+[40:42] Um the one way to sort of conceptualize the
+[40:47] structure around the model forward codes is that the model forward code is um
+[40:54] like going to call into a couple of different types of libraries or directly
+[40:58] sort of write its own code to run on the GPU. Um so a lot of it goes through like
+[41:04] PyTorch code which has its own kernel libraries and and can run things on the
+[41:08] GPU. Um then there are like specific kernel libraries that you would draw
+[41:11] from that aren't in the engine. And then finally the engine has its own uh set of
+[41:16] like kernels that can directly um you know run code on the GPU.
+[41:22] Um so picking that apart a little bit the um
+[41:26] uh the kernels that exist in their backends. The core of language modeling
+[41:32] architectures these days look something like this. Um there's a sequence of
+[41:36] layers uh that you take an input, you pass it, do some cross token computation
+[41:42] on the sequence, then you do some per token computation to enrich the
+[41:46] sequence. Um and then you merge that back in with your representation and you
+[41:50] iterate this layer after layer. Um and so this splits nicely into the two kind
+[41:55] of classes of like really critical fast kernels that are available especially
+[42:00] via the backends. Um so the cross token computation is your attention or linear
+[42:06] attention. Um there's a bunch of different backends for attention. The
+[42:10] flash attention kernels from tree and jaw and others. Uh flash and fur from
+[42:15] Nvidia. Uh cutless also from Nvidia. Um the Triton uh implementations of these
+[42:21] kernels. That's OpenAI's kernel authoring library. Um, the TRTLM, the
+[42:27] engine has also split out its kernels and they're available um, as as backends
+[42:33] for attention. I think you'll see many of the same names that show up as
+[42:37] attention backends also show up as backends for your matrix multiplications
+[42:41] inside of your um, your uh, per token computation which is your MLP layer.
+[42:48] It's where the biggest uh, gems are. Uh it's also in some architectures it's
+[42:53] this is a dense MLP a classic neural network. In other architectures it's
+[42:57] these sparse mixture of experts which basically just says don't send every
+[43:01] token to the same neural network. Per token decide which smaller neural
+[43:05] network to send it to. Um so the um the dense MLPs there's a there's a nice uh
+[43:12] library for this from uh deepseek deep gem that gets used a lot in sglang as
+[43:17] kind of like the default. Um in VLM there's some quantization focused
+[43:22] backends for this the Marlin and bits and bytes backends on the uh for the
+[43:28] group gem you can split this out into first like there we have this like
+[43:34] routing or communication problem of where do tokens go and how do I bring
+[43:38] stuff together at the end. Um so that can be done with a separate set of
+[43:41] kernels like the uh for this all to all communication and routing like the
+[43:45] another one from deepseek DP. Um and that could be sort of factored out from
+[43:52] the like matrix multiplication step. Um that had that can have performance
+[43:57] penalties and so you can also do that as like one big kernel um a mega kernel uh
+[44:03] which is what is done in the deepseek v4 architecture.
+[44:07] Um okay so these uh with VLM and SGA lang these are things that you can sort
+[44:13] of set and control in SG lang it's like kind of pushed up into your face in the
+[44:18] form of configuration at start with smart defaults VLM is a lot more focused
+[44:23] on the like smart defaults side and then you sort of like patch change things
+[44:28] more with um environment variables. Um, at least last I checked, you know, these
+[44:33] things change every like few days. Um, but yes,
+[44:37] >> questions
+[44:41] are like who decides how much?
+[44:58] >> Yeah. So the question was basically about what's happening with concurrency
+[45:01] with really large numbers of requests. Um so that goes back so that's uh much
+[45:07] higher level than the kernels and backends. Um that's happening sort of at
+[45:11] our like batch construction and scheduler level. So basically the
+[45:15] scheduler is going to do what the best that it can to decide like um which
+[45:20] requests to run emp generally emphasizing requests that already have
+[45:23] KV cache allocated to them um because then you don't need to recomputee um the
+[45:30] if you need to evict something from the cache to make space for another request
+[45:35] um yeah that will generally get like put out to CPU memory and then disk um and I
+[45:42] would say Yeah, to my point earlier about queuing, I think of that as
+[45:47] essentially like a failure state of the engine. Um, that we like I've deployed
+[45:50] my engine improperly. If I get to the case where I have KV cache thrashing or
+[45:54] like things being flushed to disk in the same way that there's like swap memory
+[45:58] in your operating system, like you can swap memory to disk, but at that point
+[46:01] your MacBook becomes unusable, right? Um, so it's it's a useful feature to
+[46:06] have, but almost like um so that you don't go hard down when you have a
+[46:11] serving problem. Um yeah,
+[46:23] how is mobile?
+[46:29] >> Yeah. So the question was about like serverless deployments and cold starts.
+[46:32] I'm not going to talk about that this much because I promised Swix I wouldn't
+[46:34] do a vendor talk. Um but please talk to me afterwards. There's a blog post
+[46:39] called truly serverless GPUs that talks about how we solve that problem. Memory
+[46:43] snapshotting, GPU memory snapshotting, custom file system, bunch of pieces to
+[46:46] make the cold starts faster. Um, yes. Um,
+[46:52] cool. All right. So, let's talk about some of the key techniques that you need
+[46:56] uh to implement to in inside an inference engine to make sure like uh
+[47:02] your performance is good. Um so attention is fundamentally quadratic at
+[47:06] least like the uh loadbearing part of the attention in in every architecture
+[47:11] that's popular. Um and the um so the solution to that is to store things um
+[47:18] after you've computed them and you do like a little space-time trade-off for
+[47:21] linear computational complexity in exchange for linear storage. um that
+[47:27] runs into problems with how much can you store in GPU memory because it's
+[47:31] actually often slower to store this somewhere else uh and then load it back
+[47:35] in as opposed to recomputing it. GPUs are fast. Um so you want to be efficient
+[47:40] with your use of GPU memory. Um and then you often have requests that share
+[47:45] prefixes. So for example like all these commandments start with thou shalt not.
+[47:51] Um, and so you can reuse the computation of everywhere up to here. Um, as soon as
+[47:56] a single token differs, you no longer can share the prefix. So it's kind of
+[48:00] this like tree or try shaped structure. Um, but you want to be able to make use
+[48:06] of that, especially if you have like a giant system prompt for like an agent
+[48:09] system that's tens of thousands of tokens. Um, it's like quite nice to be
+[48:12] able to share that across users. Um and so the solution to this is like KV
+[48:18] caching with pages or or radices. Uh so you store the information in this um in
+[48:25] like a a page cache data structure like you'd have in an operating system and
+[48:29] then you just need to reconstruct these tensors sort of on the fly to pass them
+[48:33] to attention kernels. So that that job is now it used to be the job of the
+[48:37] engine to solve that problem. That's now incorporated into the attention kernels
+[48:40] like flash attention 4. something that our team worked on the um page size one
+[48:45] um and sort of like RAD XC form of KV caching you can see on the right um and
+[48:53] uh yeah so this is this has moved a little bit I put this in here because it
+[48:57] used to be like a defining feature of the engine but now it's kind of actually
+[49:00] part of the kernels and really it's the management of KV cache capacity and um
+[49:04] and the like layout of the KB cache that's the problem of the engine
+[49:10] um another problem I already talked about how this the scheduler can be this
+[49:14] um host side bottleneck. What you want when you're running stuff on the GPU
+[49:18] like both at the sort of level and then inside of models is that you want that
+[49:22] just like at every moment some kernel is running on the GPU and things happen on
+[49:26] the CPU to decide what that uh should run on the GPU. But they shouldn't ever
+[49:31] block uh progress. But it's very easy to accidentally write some kind of host
+[49:36] device sync. There does have to be information passed between them. the GPU
+[49:39] can't just like send the response directly to the user. Um, it wouldn't be
+[49:43] that good at it if it did run an HTTP server. Um, and so you you do need this
+[49:47] CPU work. You just want to make sure it doesn't block. Um, one of the key
+[49:51] techniques for this is CUDA capture. So you take all of these kernels that get
+[49:57] run in the forward pass of the model and you track all of them and you turn that
+[50:01] into one big data structure a DAG of operations of like this kernel runs and
+[50:06] and like you know mutates the data at this pointer. Once that is done this
+[50:11] kernel can now run to mutate what was present at that same pointer and mix it
+[50:15] with data from another pointer. So this big DAG of C of of uh operations is your
+[50:21] CUDA graph. And this um allows you to go from launching like each one of these
+[50:27] GPU kernels having a little bit of CPU work to decide what to run, how to run
+[50:31] it, uh what you know which pointer to put um you turn it into just one CPU
+[50:37] side work to decide which graph to launch and then all of it gets launched
+[50:40] from that single graph which is what's depicted in this um uh peretto trace. Uh
+[50:45] so this allows you to relax quite a bit about what is going on in the model uh
+[50:50] forward pass component at least.
+[50:55] Um another problem decode here is sequential um and every time you run it
+[51:00] you have to load like either all of the parameters of the model or all the
+[51:04] active parameters in ane architecture um and you need to do that over and over
+[51:08] again um by default for each token. So you're like on behalf of your users, you
+[51:13] might be loading like a terabyte of data or 100 gigabytes of data per token and
+[51:18] you want to produce a token every couple milliseconds. Um so now you're looking
+[51:23] at that's pabyte per second scale uh memory bandwidth. That's uh pretty hard
+[51:28] to achieve. Um so one solution is key technique for solving this is
+[51:33] speculative decoding where you take um a separate model. The speculator guess
+[51:38] what the next couple of tokens will be and then pass it through the target
+[51:41] model. Um and then the target model sort of grades all of those in parallel. Um
+[51:46] and if you apply the right sampling techniques, rejection sampling, um then
+[51:51] you can uh guarantee that uh the output from the target model is the same as you
+[51:57] would have gotten if you'd run it sequentially up to numeric um the same
+[52:01] output uh but you've now run it in parallel. You sort of turn your decodes
+[52:05] into tiny prefills which is nice. Um and so the um I'll skip over a little any
+[52:12] details about the algorithm. There's a great we wrote a blog post about this uh
+[52:16] just this past week or two. The key reason why this is really important is
+[52:21] that as you improve the quality of the speculator, as you improve the number of
+[52:24] tokens it can guess in a row, um you actually get basically a linear speed up
+[52:29] in your decode throughput. So like many other optimizations that you can do on
+[52:33] your inference engine are like the it's like a game of inches of like a percent
+[52:37] 5% 10% like each time and you have to do the like very like difficult performance
+[52:44] engineering for each of those you know percentage points. Um but then on the
+[52:48] other hand you could sit down and train a better speculator model um and to
+[52:55] first approximation throw data and compute at it um and then get a 2x speed
+[52:59] up or a 4x speed up or an 8x speed up um on top of the the the baseline. Um so
+[53:07] this is has emerged as one of the like key techniques to allow you to operate
+[53:10] say like a thousand tokens per second on um on Nvidia hardware without have for
+[53:16] actually fairly large models uh without having to go to um like a a novel
+[53:21] accelerator like an LPU or Cabris. Um I'm actually going to there's a lot
+[53:28] of parallelism techniques but in the interest of time I'm going to kind of
+[53:31] skip over this one. um you want to be able to split work onto accelerators. Um
+[53:37] a lot of this comes from the underlying kernels. You need good kernels that can
+[53:40] operate with this parallelism. But within the engine in the sort of model
+[53:43] forward passcode which is written on a sort of per engine basis um you need to
+[53:48] do all of the communications around that. Um and so the communications is
+[53:53] where a lot of the problems come in in these uh parallelism uh techniques.
+[53:59] Um all right. So, uh, observability with our last couple minutes here. Um,
+[54:05] inference services like all services will have some bugs in them. Um, you
+[54:09] have everything from application level bugs from models misbehaving. Um, uh,
+[54:14] which is really not the engine's problem. It's the app developer's
+[54:17] problem, but they'll show up on your dashboard sometimes. Uh, model quality
+[54:21] bugs. These are the problem of the engine. Are you actually doing your
+[54:24] inference correctly? When you applied this performance optimization, did you
+[54:27] actually guarantee it didn't change model behavior? Um, one of the most
+[54:30] common ones here is actually on model release. Tokenizers are often slightly
+[54:34] bugged. They both tokenize and apply chat templates and there's often some
+[54:37] like uh some issues there. Um, they're beaten down in a couple weeks after
+[54:42] model release, but it's something you always have to be like on guard for. Um,
+[54:46] and then performance bugs or engine performance issues. The kind of the
+[54:50] worst ones are regressions over time. as you operate a replica for an extended
+[54:53] period, you might see performance degradation from issues that only arise
+[54:57] once the thing has been running for an extended period. Um then you also might
+[55:01] observe, especially in a heterogeneous cloud deployment environment,
+[55:04] differences across replicas in their performance um that then need to be
+[55:08] investigated. So the goal with these as with all kinds
+[55:12] of like production debugging is observability. Um if you can log enough
+[55:17] information uh to debug just from those logs, then you don't have to spin up a
+[55:21] development server and take a bunch of extra time. Um and so this runs from
+[55:25] application level stuff um to I think focusing on the engine problems, model
+[55:30] quality. You'll you want to be able you want to be good at running evals for
+[55:34] model quality as part of your deployment. Um so you want to hit your
+[55:38] actual deployment with like evaluation benchmarking type scripts. Um there's
+[55:43] scripts in SUAN, there scripts in VLM, there's external benchmarking tools. Um
+[55:48] take those uh calculate some numbers, log traces somewhere, log as much data
+[55:53] as you can about those so you can debug later. Um and then in prod log traces
+[55:57] and try to get feedback from users on correctness that you can thread through
+[56:01] all the way back to those requests. Um for tokenizer bugs, hot tip, log the
+[56:06] token IDs. Set your engine up so that the token IDs are logged as well. Um and
+[56:10] then finally for performance, performance bugs can show up anywhere.
+[56:12] So the more metrics that you log uh the better like more metrics than you think
+[56:16] you need um because you never know which crossorrelation will re will make the
+[56:20] bug super easy to discover instead of super hard.
+[56:24] Um so rather than going through those I'm going to talk a little bit about
+[56:28] this. This is an endpoint dashboard on modal and what like how you might read
+[56:32] it. Um I was operating that um the uh art project uh that I showed at the
+[56:38] beginning and I just actually spun up like three different replicas of it uh
+[56:42] to see what would happen like under increased load. Um so there was a
+[56:46] traffic spike which you can see down here that turns into increasing uh first
+[56:50] time to first token as things start to cue uh on the prefill side and and don't
+[56:55] enter prefill um until uh the things have finished. uh and then also shows up
+[57:01] as well as inter token latency as uh decodes get first get a little bit
+[57:06] slower and then a lot slower with this queuing as there's sort of contention on
+[57:09] the underlying GPU. Um and so the solution in this case with
+[57:15] going back to the question about serverless deployments is this is
+[57:18] detected as like increased load. You spin up new replicas. Those replicas
+[57:22] come online. They start taking on some of this request load um and then the um
+[57:28] like the amount cued um uh decreases back down to baseline and things are um
+[57:34] you your congestion is solved. So I think um that's the like primary way. I
+[57:39] think in many cases, you know, we scale up additional resources to solve
+[57:44] congestion and queuing. Um, so yeah. Um, when you need to go deeper, I'll skip
+[57:50] over this. Um, but there's the NSI systems or torch profiler is one of your
+[57:55] key tools here. It allows you to see the whole engine at once. Um, allows you to
+[57:59] see all the processes that are running, all the work that's going on on the GPU.
+[58:02] Um, and pick out issues like, oh, this GPU is running uh like everything's
+[58:07] slower than the others. turned out to be a NUMA awareness problem.
+[58:11] Um, okay. So, uh, closing out here, um, if you want to learn more, mini SGA and
+[58:18] Nano VLM are a really great place to start. These are these simple
+[58:21] implementations of the engine architecture, um, by the two teams.
+[58:25] They're great for humans. Um, they're incredible for agents. They can fit all
+[58:29] the context in, you know, in their context window. Uh, Alexa Gordic did a
+[58:33] great walkthrough blog of VLM. uh and uh share these slides later. Um also work
+[58:39] through that in a notebook so you can play with it and then actually uh you
+[58:43] can point your coding agent at the coding base and ask questions. Cognition
+[58:47] al also operates this thing called deep wiki which basically crawls these a
+[58:52] bunch of repos including sing and vlm and writes nice architecture diagrams
+[58:56] and makes this like wiki style um page where you can sort of read and ask and
+[59:01] then ask their um agent questions which is a nice thing to pair with your own
+[59:06] agent setup. Um so that's everything. I'm out of time. So I'll just quickly
+[59:12] say if you're interested in deploying and owning your own inference, we we
+[59:16] have a a new product on modal to help you like get started with deployment
+[59:20] really easily. Get optim get an initial baseline of reasonably optimized uh
+[59:25] inference engine deployment that you can work off of with modal endpoints. Um so
+[59:30] check that out and if you're interested in working on deploying inference for
+[59:35] hundreds of of teams, uh check out modal.j jobs. Thank you.
+[59:40] >> [applause]
+[59:54] [music]

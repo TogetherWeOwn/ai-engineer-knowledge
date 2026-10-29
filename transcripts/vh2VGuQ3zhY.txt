@@ -1,0 +1,333 @@
+# title: The 100-Tool Agent Is a Trap - Sohail Shaikh & Ankush Rastogi, Prosodica
+# source: https://www.youtube.com/watch?v=vh2VGuQ3zhY
+# speaker: Sohail Shaikh & Ankush Rastogi, Prosodica
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T08:18:35Z
+# sha256: 4f5d25ec4d8c8b9b22a97751959487727dc1445d94b519891c5094c88a5f7a1d
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:01] Hi everyone. Thanks for being here. I am Sohaib here and along with me is
+[00:06] Ankush. So, today we'll be talking about a mistake that looks harmless at first.
+[00:13] Giving which is basically giving an AI agent every tool access it might ever
+[00:18] need all at once. So, basically that approach works well
+[00:23] in a demo. It might even work with a small number
+[00:27] of tools like like say for example 10 tools. But once the catalog grows,
+[00:33] the agent gets slower. It might become more expensive and less accurate as
+[00:39] well. That is why we are calling it the 100
+[00:42] tool agent trap. In the next half an hour or so, we'll show why it breaks,
+[00:47] what the numbers look like, and how semantic routing with just-in-time
+[00:51] context can help us fix this problem.
+[00:57] So, a quick introduction about myself. I am Sohaib Shaikh. I'm currently working
+[01:03] as a data scientist with Presodica. My background spans across AI, NLP,
+[01:09] marketing, analytics, and even engineering.
+[01:13] My current focus is on applied AI, NLP, and conversational intelligence along
+[01:18] with rack systems. I'm especially interested in making AI systems more
+[01:23] reliable, measurable, and even scalable beyond the demos in production.
+[01:31] >> And I'm Ankush Astogi. I work as a senior data solutions engineer at
+[01:36] Presodica. I have spent more than a decade in AI,
+[01:40] data engineering, and production systems.
+[01:43] My focus is the engineering side. So, it's
+[01:47] not about what's going to work in notebook, but whether it's going to
+[01:52] survive in with real load, real user, and real
+[01:58] failures. So, that is the angle we are taking today.
+[02:04] Suhail will focus more on the model and routing behavior, and I will focus more
+[02:09] on system design, implementation, and production trade-offs.
+[02:15] >> Awesome. Thank you, Ankush. Um so, let's get into it.
+[02:20] So, let's imagine a common design. Um you tend to build a system, and it
+[02:27] can do many things. Say, for example, querying a database, sending an email,
+[02:32] um even checking a calendar, or looking up an order, calling an API, and so on
+[02:37] and so forth. The simplest approach over here would be
+[02:41] to give a model every tool definition on every request. Every function name, um
+[02:48] every description, and even every JSON schema will go into the prompt, whether
+[02:52] the user might need it or not. So, that We are calling that as a fat
+[02:57] agent. At small scale, it feels fine. With 10 tools as well, the model might
+[03:03] usually pick the right one. The demo looks good.
+[03:07] Then, the product grows. Um 10 tools might become 30, or it will
+[03:13] keep on increasing, and eventually the model starts calling the wrong function,
+[03:20] and starts confusing similar tools, may invent
+[03:25] tool names, and even take longer to respond.
+[03:28] The important point is, basically, the design does not fail because one
+[03:33] tool is badly written. It fails because every request is forced to carry the
+[03:39] entire catalog. So, let's look here. There are, say for
+[03:43] example, uh 741 tools in your uh
+[03:49] in your entire schema, but and it will look, basically, take up to 127,000
+[03:55] tokens just to have all those tool descriptions in it.
+[04:00] And this is even before the user user's actual question is even considered. So,
+[04:06] basically, this will lead to context overload and uh we need to manage that
+[04:11] properly.
+[04:15] So, on this slide we see why it is failing and why the accuracy collapses
+[04:21] beyond a point. So, when you look at the accuracy curve
+[04:25] with the 10 tools, fat agent will get the tools right almost 78% of the times.
+[04:31] That is not perfect, but it's usable. At almost 100 tools, the accuracy drops
+[04:38] to around 40%. Less than half of the tools that are called are the correct
+[04:44] tools. And if it grows beyond that, like say
+[04:47] for example, in over here, at 741 tools, the accuracy will be a mere 13.6%.
+[04:55] So, in short, it's roughly one correct tool out of eight tools.
+[05:00] So, when we compare it with the semantic router, semantic router behaves very
+[05:05] differently. It stays above 83% across the same catalog sizes.
+[05:11] That is because the model is not choosing from hundreds of tools, it's
+[05:15] choosing from a small and relevant set. One reason the fat agent fails is
+[05:20] because it's lost in the middle problem. Model pays stronger attention to the
+[05:26] beginning and end of the long context. When hundreds of tool schemas are packed
+[05:31] into the middle, the model does not reliably use them.
+[05:35] So, we end up paying paying for a huge prompt, and that prompts makes the
+[05:40] decisions even harder.
+[05:45] So, two more reasons over here.
+[05:48] First is the latency and the second is the cost. So, we saw in the earlier
+[05:54] slide that accuracy was a big problem. Another issue is
+[05:59] with latency and cost over here as we can see. So, like say for example, if we
+[06:04] have 741 tools, we saw that it requires almost 127,000 tokens.
+[06:11] That will include the tool description and the schema text. So, that cost is
+[06:17] basically being paid on every request. At 100,000 requests a day, if you push
+[06:24] this into production, you are sending in billions of tokens
+[06:28] and just to describe those tools. And with just-in-time routing, the
+[06:32] prompt may include only three to five relevant schemas, closer to about 1,000
+[06:38] tokens. That is roughly a 99% reduction in tool context tokens.
+[06:44] Another issue is latency. With fat agent approach,
+[06:48] time to first token grows as the tool catalog grows because the model has to
+[06:53] process a larger prompt before it can answer the user question.
+[06:57] So, say for example, if you have 500 tools
+[07:01] in your agent, the fat agent path can push first token latency past 5 seconds.
+[07:08] So, this is specifically important if your product is real-time because this
+[07:15] will take longer time to respond. So, which will make the design feel slow and
+[07:20] unpredictable. So, and with semantic routing, it might feel more
+[07:26] responsive and it will be more real-time in a way.
+[07:33] >> Here is the clean comparison. So, on the left side, we have a
+[07:38] fat agent design and on the right side, we have our semantic router design. So,
+[07:45] in the fat agent design, every schema is loaded for every request, no matter
+[07:51] what the user asked. And because of that, the catalog will
+[07:56] grow, the prompt will grow, due to which the latency will rise and
+[08:02] accuracy will drop. The agent also becomes one large
+[08:08] monolithic, which makes it hard to test, risky to update, and even painful to
+[08:15] debug. But, in the case of semantic routing design, the agent does
+[08:21] not start with every tool. So, in this case, the router
+[08:26] first look at the user's query. It retrieves the
+[08:31] three to five most relevant tool, and then it injects only those into the
+[08:37] model call. So, the context stays small, latency
+[08:42] stays stable, and the accuracy holds because the model
+[08:47] is choosing from a focused list instead of giant catalog.
+[08:51] This is Okay, so there is a one important caveat here.
+[08:56] If you have fewer than 20 tools, a router may be unnecessary.
+[09:02] Just load the tools directly. But, once you passed 50 tools in the production
+[09:08] system, then
+[09:11] justifying router-based schema make more sense.
+[09:19] >> Thanks, Ankush. So, let's now look into how semantic routing works.
+[09:25] If you have built a rack system previously, this will feel pretty
+[09:29] similar to that. The difference is that we will retrieve tools instead of the
+[09:34] documents. So, at the first stage, say for example,
+[09:38] over here, each tool will have a clear description. For example, a search
+[09:43] flights tool, uh
+[09:46] a check calendar availability tool, or a retrieve customer order status. Say for
+[09:50] example, the second step would be those descriptions needs to get embedded and
+[09:56] stored in a vector index. This is usually done offline when the
+[10:01] tool catalog is created or updated. At the runtime, the user will ask a
+[10:08] question, we embed the user query with the same embedding model.
+[10:15] Then, we search that vector index for the tools with the
+[10:19] description that are closest to the query.
+[10:23] So, the router will then return the top K tools. Often, K would be three or five
+[10:30] tools that matches the user query. And only those selected schemas will get
+[10:35] injected into the model call. So, this is the whole pattern. At the
+[10:40] first step, you need to index tool descriptions offline.
+[10:45] Then, retrieve relevant tools at runtime and keep the model's context focused.
+[10:51] So, in short, the idea is pretty simple. Semantic routing is basically a rack for
+[10:58] tools. Um if you already have an embedding model and vector database in
+[11:02] your stack, most of the infrastructure is already familiar to you.
+[11:10] >> Thank you, Sohil. Now, we will deep dive into just-in-time context injection.
+[11:16] So, semantic routing is the retrieval layer.
+[11:21] And just-in-time context injection is the context management strategy. So, in
+[11:27] the case of fat agent approach,
+[11:31] it loads everything before the query is understood.
+[11:35] Due to which the model receives a huge list of tools first, and then it tries
+[11:42] to reason through it.
+[11:45] Just-in-time context does the reverse. It will wait
+[11:50] until the query is known, then it will inject only the context needed
+[11:55] for that request. I mean, this is not a new software idea.
+[12:01] We have used lazy loading, just-in-time compilation,
+[12:07] and on-demand resource loading from years.
+[12:10] We are just applying the simple and same principle to the LLM context.
+[12:16] Anthropic has written about this pattern with on-demand tooling loading through
+[12:23] MCP. Their report token usage went from 150k
+[12:27] tokens down to 2,000, which is 98.7% token reduction.
+[12:36] That is the signal. Large tool catalog should not be dumped into the into every
+[12:42] prompt. They should be retrieved when needed.
+[12:47] So, moving to the next slide,
+[12:51] let's talk about how to evaluate this fairly.
+[12:56] We measure four things here: tool selection accuracy, time to first
+[13:02] token, input tokens per request, and the
+[13:06] estimated cost per thousand call. So, here for data sets,
+[13:11] we used Berkeley function calling leaderboard,
+[13:15] Skills bench style scenarios, and synthetic tool pools
+[13:20] that allow us to scale the number of tools, so we can test at 10, 50,
+[13:27] 100, 200, or even 1041 tools. So, we ran the same queries in two
+[13:33] modes, the fat agent one and the semantic
+[13:36] routing. Same model, same answer key, same tool
+[13:40] catalog. The only difference was whether the
+[13:44] model saw every tool or only the routed tool.
+[13:49] We also swept K at 3, 5, 10 to understand the trade-off.
+[13:56] So, the smaller K is the faster and cheaper.
+[13:59] Larger K can be the can recover more edge cases.
+[14:05] In practice, K equals 5 is a strong default starting point. So, if you are
+[14:11] want to try this, you can default it to five.
+[14:15] Here, K means the number of tools the semantic router retrieves
+[14:20] and gives to the LLM for each user queries.
+[14:26] Here are the benchmark result that we got.
+[14:30] So, here is the result on the left side. We see the fat agent accuracy line drop
+[14:38] sharply as the tool count grows. It started around 78%
+[14:45] at 10 tool and then falls to around 13% at 1041 tools.
+[14:51] But, in the case of router, the router line stays above 83% because
+[14:58] the model stays stable. From the model
+[15:02] points of view, it always choosing the handful of tool,
+[15:07] even if the real catalog contains 100.
+[15:13] On the right side, time to first token shows the same
+[15:18] story. The fat agent path gets slower as more
+[15:23] tool schemas are added. At large catalog sizes,
+[15:29] the model spend noticeable time just processing the prompt.
+[15:34] But in case of router, it stays almost flat because of the
+[15:39] prompt size is under controlled.
+[15:43] This is the core lesson from the benchmark.
+[15:47] The catalog can grow, but the model's working set should stay small.
+[15:54] Now, on the next slide, we'll be discussing about the implementation
+[15:58] pattern. There are three steps in it.
+[16:03] Step one is offline. So, build a catalog of tool.
+[16:08] For each tool, store the name, description, schema.
+[16:13] Then, embed the description and store it into a vector database. You can use
+[16:20] Chroma DB, you can use Pinecone, you can use Quadrant. Whichever vector database
+[16:26] you are using. Then, step two
+[16:30] will happen on every request. Embed the user's query. Then, run the
+[16:36] nearest neighbor search. And return the top K tools.
+[16:42] In the step three, it will also happen on every request.
+[16:48] Fetch the schema for those selected tools.
+[16:52] And then, pass only those schemas into the model call and log which tool was
+[16:57] selected. So, here, logging really matters.
+[17:02] So, let's say if you miss something and if you want to
+[17:06] improve the description or you want to tune the K,
+[17:10] you need a good logging system that you can use
+[17:14] it. So,
+[17:17] the runtime overhead is small, one embedding call,
+[17:21] and one vector search. The payoff is much smaller prompt and
+[17:26] more stable tool selection problem.
+[17:33] >> Awesome. So, now that you have learned about the implementation pattern, I'll
+[17:39] take you through the code version of it, which is pretty straightforward. So,
+[17:45] initially you need to loop through the tool catalog, and for each tool, as
+[17:51] Ankur mentioned, embed the description, store that in the vector database with
+[17:55] the tool name and other details. At run time, embed that user query,
+[18:00] compare that query vector against the stored tool vectors using cosine
+[18:05] similarity or vector search, and then retrieve the
+[18:10] top most relevant tools, and then call the model only with those schemas and
+[18:16] the function or tool parameter. That final line is the most important
+[18:20] part because the model does not receive all the tools, it only receive the
+[18:24] routed tools. This works with any embedding model and
+[18:28] at and with any vector database. You can start, as Ankur mentioned, you can start
+[18:34] with Quadrant or any other database vector database locally, and
+[18:39] then move to a more managed vector store later if needed. If you already have an
+[18:45] existing rag infrastructure, this is not a new infrastructure as we mentioned
+[18:49] earlier, it is the same retrieval pattern applied to the tool selection.
+[18:56] >> Thank you, Suhail. Uh
+[18:58] Now, we will discuss semantic routing in
+[19:02] action. So, imagine you have a 200 tool agent.
+[19:07] A user asks, "Find me a flight to New York next Wednesday.
+[19:13] The router embeds that query. Returns tool like search flights, book
+[19:18] flight, calendar check. The model sees only those relevant
+[19:24] schema, so it is much more likely to call the correct tool.
+[19:29] But, if we load all 200 tools, hotels tool, weather tool, emails tool,
+[19:36] sequels tool, or any unrelated workflow tool,
+[19:40] it would all be competing for attention. That is when model starts choosing the
+[19:47] wrong function. Now, let's take a second query.
+[19:52] What is the weather in Paris right now? The router
+[19:57] returns get weather and get forecast. Flights tools are not injected. Hotels
+[20:03] tools are not injected. They are simply not available at this
+[20:08] request. This is an underrated benefit.
+[20:13] But, the router does not only add the right tool, it also removes the wrong
+[20:18] tool from the model's choice set. Now, in the next slide, we will discuss
+[20:25] implementation checklist. So, here is the production checklist if somebody
+[20:30] wants to uh
+[20:33] follow this along. So, first,
+[20:36] get locked the tool in one place. So, add name, description, schema, owner,
+[20:43] and the version. Second is to build the index.
+[20:48] Embed each description and store the vectors.
+[20:53] The third one is write the router.
+[20:57] So, in this, embed the query, then search the index, and take top K
+[21:03] and fetch schema. The next one is the fourth one in which
+[21:10] a user need to wire it up into the agent loop. So,
+[21:14] the model tool list should come from the router, not from a hard-coded full
+[21:19] catalog. Fifth is to evaluate. Run your test set
+[21:26] at K equals to three, five,
+[21:29] and 10, and then pick the smallest K that meets
+[21:33] your accuracy target. Sixth is to monitor production.
+[21:39] Log selected tools, final tool calls, failure,
+[21:45] and fallback usage. Then re-embed tools when descriptions or
+[21:50] schema change. This is not the 6-month
+[21:55] platform rewrite. For most team, it is a focused sprint.
+[22:00] So, in the next slide, we will discuss
+[22:05] what community already has confirmed. This is not just the observation. So,
+[22:12] Anthropic has published on-demand tool loading with MCP,
+[22:17] and reported a drop of 150k tokens to 2k, which is a huge reduction in tokens.
+[22:24] Developers have raised similar issues in mainstream
+[22:29] agent and SDK projects, pointing out that sending all tools
+[22:34] definition on every request can increase latency,
+[22:40] token usage, and tool confusion. Open proj open-source projects like MCP
+[22:48] zero have also explored routing at very large
+[22:52] scale, including thousands of tool across many servers.
+[22:59] And you can find form forums post from builder
+[23:04] who hit tool confusion with only few tools.
+[23:08] Long before they reach 100. So, if you if your agent start failing as
+[23:14] tool are added, it doesn't automatically means your
+[23:18] prompt are bad. It may means the architecture is asking the model to
+[23:23] solve the wrong problem.
+[23:30] >> So, here we are just trying to say about the
+[23:35] We are going to talk about the open-source projects that we came
+[23:38] across. So, one of them is of from Areilo Labs.
+[23:43] They have an open-source semantic router project that you can easily use to test
+[23:47] locally for benchmarking, Toolbench, and the Berkeley function
+[23:53] calling loader leaderboard are also useful starting points. And for
+[23:58] practical guidance, you could read the Anthropic MCP write-up. It explains why
+[24:04] on-demand tool loading matters and gives a strong real-world signal for this
+[24:09] architecture. The point is that you don't need to invent the ecosystem from
+[24:13] scratch. Those pieces already exist.
+[24:18] Next slide.
+[24:24] Sorry. Here it is. Thank you. So, there are a few
+[24:29] trade-offs with this. The first risk could be a router miss. So,
+[24:35] if the So, the router may fail to retrieve the
+[24:39] tool the models need and handle that with you could handle that with a feed
+[24:44] fallback. If the model cannot complete the task, you could widen K, run a
+[24:50] second retrieval pass, or even route it to a broader tool group. The second risk
+[24:56] would be weak tool descriptions. If your descriptions are weak, embeddings will
+[25:02] end up being weak. Write descriptions in the words users actually use and include
+[25:09] intent, action, and key entities along with it.
+[25:13] The third risk would over here would be rare tools. So, some tools may never
+[25:19] score high unless their descriptions include the
+[25:22] right language. So, you need to monitor data misses and rewrite those
+[25:26] descriptions accordingly. And finally, just to conclude, do not
+[25:31] over-engineer small systems. If you have 10 or 15 tools, static loading may still
+[25:36] be fine. Routing generally pays off when the catalog is large enough
+[25:43] that the prompt size, latency, or tool confusion becomes a real production
+[25:47] problem.
+[25:51] So, a few takeaways.
+[25:55] First thing is, as we discussed, tool overload hurts accuracy. Loading every
+[26:00] schema into every prompt makes the model's decision harder as the catalog
+[26:05] grows on. The second one would be to
+[26:10] about tokens. It's like tokens are both cost and latency.
+[26:16] Larger tool catalogs can add add tens of thousands of tokens before the user's
+[26:22] actual request is handled. Semantic routing can help fix that problem. The
+[26:29] When the catalog can be is large, the model only sees the tools relevant to
+[26:34] the current query. This is basically a rag for tools.
+[26:40] Index those descriptions, properly retrieve at run time, and inject only
+[26:45] what is needed. And finally, start simple. Use
+[26:50] K as five as a starting point, log every decision, and evaluate against a real
+[26:57] test set. And improve their tools descriptions
+[27:01] over time in case you get incorrect tools being picked up. And the
+[27:07] goal is not to make these agents more complicated. It's It is basically to
+[27:12] stop forcing the model to reason over irrelevant tools.
+[27:20] So, there are some references on this slide.
+[27:24] So, if you're building something, you can use these references.
+[27:29] Like semantic routing libraries, tool bench, Berkeley function calling
+[27:34] leaderboard, Anthropic MCP write-up, and vector stores like Pinecone, Quadrant.
+[27:43] Thank you so much for watching this. If this was useful, please share it with
+[27:48] someone building agents. They have either already hit this wall or they're
+[27:53] about to. You can scan our
+[27:58] LinkedIn QR codes on this slide to connect with us. We are happy to
+[28:02] continue the conversation, share resources,
+[28:06] or hear how others are approaching this problem in their own system.
+[28:11] Thank you so much for watching this. I'm Ankush.
+[28:16] This is Suheel, here. Thank you so much. Yeah. Thanks, everyone.

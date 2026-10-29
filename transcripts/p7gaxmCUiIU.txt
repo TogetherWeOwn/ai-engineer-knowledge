@@ -1,0 +1,582 @@
+# title: Hill-Climbing Skills: Improve Agents Without Changing the Model — Shubhankar Srivastava, Browserbase
+# source: https://www.youtube.com/watch?v=p7gaxmCUiIU
+# speaker: Shubhankar Srivastava, Browserbase
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T03:17:17Z
+# sha256: eb0aadc4413caf5fa524e1e77541f56f1f3b97b5327b87bb728ccada40de2c73
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:00] All
+[00:12] right. Hello. Thank you everybody for being here. Uh I know it's the last
+[00:17] workshop of the day. I appreciate all of you turning up here. U I am show uh I'm
+[00:23] here to talk about hill climbing skills. uh specifically how can you improve your
+[00:29] agents without really going into the models without really going in the
+[00:33] weights. Uh I have a slido uh up here as well. I'll just uh flash the QR code in
+[00:40] case any of you want to uh put in any questions and we can address them
+[00:43] towards the end as well. U a little bit about me. I'm Sh. I'm uh on the sales
+[00:49] engineering team at browserbase. Uh I essentially work with our customers
+[00:55] deploying browser agents in production. Uh I'm not sure maybe we'll do a show of
+[01:00] hands. Uh how many of you know what browser agents are?
+[01:06] Anybody? All right, a few. Amazing. Uh have any of you built browser agents
+[01:12] before? Have any of you used these tools? Show hands. Okay, a few of them.
+[01:18] Amazing. Nice. uh maybe I'll I'll talk a bit about what browser agents are before
+[01:24] diving into the whole concept of hill climbing for skills uh so that it
+[01:29] becomes clear what we're doing towards the end of the talk we'll also look into
+[01:33] how you can do this in your domain in your uh field as well.
+[01:39] All right. Uh so quick primer on what browser agents
+[01:44] are. If you have an agent that needs to drive a browser, you basically call that
+[01:49] a browser agent, right? Browser becomes the tool to your agent. And how do you
+[01:54] control it? You control it with some sort of CLI, some sort of MCP, some sort
+[01:59] of method where you can control the browser and say, "Hey, go and click on
+[02:04] this red button. Go and click on the refresh button. Go and uh take a
+[02:09] screenshot or take a snapshot of the accessibility tree of this website."
+[02:14] Right? So these are this low-level tools that your agent can have access to to
+[02:18] control the browser. Uh and browserbase is essentially a platform for you to
+[02:24] build and run these browser agents. We provide the infrastructure and the SDKs,
+[02:30] the skills, the CLI that go with building these browser agents. Uh and
+[02:35] and we're going to be using all of these tools to see what hill climbing does
+[02:39] look like. All right. Uh I want to talk a bit about
+[02:46] the biggest problem with agents today essentially reliability right uh people
+[02:52] are frustrated with browser agents getting stuck or getting into an
+[02:57] anti-border capture issue uh or maybe just forgetting or being lazy and not
+[03:02] completing the task. Uh and we see reliability essentially is an
+[03:07] engineering problem. I think the recent models the Opus and the Fable when we
+[03:11] when it came out for those three days it was really really smart right uh but we
+[03:16] see that a lot of the work that has to be done for reliability is the hardness
+[03:22] around it is the tools that you give it it is the skills that you give here u
+[03:27] and and that's what we're going to be sort of looking at how do we improve the
+[03:30] reliability of these browser agents I wanted to give you all a few examples of
+[03:35] like where these agents suck today, right? If I zoom in a bit, you'll see
+[03:40] this browser agent is trying to like go on Google flights and click on the uh
+[03:47] it's trying to drag the time filter and it's unable to figure out how do I drag
+[03:51] that. Dragging is a tricky operation for these agents to do and it's getting
+[03:56] super confused. It doesn't know what the HTML element for that is, what the
+[03:59] JavaScript for that is. It's not really able to do this and it gets stuck and
+[04:03] it's not able to book my flight tickets. Uh, another example I wanted to show uh
+[04:09] is a browser agent on open table. Let's say I have my open claw or my Hermes
+[04:14] agent and I need to book a date night and I tell hey go to open table and and
+[04:18] find me some and and look at the anti-bot that it runs into, right? Uh,
+[04:22] and it's just like access denied. I don't know what happens here. Uh, but
+[04:26] like can my browser agent get around these issues? Can they be more reliable?
+[04:30] And can they book my date night restaurants is the biggest question I
+[04:33] wanted to ask here. uh and this is where we sort of look at different ideas to
+[04:41] improve the reliability of these agents and one of them uh oh actually let's
+[04:47] let's dig into the root cause here right like why this is happening u we have
+[04:52] like these opus models these five five the super nice general purpose you might
+[04:57] have used codeex computer use very nice but when you want to sort of do uh
+[05:01] longunning
+[05:04] tricky websites like the open tables or the Google flights it sort of becomes
+[05:10] very difficult to run these in production and these sightspecific
+[05:13] tricks or these javascript that you need to run on your browser the agent doesn't
+[05:17] know about them right and the most important thing is it's every run starts
+[05:22] from zero you're not really having any sort of learning baked into your runs I
+[05:27] think Darkh talked about this a couple days ago it's like why is progress on
+[05:31] computer use still so slow today. Uh although computer use seems like a
+[05:36] verifiable problem, why is it still not solved? Essentially, there's no learning
+[05:42] happening. Every agent run is a start from scratch run and it's not learning
+[05:48] from its production traces. U and these browser agents, I call them geniuses
+[05:52] that never learn. Um and some people might say, oh, why don't you fine-tune
+[05:56] on something some like open table or restaurant websites. Uh but it it's not
+[06:01] really scalable, right? uh if you're thinking of building agents, you can't
+[06:04] really be fine-tuning for every new task that comes up. You want some you want a
+[06:10] a modality where it can learn from its production traces uh and get better over
+[06:14] time. This is where we sort of started
+[06:18] thinking about and this was like six four to six months ago where Karpadi
+[06:22] came up with this idea of auto research. This is essentially a loop, right? Uh
+[06:28] and this loop sort of takes a verifiable problem statement and goes at it, tries
+[06:34] it again and again, looks at its own traces and tries to improve itself. And
+[06:40] we wondered how can we apply this to browser agents? How can we apply this uh
+[06:45] to these complicated workflows, these complicated websites which are not
+[06:49] deterministic, they change every day, they have different captures every time.
+[06:53] Uh how can we learn from these? Right? Uh this is where I want to sort of
+[06:59] switch into a demo and sort of show this live. Uh and I'm going to start with uh
+[07:08] a prompt over here. So I want to maybe do something like uh go to Google
+[07:13] flights and uh find me a business class flight from SF to New York for this
+[07:21] Saturday. I want to have one carry-on bag. Uh and this flight should be in the
+[07:27] morning. I hope my Okay, this is correct.
+[07:35] Just paste this and run this. Right. So starting a browser based session here.
+[07:40] Uh so what you see in the center is a remote browser has just spun up and has
+[07:45] navigated to Google flights. If I expand my agent here, uh it's doing all of
+[07:52] these things. This is the reasoning traces that you can see live and it's
+[07:55] trying to sort of apply the business class filter. So it it'll do its job and
+[08:00] and and we'll come back to this. Uh but I wanted to talk about what's really
+[08:04] happening here. Uh u and the architecture behind this auto research
+[08:10] loop.
+[08:15] So we we fired the Google flights task. Uh and and and the architecture here is
+[08:21] this auto browse loop that we call this. We took auto research and we took
+[08:25] browsing. We call it auto browse. And this loop essentially is two clawed
+[08:29] agent SDK loop uh agents. Uh you can call one as the doer agent and one as
+[08:35] the teacher agent. This doer agent its job is to actually go and do the
+[08:39] browsing. It has access to the browse CLI that we talked about. It has access
+[08:44] to the browser uh and it goes and sort of clicks on buttons, looks at the
+[08:49] screenshot, tries to get me information and the teacher teacher's job is to look
+[08:54] at the traces of the doer and learn what went wrong and what went right and they
+[08:59] keep working together until they find a very good solution
+[09:04] that converges. Right? Uh we don't tell it how many loops you need to go for. We
+[09:10] don't tell it what's the success factor success uh rate that we want. We don't
+[09:16] tell it hey we need to do this within x number of tokens or x number of seconds.
+[09:21] We just give it a broad prompt and we let the bitter lesson we embrace the
+[09:25] bitter lesson and we're like okay let the doer and teacher go at it. Uh and
+[09:30] the key thing that happens is there is a strategy.md file. uh that is essentially
+[09:35] the artifact across multiple runs. After every iteration, the teacher
+[09:42] thinks about what happened, looks at the screenshot, looks at the logs, and then
+[09:46] thinks, "Oh, you did not click on this button. U you should actually click on
+[09:51] this button instead, and it puts that in the strategy.mmd file." And that
+[09:55] artifact carries over to the next iteration, and it improves from there.
+[09:59] Maybe we'll go back to our demo and see what happened. All right. So, iteration
+[10:04] number one, uh, there was a failure here. Uh, and the learning from this
+[10:09] iteration was skip the entire form calendar widget because you can just do
+[10:15] a query parameter and you don't really need to click around, right? The agent
+[10:19] was smart enough in this instance to think, oh, I'm wasting so many tokens
+[10:23] and I'm wasting so much time clicking around where I could just use Google
+[10:27] Flight's query parameter. Now this is obvious in hindsight but maybe as a
+[10:32] human I wouldn't have thought of this and I wouldn't have written this
+[10:35] complicated query parameter myself right uh so this is the learning from the
+[10:41] first iteration now it's going and doing things in iteration number two it'll
+[10:45] keep going on till it feels like it has maxed out all the tricks it has maxed
+[10:50] out all JavaScript hacks that it could do uh and and and then uh think about
+[10:57] okay this is the skill that I can use from here.
+[11:03] I think the key the key thing uh that I wanted to also talk about is at the end
+[11:09] of this converged loop the output that I want is a skill.mmd file. This skill.md
+[11:16] file would be what I give to my future agents. Uh and it would have a
+[11:22] collection of all the hacks or all the tricks or all the learnings from
+[11:26] previous runs. We'll we'll look at what that scale might look like. Uh it could
+[11:31] look like, hey, a pre-filled URL is mandatory. Don't go around and waste
+[11:36] your clicks and tokens clicking on these buttons. There is a reopen bug in the
+[11:42] calendar. Don't do this. Uh if you want to move the drag uh if you want to drag
+[11:48] your time stamp thing, uh use JavaScript injection. Don't try to do it with the
+[11:53] mouse. Right? These are the kind of tricks that are now persisted for every
+[11:58] future run and gives me so many more savings uh from a performance,
+[12:03] reliability and cost perspective. Now uh we'll go back to our uh run and
+[12:12] see if it has passed. Okay, so iteration number two has passed and if you can see
+[12:16] uh the savings in in cost are like 4x. Uh this chart is being created on the
+[12:23] fly. Uh so it started from $12 and the second one was $3. And keep in mind my
+[12:29] agents here are Opus 48 both for the doer and uh for the uh teacher.
+[12:37] Now iteration three just came in. Uh the number of turns decreased. The latency
+[12:42] is also better. Uh but there was a failure in iteration number three.
+[12:47] there's something that it sort of overcorrected on and iteration number
+[12:50] four should probably be learning from that and we'll see if it does that.
+[12:55] Uh while it's doing its own thing, I wanted to show some previous runs that I
+[12:59] did uh just in preparation for this uh demo. U so for example, I went to uh
+[13:06] auto browse and I was like hey go to the AI engineers website and tell me which
+[13:10] talks and workshops are talking about hill climbing, right? uh and it did that
+[13:14] across multiple iterations and you can see the replay of each of these. These
+[13:18] are replays that are coming from browserbase super helpful important for
+[13:22] uh observability perspective and as you can see uh it sort of uh got better in
+[13:28] ter in terms of cost 7.4x 4x uh even though it was able to pass in all the
+[13:35] iterations, I still got improvements in cost. Now I wanted to actually see what
+[13:39] are the learnings from this skill, right? Uh how do you sort of uh persist
+[13:45] all of these learnings? It says go straight to the shed schedule page. If
+[13:50] there are open errors, don't try retry blindly. Run this. Uh type the keyword
+[13:55] into the session search input. Wait briefly. So like have these weights
+[14:00] because sometimes websites take a lot of time to load. So you you can have these
+[14:03] kind of tricks uh and then read the results. Uh you know like there there's
+[14:08] a lot of learning that is happening in these skills. Maybe I wanted to show
+[14:12] some interesting ones. I wanted to show this open table one because I started
+[14:17] with this blocker of like access denied when we
+[14:21] started this demo. Uh and if we go to the uh screenshot, this was the access
+[14:27] denied thing that we got right in in iteration number one. Let's see how it
+[14:31] learned from there. Uh it realized that the uh block is environmental because
+[14:36] the website doesn't want this agent to do something. uh in iteration number
+[14:41] two, it figured that if I do a query parameter and if I put a latitude
+[14:46] longitude metro ID, I automatically get that uh UI that works. Do not open /r
+[14:54] that's blocked and do not reload / s. These are the places where the blocks
+[14:59] kick in. If you don't do that and you follow this technique instead, your
+[15:03] agent will work, right? Uh and as you can see, uh it sort of went from $6.22
+[15:09] 22 to 0.51. The time taken went from $189 seconds to
+[15:15] 27 seconds. Uh and the scale it came up with was here. Uh build the search URL,
+[15:22] do the date math like this. Uh this is the known metro pins for San Francisco.
+[15:29] Uh and and follow these steps, right? Never call / r because that will return
+[15:34] access denied. Now these are the kind of learnings where a human could never have
+[15:38] done but you just sort of embrace the bitter lesson and a let agents do the
+[15:42] job uh and they will find these uh tricks for you.
+[15:48] I want to uh also show uh a few examples of like the kind of improvements we see.
+[15:54] Uh the reason why this problem is so close to my heart is because I from a
+[15:59] sales perspective am deploying these browser agents into production. uh the
+[16:06] sale is only done when the browser agent is successful. So reliability is like
+[16:10] the most important thing for me and this is what I this is the key tool that I
+[16:14] take to my customers and I'm like just fire your agents let them do this auto
+[16:19] research thing and your agents will be successful in production. Uh and these
+[16:23] are the kind of u success metrics that people are looking for up to 16x cheaper
+[16:28] 12x cheaper 3x cheaper uh on different tasks. Of course, every task is
+[16:33] different. The bottlenecks on each task are different. So, uh you might see
+[16:37] variance there. But the idea is you can hill climb on these uh techniques.
+[16:46] I wanted to go back to our live demo and see if there's any uh improvement. All
+[16:53] right. So, we have a graduated skill u and the skill applied end to end. No
+[16:58] further learning. The results are showing correctly. one-way business
+[17:01] class, San Francisco to New York, July the 4th, one carry-on bag included. Uh,
+[17:06] and there is 8 a.m. $649. Right? So, it was able to get all of this and I can
+[17:11] sort of watch the entire replay to see if that is accurate. Uh, it was able to
+[17:16] sort of figure out this entire skill and the fast path is encode the whole query
+[17:21] in the URL. strongly preferred the again like I know I'm I'm showing these things
+[17:27] but when I first started looking at the the results here this was like my moment
+[17:32] of like this is the mythos moment for browser agents you know like just
+[17:36] reverse engineering the hell out of things uh I I look at this with some of
+[17:40] my customers the customers are mind-blown uh earlier they would be
+[17:45] writing scripts for each of their websites they would be like hey I need
+[17:50] to spend so many engineering hours on like just reversing these websites. How
+[17:56] can I scale this to 100 a thousand websites and now our customers have
+[18:00] actually built these entire pipelines of uh these skills that get generated on
+[18:06] the fly pull requests that get created automatically. If there is a failure in
+[18:11] production, an agent kicks in and starts healing the skill as well. So there's a
+[18:15] lot of uh engineering that we can do around this to make leverage to leverage
+[18:20] this technique. Uh I wanted to also show what we've done
+[18:25] with this right we actually went ahead and created this product called
+[18:29] browse.sh uh we were like if we can do this for
+[18:34] one website we can do this for five why not do this for like 500 websites and
+[18:38] give it for free for anybody to do this. Uh and like if you remember in the 19 or
+[18:44] wherever like in the '9s before internet you had the yellow pages uh you had
+[18:49] details about accessing people, businesses etc. This is yellow pages for
+[18:56] browser agents right it has details about how to do any task on any website
+[19:01] on the web. U I wanted to actually show this to you all. uh
+[19:07] you can actually install browse CLI and use all of these skills completely for
+[19:13] free. We've eaten up the token costs ourselves and we're making this
+[19:17] available for you all. Uh so if I go to let's say search products on Amazon uh I
+[19:23] can see the entire scale is over here. When should you use the scale? How
+[19:28] should you look at like pricing and availability and whatever right? uh this
+[19:33] is how you use this lot of details about Amazon the screenshots u and I just give
+[19:40] this browse skills CLI to my openclaw and it just knows when to pull the
+[19:46] alltrails.com skill when to pull the weather.gov skill and and this makes my
+[19:52] life so much easier. uh we essentially are running the same auto research loop
+[19:56] behind the scenes uh and making this uh available for you all. In in fact if you
+[20:02] would want to you can go here and you can be like hey go and make a skill for
+[20:07] me to uh look up this uh events in San Francisco for this week. Uh you do this
+[20:15] generate a skill and this will sort of do this for you. This will send you an
+[20:19] email and you can then use your skill uh in whatever agent you want to, right? Uh
+[20:24] so we've done this for browser agents. Uh and I wanted to talk about like how
+[20:30] can you potentially do this for any other domain, right? Uh I think coding
+[20:37] agents is like one place where I have seen this frustration where the agent is
+[20:42] relearning the repo conventions every time. it's not applying the linting
+[20:47] rules correctly and I have to tell it every time and maybe you can have your
+[20:50] cloud MD and agents MD and improve that but the the fundamental premise is like
+[20:56] the agent should not be relearning your tasks from zero right uh I've seen this
+[21:04] in research agents we run a bunch of like deep research agents for our
+[21:08] internal workflows uh and every time it struggles and it tries to relearn oh I
+[21:14] pulled this information from Wikipedia IA uh but I did not pull it from this
+[21:19] other website. Uh I was like why not? Uh like we always do this other website you
+[21:25] should learn from your previous traces. Uh and you should pull information. Uh
+[21:30] internal ops you have all these dashboards all these databases all these
+[21:33] internal tools but your agents don't know which ones work and which ones are
+[21:37] preferred. Ideally you should be applying this all research technique. Uh
+[21:42] a and the two conditions that are required is that a you should have a
+[21:48] replayable environment of some sorts so that you can run these loops and b you
+[21:52] should have some sort of verifiable outcome some sort of quant quantifiable
+[21:56] metric for you to run these loops. Yes, I see a question there.
+[22:18] I realized that
+[22:39] Yeah.
+[22:43] >> Yeah. >> Yeah. Exactly. Uh so I think the
+[22:46] question is like how do you know that the auto research loop is accurate
+[22:51] whether it is converging and when it says it's converging it's actually
+[22:54] converging. When it says it's good it's actually good. When it says it's bad
+[22:58] it's actually bad. like how do I have confidence uh on what the agent is
+[23:03] saying and what the loop is doing. I think that's where I want to sort of
+[23:07] talk about the verifiable outcome here. Uh for Karpathi, it was quite easy
+[23:11] because he was looking at the log log loss of the experiment when he was
+[23:16] training neural networks. Right? So it's very easy to see whether your log loss
+[23:20] has gone down or not. Uh but in many real world scenarios that is not the
+[23:24] case for browser agents. As I explained, uh, whether you book a flight ticket or
+[23:29] not, that might be straightforward, but did you find the best flight options for
+[23:34] me might be slightly fuzzy uh and might not be the best uh
+[24:05] Yeah, if if I understand this correctly, you're saying like one mistake in the
+[24:09] loop can sort of throw off the entire auto research run. Uh and how do you
+[24:14] prevent against that? I I I have actually seen where some uh iterations
+[24:20] actually fail. uh for example if we uh look at the previous slide
+[24:29] uh there's like failures happening after there have been successes right uh so
+[24:34] it's not always that once you succeed all the future iterations will always be
+[24:38] successful but I think it's the design of your loop where you can make it
+[24:43] resilient to u failures uh where it doesn't overindex on those uh and still
+[24:50] sort of correct protects itself uh from any mistake that happened in previous
+[24:54] runs. Uh I think we're trying to sort of prevent like uh what do they call like
+[25:00] exploding sort of loss sort of scenarios. Uh I think you could do that.
+[25:05] Uh in fact Karpathi talks about this like this is one way of doing auto
+[25:10] research. You can actually auto research on different ways of doing auto research
+[25:13] itself. Uh it's like is the teacher doer loop the best? Should there be a
+[25:18] multi-agent architecture to do this or is there any other approach that might
+[25:22] actually work better for research tasks in neural networks versus browser
+[25:26] agents? Right? You could have different designs of your loops to prevent
+[25:31] situations like those. Uh and I think going back to my point, as long as you
+[25:36] have a verifiable outcome or some quantifiable metric, I think you should
+[25:40] be able to design uh a good uh loop here. uh replayable environment I think
+[25:48] sometimes is under discussed uh but extremely important. I think he was
+[25:53] talking about Darkh he said having a verifiable outcome is important but also
+[25:57] you should have uh extremely grindable environments or extremely grindable uh
+[26:04] use cases as well. Right? If your agent cannot
+[26:09] uh grind through failures, it will be difficult for it to uh go for multiple
+[26:15] iterations and fix itself. Uh so do you have like coding agents is a good
+[26:20] example because you can start from a docker image or you can start from uh a
+[26:25] particular EC2 and and you can replay from different parts of the uh stack. Uh
+[26:30] but maybe uh knowledge work is probably not that easy to replay. uh maybe
+[26:36] there's like a lot of different human in the loop actions that make it very hard
+[26:39] to replay from a particular point in time. So investing in your environment
+[26:44] also can be super uh rewarding in these cases.
+[26:52] Amazing. Uh I just wanted to share the uh URLs of uh the auto browse loop that
+[27:00] I uh demoed today. So if you scan the QR you'll be able to pull the uh GitHub for
+[27:05] that. Uh and also the second QR here uh is the skill itself. You can just do
+[27:11] /auto browse on your claude code or codeex and be like hey /auto browse use
+[27:16] opus48 on both of these uh teacher and doer and go create a skill for me to do
+[27:21] this. Uh
+[27:25] I'm looking at one of these questions. Uh and also if any of you have ideas of
+[27:32] something we want to sort of put the agent against feel free to type it in
+[27:37] the slido and we can actually try it live. Uh but let's look at this
+[27:41] question. Is there a way to optimize for convergence? Uh I think this is the same
+[27:44] question that we were just talking about. Uh
+[27:48] high cost is interesting because you might think that u doing longer
+[27:54] iterations might become costlier over time. Uh I have run a bunch of evals on
+[27:59] this where I can throw a sonnet at this problem but run it for longer iterations
+[28:05] versus throwing opus for lesser iterations. I think you can get the same
+[28:10] job done by throwing sonnet larger number of iterations but still cheaper
+[28:15] overall. Uh also this cost is amotized right like one auto browse loop that we
+[28:21] probably run is like maybe $30 $40 if it's super complicated $100 at most. Uh
+[28:26] so this is amotized as long as those costs make sense for you uh to deploy
+[28:31] this in production uh just go for it. Uh but there's a lot of interesting things
+[28:36] uh that you could do uh with evaling the kind of loops that you're generating. Uh
+[28:41] yes I will share the slides as well. Uh I can do this on the GitHub itself.
+[28:47] Uh can you share how you thought about uh
+[28:53] auto research into auto browse? Uh I mean the process was fairly
+[28:57] straightforward. Uh took the GitHub repo that Karpathi put out uh and then
+[29:03] there's all this context about my customers uh that I have uh where I was
+[29:08] like hey these customers face these kinds of reliability problems uh the way
+[29:13] I solve it for them is I go into their office I sit with them very forward
+[29:17] deployed uh and I try to sort of just brute force and reverse engineer this.
+[29:22] This is what I do. So I am the teacher agent. Uh can you automate me out of the
+[29:28] process and create a loop borrowing from uh Karpathi and and and and build the
+[29:33] same thing? And of course there's a lot of iterations on top of that. Uh there's
+[29:37] a lot of engineering as well uh to simplify this. Uh but yes, that was the
+[29:43] process of converting this.
+[29:48] Can you use this in a proxy? Can you be logged into a site? Yes. Uh again this
+[29:52] goes back to the environment that you design. Uh browserbased the
+[29:55] infrastructure that all of this is running on uh gives you the ability to
+[29:59] log into websites uh save the cookies uh reuse those cookies in future runs so
+[30:05] you don't have to log in every time. Uh makes it super easy for you to uh
+[30:09] replicate real world workflows. Uh and yes you can use proxies as well. If you
+[30:15] have uh particular IP addresses, residential IP addresses, you can bring
+[30:20] those in as well. Uh a lot of success is definitely how good your infrastructure
+[30:26] and environment is, especially in these adversarial scenarios, uh like captures
+[30:31] and antibots. Uh so making the infrastructure as good as possible is
+[30:35] definitely of value.
+[30:42] Amazing. any any asks for something that we might want to run live? Yes.
+[30:48] Question.
+[30:56] >> Great, great question. Actually, I wanted to sort of show the code as well.
+[30:59] Uh so if you uh look at the GitHub, you'll be able to find this evaluate.mjs
+[31:04] file. Uh essentially, it lists out the entire
+[31:09] loop. Uh what's happening here? Uh but to answer your question, the teacher and
+[31:14] the doer are u working one after the other for every loop. So the teacher is
+[31:24] finding learnings in every iteration. Uh maybe if I show the demo uh over here uh
+[31:31] let's go to the one we just did. Iteration one had these learnings and
+[31:35] then iteration two had some other learnings. Right? you should include the
+[31:40] explicit ISO date in this particular format. Iteration three would have some
+[31:44] other learnings. The date resolution still opens the bare page and clicks
+[31:48] wasting three turns uh reading today's date uh or having the executor compute
+[31:54] today. So it's figuring out something about the date time. So in every
+[31:57] iteration the teacher is learning something new and putting this back into
+[32:02] the strategy.mmd. Maybe I'll make this real by looking at the traces for one of
+[32:06] these runs. Uh so
+[32:12] over here these are all my runs. Uh so for example this was the open table
+[32:18] reservation example u and uh this was the strategy.mmd that the teacher sort
+[32:24] of appended to every time. So uh step zero you should do this so on and so
+[32:29] forth. Uh this was the task this was the uh prompt that I gave it. Find me
+[32:34] reservations for the big B bigs restaurant. uh and these were the kind
+[32:37] of traces that uh it was sort of learning from. It would take screenshots
+[32:41] would take these sort of traces at every step is doing browse open this is what
+[32:47] the output is. Then turn number two browse snapshot. Snapshot essentially
+[32:52] takes the accessibility tree and this is the snapshot. So it's reading this
+[32:56] entire thing and at every step thinking of like what went right and what went
+[33:01] wrong. U yeah I mean this is like machine code. uh I won't show this
+[33:06] entire thing. Uh but yeah, this is the summary that it also writes uh at every
+[33:10] iteration. Uh so yeah, this there's a lot lot of like engineering tweaks that
+[33:14] you can do to suit this to your domain as well. U and uh like the easiest way
+[33:21] to uh read this is we put it out here on skills.sh as well
+[33:29] uh in auto browse u and you can sort of do something like this.
+[33:54] Great question.
+[34:03] Such a good question. I think that goes back to like
+[34:07] how do you increase the reliability of your uh agents. Uh reliability is an
+[34:14] engineering problem. Uh you can design your harness to sort of go for one skill
+[34:20] for each task or you can be like hey one skill for every task that you will ever
+[34:25] see. Uh I think it entirely depends how you do the harness engineering entirely
+[34:31] depends on the use case that you have u and you run evals with all these
+[34:36] different strategies uh and see which one works for you. for us. This was
+[34:40] Yeah.
+[34:55] Yes.
+[35:00] >> Yeah. Yeah. And this is where again the harness comes into the picture. If the
+[35:06] harness has the intelligence to bring in skills from Open Table and from Resi and
+[35:12] Google res Google reservations, maybe it can bring all of those in to figure out
+[35:18] what is the best way to book me a date night.
+[35:21] That's your solution, right? Like the harness should be able to uh figure out
+[35:26] which tools to use to get the job done. That's like how I would go about it. uh
+[35:32] figure out what are the most common use cases that your customers have for those
+[35:37] use cases. What's the best scale files, prompts, tools, maybe you want to do
+[35:42] like specific tools for specific use cases, right? Maybe you want to do
+[35:46] generic tools for all use cases. Like that's the same argument here is like do
+[35:50] you do one skill for each or one skill for all uh and eval across all of these
+[35:55] strategies and and let the hardness figure it out.
+[36:01] Yes. >> Yes. Yeah. I mean it's a very similar
+[36:04] concept as this, right? Uh so DSPY. >> Yeah. I I think those guys were on to
+[36:11] something really cool like they were around like 3 four years ago where they
+[36:15] started building DSP and Japa all of that. I think uh we have been doing a
+[36:22] lot of research uh along these lines as well. Browserbase works with uh
+[36:26] Microsoft. We actually released a paper uh about how to build the right sort of
+[36:31] verifiers uh for your agents. Uh I think running evals is straightforward until
+[36:36] you start questioning okay how should I eval my eval right like
+[36:42] do I need to put all these humans to verify all these runs or is there a good
+[36:46] verifier that I can build here and all of that u uses the uh learnings from uh
+[36:52] these papers as well. I can share all of that in the GitHub as well.
+[37:00] I'll also see if there's any new questions here.
+[37:05] Where and how were these skills stored retrieved at scale. Uh right now for
+[37:10] this repo uh all of these get stored in my cloud over here. So each of these is
+[37:15] a scale file. This was my recipe searcher. Uh I wanted to build some I
+[37:20] wanted to cook some dinner yesterday. So I was like, "Hey, make me some recipes."
+[37:24] Uh, so all of these are currently in my
+[37:28] local uh skills folder. Uh, but if you want to ship this uh in production, of
+[37:34] course, you can uh bake this into your agent loop. Uh, or if you want to I
+[37:40] think for browse.sh the public uh publicly available uh skills that we
+[37:45] have, I think we use versel blob storage to store all these skills uh and make
+[37:48] them on demand. Hope that helps. Uh,
+[37:54] websites change frequently. What's your STR strategy for monitoring that and
+[37:58] keeping the website skill updated? Yeah, this is such a great question. Uh, and
+[38:03] this is what I was alluding to earlier is like how do you keep these skills up
+[38:08] to date because the website's going to change. The
+[38:13] the current working theory that we have right now is you don't want to waste
+[38:17] tokens running auto research every day. you want to probably trigger or if it's
+[38:23] failing at any particular point in production, right? So, we build these
+[38:28] loops or like systems where as soon as we run into any production failure, we
+[38:34] run an auto research loop to see what went wrong to heal it, create a pull
+[38:38] request, that goes directly to a human engineer and they fix it automatically.
+[38:44] The skill gets updated. Uh so yes there is that notion of like production
+[38:49] failure when this might happen. Uh but it's a trade-off. You can run an auto
+[38:54] research or you can run a sample run every 2 hours every 3 hours to see if
+[39:00] the skill is working uh perfectly. So there's different ways of having the uh
+[39:06] cron jobs uh check for the accuracy of these skills. This is actually one thing
+[39:11] that I'm actively working on with the customer right now to implement. And
+[39:15] there's all these questions, right? People don't want 100% accuracy. People
+[39:19] might want like 10x cheaper cost. So like uh that's the uh question that
+[39:23] comes up. What's your teachers criteria here in the example? Separate from
+[39:28] reaching the goal seems to do some optimizations for turns. What other
+[39:32] criteria do you use? Uh so again this is the design of the auto
+[39:38] research loop. Uh there's one way of telling your order research that hey I
+[39:43] want to focus on just success. As soon as you get me success I'm fine just give
+[39:48] that to me. Uh that's typically not what everybody wants to do. Uh people want to
+[39:53] minimize on uh latency. Uh because maybe this is a real time run where you're
+[39:59] focused on how quickly can you get the job done. U so if that is the optimizing
+[40:04] metric and you focus on getting it as fast as possible. What I've seen
+[40:08] sometimes these auto research loops are so smart they realize that browsers are
+[40:12] not needed at all and they just reverse engineer the API and they fire the API
+[40:17] and that's the fastest that you'll ever get to. Right? Uh so sometimes uh I've
+[40:22] seen situations where uh it finds a solution that works in 500 milliseconds.
+[40:28] U sometimes it is the number of turns,
+[40:31] right? you want to minimize your context loop uh and you want to minimize the
+[40:36] number of uh turns it takes to complete the task. Uh in my instance, I think
+[40:41] what I have done is it's your decision to pass or converge whenever you want to
+[40:47] pause it. I'm not really concerned about the costs. Uh I care most about
+[40:52] reliability. So keep doing it as long as you feel it's relevant and then it's the
+[40:57] teacher agent's job to uh call it day when it wants to.
+[41:03] But yeah, you can uh try all different strategies. Uh if a website supports
+[41:09] WebMP, will this use it? WebMCP is so cool. U it's essentially this concept. I
+[41:14] don't know if everybody knows this, but it's this concept of like making your
+[41:20] website programmable. It's it's come out in this new Google Chrome release
+[41:24] recently where you tell your u website that if anybody wants to book a
+[41:30] reservation they can do xyz on the website. It's kind of like an API but
+[41:35] it's on the browser. Uh right now I don't think our oral research loop
+[41:40] supports this. Uh but I don't think it would be uh too hard to do that. Uh in
+[41:48] fact we recently shipped support for WebMCP with our SDKs that we launched.
+[41:53] Uh we also made some tools for website owners to ship web MCPS at scale. Uh but
+[41:59] yeah this is an interesting one. We've not really seen a lot of adoption with
+[42:02] Web MCP as yet.
+[42:06] Uh ground truth for pass. That's interesting. Uh I think as long as the
+[42:12] job was done as long as for example in Google flights uh if it found the
+[42:17] cheapest flights in open table if it found a reservation uh so it it
+[42:22] evaluates itself. It's typically a binary uh and yeah again I I I fully
+[42:30] embrace the bitter lesson. I try not to put many guardrails in uh these
+[42:36] evaluations. Uh, have you considered a verifier as a
+[42:41] service for browsing tasks, including something that allows us to mock certain
+[42:44] side effects like purchases? Uh, I might have to ask uh
+[42:52] a followup on that. What do you mean by verifier as a service? Ravish, if you're
+[42:57] here. Yes.
+[43:29] Uh so uh do you mean that
+[43:36] yeah if I understand this correctly like you have like different environments
+[43:40] that you can use for RL training and you want to like mock what happens if I am
+[43:45] replicating Amazon if I click on purchase what happens after
+[43:50] Uh
+[43:54] no because uh we try to rely more on real world websites. Uh browser base we
+[44:01] have the privilege of being able to access most of the web with our uh
+[44:07] access to different websites uh and capture solvers etc. Uh so we try to
+[44:13] mimic the real world as much as possible but we've been seeing a lot of these RL
+[44:17] environments where people are mimicking websites to train uh and build browser
+[44:21] agents that are uh really good at like browsing Salesforce, really good at like
+[44:26] browsing SAP. Uh we try to do that on real world portals as much as possible.
+[44:33] [snorts] Are edge captures easy for the skill to
+[44:36] move past or is it token incentive? uh what is the point of edge captures for
+[44:40] website owners? Edge capture if I'm understanding this is like a particular
+[44:44] kind of capture. It's kind of like Google recapture etc. uh
+[44:50] yeah I would probably talk about this separately. Uh I don't think we can talk
+[44:56] about like what it what captures we can solve or not. Uh but it's not a token
+[45:00] inensive job per se because it's an inf like it's thing that's done at the
+[45:04] infrastructure layer, right? uh we don't really need to use an AI to
+[45:10] solve a capture. Uh it's solved at the Chrome binary layer. Uh and we do that
+[45:15] out of the box.
+[45:19] How does the teacher evaluate the doer and when is the skill markers graduated?
+[45:23] Yes. So uh it evaluates the doer by essentially reading these traces. Uh for
+[45:30] every iteration there is this folder that gets created. uh there are these uh
+[45:35] JSON files. Uh it reads these uh it has a clawed agent SDK loop uh and it
+[45:41] essentially figures out what the learnings from that loop are. Uh
+[45:45] actually I think I have a slide that talks about this at the end.
+[45:53] Yeah. Uh this is kind of like the prompt for this uh where it says that you're a
+[45:58] browser automation agent. You can use these tools uh and the strategy.md gets
+[46:04] injected at every iteration and this is how the uh
+[46:10] uh doer the teacher evaluates the doer's job. Uh so yeah it reads the traces it
+[46:15] has the system prompt it has the previous strategy and it comes up with a
+[46:19] better strategy. [snorts]
+[46:27] Amazing. Uh I hope we've covered all the questions.
+[46:34] Uh any other questions live that we might
+[46:38] want to talk about? Yes.
+[46:44] >> Yeah, it can work with the stage hand SDK. It can work in your cloud code. Uh
+[46:48] it's essentially a markdown, right? Uh I took uh a skill and I told my clot code,
+[46:54] can you find events in SF for this Friday, July the 3rd? and went on and
+[46:58] did this. So it it need not use browser base. It need not use stage hand. It is
+[47:03] essentially a skill. It is a portable artifact you can use in any agent or any
+[47:07] SDK.
+[47:30] Yeah. Yeah. Great question. I think if I understand this correctly, how do you
+[47:34] prevent against prompt injection? Uh because websites could trick my auto
+[47:41] research loop in learning something bad that can do some malicious behavior in
+[47:46] in a production setting. Uh there's a few ways we do that. One is at the
+[47:52] infrastructure layer itself. Uh we have a bunch of uh
+[47:57] protections around our browsers itself. Uh we have this browserbased safe mode
+[48:03] where you can sort of control which URLs it can go to. You can control what kind
+[48:08] of actions it can take on different websites. So at the infrastructure
+[48:12] layer, at the network firewall, we control things. Now you might say that
+[48:16] it is possible that Amazon.com gets hacked someday. How do you prevent
+[48:20] against like malicious actions on those portals as well? Uh I think we also try
+[48:26] to uh run our skills that are generated against some security uh reviewer agent
+[48:32] of sorts uh before we actually publish this on browser.sh. Uh so that's like
+[48:37] one way of doing it. uh we encourage our customers to have uh a good level of uh
+[48:46] prompt injection guardrail uh surface area uh if they're sort of giving this
+[48:51] out to c consumers uh for example some customers of ours uh might want to
+[48:56] automate something on Amazon and what if somebody puts uh a listing on Amazon
+[49:02] which has some hidden instructions and how do you prevent against those kind of
+[49:05] things uh and that's where uh we work with our customers to build the right
+[49:09] kind of uh guardrails before the uh instruction even reaches the hardness.
+[49:16] Um so yeah I think I would put like three layers here. One is
+[49:21] as the as the query is even entering our surface area we control that at the
+[49:26] skill layer we make sure that our skill is not uh tricked and at the
+[49:31] infrastructure layer we have network restrictions and action restrictions.
+[49:35] You can even do something like what codeex or plot code does u like always
+[49:39] allow or allow once or allow any action. Uh you can this is what like
+[49:44] browserbased safe mode offers out of the box. I know browser is a crazy threat
+[49:48] vector when you think about it like it has access to anything on the wild web.
+[49:53] Uh and take that super seriously from a prompt injection POV.
+[50:02] Amazing. I'll wait for 10 more seconds if there's any other questions. This was
+[50:09] fun. I really enjoyed this. I love the kind of questions as well. Uh
+[50:15] and yeah, I will put the QR code back on screen in case any of you want to grab
+[50:22] this. Yes.
+[50:33] Yeah.
+[50:44] >> Yeah. Yeah. Exactly. Yeah. I think we talked about it a while back. What you
+[50:49] could do is like I used uh entropic managed agents quite a bit. Uh so I
+[50:53] would run a chron job on managed agents where I would say use this skill every
+[50:58] day at 9:00 am to do this job and if this is a success all good if this is a
+[51:02] failure send me a notification here that will trigger a healing loop uh so that's
+[51:07] how I sort of can bake in uh checks and balances around websites changing
+[51:14] antibbots changing etc.
+[51:22] I'm going to hang around here. Uh also uh I'll be at the browserbased booths
+[51:28] all days of the conference as well. So uh in case you're curious and want to
+[51:32] chat more uh love to do that. Thank you.
+[51:50] >> [music]

@@ -1,0 +1,235 @@
+# title: When Vectors Break Down: Graph-Based RAG for Dense Enterprise Knowledge - Sam Julien, Writer
+# source: https://www.youtube.com/watch?v=XlAIgmi_Vow
+# speaker: Sam Julien, Writer
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T11:35:10Z
+# sha256: 4771ec6557941744351cdc00580647b6138e3356282cc61863395690a509bf8c
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:00] [Music]
+[00:15] welcome. So glad to see you all here. Uh, welcome to When Vectors Breakdown,
+[00:20] graph-based rag for dense enterprise knowledge. And big thank you to Swix and
+[00:25] Ben for putting on yet another amazing event. Um, so it's a pretty interesting
+[00:30] signal that we have an entire track dedicated to graph-based rag. And I
+[00:35] think in addition to all of the agentic uh promise of graph-based rag, we're
+[00:40] also seeing that the market is starting to catch up that vector search is just
+[00:43] not enough for rag at scale. You may have seen this really interesting
+[00:48] article by Joe Christian Bergam who is around here somewhere on the rise and
+[00:51] fall of the vector database infrastructure category and his
+[00:55] subsequent interview on latent space where he talked about how vector
+[00:58] databases have experienced this gold rush after ChatP's launch. uh but that
+[01:04] the industry is starting to recognize that vector search alone is just
+[01:07] insufficient for sophisticated retrieval and that we're going to need multiple
+[01:12] strategies beyond simple vector similarity. This is music to our ears at
+[01:17] Ryder because we've actually been talking about this for a long time.
+[01:20] We've been uh talking about the benefits of graph-based rag for a couple of years
+[01:24] now. In fact, if you look at this article from November 2023, which in AI
+[01:28] time is like prehistoric times, um we actually talk about the benefits of
+[01:33] knowledge graphs and the shortcomings of vector databases and simple similarity
+[01:38] search for enterprise rag at scale. And if you're not familiar with writer,
+[01:43] we're this end-to-end agentic platform for enterprises where we build our own
+[01:47] models, we build our own graph-based rag system and have this suite of software
+[01:51] tools on top of that for enterprises to be able to build agents and AI
+[01:55] applications. And so as we've been building knowledger graph over the
+[01:59] years, it's been an interesting journey as we've been working with these Fortune
+[02:03] 500 and global 2000 companies at scale. Most of them or many of them are in
+[02:09] highly regulated industries like healthcare and finance where accuracy
+[02:13] and low hallucinations are super important. And so our team has been
+[02:17] putting together this system over the years of different components put
+[02:21] together and different techniques that we could really drive our accuracy rate
+[02:25] up high and reduce our hallucinations. And so what I wanted to share in this
+[02:30] talk was kind of the journey of how we got there. And the main takeaway being
+[02:34] as you're seeing in several of these talks like the first talk about hybrid
+[02:37] search there are many different ways that you can get the benefits of
+[02:40] knowledge graphs in rag and also what how you get there and what you learn
+[02:45] along the way is actually often very valuable as you're building out your
+[02:49] retrieval system uh almost just as valuable as the end result itself. So,
+[02:54] I'm going to weave together these two stories of our journey to graph-based
+[02:57] rag and sort of the first principles thinking that I think has made our team
+[03:01] successful in putting together this system as we continue to iterate and
+[03:05] improve on it. So, I'm Sam Julene. I'm the director of developer relations at
+[03:09] Writer and you can find most of my writing and books and newsletters and
+[03:12] all of those things at sjulene.com. So, I talked about this system composed
+[03:17] of multiple pieces put together over a couple of different years. And I want to
+[03:22] talk about sort of how we got to this point and where we are now. And I'm just
+[03:27] going to put a blanket caveat on here that please consider this a sketch and
+[03:30] not a blueprint of what is currently in production. Of course, there are like
+[03:34] many moving pieces and many layers to this. Uh, but I want to abstract it
+[03:38] enough to make it something that is practical and and usable for people. So
+[03:42] our research team, we have a cracked research team at Ryder and they have
+[03:47] four main areas of focus. Enterprise models like like our Palmyra X5 model,
+[03:52] that's the one powering the chat on the AI engineer website right now. Practical
+[03:56] evaluations like our finance uh benchmark called failsafe QA domain
+[04:01] specific uh specialization. These are our domain specific models like Palmyra
+[04:05] Med and Pomera Finn. And then what our focus is here retrieval and knowledge
+[04:09] integration. So bringing enterprise data to work with our models in a secure
+[04:15] reliable way. And I think what's really cool about the way our research team
+[04:19] works is that they're very focused on solving practical problems for our
+[04:23] customers. Uh they're not just sort of like working in isolation uh working on
+[04:28] theoretical things. They're actually driven by customer insights. And that's
+[04:31] uh really what I would consider like sort of the first meta lesson of what
+[04:35] why I think this is working so well for writer. Right now we're really focused
+[04:39] on solving the customer problems rather than implementing specific solutions.
+[04:44] So the problem that we are trying to solve kind of constantly as most of us
+[04:48] are here is that enterprise data is really dense, specialized and massive.
+[04:53] So we're often dealing with terabytes of data and it uses very specific language
+[04:58] and it's often very clustered together. There's not a lot of diversity in the
+[05:02] language used in these documents. And that's what our research and engineering
+[05:06] teams have been focused on these last few years. So like most we kind of
+[05:10] started out with a regular search of quering a knowledge base using an
+[05:15] algorithm and passing that to the LLM. But that quickly sort of like ran out
+[05:19] because of you know it was good for basic keyword searches but not really
+[05:23] great for that advanced similarity search that we needed. So then again
+[05:27] like most we went to vector embeddings and did chunking and embeddings and put
+[05:32] it in a database and then similarity search uh and passing it to the LLM for
+[05:37] the end user to query. But we ran into two major problems with this. The first
+[05:43] is that with vector retrieval chunking and nearest neighbors can give
+[05:48] inaccurate answers. Uh so if you look at this example of kind of this text about
+[05:53] the founding of Apple and the timeline, it's very easy for us as humans to look
+[05:57] at these text chunks and pick out the fact that the Macintosh was created in
+[06:01] 1984. But when you chunk this text naively and you just give it to a
+[06:05] nearest neighbor search, uh it can get confused and it thinks that it was
+[06:09] actually in 1983 instead of 1984 because it's in the same chunk as the
+[06:12] introduction of the Lisa. Uh side note, I'm a huge Apple vintage Apple nerd and
+[06:17] so I liked this example. The other big problem that we ran into with vector
+[06:22] retrieval was that it was failing with really concentrated data. So if you
+[06:26] think about a lot of large enterprises, it's not like they're dealing with
+[06:29] documents where like some of them are talking about animals and some of them
+[06:31] are talking about fruit, right? Like so if you have a mobile phone company for
+[06:36] example and they have thousands and thousands of documents that all use
+[06:39] megapixels and cameras and battery life and things like that and you ask the rag
+[06:44] system and the LLM to compare two different phone models, it's going to
+[06:47] really struggle with that because it's going to find all these answers and have
+[06:50] no idea how to make sense of them. And so that's what took took us to
+[06:55] graph-based rag where instead we would query a graph database and get back the
+[07:00] relevant documents using keys uh and generate an answer. Especially powerful
+[07:05] if you combine that with like full text and similarity search and things like
+[07:08] that. Um and so this really helped us with our accuracy because we were able
+[07:15] to preserve the relationships with the text and provide more context to to the
+[07:20] model. Uh, and this was really interesting because at the time there
+[07:22] actually weren't that many people doing graph-based rag o last over the last
+[07:27] couple of years. And that's why I think the focus of the team on really trying
+[07:30] to solve the problem of the customer rather than chase whatever was uh being
+[07:35] hyped up at the time was really important. So that was really great. But
+[07:40] we did run into some challenges back then with using graph databases. Now
+[07:44] this is not an indictment of any graph database technology. It's just that we
+[07:47] were running into these issues at the time. a couple of years ago. And so
+[07:52] there were four things that we ran into. First, that converting the data into the
+[07:57] structured graph was getting really challenging and costly at scale. Uh as
+[08:02] the as the graph database scaled, we were hitting the limits of our team's
+[08:05] expertise as well as hitting some cost issues. And then we were running into
+[08:09] some problems where cipher was struggling with the advanced similarity
+[08:13] matching that we needed. And we were noticing that LLMs were doing better
+[08:16] with textbased queries rather than complex graph structures. Now again, if
+[08:20] you were to do this now, you might not run into those problems, but this is
+[08:22] what we ran into historically. And so I think the way that the team
+[08:26] approached this is also very interesting where they decided to stay flexible
+[08:31] based on their expertise. So they were running into these problems that I think
+[08:35] were not necessarily fundamental to the technology itself, but more like okay,
+[08:38] how can we solve the problems for our customers using the expertise that we
+[08:42] have on the team? And so they came up with a few really interesting solutions
+[08:45] to this problem to these problems. So first when it came to converting the
+[08:50] data into the graph structure team went back to their expertise and they say
+[08:54] what do we know how to do? We know how to build models. So let's build a
+[08:57] specialized model that can scale and run on CPUs or smaller GPUs which I think is
+[09:03] a really clever solution. Now if you were to do this now there's probably
+[09:07] enough fast small models out there that you could fine-tune something like that.
+[09:10] You wouldn't have to build it yourself. But at the time we didn't really have
+[09:13] any options like that. So the team built it themselves and fine-tuned a model
+[09:17] that was trained to map this data into graph structures of nodes and edges and
+[09:21] we did some uh better contextaware splitting and chunking to uh preserve
+[09:25] the context and the semantic relationships and this really helped uh
+[09:29] preserve the reliability. Okay. And so then the issues with the
+[09:34] scaling of the graph databases and the limitations of the the expertise on the
+[09:38] team with the cost at scale. So again we went back and and thought about like
+[09:42] what is our team's expertise in and what can we do and so what we did was instead
+[09:46] we stored the data points as JSON in a lucine based search engine. So we take
+[09:51] the graph structure we converted into JSON and we put it in the search engine
+[09:54] and this allowed us to easily handle the large amounts of data without any
+[09:59] performance or speed degradation uh at scale while still being something that
+[10:04] the team was really good at. And so the team had started to assemble this
+[10:09] concept of of what our rag system was look was looking like. And again, this
+[10:13] is kind of more of a historical snapshot and a and a and a sketch over time. But
+[10:17] uh where we do the context aware splitting and text to graph with this
+[10:20] specialized model and then pass it to a search engine. Uh and we were really
+[10:24] starting to drive up our accuracy. But uh we still have those problems with
+[10:30] the similarity matching and the textbased queries doing better than the
+[10:34] complex graph structures. And so again, the team sort of like went back to first
+[10:39] principles and thought, okay, what what is it that we're trying to solve here
+[10:42] and let's go back to the research and figure out like what we can build on to
+[10:46] build a solution that's best for our customers and our specific needs. And I
+[10:50] think this is kind of the final meta point of letting research challenge your
+[10:55] assumptions. So rather than staying focused on the solution, you know, step
+[10:58] back, look at the research and figure out what you can do to solve the
+[11:02] challenges for your customers. So they went back to the original rag paper and
+[11:06] if you go back to the original rag paper it doesn't actually ever talk about
+[11:08] using prompt context and questions which is super interesting right that's sort
+[11:12] of like the deacto way of doing rag now but the the original rag paper actually
+[11:16] proposed this whole like two uh component architecture with a retriever
+[11:21] and a generator with pre- pre-trained sequence to sequence model never
+[11:25] actually talks about prompt and context in questions and so that's where they
+[11:28] came across fusion and decoder which I kind of think of as like an alternate
+[11:32] timeline for rag like if we if we didn't go down the road of uh prompt and
+[11:37] context and questions and so fusion and decoder is this technique that kind of
+[11:40] builds upon the original proposal of the original rag paper where it processes
+[11:45] the passages independently in the encoder to get linear scaling instead of
+[11:49] quadratic scaling but then jointly in the decoder for better evidence
+[11:52] aggregation. So big efficiency breakthrough and lots of
+[11:56] state-of-the-art performance. I know there's a super abstract. So if you go
+[11:59] to Facebook, they actually have a a fusion and decoder uh library that you
+[12:03] can play around with and actually do the steps of fusion and decoder. I also know
+[12:07] that at this point you're going like what the heck is this guy talking about
+[12:09] in a graph rag track? Why are we talking about fusion and decoder? Well, I'm glad
+[12:12] you asked because the next big breakthrough was knowledge graph with
+[12:16] fusion and decoder. So you can use knowledge graphs with fusion and decoder
+[12:20] uh as a technique and this sort of improves upon the fusion and decoder
+[12:24] paper by using knowledge graphs to understand the relationships between the
+[12:28] retrieved passages and so it helps with this efficiency bottleneck and improves
+[12:33] uh the the process. I'm not going to walk through this diagram step by step,
+[12:36] but this is the diagram in the paper of the architecture where it it uses the
+[12:40] graph and then does this kind of two-stage ranking of the passages and it
+[12:44] helps with uh improving the efficiency while also lowering the cost. And so the
+[12:49] team took all this research and came to came together to build their own um
+[12:53] implementation of fusion indicer since we actually build our own models uh to
+[12:57] make that kind of the final piece of the puzzle and it really helped our
+[13:00] hallucination rate. really drove it down and then we published a white paper with
+[13:04] our own findings of it. And so then we kind of had that piece of
+[13:08] the puzzle and there's a few other techniques that we don't have time to go
+[13:10] over but point being we're we're assembling together multiple techniques
+[13:14] based on research to get the best results we can for our customers. So
+[13:19] that's all well and good but like does it actually work? Like that's the
+[13:21] important part right. So we did some benchmarking last year. We used Amazon's
+[13:25] robust QA data set and compared our retrieval system with knowledge graph
+[13:29] and fusion decoder and everything uh with our with seven different vector
+[13:34] search uh systems and we found that we had the the best accuracy and the
+[13:39] fastest response time. So encourage you to check that out and kind of check out
+[13:42] this process. Benchmarks are really cool but what's even cooler is like what it
+[13:47] unlocks for our customers which are various features in the product. Um for
+[13:52] one because like most graph structures we can actually expose the thought
+[13:57] process because we have that relationships and the additional context
+[14:01] where you can show the snippets and the subqueries and the sources for how the
+[14:05] rag system is actually getting the answers and we can expose this in the
+[14:08] API to developers as well as in the product
+[14:12] and then we're also to have able to have knowledge graphic sell multihop
+[14:15] questions where we can um reason across multiple
+[14:20] documents and multiple topics without any struggles. And then lastly, it can
+[14:24] handle complex data formats where vector retrieval struggles where an answer
+[14:28] might be split into multiple pages or maybe there's a similar term that
+[14:33] doesn't quite match what the user is looking for. But we because we have that
+[14:36] graph structure and and the and fusion and decoder with the additional context
+[14:40] and relationships, we're able to uh formulate these correct answers.
+[14:46] So again, my main takeaway here is that there are many ways that you can get the
+[14:50] benefits of knowledge graphs in rag. That could be through a graph database.
+[14:54] It could be through doing something creative with posters. It could be
+[14:56] through a search engine. Uh but you can you take advantage of the relationships
+[15:02] that you can build with knowledge graphs uh in your rag system. And as you get
+[15:05] there, you can challenge your assumptions and focus on the customers
+[15:08] to be able to get to the end result to to make the team successful. And so for
+[15:13] our team, it was focusing on the customer needs instead of what was
+[15:16] hyped, staying flexible based on the expertise of the team and letting
+[15:20] research challenge their assumptions. Um, so if you want to join this amazing
+[15:24] team, we're hiring across research, engineering, and product. Uh, we would
+[15:28] love to talk to you about any of our open roles. Uh, and I'm available for
+[15:32] questions. You can come find me in the hallway or reach out to me on Twitter or
+[15:35] LinkedIn. And that's all I've got for you. Thank you so much.

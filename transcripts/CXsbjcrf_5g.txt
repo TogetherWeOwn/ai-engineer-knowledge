@@ -1,0 +1,457 @@
+# title: Text-to-Speech Data Preparation and Fine-tuning Workshop - Ronan McGovern
+# source: https://www.youtube.com/watch?v=CXsbjcrf_5g
+# speaker: Ronan McGovern
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T13:02:52Z
+# sha256: 7f96d4d52792225d26bdbb3b27a18e443d10038ecc965a8fb9a625b7a47a03a3
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:00] Welcome to this workshop on text to speech model fine-tuning. I'm Ronan of
+[00:04] the Trellis Research YouTube channel and today I'll be walking you through data
+[00:08] preparation and fine-tuning of Sesame's CSM 1B model. You should be able to
+[00:14] follow along. All of the materials are available on the Trellis research
+[00:19] GitHub. If you go to AI Worldsfare-2025, you'll be able to find
+[00:24] the collab notebook and also the slides that I'm going to go through for this
+[00:28] workshop. Now, by the end of this workshop, you should be able to train a
+[00:32] texttospech model so that it sounds like a specific voice. You should be able uh
+[00:38] to understand how token-based texttospech models work. The one we're
+[00:42] going to train today is Sesame CSM1B, but Orpheus from Canopy Labs is also a
+[00:47] tokenbased texttospech model. We'll go through how to create a
+[00:51] voice data set. You can record one yourself. Uh but today we're just going
+[00:56] to pull audio from a YouTube video. You can pick which video and use that as a
+[01:01] basis for the finetuning. We'll cover then fine-tuning using Unsloth, which is
+[01:06] a library based around transformers. Many of you might be familiar with it.
+[01:10] And last fall, we'll evaluate performance uh both before the
+[01:13] finetuning and after the finetuning. Now before I start to get into the collab
+[01:19] notebook, it's just going to be one collab note book that covers all of
+[01:22] these steps. I want to describe a little bit how these models work very briefly.
+[01:27] If you do want to understand in much more detail, uh I'll point you to a much
+[01:32] longer video about an hour and 30 minutes where I talk about token-based
+[01:36] uh texttospech models. I also talk a little bit about Moshi. I'll put a link
+[01:40] to this in the GitHub repo as well. It helps to start off with reviewing how a
+[01:46] tokenbased text model works such as say the chat GPT models uh from OpenAI uh
+[01:51] like GPT40 or LMA series of models. Those models which you'll be familiar
+[01:56] with most likely involve taking in a string of text and predicting the next
+[02:00] uh word or token and then passing that around so that you recursively predict
+[02:05] the next word. Now, when we talk about text to speech, what we want to do is
+[02:10] take in a series of text tokens and predict the next audio token. If you can
+[02:15] bear with me as to what an audio token might be. And in fact, we'd like to be
+[02:19] able to pass in a history of text and also audio from the earlier conversation
+[02:23] and then decode recursively. We'd like to produce the next audio token. So, we
+[02:28] have a string of audio tokens that represent the output speech uh that we
+[02:33] want. So, conceptually, this is what we're trying to do. We need a
+[02:36] transformer model that instead of taking in only text and outputting text tokens
+[02:40] can input ideally text and audio and output a string of audio tokens. So the
+[02:46] question the first question then is how do you make tokens for audio? How do you
+[02:51] take a wave a soundwave like this and represent it uh in terms of discrete
+[02:56] tokens rather than continuous uh frequencies or sound waves? And the
+[03:01] answer is you can represent audio or a little piece of audio as a choice from a
+[03:07] code book. A codebook is like a dictionary and inside the dictionary
+[03:12] there are a series of vectors where a vector represents a given uh sound. Now
+[03:18] these code books could be fairly large in order to represent a wide variety of
+[03:22] sounds and that could be the acoustics and also the semantics. But it is
+[03:26] possible to take sound and represent it in a discrete way much like text uh
+[03:31] represents meaning in a discrete way. The way that these code books are
+[03:36] trained, I won't get into too much detail, but broadly speaking, you need
+[03:39] to train um an encoder decoder where you take a soundwave. You then have some
+[03:45] kind of transformer that converts it into tokens and then you have another
+[03:49] transformer that will decode it back uh into a wave. And the question you ask
+[03:55] during training is whether the output here after encoding it to tokens and
+[03:59] decoding it back you ask the question of whether it matches the input and to the
+[04:03] extent it doesn't match you will use that difference or the loss to back
+[04:07] propagate and update these weights here. So it is possible giving sufficient data
+[04:12] on sound waves to then train uh a code book so you can represent those uh that
+[04:18] sound in a discrete form. Now it turns out if you use that approach uh you can
+[04:23] represent sound using a code book but it turns out insufficient to just have one
+[04:28] token for each time step. Actually what works out better is to have a
+[04:32] hierarchical representation or at least have multiple tokens allowed at the same
+[04:37] kind of time stamp or same window so that you can have a more detailed
+[04:41] representation. So this is the idea that's used in most tokenbased audio
+[04:45] models. Instead of just having one token at each window, you will have multiple
+[04:48] tokens potentially set up in a hierarchy so you represent higher level kind of
+[04:52] meaning or acoustics and then you have more granular more granular and so you
+[04:57] have these multiple layers of representation. Now there are a few ways
+[05:00] to set things up to have different tokens represent sound at a given
+[05:04] window. The one we're going to focus on is the sesame model uh where there are
+[05:10] 32 tokens at every uh window that will represent the sound. There is a zeroth
+[05:16] token that will be predicted by the main transformer here, but then there's a
+[05:20] secondary transformer that's being used to decode out the other 31 uh tokens of
+[05:26] meaning. So whereas here we basically have sesame decoding out with a main
+[05:31] transformer auto reggressively these first zeroth tokens the kind of stack
+[05:36] tokens are being decoded by a second transformer. So actually Sesame has two
+[05:40] models. It's the main 1 billion parameter model and then a much smaller
+[05:44] model that will decode out kind of these hierarchical tokens here. So this is a
+[05:50] quick overview of how the model is going to work. We will start off with a
+[05:54] pre-trained model that is capable of taking in text and audio and outputting
+[05:58] uh a stream of audio here. And we'll see how it performs. Just when we give it
+[06:02] some text, we'll see it generate or we'll hear it generate some sound. But
+[06:05] then we're going to take a data set and it's uh in my case it's going to be of
+[06:09] one of my YouTube videos with my voice and we're going to see if we can make
+[06:12] the model sound a little bit more like me by fine-tuning it uh on that data. So
+[06:18] with that we will move over to the collab notebook. As I said you can find
+[06:23] it uh on trellis research if you look for the AI worlds fair 2025 repo. And if
+[06:29] you open that up in Collab, you should be able to run it for free using uh a
+[06:34] T5. So when you open up the notebook, make sure that uh you are
+[06:39] connected to a GPU. This should be available for free. If you're not
+[06:43] connected to a GPU, uh you can say change runtime type and then you'll want
+[06:49] to select uh the TPU here. So I am connected and there are two sections in
+[06:55] this notebook. If you're following along, you can just open it up in your
+[06:59] browser. Now, there are two sections we'll go through. The first is data
+[07:03] generation where we're going to pick a YouTube video. We're going to use
+[07:06] Whisper in the Collab Notebook to transcribe the YouTube video and then
+[07:10] we're going to convert it into a data set. The data set will have audio
+[07:15] snippets of up to 30 seconds and they will have text which will be the
+[07:19] transcription uh using Whisper. Given that data set of
+[07:25] snippets, I think I will have maybe around let's see 41 rows of data which
+[07:30] is actually enough to have an effect on the quality. I have previously done
+[07:34] trainings with maybe shorter snippets of only 10 seconds and 20 20 of those and I
+[07:41] don't think that's enough data. So I would say if you've got 30 second
+[07:43] snippets probably having roughly 50 of them is enough to start to have an
+[07:47] effect. And given that data set, we'll then fine-tune the unsloth model or
+[07:52] sorry, we'll fine-tune the CSM model, the SESB model using Unsloth, and we
+[07:58] will measure performance at the end and see how that
+[08:02] fares. So, let's start off with the data generation. And you can pick your own
+[08:06] YouTube video if you like. I recommend picking a video where you just have one
+[08:11] speaker. You could pick a video with two speakers, but you need to do more data
+[08:15] processing. you need to do diorization to split that uh audio up into multiple
+[08:20] speakers which is not supported in this basic notebook here. So I recommend
+[08:24] taking a video where you just have one speaker. This is a a trellis video here.
+[08:28] You can then pick the model size the whisper model size that you want to use
+[08:33] for transcription. I recommend using turbo
+[08:36] which is almost as good as large. Um I think it's better than definitely small
+[08:41] base and tiny but it's actually a lot faster than large. So we'll go with
+[08:44] turbo. run the installs. So, you'll need white
+[08:48] uh YouTube DLP. Note that this works well in Collab. If you try and run this
+[08:52] notebook outside of Collab, you can run into authentication issues where you'll
+[08:56] get blocked from downloading from YouTube. So, I recommend running this in
+[08:59] Collab. Um you also need to install Whisper, which is uh from OpenAI. And
+[09:05] with all of that installed, you should be ready to then load the Whisper model
+[09:09] here and run the transcription. And we're going to use the GPU. So we'll
+[09:14] use CUDA here. And it should then save your transcript to a file to a JSON file
+[09:20] which will be saved here locally. So what you should find is a JSON file uh
+[09:24] that's saved. And uh you should be ready to to then use that file as a basis for
+[09:30] the training. Now when you run the transcription, I'm not going to run it
+[09:34] here cuz it's uh going to take a little bit of time. And when you have that JSON
+[09:38] file, um, you can take a look at that file, which I'll show you now. Okay. So,
+[09:45] I've opened up the JSON file, and it has a bunch of text and also details around
+[09:52] the exact tokens. It also will have the segments of uh the
+[09:56] transcription. And what I recommend doing is just take a quick read through
+[10:00] it. I know you won't be able to see because of the font size here, but take
+[10:03] a look through for any words that you think might be misspelled. And what you
+[10:07] can do is a quick find replace on some of those variables. So for example,
+[10:12] often uh I'll see the word trellis with two L's because that's how the correct
+[10:17] English word is spelled, but the word uh trellis for the name of Trellis research
+[10:20] is one L. And so I'll often just do a find replace uh for trellis and put in
+[10:26] tris and then I'll replace that throughout. Now I've already done that,
+[10:31] so it's uh completed. But if you want to make those fixes, what you can do is do
+[10:36] the find replace and then re-upload the file to Google Collab. Just re upload it
+[10:41] here uh so that you can read it in and use that corrected transcript then as
+[10:46] the basis for your fine-tuning data set. So, at this point, what we've done is
+[10:51] we've grabbed the audio from YouTube. We have transcribed it. We've corrected it
+[10:56] then manually, and we're ready now to split
+[10:59] what's a long uh transcript consisting of short segments from Whisper. And what
+[11:04] we want to do is combine some of those segments so that we have longer chunks
+[11:07] up to about 30 seconds in length. Uh we're going to use the sil simple
+[11:11] algorithm. We're simply going to stack them until they reach more than 30
+[11:14] seconds and then we'll move to creating a new row of data. So what we ultimately
+[11:18] want is rows of data that are max 30 seconds in length. So that's what we're
+[11:23] going to do here. I'm going to just log into hugging face so that I can push a
+[11:29] data set up to hugging face. Now I've done this earlier so I'm not going to uh
+[11:32] log in right now. I'm going to define the organization. So if you've created
+[11:37] an account you can create an organization minus con trellis. I'll
+[11:41] create a you a repo name and I'll create the maximum length I want for the rows
+[11:46] of data. Then I will grab the source audio
+[11:50] which should be saved from running the YouTube extraction earlier and I'll also
+[11:54] specify the path to my JSON file which could be an updated JSON file with those
+[11:59] corrections. Then I'll load that JSON file and I'm
+[12:04] now going to run through basically taking the segments here and adding them
+[12:09] together until we get to the maximum duration. And when we're at the maximum
+[12:14] duration, we'll call that a row of data and we'll move then uh to the next data
+[12:18] set. So with that done, as you can see uh here, I've generated 41 clips. Uh
+[12:25] I've pushed it up to YouTube if you or sorry pushed it up to Hingface. If you
+[12:29] don't want to push it up, just set this to false. And yeah, my data set should
+[12:33] now be available. So, if you're following
+[12:36] along, it will take a bit of time. You might need to pause the video because
+[12:40] you need to run the transcription. Should take a few minutes at most, even
+[12:43] if you have like half an hour or an hour worth of video. And then you should find
+[12:48] your data set up here. And you can see my snippets of text. And then you can
+[12:53] see the sound. So, I could uh, for example, play some of these sounds and
+[12:57] test them out. Now this is kind of a basic
+[13:01] implementation what I'm showing but you can see already an opportunity for
+[13:04] improvement here. Right now I'm adding segments of
+[13:09] text but I'm not being careful as to whether the segments are ending. It
+[13:14] would be better if I ended every row of data here on a full stop. That could be
+[13:19] done by using a library such as NLTK to detect sentence boundaries or
+[13:24] you could even use just a regular expression. So there is room for
+[13:28] improvement of how these data sets are being compiled. Shouldn't make a huge
+[13:31] difference, but generally you want to have kind of paragraphs that are
+[13:35] complete within a row of data here. All right. So at this point, hopefully you
+[13:39] have your data set uh pushed up and you've noted what your org name and your
+[13:43] data set name is. So we're ready to move on uh to
+[13:48] fine-tuning. Now the first thing for fine-tuning is to install Unsloth. Uh so
+[13:54] I've actually run this and I have run it just uh earlier this morning. So we're
+[13:58] going to be able to follow on with these cells. We're installing um Unsloth here
+[14:03] which includes transformers and a number of packages for loading and fine-tuning
+[14:08] models. Next with Unsloth installed, we're going to load the base model that
+[14:12] we want to train which is CSM1B. This is the Sesame model. We're going to load it
+[14:17] with a maximum sequence length. This is the maximum text text length which is
+[14:21] probably quite a bit longer than 30 seconds uh which it should be. We will
+[14:25] leave the data type as none. Yeah, the data type if I'm on a T4 will be uh
+[14:30] float 16. So it'll be float uh torch.flat 16 on T4 and it'll be uh
+[14:41] torch.bflat 16 on um anything more recent than that.
+[14:46] So on hopper or blackwell GPUs also ampere as well. The auto model
+[14:53] is CSM for conditional generation. So sesame models are now supported by
+[14:56] transformers and that's what onslaught is leveraging here. You could quantize
+[15:00] the base model but it's not necessary cuz CSM1B is just a few gigabytes in
+[15:05] size and the T4 is 15 GB. So it will fit easily uh within this here. So the model
+[15:11] is going to download and it will then be loaded into the GPU. When the shards are
+[15:16] loading, you should see that uh the GPU should start to get full with the
+[15:20] shards. Now, this here looks like my GPU usage is kind of high. It might suggest
+[15:27] I've loaded the model twice. Uh so, I may have to restart my runtime and
+[15:31] reload it again. Uh but we'll see. It's It's lowering down now, so maybe that's
+[15:35] okay. And what you can do then is print out the model architecture just to take
+[15:40] a look. And yeah, there's quite a lot in the CSM model.
+[15:45] There's the backbone model. This is the main transformer model here. And then
+[15:51] there's the depth decoder. So this is where you're decoding out those 31 other
+[15:56] tokens. And then there's also the model that allows you to convert from the
+[16:00] waveform into tokens and tokens back to the waveform. So you've got the codec
+[16:04] model and there's also the decoder down here as
+[16:07] well. So this is the architecture. It's relevant to print the architecture
+[16:11] because actually we're not going to train all of these parameters. We're
+[16:15] just going to train a subset. We're going to focus on the linear layers and
+[16:19] actually we're not even going to train all of the parameters in the linear
+[16:21] layers. We're going to train adapters that plug on. So that's going to save
+[16:24] memory and also make the training faster. So you'll just take note of some
+[16:28] of these modules here. These are the attention modules that we're going to
+[16:31] train. These are the linear layers. We're going to train these as well.
+[16:35] Okay. Okay, so that's the model printed out and we're ready now to apply those
+[16:40] adapters I just mentioned. So apply little adapters to train and apply them
+[16:44] to these modules here. I'm going to come back though before I apply this because
+[16:50] I'm going to skip Rudder because I want to see how the base model is performing
+[16:53] without any fine-tuning. So we're going to skip the data preparation just for
+[16:58] now. We're going to skip the training and we're going to run straight to
+[17:00] inference just to hear what some of these sounds are like.
+[17:05] So, um, yeah, let's start off and just pass
+[17:10] in a piece of text here saying we just finished fine-tuning a text to speech
+[17:14] model. We didn't finish because we're just starting, but let's run this here
+[17:17] and see um, what it sounds like. There's an alternative way of running here.
+[17:22] Basically, here we're using a chat template to apply to text that we're
+[17:26] passing in. Whereas here we're preparing uh the tensors in a more raw format just
+[17:31] by passing in um the speaker ID and text here. So essentially we're bypassing the
+[17:37] chat template whereas here we're using the chat template. Just two different
+[17:40] ways to call the model. So this is just a basic called zeroot inference. You're
+[17:45] passing in text. You get out audio. You're going to get a random speaker's
+[17:48] voice here because uh the temperature is non zero. So you could get female, you
+[17:52] could get male, you could get deep, you could get high pitched. uh you could
+[17:56] really get any speaker and one way you can avoid that is by doing what's called
+[18:00] voice cloning. So with voice cloning which is different to fine-tuning. With
+[18:04] voice cloning we will pass in a sample and we will then get the model uh to
+[18:10] speak. So basically we pass in audio and then we get the model to generate audio
+[18:15] and the model will tend to generate audio that sounds more like the audio we
+[18:19] passed in. This is called voice cloning. And we're just going to use some of the
+[18:23] data set that we already created for this purpose. And yeah, that data set
+[18:30] will get passed in. And then we will ask the model to speak this text here. And
+[18:35] this should be quite a bit closer to my voice than the first example because
+[18:40] we've passed in a sample. Uh but it still won't be as close as we get after
+[18:44] fine-tuning. Now, to be able to run this, I do need to have loaded the data
+[18:48] set. So, I need to load the raw data set. Uh, so for that, I'm actually going
+[18:53] to go up here to the fine-tuning. I've got on uh data prep. I'm not going to
+[18:59] Yeah. And then I do need to run the loading here. So, I will just run the
+[19:03] data preparation script here so that I load in my raw data set from my YouTube
+[19:09] TTS. Just a note that when we load the data set, we do need to have a data set
+[19:14] with an audio column and a text column. Optionally, you can have a source column
+[19:19] and the source would refer to the speaker number which would start at
+[19:22] zero. So, if you have two speakers, it could be zero and then it could be one
+[19:25] for a different speaker. Um, if you don't have a speaker column, what this
+[19:30] code here is doing is simply assigning uh speaker zero. So, it will just uh if
+[19:37] there's no speaker found, it will use the default of source which is zero. So,
+[19:41] it will apply a column effectively of source being equal to zero. Okay. So,
+[19:46] I'm just loading the data set here because we need to have some data
+[19:50] if we're going to clone. And yeah, the message is showing here that the speaker
+[19:55] is being set to zero for each of the rows, which is good cuz it's a video
+[19:59] where I just have one speaker. And now it's just checking the maximum audio
+[20:04] length, which we're going to need when we set up the trainer later. So, we
+[20:07] configure the trainer to also have uh that maximum audio length. But while
+[20:12] that's running, uh, we can just go down so that we're ready to run the cloning
+[20:17] script. And this is just going to run inference with
+[20:22] cloning. And I do have an issue here. I need to comment that out. And the
+[20:27] cloning is now underway. So, we're basically going to pass in that well, a
+[20:32] sample of my voice. And then we're going to try and generate text uh to say this
+[20:38] right here. So, in the meantime, I've already generated um a sample without
+[20:44] the cloning. So, let's just play that. We just finished by tuning text to
+[20:48] speech model. Okay. So, yeah, you can hear it's um
+[20:53] it's a woman's voice. Um and as I said, it can be unpredictable exactly what
+[20:58] voice you get based on temperature. And here's another sample.
+[21:02] Sesame is a super cool TTS model which can be fine-tuned with an SLO. So yeah,
+[21:08] you can see that there's a very wide variance in the type of speaker that
+[21:11] you're going to get if you just do zero shot
+[21:14] inference. I have got a sound file now of the clone audio. Is a super cool TTS.
+[21:22] And here's that audio model which can be fine- tuned with. And here's that audio.
+[21:28] Sesame is a super cool TTS model which can be fine- tuned with
+[21:34] once. So, it's not too bad. My voice has quite
+[21:38] a bit of drag on it. Sesame is a super cool
+[21:41] TTS model which can be fine tuned on slots. Sesame is a So, it's definitely
+[21:48] closer to my voice, but not as good as we can get with finetuning. So, what
+[21:52] we're going to do now is go back up to the start uh and we'll continue on after
+[21:56] having loaded the model to apply Laura adapters and then run through the
+[21:59] training and we'll see if the fine-tuned model performs better than just using
+[22:04] cloning on its own. So, I'm going to scroll back up here to the point where
+[22:08] we loaded the model. The model is uh is still loaded.
+[22:14] Um I'll just rerun this to kind of make it more compact. And now we're going to
+[22:18] apply those adapters. So, we're going to target the linear layers, the
+[22:23] QVO, and then also the MLP linear layers here, gate up and down. We'll use a
+[22:29] lower alpha of 16. It's a pretty small model. I usually recommend 16 if the if
+[22:33] it's about 1 billion in size and we will use uh rescale Laura. This means that
+[22:38] the learning rate for the Laura adapters will be scaled according to the size of
+[22:42] the adapters because if you have larger adapters you need to train them more
+[22:45] slowly and vice versa. So we'll go ahead with this.
+[22:49] We'll use a rank of 32. That means um the rank kind of like the width or the
+[22:53] the height of the adapter matrices. You can make that larger if
+[22:58] you want more granularity, but 32 should be fine. And with that, we will apply
+[23:03] the adapters and we should get a print out of the number of trainable
+[23:06] parameters. So yeah, I think we've already applied everything there. Um,
+[23:13] it's not actually showing us the trainable parameters, but we could
+[23:16] probably do that by just running print trainable params. And yeah, so print
+[23:24] vinable parameters. You can see that we've got about just under 2% of the
+[23:28] parameters are trainable. Technically, you could train more parameters say by
+[23:32] training the embeddings. If you want to do that, you would add in here modules
+[23:36] uh modules to save. And the ones that you typically
+[23:40] would want to save or that you would typically want to train are LM head and
+[23:46] lm embed or embed tokens. But um because we're not changing the embeddings, we're
+[23:52] not changing the tokens here, there's not really any reason to train them. So
+[23:56] just applying adapters to the linear layers uh should be plenty. Okay, so we
+[24:01] have the adapters applied and we're ready to move to training. We've already
+[24:05] loaded the data set uh the raw data set. We've set the source to zero because
+[24:09] we've just got one speaker. There's a little more formatting we need to do
+[24:13] though. And for that formatting, basically preparing the data for the
+[24:16] trainer, we do need to know the maximum audio length. We've already got that
+[24:20] printed here. It's about 700,000 um audio steps.
+[24:27] uh audio uh tokens in length. Sorry, not tokens, but it's the length uh of the
+[24:33] audio. Then we need to measure the length of the text. So, I'll just run
+[24:37] that cell here. And the max is uh 587. And we're going to pass that max text
+[24:42] length and the max audio length into the trainer down here. So, you can see when
+[24:47] we're preparing the inputs, we need to prepare text keyword arguments and we
+[24:50] need to prepare audio keyword arguments. uh we need to set a sampling rate and we
+[24:55] do need to set the text length and the audio length right here. So I've got
+[24:59] this set and Unsloth is doing the work to prepare the input ids, the attention
+[25:03] mask, the labels, the input values and the cutoffs. So all this is uh set up
+[25:08] nicely for us per the original unsloth notebook and we just need to apply this
+[25:12] mapping now uh to our pre-processed examples to get a processed data set. So
+[25:18] I'll go ahead and do that now and then I'll be able to print out the data set
+[25:22] which will show the number of rows uh the input ids and uh these other columns
+[25:27] here. Next we're ready to train the model. So we can pass that process data
+[25:31] set uh into the trainer. You can see that's being passed
+[25:35] in here. The model is being passed in here. We've already applied the
+[25:39] adapters. We will use um a virtual batch size of eight. You probably can go a bit
+[25:44] bigger within the T4. Um I usually would like to have this of 32 in size. So the
+[25:51] product being 32, but we don't have that much data. So we won't go with that
+[25:54] large of a virtual size. We'll go with eight with 41 rows. So it'll be uh five
+[25:59] different steps for every epoch of training. We'll just train for one
+[26:03] epoch. Um the warm-up steps of three. This means that we're going to increase
+[26:07] the learning rate slowly. To be honest, three is a bit much if there's only five
+[26:11] uh in terms of total steps. So you could just reduce that to one. Maybe the
+[26:16] learning rate 2EUS 4 is probably good for a 1 billion parameter model. This
+[26:20] will automatically decide whether to use float 16 or brain float 16 depending on
+[26:24] the TPU that's being used. Uh we'll use Atomw 8bit optimizer to reduce memory
+[26:29] requirements a little bit. Uh weight decay prevents overfitting probably not
+[26:34] essential. We will train at a constant learning
+[26:37] rate and we will save our outputs here uh to the output directory. So with that
+[26:43] I think we can uh set up training check our current memory stats. So we've got
+[26:48] almost 15 GB in the GPU and nearly seven of them are used up and we can start our
+[26:54] training and it's going to take about uh 10 minutes if you run the training and
+[27:00] what you'll find is during that training uh the loss will fall from roughly 6.34
+[27:06] uh down to you know somewhere around 3.7. It looks like the loss is still
+[27:12] falling. So, probably there's potential for improvement here uh in terms of the
+[27:17] quality of the outputs. Um maybe it'll help a little that I reduced the number
+[27:22] of warm-up steps because that means we'll have a bit higher of a learning
+[27:25] rate. So, I'd expect if I run this now, I probably should uh do a little bit
+[27:30] better. Let's get the training going. And when the training is done, we'll
+[27:34] print out the final training stats. You can see with that batch size that I
+[27:38] specified, the virtual size of eight or the actual batch of two, there's only
+[27:42] half of the memory being used. So you probably could increase up to a batch
+[27:45] size of four without a problem. So I would run this and then what we'll do is
+[27:50] run the inference again. Uh but this time on the fine-tuned model and see how
+[27:55] the performance compares. And what we'll do um what will happen automatically is
+[28:01] we will get saving of some of these um of some of these sound files. So we'll
+[28:06] be able to just play back the zeroot example here. We've got the zeroot audio
+[28:10] and the cloned audio on the base model. But now we're going to generate uh voice
+[28:15] samples using the fine-tuned model. So I'll just run this here. run all of
+[28:21] these cells so that when the training is done and then run the uh cloning test
+[28:27] for when the training is done, training should be underway here. Now, if I
+[28:31] scroll up, you can see we're at two out of 60 steps. Note that there's no eval
+[28:36] data set. Ideally, you would split your training set into train and eval. And
+[28:40] you would inspect the eval loss and make sure that that's falling. If it stops
+[28:44] falling, that means you probably need to stop training. either you've gone too
+[28:48] far in epochs or maybe your learning rate is too high. You also typically
+[28:52] want to monitor the gradorm. Make sure it's around one or less than one. You
+[28:55] would do that typically by adding in here uh tensorboard. So you would report
+[29:00] to tensorboard. You also need to set a log directory. So I think it's logging
+[29:04] deer that you need to set here. Dear typically you would set it something
+[29:10] like logs. Uh but I'm going to leave this
+[29:13] because we're just looking at a basic setup for now. But if you do that, you
+[29:16] can pip install tensorboard and then you can look up uh how to monitor the
+[29:20] losses. You can see that in a longer video I already published. I'll probably
+[29:24] publish a more detailed video after this uh too on the you on the trellis
+[29:28] research YouTube channel. So training is going on. It looks like our loss is
+[29:32] falling which is good. And while that's happening I'll just explain once uh the
+[29:36] training and the inference is done you have the option to save the model and
+[29:41] also push it to hub. If you just run this cell here, it's going to save a
+[29:44] copy of the model locally. So, it'll be in your temporary storage on Collab. If
+[29:49] you want to push it to hub, you need to set one of these to true. Uh both of
+[29:52] them to true cuz you need the model and processor. This will just push the Laura
+[29:56] adapters uh which is lightweight. It'll be a smaller repo. But if you want to
+[30:00] push the full model, uh you need to merge it first. And that's where uh this
+[30:05] comes into play here. You can save the model in merged form. Um well this is
+[30:09] just saving again in as lower adapters but if you want to merge it to 16 bit
+[30:13] format you can set these two to true and you can save the model and also push it
+[30:18] to hub and I believe these will actually save both the model and the processor as
+[30:22] well. So if you want to push to hub yeah you just set this one uh here true. It
+[30:27] will merge the model and then push it up to hub. By the way, if you do want to
+[30:31] reload um a model that you have previously created, you would do that
+[30:35] right back up here where we loaded the model. Instead of specifying the base
+[30:39] model name, you would specify the um the fine-tuned model name, which in my case
+[30:45] is going to be trellis my YouTube tts. Okay, so training is done. We've gotten
+[30:50] down to 3.72 as loss and used just under half of the memory available. Next, uh
+[30:57] we'll run inference using this fine-tuned model. So actually this is
+[30:59] run. We should have a sample here. Uh we should have a second sample here which
+[31:04] we listen to now. And then we have a cloned example which we expect uh should
+[31:07] be the best. So let's give a listen to the fine-tuned model here. We just
+[31:12] finished fine-tuning. Let's have a listen. We just finished
+[31:16] fine-tuning a text to speech model. It's pretty good.
+[31:23] So it sounds a little bit like me, but um yeah, definitely it's a male voice.
+[31:28] So that randomness of it being any kind of voice has been removed and it does
+[31:32] sound a little bit Irish. You can see the pacing is not quite right. That
+[31:36] perhaps would be improved by better filtering the original data set so that
+[31:40] I don't have segments from my YouTube video where there's just a lot of pause.
+[31:44] Now there isn't a lot of pause anyway in my YouTube videos typically cuz I cut
+[31:47] those out. But you could better do some filtering on the data if you want to
+[31:51] improve that. Let's see a second sample though because there is some randomness.
+[31:55] Sesame is a super cool TTS model which can be tuned on Slack. So it's a little
+[32:02] bit of an Irish accent. Probably indicates more data is needed to improve
+[32:06] the quality here. The T in tuned is still a little bit American, although
+[32:10] it's kind of slightly Irish. So some room for improvement here. But what we
+[32:14] see now is probably the best chance we have, which is using the cloning plus
+[32:19] the fine tuning. So I'll play this sample now. Sesame is a super cool TTS
+[32:24] model which can't be fine-tuned with onslaught. Okay, so that was great. It
+[32:29] even has the Irish uh tuned. It even kind of makes this little bit of an
+[32:33] error here which actually sounds natural. Let's give it one more listen.
+[32:36] Sesame is a super cool TTS which can't be fine tuned with on staff. Yeah. Now
+[32:43] maybe the super cool that's not something I would say. So maybe it
+[32:46] hasn't got my ton uh my intonation correct. But broadly speaking, this uh
+[32:50] this sounds pretty great. So at this point, we've pretty
+[32:54] much finished the workshop. At you should have a sound ideally with the
+[32:58] cloning that sounds something more like what you do or what the person in the
+[33:02] video you chose sounds like. If you wish, um you could create more data. Aim
+[33:07] for maybe 500 rows of 30 seconds, and I think you would see better performance,
+[33:12] particularly without the voice cloning. But you can see here that if you combine
+[33:15] fine-tuning with cloning, you're able to get pretty good performance even with a
+[33:19] relatively small amount of data. Uh just say I think a video of 30 minutes was
+[33:23] enough in this case here. So that rounds up the workshop. As I said at the start,
+[33:28] you can get all of the resources on GitHub. That's uh trellis
+[33:33] research/iorldsfair 2025. I will probably make uh I will make future
+[33:38] videos on voice that you can check out on the Trellis YouTube channel. probably
+[33:42] some more detailed videos covering in depth a little more depth the data
+[33:46] preparation and some of the hyperparameters around the finetuning
+[33:49] itself. Uh in the meantime let me know if you have any questions by dropping
+[33:54] some of your questions or comments below in the YouTube comments. Cheers folks.

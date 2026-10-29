@@ -1,0 +1,759 @@
+# title: How to Test Your Agents on Real Tasks With Harbor - Xander Song, Arize AI
+# source: https://www.youtube.com/watch?v=kRJjSOYqW0I
+# speaker: Xander Song, Arize AI
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-27T04:41:14Z
+# sha256: 3d2d35c4b504e8088e6c3663ec9c009758b0b22f61a0d4816cd4b5740e01956f
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:01] [music]
+[00:12] I'll go ahead and get started. Uh, my name is Xander Song. I'm an engineer at
+[00:17] AriseAI where I work on Phoenix, our open-source observability
+[00:22] experimentation and evaluation platform. And today I'm going to introduce you to
+[00:28] Harbor, which is an open- source framework for evaluating agents on real
+[00:32] tasks with real data in isolated sandboxed environments.
+[00:38] The theme of today's talk is shipping based on evidence rather than vibes. And
+[00:43] my goal is to give you a conceptual overview of how Harbor works as a
+[00:47] framework and to share some of the ways in which my team is using Harbor to
+[00:51] iterate more quickly and with more confidence on our agents, harnesses,
+[00:56] skills, prompts, and tools. This talk is going to be a discussion rather than a
+[01:01] interactive workshop. But my hope is that you walk away with a concrete sense
+[01:05] of how Harbor works as a framework and also a sense of how you might use it in
+[01:11] your day-to-day work to make your life and your agents a little bit better. A
+[01:16] disclaimer before I begin. I am not a maintainer of Harbor. Um I do however
+[01:21] consider myself to be an avid power user at this point.
+[01:28] So, so what is harbor? At a high level, Harbor is a framework that allows you to
+[01:34] define realistic tasks in the form of natural language instructions to an
+[01:38] agent. These are tasks that you would like your agent to be able to
+[01:42] accomplish. Harbor feeds those tasks to your agent
+[01:47] running in a fresh sandboxed environment with real data relevant to the given
+[01:53] task. And then it enables you to define what
+[01:56] are called verifiers. These verifiers are specific to each task and they just
+[02:02] check that your agent produced the intended side effects inside of the
+[02:06] environment. Verifiers produce rewards. Examples of
+[02:10] rewards are binary scores such as zero or one or pass fail.
+[02:16] So this picture is like really really simple, right? But I want to just take a
+[02:20] moment to appreciate why it's powerful. Because if my task and my data are
+[02:27] realistic and if I've done a good job of defining verifiers that accurately
+[02:33] describe what constitutes success or failure on the given task, what that
+[02:38] means is that I can hold my task and my verifier constant while I change the
+[02:44] implementation of my agent. And by simply executing this pipeline from
+[02:49] start to finish, I can quickly and efficiently gain a signal telling me
+[02:55] whether or not the change I made to my agent produced an improvement or a
+[03:00] regression for this particular task. Um, and not only that, I can take it a step
+[03:06] further. I can compile not just one task, but many tasks that cover the
+[03:10] broad surface area of the capabilities of my agent. And this lets me close the
+[03:16] loop here. So that now I'm actually able to start iterating with a degree of
+[03:21] confidence that I might not be able to um if I was shipping based on vibes
+[03:27] alone.
+[03:30] So that's really the idea of harbor in a nutshell.
+[03:35] Let's break it down a little bit further. I'm going to talk about like
+[03:38] the architectural details of how Harbor works. So on this slide here, I have the
+[03:44] task that I was talking about on the previous slide. Each task specifies a
+[03:50] set of instructions in the form of a markdown file. And once again, that is
+[03:53] just a piece of natural language that you're going to feed to your agent.
+[03:58] The task also describes an environment in which the agent will run. And that
+[04:03] typically takes the form of a Docker file. And that Docker file typically
+[04:07] contains data that is relevant to your task at hand. And we'll give examples of
+[04:11] this in just a minute. But the thing to realize here is that um Harbor's
+[04:17] actually agnostic with respect to what kind of data you give it. So some
+[04:21] examples could be like a SQL light file. A very common example for coding agents
+[04:25] would be like a git repository at a particular commit.
+[04:30] And Harbor also lets you define a set of verifiers inside of a test directory.
+[04:34] And as I said, verifiers are just scripts. They're just scripts that run
+[04:38] on your environment after your agent is done running that verify that the
+[04:42] intended side effect took place.
+[04:46] And like I said, typically we don't have just one task, but we have many
+[04:50] collected together in what is called a data set.
+[04:54] And for each task in the data set, Harbor allows you to run a configurable
+[05:00] number of trials. These trials are just independent executions of the task to
+[05:05] account for the fact that LLMs are stochastic. Agents are stochastic. They
+[05:10] don't behave the same every time. So each trial is going to build a fresh
+[05:15] environment in the form of a brand new Docker container seated with that data
+[05:18] we were just talking about. Harbor is going to drop your agent of choice into
+[05:23] this environment. It's going to feed it the instruction markdown file and it's
+[05:27] going to let it do its thing. And of course, the agent under test is going to
+[05:32] produce side effects in the environment usually. So if it's a coding agent, it's
+[05:36] going to make changes to source files. Um, it might make changes to a database
+[05:41] if you put it in there. It could do any number of things, right? And after the
+[05:45] agent finishes, the verifiers are going to run on the
+[05:48] environment. And again, a verifier is just a script that checks the
+[05:53] environment. Those verifiers produce rewards which
+[05:58] get written to a reward.ext file and that that's the most important thing
+[06:05] if you take away nothing else. This is like the architecture of how harbor
+[06:08] works. There's another thing which is kind of an additional optional thing you
+[06:12] can do which is you can configure your agents to emit so-called trajectories in
+[06:18] the form of ATIF. ATIF stands for agent trajectory interchange format. ATIF is
+[06:25] Harbor's specification for a JSON based tracing format which basically lets you
+[06:30] peer into the internal details and the internal steps that your agent took to
+[06:35] produce the side effect on the system. So it's basically there for debugging
+[06:39] purposes and for logs and and recording and all that.
+[06:45] this whole pipeline executing end to end where we take all the tasks in a data
+[06:50] set run a certain number of trials for those tasks run our verifiers to produce
+[06:54] rewards and collect trajectories this whole thing all taking together is what
+[06:59] Harper calls a job and there's one more thing I want to
+[07:03] point out while I'm on this slide which is you'll notice right here um I said I
+[07:08] said agent/oracle um so Harbor also has this notion of an
+[07:13] oracle you can drop not only an agent agent into the environment, but also an
+[07:17] oracle. And an oracle is just a solution to your task. It's just a script that
+[07:22] solves your task. And we'll talk about oracles more in a minute, but oracles
+[07:27] turn out to be like this really useful thing because oracles basically let you
+[07:32] work out all the the the kinks in your pipeline before you ever throw an agent
+[07:35] into the mix. It lets you make sure that your data is good, that your environment
+[07:39] is configured properly, that your verifiers work as expected, and you get
+[07:43] to do all that before you spend any money on tokens for an agent.
+[07:49] All right, so that is like the high level. Um, before I pause for questions,
+[07:53] I will I will just continue on for just a second to kind of illustrate it with a
+[07:57] concrete example. So, I'm going to break down a concrete task. Let's suppose that
+[08:02] our agent that we care about is a coding agent um or a coding agent with a
+[08:07] particular set of skills or a coding agent configured with [clears throat]
+[08:10] like a custom MCP server that we're running. And let's suppose that the task
+[08:14] is to fix a failing migration. So if that's the case, the instruction
+[08:19] markdown file would you know it would it would be some set of instructions that
+[08:23] you would pass to the coding agent as a user. So it might say, "Hey, I'm
+[08:26] noticing that this migration is failing. Could you please try to fix it?" Right?
+[08:30] And in the environment, the environment would contain perhaps an actual um SQL
+[08:36] file. Maybe it would contain some DDL. Um and maybe it would contain some
+[08:40] source code containing an up migration. And we've, you know, we've seated the
+[08:44] data so that the up migration fails. Um
+[08:50] in addition, we'll have our tests. And again, the tests, they could be just
+[08:54] scripts that run the up migration that ensures that the up migration exit with
+[08:58] status code zero. And then it maybe it checks like some tables. Maybe it just
+[09:02] checks the tables to make sure that the columns are there that we expect, the
+[09:05] indexes are there that we expect to make sure that the um migration has actually
+[09:10] had the intended side effects on the system.
+[09:15] And you'll also notice that here optionally we have the solution, right?
+[09:18] So the solution is just going to be the literal solution, the literal uh script
+[09:22] that you could run um that would fix the the migration. And again, why would why
+[09:28] would you go through the trouble of doing this? Um, the reason again is it
+[09:33] kind of lets you quickly and confidently build a little bit of assurance that
+[09:37] you've got your system set up, that your verifiers are correct, and you can it
+[09:41] kind of lets you um vibe a little harder, I think, with the system because
+[09:46] you can gain a certain amount of confidence in your verifiers without
+[09:49] necessarily like reviewing them line by line. At least that's my experience with
+[09:53] it.
+[10:00] And so after the the agent runs the task in the environment,
+[10:05] um it's going to edit that broken migration
+[10:09] file, it's going to leave a couple modifications on the file system and
+[10:13] then the verifiers are going to run. And typically if you're running um
+[10:20] Harbor in Docker, which is like the default local setting,
+[10:24] those verifiers are going to mount in the Docker container after the agent
+[10:27] finishes. And that's to prevent the agent from cheating. So the the agent
+[10:31] doesn't have access to the verifiers and the solutions um during the actual
+[10:36] execution. Those verifiers are going to run the
+[10:40] sort of checks that we talked about. Maybe it literally runs the up
+[10:42] migration. Maybe it um you know checks the tables, checks the indexes.
+[10:48] And I think the thing to really take away from this slide is um the verifiers
+[10:53] are agnostic of the implementation of your agent.
+[10:57] They actually don't know anything about the agent at all. All they care about is
+[11:01] what the agent leaves behind. So it is possible to like write some
+[11:06] verifiers that are not like that that peak into the ATIF trajectory that kind
+[11:10] of look at the implementation or the execution of the agent and evaluate it
+[11:15] that way. But that's not really the canonical kind of verifier.
+[11:21] The verifiers, you know, canonically treat the agent as a little bit of a
+[11:24] black box and they're grading the agent solely based on its side effects and its
+[11:30] output in the environment rather than the exact manner in which it produced
+[11:35] those side effects and outcome. And there's kind of a natural parallel here
+[11:39] with integration tests because you can imagine that if you have some
+[11:42] integration tests for an interface or an API, those integration tests um if
+[11:47] they're really well written are hopefully agnostic of the implementation
+[11:51] that is behind that interface or API. And in the same way, if we have really
+[11:56] good verifiers, our verifiers are kind of describing what we expect the agent
+[12:01] to do, the side effects we expected to produce in the environment. And they're
+[12:06] doing so in a way that is decoupled from the implementation. And that's a really
+[12:10] nice feature to have for a set of tests because it allows you to refactor under
+[12:15] green, for example. It allows you to hold your tasks constant while you like
+[12:20] completely change the implementation of your agent and then it allows you to
+[12:24] like fire this pipeline really quickly to figure out if everything still works.
+[12:30] That's kind of what we're talking about when we're talking about iterating
+[12:32] quickly um and shipping confidently. So before I go any further, let me just
+[12:40] pause right here for questions or comments or um Yeah, let me just pause
+[12:44] before I go any further. Yeah. Yeah. Yeah. You just Yeah. Again, it's just a
+[12:47] Docker container. So, you just pop whatever you want in there, right?
+[12:50] [laughter] >> It's a primitive that you're you're
+[12:52] proposing. >> Yeah. Yeah. Yeah. Yeah. Yeah. Yeah. So,
+[12:55] you know, it could be it could be any framework, right? Uh it could be any
+[12:58] language. It could be any piece of code, any executable. Concretely, like, you
+[13:02] know, I'll give you a little sneak sneak peek or sneak preview, right? Like,
+[13:05] we've had to like change tools like um you know, adjust adjust prompts, right?
+[13:11] Um, I'm going through a process right now where I'm trying to consolidate our
+[13:15] skills, for example. So, we kind of have like uh several different agent
+[13:20] experiences that we try to support. Um, there's a lot of overlap and then
+[13:24] there's like certain differences and we're trying to like basically get our
+[13:26] skills all kind of like reusable, right? Um, and agnostic of the particular like
+[13:31] direction that the agent is coming from, whether it's MCP or a CLI or via like
+[13:36] our our own like server side agent. we're trying to get it agnostic and and
+[13:40] so those are the kinds of things where it kind of helps to be able to specify
+[13:44] this set of tests that is like completely agnostic of the underlying
+[13:48] implementation, you know, and we we kind of we came to this like maybe um through
+[13:54] the pain of doing it the other way where we were like kind of like had a set of
+[13:58] tests that were um that were coupled and it was becoming difficult to maintain
+[14:03] because you know I would change a tool and the tests would break right even
+[14:08] though the not even though the true functionality of the agent was still
+[14:10] intact, right? Things like that. Um, we'll get to more of these, right? We'll
+[14:14] get to more of these at the end. Um, any other questions before I go on?
+[14:19] Okay. Okay. So, uh, this this slide is going
+[14:24] to talk about scale. Um, so as we as we already talked about, right, each task
+[14:29] and each trial, uh, is independent, runs in its own environment, its own docker
+[14:34] container. Um, and that makes this whole pipeline completely horizontally
+[14:38] scalable. And that means that it's very compatible
+[14:41] with a sandbox provider such as Daytona or Modal or E2B or any of those. Um, and
+[14:47] it means you can kind of rip through these tests like really fast if you want
+[14:50] to, which is kind of fun. So in this diagram arrayed vertically, we have a
+[14:55] set of four tasks in a data set, including the fixed migration task that
+[14:59] we were just imagining. Um, we've got a couple of different coding agents that
+[15:03] we might want to test out. claude code with opus 5 codeex with gbt5 and then
+[15:07] we've got um a couple of different trials. Let's suppose that we're doing
+[15:11] three trials for k equals 1 2 3. Again, the point of that is just to kind of
+[15:16] handle the handle the fact that these things are stocastic and they they're
+[15:20] not perfect. They don't behave the same every time.
+[15:23] Um so because all these are independent um
+[15:30] you can run them all in parallel on these sandbox providers. So we use
+[15:33] Daytona um and it runs quite fast with like 200 concurrent workers. So even if
+[15:39] you have a large test suite you can rip through it quickly. Um
+[15:44] and then from these individual trials you are able to compute aggregate
+[15:49] metrics for the kinds of things that you care about. So for example you could
+[15:52] compute a pass at Kmetric that just tells you in this case did I pass after
+[15:57] three attempts at the at the task. And so I can see that oh for like this
+[16:02] particular task the fixed migration task both of my agents like passed at K right
+[16:07] passed at three uh for this one only one of my two agents passed at three. You
+[16:11] can actually also compute those kind of aggregate metrics over the entire data
+[16:14] set right and so this kind of like gives you this very quick picture of how your
+[16:20] change is performing because again if you have like a a good data set that
+[16:23] covers the set of functionality that you care about you can get these aggregate
+[16:27] metrics pretty pretty rapidly. Yeah. Go ahead. Each Yeah, that's a great
+[16:31] question. So, this is a really important point, right? Is each of these boxes is
+[16:35] a totally separate Docker container, identical in the beginning, but then you
+[16:40] you put an agent, a separate agent into each one, and you let it go and do its
+[16:44] thing, and they do different things, right? Um, so each one is totally
+[16:48] independent. They're completely isolated, right? They're independent
+[16:51] trials of the same task with the same agent. Um you're basically run yeah
+[16:57] you're basically running claude code three times and saying hey try to fix
+[16:59] this migration and then you're saying oh after three tries did claude code fix
+[17:03] the migration. Okay so now now I've now we've talked about harbor at a at a high
+[17:08] level. Um but I want to switch gears and I want to talk about how Harbor plugs
+[17:12] into Phoenix. So again I'm not a maintainer of Harbor. Um I'm just a fan.
+[17:16] Uh but I am a maintainer of of Phoenix uh which is our which is ARIS's open
+[17:21] source AI observability tool. And the point of this slide is just to
+[17:26] basically convey that we have analogous concepts for the primitives in Harbor.
+[17:33] So we're able to map your data sets to our notion of a data set. We're able to
+[17:38] track your experiments. We're able to um record your trials. Uh we're able to
+[17:45] convert your rewards into our notion of reward which we call an evaluation. Um,
+[17:52] and I guess the other thing I I want to take away from this slide is also we we
+[17:56] do something where we convert those trajectories that I talked about into
+[18:00] so-called open inference format. Um
+[18:09] so open inference is a open standard of semantic conventions so-called semantic
+[18:14] conventions which is built on top of open telemetry which is an open source
+[18:18] framework for telemetry data such as logs metrics and traces
+[18:24] and these conventions basically define data
+[18:28] structures that uh your AI I application can emit which then downstream consumers
+[18:36] such as Phoenix can ingest and we can use those to build certain kinds of UI
+[18:41] experiences and workflows that wouldn't otherwise be possible. So full
+[18:45] disclosure, I am a maintainer of both imprints. Um we recently donated this
+[18:49] the spec to cloud native, right? Um and to the hotel working group. So it has
+[18:54] some traction outside of arise. And so that's maybe a reason you might want to
+[18:58] um use open inference. Um so this diagram on the left, you can see
+[19:04] the ATIF trajectory for that fixed migration task. you can see the
+[19:08] individual steps that the agent might take um including an LLM call and
+[19:13] including a tool call. And over on the right, uh this is kind of what it winds
+[19:17] up looking like in open inference.
+[19:21] And in the product, like I said, open inference allows us to
+[19:27] build out the kinds of opinionated UIs and workflows that you see here. So we
+[19:31] can do things like we can render your trajectories with some opinionated UI,
+[19:35] some specialized UI for LLMs and tools. We can version your tasks and your data
+[19:42] sets so that at any given time you know exactly what the task look like for a
+[19:49] particular job in Harbor. We track your experiments and we help
+[19:54] you visualize metrics and rewards as you iterate. So in this case the reward you
+[19:59] could imagine it being pass fail um zero or one and you can run a sequence of
+[20:04] experiments and you can kind of see over time is my reward moving in the right
+[20:08] direction. We also have skills CLIs and an MCP
+[20:13] server so that claude and codecs and cursor can easily get access to this
+[20:17] data. [clears throat] And at this point I do want to note that Harbor does have
+[20:21] its own open- source UI um that you can run locally on your machine. It also has
+[20:25] a hosted web service. Um, so you you definitely don't have to use Phoenix to
+[20:29] use Harbor. Um, but if you're interested in some of the features I just
+[20:32] mentioned, that would be a reason to give Phoenix a try.
+[20:37] Okay, so hopefully at this point I've given you kind of a bird's eye view of
+[20:42] how everything works. Now I want to talk about some of the ways in which our team
+[20:45] has been using Harbor. And hopefully this answers um answers your point over
+[20:50] here just around getting some concrete examples. Um so in order to do that I
+[20:55] just want to give kind of this high level of like what our architecture
+[20:59] works with. So again this is the Phoenix architecture. This is particular to our
+[21:03] team right this is the this is what our team is kind of like dealing with on a
+[21:07] day-to-day basis. Um on the left here you have an enduser's
+[21:14] AI application or agent. And again this application is going to have been
+[21:19] instrumented with open telemetry and open inference. And it's going to be
+[21:22] exporting and emitting traces to the Phoenix server over OTLP, which is the
+[21:27] open telemetry protocol. So, it's basically sending data to Phoenix,
+[21:31] right? Saying, "Hey, I'm doing this and this is like what my these are the
+[21:35] sequence of steps that I did to accomplish this task. This could be like
+[21:38] a production application. It could be an application that you're testing out.
+[21:42] Those traces are ingested by Phoenix and they are written to one of our SQL
+[21:47] backends, either SQLite or Postgres. And once the data is in the system, we have
+[21:52] a set of core services for things like traces, spans, sessions, data sets,
+[21:58] experiments, and evaluations. And these core services are exposed via various
+[22:03] kinds of APIs, REST or GraphQL. But our goal is not only to like make
+[22:09] those programmatic interfaces, but it's also to make it easy for our end users
+[22:13] and for their coding agents and other kinds of agents to get access to the
+[22:16] data and use the data. And so we support several different kinds of agent
+[22:22] experiences. Um
+[22:25] the first of which are coding agents. So for coding agents, we have a CLI that
+[22:30] the coding agent can use which will invoke REST or it will invoke GraphQL.
+[22:35] We also have an MCP server that you can configure your coding agent to use um
+[22:40] which is going to do the same things. And we have a third agent interface that
+[22:46] we maintain for the team which is a server side agent that we call Pixie
+[22:52] which also has access to the MCP server and therefore has access to REST and
+[22:56] GraphQL. Um it also has like a bash emulator. So it's it's kind of like a
+[23:00] coding agent but running server side. Um so these are the three surfaces that we
+[23:06] that we want to support and that we have to test and ensure are working. the
+[23:11] coding agent with the CLI, the coding agent with an MCP server, and a server
+[23:15] side agent, which is our own harness.
+[23:20] And when it comes time to actually like test all of this out, architecturally,
+[23:25] we have a pretty big advantage. We have this really nice feature, which is that
+[23:29] this server runs on a single node. It's kind of like a graphana- like
+[23:32] architecture. Um, and that means it's very easy to dockerize. So, you just pop
+[23:37] the whole thing in a Docker container. What we do is we just take a SQLite file
+[23:41] which contains some realistic data that we've tested on. Um we replace the
+[23:46] browser with a test client. Um and we just put it in Docker.
+[23:54] And once it's in Docker,
+[23:58] we can start using it in Harbor. So we can feed the system the kinds of tasks
+[24:04] that our particular users care about. So, our particular users might ask a
+[24:09] coding agent or they might ask our Pixie server agent,
+[24:13] find some hallucinated LLM calls from the last week of my traces and add them
+[24:18] to a data set. That's a realistic query that one of our users might ask. And we
+[24:22] can go ahead and let any of these three kinds of agents
+[24:29] go wild inside of this environment. And at the end, we can run our verifiers.
+[24:35] And the kinds of verifiers that we can run for us in this particular setup are
+[24:41] really quite simple because we have a server running inside of here with the
+[24:45] SQL life file. So we could either hit a rest endpoint to verify that the
+[24:51] intended side effect has changed or we could literally like query the SQL life
+[24:55] file if we wanted to because it's just in the container. Um and just verify for
+[25:00] example that the particular tupil for this data sets table has been written in
+[25:05] the way that we expect. >> Yeah. Yeah. No, thanks for stopping me
+[25:08] because I think there's a lot going on on this slide. So maybe I should pause
+[25:11] and and kind of like make sure it's clear before I go on. Right. Um, so I
+[25:15] think there were a couple of questions there and I'll I'll try and address
+[25:18] address them. Um, so in this slide there are three
+[25:23] different agents in in any given trial. I would only be testing one of them if
+[25:28] that makes sense. So you could imagine maybe I'm only testing Claude code with
+[25:32] the CLI, maybe I'm only testing Claude code with MCP or maybe I'm only testing
+[25:37] you know our Pixie server server agent. So just may let's imagine like it's just
+[25:41] one at a time in terms of how does harbor feed at the prompt. Harbor and
+[25:47] this is maybe a nuance that I haven't really talked about, right? Harbor
+[25:50] itself um does not Harbor is a program. It's a command line tool. Um and it
+[25:57] doesn't actually run in the environment per se in the Docker
+[26:01] environment per se. It runs on a host machine which could be your laptop if
+[26:05] you're running it locally or it runs in like a GitHub action runner, you know,
+[26:09] if you're running it in CI. Um, and you can run the environment in a Docker
+[26:15] container locally. That's like the default behavior. But if you're trying
+[26:18] to do something more scalable, you would be running it on a sandbox provider in
+[26:21] all likelihood. Um, so you'd be running it on Daytona. And so Harbor is this
+[26:26] orchestrator um which is running on your laptop or running in GitHub actions
+[26:31] which is um kicking off the run. It's basically saying, you know, hey, start
+[26:37] start the agent, right? Um, and the way it does that is, and I can show you what
+[26:44] this looks like on the file system, but it basically, you know, um, expects a
+[26:48] particular script. Harbor expects a particular script to be written for the
+[26:53] task, right? It's all driven via scripts. So, you like when you're when
+[26:56] you're setting up Harbor, you have to kind of make sure that all these scripts
+[27:00] are in the right place in the Docker image. Um, so there's going to be a
+[27:04] script to start the task. There's going to be a script to run the verifiers.
+[27:06] There's going to be a script to run the oracles. It's all driven by scripts. So
+[27:10] the scripts are in the Docker container. Um, but doc but Harborself is a program
+[27:15] that lives on a on a host machine and just kind of orchestrates things and
+[27:19] kicks things off. That's right. And the interf Yeah. So maybe I'll just repeat
+[27:22] what he what you just said because I think it's well put is like Harbor is a
+[27:26] CLI um and it has certain conventions for if you like make your docker
+[27:32] container or your docker image look this way it will be able to run it um and
+[27:36] those conventions are almost all like is there a script in the right place so
+[27:41] that's kind of like the contract right if there was a a contract that you had
+[27:45] to honor with harbor so that your your image would run it would be like did I
+[27:49] put my scripts in the right place right That's kind of the contract.
+[27:52] >> Got it. >> Yeah. Does that Does that clarify?
+[27:54] >> Yes. >> Okay. Yeah. So again on this one on this
+[27:57] slide, right? Basically I think the takeaway is um
+[28:02] the takeaway on this slide is like you have a great deal of freedom um and
+[28:06] flexibility when it comes to customizing your harbor environment, right? Um the
+[28:10] the simplest like the simplest example that people always get started with is
+[28:14] the example of a coding agent operating on a git repo. But this example is
+[28:19] different, right? This example is like I literally put some data from a SQL life
+[28:23] file in there. I threw my whole application in there with it along with
+[28:27] its APIs along with its own serverside agent. It's all it's a running server in
+[28:31] the environment in the Docker container. Um something you know there's a CLI in
+[28:36] the environment. So what's not even included here is like there's actually a
+[28:40] set of skills literally in the environment on the file system that the
+[28:43] agent has access to. Um, so all that is to say is like you have a lot of
+[28:48] flexibility in setting up your environment. Um, you know, it has to fit
+[28:53] in a Docker image, but if you can fit it in a Docker image, um, you know, you can
+[28:57] you can make Harbor run it basically.
+[29:04] All right. And now any other any other questions before I
+[29:07] move on? Maybe because this is a complex slide. I think this is and and you know
+[29:11] this is like again this slide is very much like particular to to our project
+[29:16] right this is like what our project looks like your project may not look
+[29:20] like this right if you if you're not running like a single node server or
+[29:23] something but yeah I mean that's such a good question and I haven't had to deal
+[29:27] with that problem so it would require a lot of thought I think right but
+[29:30] basically the question is like my system is not a single node it's not a single
+[29:35] you know I can't just like throw in a SQL single SQLite file I have like
+[29:40] you know, some distributed system with like S3 and all this other stuff that
+[29:43] I'm trying to maintain. How would I test harbor out with that? The answer is like
+[29:47] that's probably harder. Yeah, that's probably harder. So, in that case, in
+[29:52] that case, my initial thought is like, you know, you have to
+[29:56] perhaps carve out your agent a little more, right? So, here we've had this
+[30:00] advantage where like it's simple for us to throw the whole damn thing in there
+[30:03] in the Docker container. And so, we did. If that wasn't simple to do, if you can
+[30:09] modularize your agent somehow into some kind of like interface, hide hide the
+[30:13] implementation behind an interface um and if you can like if there's some like
+[30:18] stable API boundary or interface that is relatively stable, right? Where you know
+[30:23] um I'm feeding like this agent data in this format, right? Whatever that format
+[30:29] may be, like eventually this agent has access to data in this format, right?
+[30:34] Um,
+[30:37] that would be one approach, right? Um, and I realize that that is maybe not a
+[30:42] satisfactory answer depending on what your exact setup looks like because
+[30:46] maybe your agent like literally queries S3 and then like what are you to do,
+[30:49] right? Are you going to mock out all those S3 calls? And then once you start
+[30:52] mocking out S3 calls, you're kind of in a world of pain because now you're in
+[30:56] the world of mocking stuff again, right? And and that's really like what we're
+[30:59] trying to get away from with Harbor. We were trying to get away from that world.
+[31:03] Um, so I don't know that there's like I actually don't know because I haven't
+[31:06] had to explore this problem yet. Um, I do know that you know I've been kind of
+[31:11] like eliding this particular feature of Harbor, but Harbor does have the ability
+[31:16] to um like run multiple Docker images, right? Spin up multiple things. So like
+[31:22] you could you could wonder I would wonder about that is like oh is there a
+[31:25] way where I could somehow encapsulate my application or something? Yeah, go
+[31:29] ahead. The question was like what scale do you use? Right? if you have some
+[31:32] massive SQL life file or some you know really large set of traces do you like
+[31:37] actually evaluate on the whole thing we don't currently do that and I think it
+[31:41] would probably be okay for us to do that um right now we you know right now the
+[31:46] kind of format is like oh like we have some data here I'm going to have Claude
+[31:50] kind of help me clean it up a little bit for this particular set of tasks and
+[31:53] again the kind of the nice thing about Harbor is you know you you can um use
+[31:58] the exact same data for many different tasks but you don't have to. Um, and so
+[32:03] if there's a particular question that you care about and it only requires a
+[32:07] small subset of the data to answer, you don't have to like upload all of the
+[32:11] data to answer that particular question. Um,
+[32:15] but yeah, I mean it it just depends too like on what you're trying to test, I
+[32:18] think, right? If part of what you were trying to test was the performance of
+[32:21] your agent when the system is full, when the database is like quite full, then I
+[32:27] think it would totally make sense to um put in a lot of data. We we haven't done
+[32:31] that yet. Well, I tried to Yeah, that's such a good question. I think the
+[32:34] question is like what is what what do you get by using Phoenix with Harbor?
+[32:37] Why not just use Harbor maybe? Um and the answer is like you totally can use
+[32:42] just Harbor, right? I'll I'll give you a little demo um in just a second where
+[32:46] hopefully some of some of what we offer is is on display, right? Because I I do
+[32:50] think that there are some genuinely unique things around like data set
+[32:53] versioning, around the experiments, around the visualizations, around the
+[32:57] the agent experiences that you get. um the ability to like actually inspect and
+[33:02] drill down quickly, right? So, we've been we've been solving those kinds of
+[33:06] problems um for several years and and our UI is like really dialed in for that
+[33:11] sort of thing. And I'll give you a demo in just a sec. Yeah. And then you can
+[33:15] ask me again, see if I answered the question. All right. Uh
+[33:21] All right. I'm going to go to the next slide. Right. So this particular example
+[33:24] that we're going to think about is um this problem that we encountered
+[33:28] recently. Uh the problem was you know in this picture that I've shown you I
+[33:33] talked about rest and I talked about GraphQL. So our MCP server our CLIs they
+[33:37] had access to these APIs but we found that people were asking questions that
+[33:41] are not easily answerable via REST or GraphQL. So they were asking aggregate
+[33:46] kind of questions, right? They were asking, you know, what was the busiest
+[33:50] day that I had in the last few months or something, right? Um how many traces did
+[33:55] I get on that day? Or they were asking questions like how much am I spending on
+[33:59] uh each of these models, right? Like which model is actually costing me the
+[34:03] most out of all my LLM calls, right? Where am I spending the most? Um and so
+[34:08] what the agents would try to do is they would uh you know when possible they
+[34:12] would uh look for the the rest route or the uh the GraphQL resolver. Um but
+[34:19] these were not aggregate resolvers. So they would try to like basically
+[34:22] pageionate through stuff and and do the aggregation themselves. And as you can
+[34:27] imagine that results in a problem because if there's enough data you wind
+[34:30] up uh you wind up doing a lot of a lot of pageionations right and a lot of tool
+[34:35] calls. Um, and so part of what we did was we actually added this this line
+[34:41] right here. So this line uh is meant to represent a tool that we added to our
+[34:47] MCP server um, which basically allows the agent to write a readonly SQL query
+[34:55] and execute it against the database. Um, and a lot went into making that tool. I
+[35:01] won't really go into the implementation details but the thing that we noticed
+[35:05] even after we made that tool was that oh sometimes
+[35:09] sometimes the agent isn't calling the right tool because now the agent has
+[35:12] this other problem right now the agent is here and it's like well I got rest I
+[35:16] got graphql and I got SQL which one which one should I be using the agent
+[35:20] doesn't really know and so we realized oh yeah well naturally we have to like
+[35:23] somehow update a prompt we got to tell it what to do right um but even after
+[35:28] you tell it what to do how do you verify that it's actually doing it Okay. Um,
+[35:32] you know, it's one thing to change the prompt, but again, we're trying to like
+[35:35] ship based on some evidence, right? And not just on vibes. Um, so this is this
+[35:39] is the change that we we wound up testing out. It's like a small little
+[35:43] tweak to a to a prompt, right? So before it it only mentioned uh GraphQL, but
+[35:49] after it says, "Hey, if you're dealing with like a some kind of aggregate like
+[35:53] a count or group, um why don't you use our SQL tool rather than reaching for
+[35:58] GraphQL first?" Right? Um, and of course the most important the most important
+[36:04] thing that we need in order to answer this question is first of all some like
+[36:07] realistic data. So we throw in a you know semi-realistic um SQL life file
+[36:13] that we've been kind of just like collecting as we develop ourselves as we
+[36:16] work ourselves and like dog food the product ourselves. Um, but then here's
+[36:20] the really the part that I found quite cool or novel about Harbor, which is
+[36:24] like um I literally just asked Claude like can
+[36:29] you look at like the domains of my application, you know, traces, spans,
+[36:35] um, data sets, experiments. Can you look at all these domains? Can you brainstorm
+[36:39] a list of user queries, some of which would be aggregate, some of which would
+[36:43] not be aggregate, right? And then can you write an Oracle solution to those
+[36:48] queries, right? Um the Oracle solution literally just being a REST call or
+[36:53] perhaps a database query and the coding agent will just do that. So we generated
+[36:59] just this data set of synthetic questions. Um I spot check the
+[37:03] questions, right? Just to make sure they sort of make sense. Um and I have a
+[37:08] certain degree of confidence in the actual verifiers which again are just
+[37:11] scripts that are that are running in the environment. But because those verifiers
+[37:16] um are passing against an oracle again those verifiers are just like you know
+[37:21] kind of passing against this oracle I have a certain amount of confidence in
+[37:24] them right some of them were LLM as a judge some of them were SQL queries or
+[37:29] or REST calls themselves but you know just the ability to kind of work out
+[37:33] those kinks before the agent ever gets to the system it gives you a certain
+[37:36] level of confidence um and then you know I was able to test out this particular
+[37:42] change and I was able to see like, oh, you know, as you might expect, making a
+[37:46] change like this, it causes the system to use SQL more frequently and more
+[37:49] aggressively, which is what I wanted it to do, right? I wanted to overuse SQL
+[37:53] rather than underuse it because I don't want it to like start trying to
+[37:57] pageionate through trying to do like aggregate queries. That would be bad.
+[38:00] And then the other interesting thing is just by changing this one prompt I can
+[38:04] also see the number of tool calls in each in each uh trajectory the average
+[38:09] number of tool calls dropping which again is like also you know the reason
+[38:12] that we did this in the first place is I wanted to reduce the number of tool
+[38:15] calls and this data set it wasn't even like a big data it wasn't a big data set
+[38:21] so it didn't have to do a lot of pageionations I think it these numbers
+[38:24] like these modest drops they kind of understate the issue because the data
+[38:28] was not large and So let me let me show you now what this looks like inside of
+[38:32] Phoenix. So the first thing that you can see here
+[38:38] um are the examples in our data set, the tasks in our data set. And again, these
+[38:42] are versioned. So we actually have a whole version history here every time
+[38:46] there's a change. Um and we can inspect what some of these look like. So again,
+[38:51] some of these are aggregate queries, some of them are not.
+[38:55] So here's an example of an aggregate query that I might care about. What are
+[38:58] the three most expensive models by total cost? How much does each cost? So this
+[39:02] question is more easily answered with a SQL than than by pageionating through
+[39:07] like a REST API. And down here you can see the answer and
+[39:12] again this answer um it comes from an oracle. Um and so that's part of why I
+[39:17] have a certain level of faith in it is because it's it's coming from a SQL
+[39:21] query run against a concrete set of data. It's not something that I feel um
+[39:27] a strong need to check actually for this particular example because the answer is
+[39:31] deterministic and I'm I'm sort of allow I'm I'm placing a certain amount of
+[39:35] trust in Claude I guess to like write a good SQL query. Um
+[39:39] so we got all our examples here
+[39:44] and then we got our um we got our experiments and our notion of an
+[39:47] experiment that's that's what I've been calling a job in Harvard. So just
+[39:50] imagine this to be all the jobs that we've run. I've run a lot of jobs in
+[39:53] preparation for this talk. Um, these charts show you the kinds of metrics
+[39:58] that you might care about, whether those are cost or run latency. Uh, the reward,
+[40:02] as you can see, for this particular task is quite high. Um, and that's because I
+[40:07] haven't really done anything that's going to like hopefully break the
+[40:10] system. It's not like something was truly genuinely broken. The system was
+[40:13] getting the right answer in the beginning. So, the reward was always
+[40:16] high. Um, it's just that it was just taking too many tool calls, right? So
+[40:20] this was more of an optimization rather than a correctness fix. You can see tool
+[40:25] call count. You can see um whether or not we use SQL.
+[40:30] >> How do you calculate the reward? >> So the reward if we go back in the
+[40:35] slide, the reward is just coming from the
+[40:38] verifier. And the verifier is something that you the user have in your control.
+[40:44] Right? So when you're defining your task, for each task, you get to write a
+[40:50] script that says what constitutes success or failure. And that script is
+[40:56] going to emit a zero or a one, a pass or a fail. You get to name the reward,
+[41:00] right? So the reward could have a different name other than pass fail. Um
+[41:04] that's all a reward is though. you as the developer, you as the maintainer,
+[41:08] you think about for this particular task, what what does it mean to succeed
+[41:13] and what does it mean to fail? How could I figure out just by looking at the side
+[41:17] effects in the environment, looking at the file system or database file for
+[41:21] example, how could I figure out whether the agent succeeded and that's what the
+[41:25] reward is and so that's what we're tracking over time. There are the
+[41:28] aggregate rewards for the entire job. That's what we're tracking in this view.
+[41:32] Yeah, go ahead. >> I mean this is such a good question,
+[41:35] right? I kind of get it kind of like gets to one of these big big qu big big
+[41:38] picture questions about like what do you use Harbor for? Actually the question
+[41:42] was around like well hey you said that you know typically your verifiers are
+[41:45] agnostic with respect to the the trajectory or the execution path of the
+[41:50] agent but hey like look some of your verifiers actually like kind of it looks
+[41:53] like they're peeking in to see whether the agent use SQL. Isn't that cheating?
+[41:56] Um the answer is yes. So it's not I think the times when you would do what I
+[42:01] said in the purest form of like your verifiers are truly agnostic and they
+[42:05] really don't look at the trajectory and they really just look at the file system
+[42:08] you know or the the side effects the situation for that is really like um
+[42:13] when you care about correctness right so may you know one of the other things
+[42:17] that I'm not showing here which is a different example that we've done is
+[42:19] like we've worked on some regression tests and those tests are really like
+[42:24] does it get to the right answer in the end and for Those tests I think our
+[42:28] verifiers are quite pure. They don't really look at the trajectory. They just
+[42:32] look at like oh did it get the right answer right? For this one for this
+[42:35] particular problem I was concerned with something maybe subtly different. Like I
+[42:39] wasn't really just trying to get the right answer. I was trying to optimize a
+[42:42] metric. Right? I was trying to optimize tool calling in particular tool calls.
+[42:46] Harbor is one of these things where you can use it for many things. You could
+[42:49] use it for uh you know I I talked about integration testing. You can use it for
+[42:52] like kind of endto-end testing um for assuring correctness um for running in
+[42:57] CI right or you could also use it because you're like oh right now I'm
+[43:01] trying to solve a really particular problem which is like oh I kind of
+[43:03] noticed that it sucks on these aggregate queries like how can I make it better
+[43:07] how could I in a quick and dirty way kind of convince myself that it's
+[43:11] actually doing what I hope it's doing right um so like at least for for us
+[43:16] like what I found so far is it just depends on what you're trying to do um
+[43:19] sometimes sometimes it is worth peing inside the trajectory I think you know
+[43:24] [laughter] yeah even though even though it makes
+[43:26] the test less robust to change perhaps that that's a really good question you
+[43:32] know my team is so small I don't know that we can I can really speak from
+[43:35] personal experience um that being said like one of the reasons that you you
+[43:39] might use a tool like Phoenix is because it allows you know it has like the
+[43:42] ability to share data right to curate data from different sources to add it
+[43:48] you know to to like add traces to a data set um it has the ability to like store
+[43:53] data as a you know in an external file and like upsert it to the database and
+[43:57] then run it has those kinds of abilities. So like that might help you
+[44:00] in terms of the the uh logistics of like you know actually like dealing with this
+[44:04] in a larger team. I I don't I don't know because really it is just me and a
+[44:08] handful of people working on this right now. All right, I'm going to show you
+[44:11] one last little demo and then I'll just take questions. I think we got only a
+[44:14] handful of minutes here left. So you know back to back to your question
+[44:18] around like what are some of the things that you might get out of Phoenix. I
+[44:20] think this is like kind of the the one of the bigger ones, right? Is like the
+[44:24] ability to compare individual jobs at the task level, right? So right here I
+[44:29] have two two particular jobs selected. I have opus 5 before and after making that
+[44:34] single prompt change. This column is opus 5 before. This column is opus 5
+[44:39] after these these metrics at the top. They're telling me in aggregate how did
+[44:43] these like metrics that I care about, how did these rewards change after I
+[44:47] made this tweak to the prompt, right? And I can see that like GraphQL tool
+[44:52] calls went down. So it's calling GraphQL in aggre in it's calling GraphQL less
+[44:56] than it was. Um the reward is staying the same which means everything is still
+[45:01] passing. Right? SQL calls are going up. Tool counts are going down. The number
+[45:07] of turns the agent is taking is going down because it's encapsulating a lot of
+[45:11] that a lot of those turns that would have been multi-turn steps into a single
+[45:15] turn because it's using SQL. uh it's using more SQL, it's using less GraphQL,
+[45:20] right? So you get those kind of like top level metrics which are the ones that in
+[45:23] my mind verify, okay, this is a decent change. Um and then I'm able to see in
+[45:29] this table like four particular tasks, right? Here's the here's that one we
+[45:33] looked at like what are the three most expensive models by by total cost. I'm
+[45:37] able to see what I expected the answer to be, right? I'm able to see the actual
+[45:41] answer in each job. I'm able to see the metrics and how they changed. So for
+[45:45] this one um yeah for this one the number of tools went down the number of turns
+[45:52] went down interestingly enough the number of SQL calls actually went down
+[45:55] too which is kind of unexpected and I can do things like I can I can filter by
+[46:00] these right so I can here's a fun little feature that Miko built recently um
+[46:04] which is I can say show me the runs where
+[46:08] the second experiment had um
+[46:14] where the second experiment ment had lower
+[46:20] tool call count and I'll use the exact the exact metric to help it out. Lower
+[46:25] tool count than the first experiment.
+[46:30] We'll see if this works. So, what this is doing is it's actually running a a
+[46:34] local model in the browser to convert that piece of natural language into a
+[46:40] query DSL. I think it messed that up though.
+[46:46] We gota we got to use a more powerful one.
+[46:49] >> The prompt API is a little bit >> I'll just I'll just copy in what I know
+[46:53] to be the correct uh correct expression here.
+[47:02] So I'm able to filter down. So now I'm just looking at the um now I'm looking
+[47:06] at the rows where it improved basically like I'm looking at the ones where it
+[47:11] didn't use SQL before where now it's using SQL. Um and you can see here this
+[47:16] one used SQL it went up by one and if we actually like look at the uh
+[47:22] look at the trace we can actually see that right so those ATIF trajectories
+[47:26] that get converted into open inference traces here you can see it you can see
+[47:30] it was using bash before um and when it's using bash under the hood it is
+[47:35] actually using graphql it's calling has a bash emulator which is calling graphql
+[47:40] underneath the hood right so I'm able to see that right here I'm able to see in
+[47:44] the second job the same trace or the analogous trace and I'm able to see oh
+[47:49] instead of instead of calling bash and using graphql here it actually issued a
+[47:55] SQL query directly to the database so I'm able to like visually inspect and
+[47:59] say oh okay in this particular example it did the right thing um and I can even
+[48:05] I can even ask you know the agent itself so this is kind of like what we do um
+[48:09] you know I can literally ask the agent itself like hey look at a particular um
+[48:14] set of experiments, you know, look at this particular task and it will tell me
+[48:18] exactly what happened. And so this is kind of like how we get some of our data
+[48:22] in the first place is we're kind of like using using the agent um recording its
+[48:26] traces uh getting its data and using the agent to like iterate on itself.
+[48:31] >> Yeah, I'd say with respect to the regression stuff, we're still really
+[48:34] early days. I mean, we're trying to get like happy paths going, I would say. Um,
+[48:38] and I think like the way that the way that we're structuring it is is around
+[48:41] skills because I think in my mind when you're doing those regression tests,
+[48:46] they are sort of analogous to like playright in a certain way where it's
+[48:50] like an endto-end thing and it just includes like an agent in the loop. It
+[48:55] includes like LLM calls in the loop. Um, and so I think skills are a really good
+[49:00] like thing to write those kinds of tests for because at least in our case like
+[49:05] the skills are describing workflows. They're saying, "Oh, if this happens to
+[49:09] this, if that happens to this, right? It's describing a workflow that you want
+[49:12] to have happen and and so right now we're just kind of in the process of
+[49:16] trying to nail down happy paths on our most important skills. um and ensure
+[49:21] that the happy path passes across like the the broad array of like models and
+[49:26] providers that we're trying to support. Right. Right. Right. Yeah. So this this
+[49:30] particular comment is around like the ability of uh you could make the the
+[49:35] greatest skill in the world, but like if somebody else makes another skill that
+[49:38] kind of like where the front matter of the skill kind of treads on your feet a
+[49:41] little bit, it's going to it may not fire anymore, right? And then it's no
+[49:44] good if it never fires. Um, and for that sort of thing,
+[49:50] it's an interesting question, right? It's like
+[49:54] there's multiple ways of approaching it, right? Like one thing that you could do
+[49:57] would you you could just say, well, I don't care which one fired as long as I
+[50:02] have a good test and I know that like, oh well, like if this skill didn't fire,
+[50:07] it's probably not going to pass this test, right? Um, that would be one
+[50:11] approach. Another thing you can do and maybe this is the appropriate thing
+[50:14] right is you can always as we said reach into the trajectory with your verifiers
+[50:19] you can always look in you can always peek you know you can cheat a little bit
+[50:22] you can say oh well like given this question did it call this particular
+[50:25] skill and we have had tests like that um I think the challenge is maintainability
+[50:32] right it's always around maintainability um if you change the skill name or
+[50:37] something the test is going to flake um but we've had tests where the thing we
+[50:42] were trying to test was skillfiring, right? And those tests are not they're
+[50:46] not the hardest to write, right? I mean, don't even because if if you're only
+[50:49] testing one turn and all you want to know is like, did the right skill fire?
+[50:53] Um, you don't even really need great data for that. You just ask it a
+[50:57] question and and see did the skillfire. >> Um, and like you can totally, you know,
+[51:03] maintain a suite of tests that that do that, right? And and you know, then it
+[51:06] becomes less of a end to end test. it becomes more of like a
+[51:13] almost like it's like almost like you know on the spectrum between you know
+[51:17] fully decoupled from the implementation and coupled to the implementation is a
+[51:21] little bit more coupled um and yet it could still be useful to you right um so
+[51:25] there's no reason to not write a test like that um there's no reason to not
+[51:31] write a test like that I think so it really just depends on like you know
+[51:35] getting getting a broad level of coverage um on the things that you care
+[51:40] about. We are collecting traces in production. So when you deploy
+[51:44] Phoenix in production, this is the picture. The traces are coming into the
+[51:48] system from an instrumented application or agent. We're collecting those traces
+[51:52] and we're writing them to the database. When we're running things in harbor, you
+[51:57] can see [clears throat] that this this thing disappears, right? the OTOP
+[52:01] ingest, the AI agent, which is the user's agent, those disappear and we
+[52:08] just seed the database with data. So when you're running when we evaluate in
+[52:12] harbor, um we don't we don't pretend or emulate an end user's application. Um we
+[52:19] assume that the end user's application exists and has resulted in the data in
+[52:23] the in the SQL life file. Yeah. So the question is around um
+[52:28] Harbor is canonically used for evaluating coding agents.
+[52:32] >> That's the canonical use case and we're doing something
+[52:38] similar on the one hand but the unit that we're trying to evaluation to to
+[52:43] evaluate here is not the coding agent in isolation because we don't work on cloud
+[52:47] code, right? We don't we don't tweak cloud code. Uh we don't tweak codecs,
+[52:50] right? The thing that we're trying to optimize for is this hybrid system which
+[52:57] is cloud code plus our particular bespoke MCP server or cloud code plus
+[53:02] our particular bespoke set of skills that we maintain or cloud code plus our
+[53:09] um cloud code plus uh our CLI or cloud code um
+[53:18] interacting with our APIs. And that is a different problem, right?
+[53:24] And the fact that that is the thing that we're trying to optimize this hybrid
+[53:27] entity which includes cloud code, it includes the coding agent, but it's more
+[53:31] than just the coding agent. It's all of the um supporting
+[53:36] infrastructure around the coding agent which we maintain which helps cloud code
+[53:40] be better at interacting with our product. Um, that's the reason that
+[53:44] we've shoved all of this stuff into an environment together is because all of
+[53:49] that stuff has to change um and be evaluated together um as a
+[53:55] unit. I think it took a second to kind of conceptually land on and understand
+[53:59] Harbor well enough to land on this picture. Um, and then it took a second.
+[54:05] it didn't take super long and again like I think part of that is
+[54:10] part of that is due to our advantage which I mentioned which is that Phoenix
+[54:13] runs on a single node um and that makes it easy to dockerize right and so as as
+[54:17] some of these other folks suggested it's like you know if you're working on a
+[54:20] distributed system you know it's it's tougher your your life is going to be a
+[54:24] little tougher right and so we had a certain advantage that made it easier
+[54:26] for us to set this picture up um but I would say like
+[54:31] the coding agents are Um, Harbor's tough in the sense that like
+[54:36] there's no because the contract that Harbor tries to honor is all based on
+[54:42] like scripts in certain directories. You know, I need to put my my task my task
+[54:48] initiation script here. I need to put my verifier script here. Um, there's no
+[54:52] like llinters that the coding agents can rely on to make sure that that works.
+[54:56] Um, the best that you can do uh is you can download Harbor's skills. Um and
+[55:02] those will help you set up your project correctly. Yeah. So the question is uh I
+[55:07] have a SQLite file here. Where do I put it? Right. Um cloud storage. Yeah. So
+[55:13] basically um it's kind of a one-off process right
+[55:18] now. It's like we have a collection of data that we generally use and if that
+[55:23] thing works for the task at hand, I tend to reuse that file. And if it if I don't
+[55:27] need the whole file, I'll say Claude, can you clean this up?
+[55:30] >> [laughter] >> can you can you cut out the stuff I
+[55:32] don't need um and push it to cloud storage for me? Um that data though, the
+[55:37] data is the hard part, right? I think the data getting the data is the hard
+[55:40] part um for for any of these tasks. And the more realistic your data, the better
+[55:45] the system is going to run uh the better it's going to like uncover realistic
+[55:50] issues for you. So it's always the hard part getting data

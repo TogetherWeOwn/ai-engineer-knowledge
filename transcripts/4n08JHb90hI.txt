@@ -1,0 +1,1384 @@
+# title: Agents That Own Their Inference — Du'an Lightfoot & Khaja Omer, Akamai Technologies
+# source: https://www.youtube.com/watch?v=4n08JHb90hI
+# speaker: Du'an Lightfoot & Khaja Omer, Akamai Technologies
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T03:31:31Z
+# sha256: 0296566376a490a4368b24a657c77025bd170e1bfabd395d0548ea900192d5bc
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:12] I mentioned before my name is Dewan Lightoot. I'm a developer AC advocate at
+[00:17] Akami and this is my colleague. >> I'm Kaja Omar. I go by R. I'm a senior
+[00:22] software engineer at Akami. And we're going to be talking agents that own
+[00:26] their own inference, building production AI agents on dedicated GPUs.
+[00:31] Now, why are we here? Things are kind of changing. And for me,
+[00:37] I started building agents before tool calling. Back in January 2023 is when I
+[00:44] built my first agent. I would take a prompt, that context was about 8,000
+[00:49] tokens at the time, and I would parse that prompt and then make a tool call
+[00:54] with Python and then give the response back to an LLM, right? But as I was
+[01:00] doing that, I found something interesting. It can get really
+[01:05] expensive, right? And then I started using local models to figure out, okay,
+[01:11] how can I do this? And then I learned something else. There's another
+[01:14] challenge around that because if I'm using a smaller model, it may not be as
+[01:18] capable and then I may be compute bound that memory in that GPU may not handle
+[01:26] the larger context. So that's the inputs and outputs and then the multiple turns
+[01:30] in the tool cost. How do we get the most either the GPUs, the costs, the latency
+[01:35] that we need in production or just for our own use cases, right? So the reason
+[01:41] why we're here, we're going to talk about
+[01:43] agents that are often renting their intelligence and then how you can take
+[01:48] back that control and own it. When it comes to an agent, it's just a
+[01:53] loop. You invoke an LLM, it has access to tools, it has access to an
+[01:57] environment, makes a decision, a reasoning decision on what actions to
+[02:02] take once you invoke it or give it a prompt. And then those actions are being
+[02:06] performed by your tools, your Python code, your other programming languages
+[02:12] and then given back to a model. The model evaluates that the actions, the
+[02:16] results and then updates the plan, takes additional actions or the goal is
+[02:21] achieved, right? But all that requires tokens to be generated, right?
+[02:29] And depending on your application can lead to latency challenges. So we're
+[02:33] going to talk about how you can actually man manage all of that on dedicated
+[02:36] GPUs. So what does it mean to own your
+[02:40] inference? First, when it comes to owning owning your inference, you
+[02:44] actually own the GPU or rent the GPU. So when you do that, that means that you
+[02:49] have access to the GPU, the hardware for that AI to be ran on, for the models to
+[02:57] live on, which means then you have access to control where it goes. So the
+[03:02] data never leaves your cluster, never leaves your data center, never leaves
+[03:06] your laptop, right? You now own that intelligence and what's happening with
+[03:11] the model. And if you're in the cloud, you can also
+[03:16] do something like private VPC endpoints or have it in the VPC so it never leaves
+[03:20] your VPC. Right? I know we all have different environments, have different
+[03:25] ways to set up our infrastructure. We can talk about all of those.
+[03:30] Now what's the difference like when do you own
+[03:34] when do you rent? Well, first if your usage is high and steady, why is that?
+[03:42] Yes. >> Yes. At the end of the talk, I'll have a
+[03:46] link to the slide and everything that we showed code, everything. You can
+[03:49] download it and take it with you. So, thank you. Now, when do you own if the
+[03:56] usage is high? Right? If you're constantly
+[03:59] have a workload running, because if you're paying for a GPU, you're renting
+[04:03] a GPU. What does that mean? that GPU should always be working.
+[04:08] Otherwise, what are you paying for? So, that's something you got to think about.
+[04:12] Then, when it comes to the data, if you need that data to stay private, if you
+[04:16] need to own the data, you care about your intellectual property, or you have
+[04:20] some governance and compliance reasons why you can't use a public provider when
+[04:24] it comes to AI, that's another reason you want to own.
+[04:28] And then the hardware, that's something we got to
+[04:33] think about your hardware. If you can afford the capacity and you have the
+[04:39] capacity, why not run those models, right, for your use cases because then
+[04:43] you have that full control. Now, when do you rent? If your traffic is low,
+[04:48] bursty, you just need intelligence sporadically,
+[04:53] it might not be efficient for you to own some GPUs. Next, well, we start talking
+[04:58] about intelligence. The more capable models, they're going to cost for those
+[05:03] GPUs. And often times, those providers will provide that intelligence on the
+[05:09] GPUs because they have the infrastructure for that. So, it may make
+[05:13] more sense to use those providers to get that intelligence, get those benefits.
+[05:17] And then the next part which is often a challenge is that your teams may not
+[05:21] have the knowledge or the expertise to support dedicated or self-hosted AI.
+[05:29] Now today's agenda we're going to start out discussing some of the foundation
+[05:33] you need to understand like the infrastructure stack we'll be using
+[05:36] units and memory budget. We'll look at prefield decode and KB cache and what
+[05:41] that looks like. And then from there we'll look at dis dense models verse
+[05:45] mixture of experts so you understand what that actually looks like on the GPU
+[05:50] and why you would pick one or the other from there will discuss how to optimize
+[05:57] your inference right once you figure out okay we want to do self-hosted how can
+[06:02] we optimize this to get the most out of our GPUs the inference engine that we
+[06:07] run and just our entire workload and then finally from there. We'll take
+[06:12] that agent and deploy it into our own dedicated cluster.
+[06:19] With that being said, I'm going to pass it off to you, Omar. Right. Thank you.
+[06:23] So, next uh we'll talk about uh the environment that you each of you is
+[06:28] going to get for this workshop. Um we have a Kubernetes cluster with around
+[06:33] 200 plus GPU nodes. Each of you gets a single GPU. Um and we have set it up in
+[06:41] such a way that uh each of you gets sort of like your own namespace and within
+[06:45] that namespace you will have like your Jupyter notebook running and then you
+[06:49] will have your VLM inference endpoint running as well that you'll be playing
+[06:53] around with. Um and then we're also going to be deploying uh the agent on
+[06:58] there as well. Uh the cool thing here is that the VLM endpoint that we have
+[07:03] running in your namespace, you're going to be optimizing it uh as part of uh um
+[07:08] after the first four modules. And um I think that'll be pretty interesting.
+[07:13] We're going to look at different techniques that we're going to be using
+[07:16] there uh to do so. And you're going to redeploy this VLM endpoint over and over
+[07:20] again until you have sort of optimized it to increase the throughput uh reduce
+[07:24] the latency and uh make sure like you're meeting all your SLAs's.
+[07:30] And then the other thing I want to talk about is uh GPUs on LKE. So I work on
+[07:36] the Kubernetes side of things at Okami. Um so this is sort of my wheelhouse. So
+[07:42] if anyone has any Kubernetes related questions, uh feel free to ask anytime.
+[07:47] But I want to talk about what Akami has. So we have the uh we're going to be
+[07:51] using the RTX 4000 ADA GPUs. Uh we also have other GPUs available. Uh but these
+[07:57] are dedicated GPUs. EGPU has 200 uh eGPU has 2 GB of uh VRAM with 260 GB per
+[08:06] second memory bandwidth. So the decode will be pretty quick because of that. Uh
+[08:10] we have high performance in Tflops. Uh large amount of CUDA core. So the
+[08:15] pre-fill will be pretty quick as well because of that. Uh currently for your
+[08:18] workshop we will be using a single GPU but that doesn't mean when you want to
+[08:22] deploy this at the end on your own you can have different plans that we offer
+[08:26] as well where you can have up to four GPUs in a node. So that goes up to 80
+[08:30] gigabytes of uh VRAM on a single node. So you can deploy uh decently sized uh
+[08:35] models on there as well. Um and uh everything is sort of orchestrated by
+[08:40] LKE. So setting up the node, uh deploying the drivers, uh setting it all
+[08:45] up for you. So that way you don't have to do anything manually. Uh everything
+[08:48] is sort of like one click. You click a button, everything gets deployed and
+[08:52] you're off to races. Um yeah, for more information, we have a link here as
+[08:56] well. Um and at the end, you'll definitely get all these slides. So
+[09:00] you'll be able to get to the pages and then um
+[09:05] I'll give it back to Dwan. >> All right. So for the inference engine,
+[09:10] we're going to be using V LLM. Now, some of you may have heard of Lama, which is
+[09:15] great for local, but VLM offers some benefits that are better for
+[09:21] production. One of those being being continuous batching out the box, the
+[09:26] other being page detention. Now, it also supports the Open AI compatible API. So
+[09:33] if you're using whatever SDK that supports Open AI, you can use it with
+[09:39] VLM. It also allows you to do some really
+[09:43] interesting tweaks when you're setting up inference for your for your endpoints
+[09:48] and for your applications. Now, I mentioned continuous batching. For those
+[09:54] of you that don't know what it is and how it actually works, this happens at
+[09:58] the prefill stage, right? the prompts come in and normally with static batch,
+[10:03] let's say you have a school bus full of kids. Well, in order for you to drop get
+[10:09] new kids with static batching, you have to drop off every kid one at a time and
+[10:14] then once all the kids are dropped off, you go back and get the rest of the kids
+[10:17] and then start the next batch. But with continuous batching, you can drop off a
+[10:22] kid and pick a kid all at the same time. This is way more efficient when it comes
+[10:26] to the KV caching that happens during the preill stage.
+[10:30] now or when it comes to page detention.
+[10:35] Paged detention is when you think about the KB cache and you think about what's
+[10:40] actually happening there's memory space that happens. So the prompt comes in and
+[10:44] the longest prompt is going to take up memory space. When you when page
+[10:49] attention that memory space gets allocated even for smaller prompts,
+[10:53] right? But with page attention now that is all managed through c with the VLM
+[11:00] that ensures that you can continuously pro process generate and batch those
+[11:07] requests as they come through VLM. It has auler that kind of manages the
+[11:13] batching, but it makes this really efficient. Now, there are other service
+[11:17] engines that are out there, and we'll talk about some of those in this
+[11:21] workshop. With that being said, some of the
+[11:24] metrics you're going to want to care about is going to be throughput, right?
+[11:28] To understand how your GPU is performing that time, the first token, understand
+[11:33] that, okay, you sent a prompt. How long does it take to get the first token
+[11:36] back? from there that KV cache utilization. We're going to look at
+[11:40] these metrics and show you how to get all of that out of VLM and then the QEP.
+[11:45] So these are some of the metrics as we're going through this workshop you'll
+[11:48] you'll see and be able to better understand.
+[11:51] And with that being said, we're going to access the environment. So if you can
+[11:55] scan this QR code, pull out your laptops if you want to follow along. If not, you
+[12:00] can follow us as we go through the workshop. In this Jupyter notebook, we
+[12:04] have nine different labs that we'll cover and all of the resources and
+[12:11] dependencies are loaded into this environment. Now, if you want to look at
+[12:17] the code and try this on your own at home, I do have the repo public on
+[12:22] accommoders. I'll have this link along with the presentation and everything
+[12:27] that we shared available with one QR code that you can download. And if you
+[12:31] need me to make a short link, I will.
+[12:36] All right, with that being said, we're gonna start with the first module in the
+[12:40] workshop. If everyone is connected.
+[12:56] >> Yeah, it was kind of slow for me too, which is why I went to my own leak
+[13:00] shortener because I kind of made that really fast with Russ. So yeah,
+[13:07] >> hopefully like if you do have a hot spot, I would use your hotspot. Um but
+[13:11] we'll try to make the best out of the experience.
+[13:16] Sound good? Awesome. All right. So in the first
+[13:20] module module, we're going to talk about the inference stack. We're going to
+[13:24] connect to our VLM endpoint, understand it, see how it generates tokens. We'll
+[13:29] also look at building our first agent. some things that we need to know, look
+[13:33] at some met some metrics and then understand the model that we'll connect
+[13:37] to. The model that we'll use is going to be Quinn 3 4B, but we have several
+[13:42] models that sit on a PVC that you can actually load and unload for this
+[13:49] endpoint. Now, when we talk about VL LM, one of the things about it is when you
+[13:56] serve an endpoint, it just has one model, right? So if you want to serve
+[14:00] two models, you're going to need another V LMA endpoint, right? Which means you
+[14:07] may need some model routing, a gateway in front of it to kind of handle that.
+[14:10] Now, it does support authentication, but there's no authorization. So you may
+[14:16] need a gateway around that, right? So agent gateway is often kerve is another
+[14:22] one. Um, any others? >> There's LLMD. There's there's all sorts
+[14:27] of open source tooling out there that lets you do that. Uh but the main but
+[14:30] the main one is like Kserve is what we use a lot. Um and it's it's pretty good
+[14:35] and doing the scaling, doing the routing and the authentication as well, right?
+[14:39] Another thing it doesn't have is rate limiting, right? If you're processing
+[14:43] requests, you may want to rate limit. So again, you want to find a gateway to put
+[14:47] in front of it to manage those requests and also handle the routing.
+[14:56] I mentioned that when it comes to the runtime there are other
+[15:00] service endpoints that or service runtimes that you can actually use for
+[15:05] the server. SG lang is one, tensor RT is another and llama CPP which we do go
+[15:11] over this later with a little bit more in depth so you can kind of understand
+[15:14] it. Now in this environment you are connected to a Jupyter notebook that
+[15:20] lives in the name space. You also have the VLM server endpoint that you'll see
+[15:26] here in a moment. And all of this is in its own pod. And then you'll have
+[15:31] another pod. Well, another pod that you can launch for the agent. And we'll see
+[15:35] that too. So, let's go ahead and install our dependencies.
+[15:40] So, we'll install our dependencies. I've kind of already ran through this, so
+[15:44] some of this is already loaded in my runtime. I figured we don't know how the
+[15:49] internet will be, right? But the good thing is once you send a request, it
+[15:52] happens within the cluster. So once we send our first request
+[15:58] to understand how we're configured in VLM, you can notice the model that we
+[16:03] have the name of your name space inside of the cluster. The coupube config is
+[16:11] just for your namespace. So that way nobody can access anyone else's
+[16:15] namespace in the environment. And then we don't have an API key set, but you
+[16:20] can set one with V L.
+[16:26] Now from here, we're going to use the open AI
+[16:30] API compatible endpoint to be able or API to connect to the VLM QN
+[16:38] 34B 4 billion parameter model. I believe we're using that at FP8, meaning that it
+[16:45] actually sits at um eight billion parameters. Is it eight billion
+[16:49] parameters? >> No, four billion parameters.
+[16:51] >> Four billion parameters. >> We're using BF16.
+[16:53] >> Oh, BF, that's what it is. >> Four precision.
+[16:55] >> Yeah. So, we're using BF16 full position. So, you times the bits or
+[16:59] bytes or parameters by two. So, it's 4 billion, which means it's eight gigs on
+[17:05] the GPU.
+[17:10] Now once we invoke we got our response for the model and we can see what it was
+[17:15] actually served by. Now this was all within our cluster. That was pretty
+[17:19] fast, right? It lives within our cluster. So hopefully with this
+[17:23] experience since we're not hitting the public API, we're already connected to
+[17:26] this HTTP. It's going to happen right inside of the cluster. The response
+[17:30] should come back a little faster. Now we're going to trace send a trace in
+[17:34] the end so we can actually understand how this actually looks like when it
+[17:38] goes through the prefill the KB cache and the decode phase.
+[17:45] So here we have our stream that we're going to configure. We're going to look
+[17:49] at the chunks and do some calculations. We'll get that time to first token so we
+[17:53] can understand that. We'll see how all of this is generated here in a moment.
+[17:58] So if we run this,
+[18:03] I ran that one again. We'll come down here and run that.
+[18:08] This may take a little bit to go through, but we should see time. The
+[18:11] first tokens took 37 milliseconds and time output token, the decode phase,
+[18:17] which means every token after the after the time of first token, right? That's
+[18:24] going to be that inner in interle latency, right? that inter latency that
+[18:29] happens when those tokens are processed. So, we're calculating that and we're
+[18:33] getting about 40 tokens per second, which is probably going to be our cap.
+[18:37] But when we start talking throughput, that kind of changes because this is
+[18:41] just one request. But imagine if we had hundreds of requests or 16 requests,
+[18:47] that throughput is going to be a lot higher, but they're still going to be
+[18:49] capped at that 40 tokens per second, right? Or it could go down, but we can
+[18:55] still get more on that throughput. And I believe Omar will go deeper into
+[18:59] that. So one of the things that I want to showcase is the question is around
+[19:04] why don't you just run this on CPU? Um I didn't want to do CPU on environment
+[19:09] because this this um pod for this or this container for the Jupyter notebook
+[19:16] is only one gig, right? So trying to run a local model on this is gonna it's just
+[19:21] going to crash. So I kind of simulated what that would look like. But if you're
+[19:24] trying to run a local model on CPU, it's going to be a lot slower, right? It
+[19:29] can't do the complex multiplication in those matrices like a GPU can. That's
+[19:34] the purpose of a GPU. It does all those all that math in parallel, which makes
+[19:38] it a lot faster, right? So, we simulate this on on the CPU.
+[19:46] And then from there, we actually look look at this on the GPU to see how that
+[19:51] looks.
+[19:55] We got 45 tokens per second. And one of the things about this and
+[20:02] which is interesting to me is that I do a lot of I would say local models
+[20:10] and running them. But 45 tokens or 39 tokens per second isn't that bad for an
+[20:16] application if you're running it for a specific use case. Right? If you have a
+[20:20] specific use case and you don't care about the latency, you don't care about
+[20:23] those like if you have a chatbot, you want that kind of that first token to
+[20:26] come fast. But for a standard application where you just kick off a
+[20:30] job in the background, well, that 39 tokens per second may not be that bad,
+[20:34] right? So sometimes a lower token per second or a lower time to first token
+[20:40] may not be as important depending on the application and the latency that you
+[20:44] care about, right? you may care more about the intelligence in the job
+[20:48] getting done than you do actually how fast it actually happens especially like
+[20:53] I said if it's a background process.
+[20:59] Now here we're going to build our first agent. Now for those of you that when we
+[21:03] talk about agents there are no tools in this agent. So it's actually just a
+[21:07] request but just the foundation of the agent. We're giving it a system prompt
+[21:12] so it knows it role when we do give it to us later on in the course. But right
+[21:16] now we're just giving it a single prompt and we're giving it a role as system as
+[21:21] a solutions architect agent for Akami
+[21:30] and you can see that it was able to generate the response.
+[21:34] Now, this response pretty fast. It works. But then the question is,
+[21:44] if we're trying to do this at scale or we're trying to build an agent that
+[21:49] does more than just take it take a prompt and generate a response, it may
+[21:54] need to make multiple tool calls, right? So, that's when you start to think about
+[21:59] things like the KB cache. You start to think about how much context because
+[22:05] when we started talking about that KB cache, that's actually how much context
+[22:08] you can actually fit on that GPU, right? And so with continuous batching, what
+[22:14] happens is you send a prompt to the model. Well, you may have 100 users
+[22:19] trying to send prompts at the same time, right? Well, continuous batch, they're
+[22:23] all going to be different sizes. So, a smaller GPU can actually handle a bunch
+[22:27] of requests if you're using some with something like VLM. Now, if you're using
+[22:31] something like Olama, you'll see you'll get throttled a lot faster because it
+[22:35] doesn't process those requests the same way. But VLM actually handles that with
+[22:40] theiruler a lot better.
+[22:46] And so here we're going to set up our our our
+[22:51] agent and invoke it and we're going to actually going to look at the steps. Now
+[22:56] the code that we're using for this is inside of common and you can actually
+[23:00] look at all the code that we actually are importing that is custom code. So
+[23:04] here we have this foundation.py that allows us to do some measures
+[23:10] measurements from with Prometheus from VLM right we can look at those metrics.
+[23:15] Now speaking speak speaking of metrics you can use Prometheus and you can use
+[23:19] graphana right at home I always use graphana also when I'm building my
+[23:24] agents outside of just looking at the metrics another thing that I always
+[23:27] build one of the first things I build into my agents is observability
+[23:31] right lanefuse that's something I commonly use how many of you have heard
+[23:35] of lanefuse now there are other tools out there but it's open source you can
+[23:39] run that in your cluster as well right beside your agents and then have access
+[23:43] that now your observability is private as
+[23:45] Right? And you can see every step, every trace, every span in your agent with how
+[23:50] many tokens, what was the latency, not just from the time the first token, but
+[23:55] for every tool call, right? If you're trying to troubleshoot or you're trying
+[23:59] to evaluate now, you can see all of the latency steps in the spans. But then you
+[24:05] can see, okay, I'm using a smaller model and it's making way more tool calls.
+[24:10] It's taking way more time than it should. Why is that? Well, that's where
+[24:13] evaluations come in and OM will talk more about that. But it's important to
+[24:17] have that visibility into your agents so you can understand when you're using a
+[24:21] smaller model how to optimize. And that could be something as simple as a prompt
+[24:26] removing tools or making the agent just a little bit more specialized.
+[24:33] And so we'll run this.
+[24:41] And so we're looking at the steps. We're going to look at the max tokens
+[24:45] and we should see the time to first token. So you can see as we increase the
+[24:50] tokens, what happens to the time to first token
+[24:53] in millisecond as we increase the pump, right? As the prompts get larger, that
+[24:58] time the first token takes longer, right? So the question is what do you
+[25:02] optimize on? Do you optimize on the median or the largest? Right? The one
+[25:07] that took the most time doing the latency. Well, you're going to optimize
+[25:10] on the one that takes the most time rather than the median, right? And then
+[25:15] that way you can increase your median by doing that.
+[25:20] Now, [snorts] here we talk about renting versus owning. We're going to look at
+[25:24] tokens. How much are being generated? This is where I I mentioned that if
+[25:28] you're using bursty where you're not using invoking a model as much with a
+[25:33] provider versus if you have a agent [snorts] or
+[25:37] some agentic applications that are always working you can kind of compare
+[25:40] that cost.
+[25:45] So here we generate a response just to get those tokens. And now we're going to
+[25:49] actually look at the billing and compare which one would actually be more
+[25:53] efficient. So, if you're processing, let's say, 200,000 tokens per day
+[26:00] on a hosted bill, rent it, that's going to be about 1,500 per month, right? But
+[26:04] if you're renting a GPU, that's going to be about a,000 per month. Now, it does
+[26:10] matter the size of the GPU, the size of the model, the if it actually performs
+[26:14] the way you need. But these are some of the things you think about when you're
+[26:17] trying to compare, should I rent versus own? You can actually do the math on
+[26:21] that to break that down.
+[26:25] And we already talked about these with the data resiliency, you know, the
+[26:29] compliance, the security, the controls, and all of those good things when it
+[26:33] comes to running locally. Now, before we go, the runtime landscape, I
+[26:38] mentioned that we're using VLL, but you can also use SE lane, which is good if
+[26:44] you're using if you have requests that share long prefixes, multi-turn chats.
+[26:49] So for agents a lot of organizations are using SG lane for that. When it come to
+[26:54] tensor well this is about that peak throughput on Nvidia hardware. It really
+[26:58] specializes in providing you that and then llama CPP for that edge that that
+[27:03] really fast processing. It can help you with those heavily quantized models like
+[27:07] on the ARM server.
+[27:11] So we're going to invoke one more time here
+[27:16] and we're looking at our client just to verify that we're still good. We're
+[27:20] verifying that we can connect. We can see the model serve and we can see the
+[27:24] ID and I believe I can print the entire so we can see how that require that
+[27:30] request actually looks when it comes back. So I'm going to print this whole
+[27:33] thing as well. So we'll and now you can see and actually let's
+[27:39] pretty print it. So we can see it even better.
+[27:56] There we go. And so when that request comes back, you can see the ID, you can
+[28:00] see the max model length, which the that context length. You can control that,
+[28:05] right? You can tweak those parameters of course when you're working with a model
+[28:09] but we can see everything about the model itself.
+[28:18] Now we're going to move on to the next session. Um this will have some taking
+[28:22] it further when you can explore the cluster explore vm you can feel free to
+[28:27] do that in this notebook. So I'm going to close that
+[28:32] out. We'll discard that and we'll move on to units and memory.
+[28:39] Now the next section and I'm g kind of go faster so Omar can has some time. Now
+[28:44] when it comes to units and memory, we're going to talk about the ceiling when it
+[28:47] comes to token per second on using a model. We're also going to look at the
+[28:50] model's real config and understanding how a model actually is sits and how
+[28:56] actually looks um when it comes to a GPU. So here, like Omar mentioned, we
+[29:03] are using and I'm going to make that a little smaller. Let's see if we can get
+[29:06] more of that on there. All right. So when we talk about the the model
+[29:10] actually sitting on the GPU, you have the model weights for the 4 billion
+[29:15] parameter model, that model weights at BF16 is going to be 8 gigs. So we have 8
+[29:21] gigs and the rest of the room is going to be for KV cache. Meaning how much
+[29:25] context can you fit on that GPU? because it all has to fit within there. Now,
+[29:29] when your prompt comes in, when we talk about prefill, the model is going to
+[29:33] read that entire prompt and store it in the KV cache. And then every time it
+[29:38] generates a new token, it's going to update that prefill. So, that prefill is
+[29:41] going to grow, right? So, just because your your your prompt that goes in is
+[29:46] one size, as it goes through and is processed through the model, it's going
+[29:50] to increase as it generates, right? And then imagine the tool calls, the system
+[29:55] prompt, all of these go to the model and all of that has to fit on the KV cache
+[29:59] in order for it to be able to handle your request efficiently.
+[30:03] And so we're also looking at um if we're using at FP8, which is going to talk
+[30:09] about quantization and what that actually looks like to shrink a model
+[30:13] and to still get the efficiencies that you're looking for.
+[30:17] Now we're going to install our dependencies
+[30:25] and then from here we're going to connect to
+[30:30] verify what we have loaded. So again we have the Quinn 3 4 billion parameter
+[30:35] model our workshop namespace the cluster API key.
+[30:40] Now when it comes to models we have the config.json JSON like what is actually
+[30:46] that file when you download a model you get the config.json let's say you go to
+[30:50] huggerface you download a model you're going to get a collection of files all
+[30:54] of those files are needed right you're going to get the config.json JSON you're
+[30:58] going to get these save.tensors tensors. Those tensor files are the model
+[31:02] weights, right? But the configuration is what tells VLM how to handle that model,
+[31:07] right? So you can actually look at this and explore those files to understand
+[31:11] what they actually look like. So here we're showing what that configuration
+[31:14] file looks like. So we have 128 layers. The size is 1,024. The attention head,
+[31:22] there are 16 attention heads. The values are eight. Vocabulary size, right? How
+[31:28] does the model train? What is the vocabulary size of that ma model? Right?
+[31:32] You can actually look at these configurations. Can you modify them?
+[31:38] No. Right? These files cannot be modified. But you can fine-tune. Right?
+[31:43] You can use lower. You can do all these things to adapt the model. But to modify
+[31:48] these files, if you try to do that, it's just going to crash. It's not going to
+[31:51] load.
+[31:55] Now here we're going to look at the bytes per weight and where it comes from
+[32:01] and we calculate here we're looking at a smaller model at BF-16 for the 6 billion
+[32:08] parameter model and the parameters you multiply by two 1.5 gigs and for the 8
+[32:14] billion parameter models what those params look like and it's gonna be eight
+[32:17] gigs and if we compare the BF16 versus FP8
+[32:24] Now, when we talk about pre precision, most models when they're trained,
+[32:27] they're going to be at sometimes FP32, but you'll often get it at FP16. Full
+[32:33] precision, meaning that you multiply whatever the model size by what? Four by
+[32:39] four, right? So, this 4 billion parameter will be 16 gigs at full
+[32:44] precision, right? on your GPU when you quantize it down to let's say FP8
+[32:53] well you kind of lose a little bit capabilities of the model but not much
+[32:58] right but that's when you start to evaluate right if your compute
+[33:02] constraint you have this larger model maybe 70 billion parameters that maybe
+[33:08] you can do it at FP8 or maybe with int4 right all the way down to where now that
+[33:16] 70 billion parameter models is rather than 32 is 16 gigs, right? If that's
+[33:22] possible, right? I don't know how much you're going to lose for the position,
+[33:26] but you'll have to evaluate that. And so evaluation hardnesses are important.
+[33:33] So we'll look at the GPU where the weights live.
+[33:38] So here BF16, you multiply by two, FP8, you multiply by one. We're looking at
+[33:43] this for Quinn. And then we have another model that we're going to use in this
+[33:47] course where it's say at 8 billion parameters is five gigs on the GPU which
+[33:52] you can see how much you save with the still intelligence that works for the
+[33:56] use cases that we're discussing if you decide to quantize down.
+[34:08] So we're looking at this card the gigabytes per second. you take the where
+[34:11] we're actually calculating. Okay, we know how the speed of the GPU is 360 and
+[34:17] we're showing how to calculate to get the tokens per second and where we're
+[34:22] actually bound. So, we're going to be bound by the speed of the actual GPU on
+[34:27] how fast it can go. And we're showing the math for the KV cache here. And I'm
+[34:30] trying to go a little faster so we can get into the quantization and
+[34:34] optimization. But if you go through these, you can
+[34:37] read through it and understand how the KV cache formula works. Oftent times we
+[34:42] may not have to go through this and figure it out, but you will have to when
+[34:46] you're trying to calculate, for example, you have a 100 users you want to serve.
+[34:51] You have a smaller GPU. The question is I got this smaller GPU. Let's say I'll
+[34:56] give you a perfect example. I had to do a workshop and I had to figure out how
+[35:00] to serve 80 students and perform inference for all the students with
+[35:04] about three or four GPUs that were about 20 gigs, right? Do I need that many? Is
+[35:09] it going to fit? Well, how big is my context for the workload? What if
+[35:12] everybody is invoking at the same time? Will the GPUs will the cluster support
+[35:16] that? Will continuous batching work? So, you set up an evaluation to evaluate the
+[35:21] entire workload and to determine, okay, is it going to fit or do you hit that
+[35:25] roof line, right? Do you have start to have spill over the CPU? These is your
+[35:29] application slowdown
+[35:35] or the memory weights memory budget versus KV pool. So we'll look at that
+[35:40] and then here's how you can actually get that the math. So here's our we can get
+[35:44] 37,000 tokens on this GPU right on the Sega GPU this 8 gigs for the model
+[35:53] weights. And then the room that you have is going to be 37,000 tokens, right? And
+[35:59] so if we have multiple users sending requests, right? Well, this will show
+[36:04] how many users in their context list. So if we have four users, they can all send
+[36:09] 8,000 tokens, right? For input output tool calls, this going to add up to
+[36:14] 8,000 tokens at the same time on that GPU.
+[36:20] And now we're showing the tax as this increases
+[36:25] the different requests and the generation of that request.
+[36:32] And this kind of shows how to do that math when you're trying to understand
+[36:36] your compute constraint, your GPU, and then the workloads that you're
+[36:40] performing. So you can take all this code and apply it and be able to
+[36:45] take your use cases and do the math on it so you can see if it fits on your
+[36:49] GPUs.
+[36:54] So we
+[36:57] will go to the prefill and decode. So going a little bit deeper into the
+[37:01] prefill and the decode in the KV cache. Again, we're using the Quinn3 model, but
+[37:08] we're actually going to dive in to see how this looks. So we have the prefill,
+[37:11] which like I mentioned is going to be focused on that time to first token,
+[37:15] right? from the time you press send, how long does the first token, if you're
+[37:19] streaming, right? Because if you're not streaming, you're just going to get the
+[37:22] whole response back. But if you're streaming, how long does it take to get
+[37:25] that first token back, right? And that's going to be that prefill stage.
+[37:31] And then the decode is going to be that token, every token after that, that's
+[37:34] all measured. And if you're looking at the metrics inside of VLM, you send that
+[37:41] to Graphana, you can actually view that on the dashboard and you can watch,
+[37:44] okay, as I increase my prompts, you can watch it increase, you can watch it
+[37:49] decrease, right? Right. And really understand what's actually happening on
+[37:54] that GPU when you're sending requests. So, we'll go through here. We'll install
+[37:59] our dependencies. Then from there, we'll look at our
+[38:03] environment. Make sure we're connected. Yes. And we're still using the Quinn
+[38:08] 34B. And we're going to look at the self
+[38:11] attention, meaning how does that KB cache get processed. So this is the
+[38:16] actual formula. So you can look at that soft max to really understand how that
+[38:20] KB cache is being handled within a model. We're just doing it by hand just
+[38:25] so you can see the math on that. And so when it comes to the KB cache, there's
+[38:31] the naive approach and there's the KB cache approach that I would say is
+[38:37] handled. So the naive approach is you take a prompt, the model looks at the
+[38:41] whole prompt and then one by one stores that prompt in the KV cache and
+[38:46] generates a response. What KV cache does, it says, okay, I'm gonna take the
+[38:51] prompt, I'm gonna learn from it, and I'm gonna store it right in parallel. And so
+[38:56] the KB cache allows you to learn from the prompt to be able to reference the
+[39:00] information rather than just doing the fixed sequence of the naive caching
+[39:05] approach when it comes to handling that KB cache. And so if we generate this,
+[39:14] [snorts] we can look how it computes
+[39:19] the reduction of how much if you use the KB cache approach
+[39:27] rather than the naive approach and we're just showing all that by hand in code so
+[39:31] you can really break it down and understand. And now we're going to look
+[39:34] okay using K KV caching and we'll measure the time to first token.
+[39:40] And so here we have 57 milliseconds and then the decode was 25 milliseconds.
+[39:48] And so we'll continue on
+[39:53] and we can see what VLM is actually exposing. So we can actually look at
+[39:57] those metrics and we're just showing some of the metrics that are actually
+[39:59] being exposed and how you would view that in VL.
+[40:05] Now we're going to invoke the prompt and we're going to increase it and you can
+[40:08] watch that KB cache fill
+[40:13] and you can see this is going to take a little while. So we'll give it a couple
+[40:18] minutes while this process we're increasing it. So we can see the KB
+[40:22] cache usage and we can look at the metrics. So we have peak usage running
+[40:30] and then the KB usage after it's finished. And this will be the math on
+[40:34] how you would process that. Again the worker that we're using for this code is
+[40:39] in the foundation.py. So that's going to be the helper for
+[40:44] this code. Now we're going to look at the warm the
+[40:49] code um against the warm prefix caching. Now preface caching is an interesting
+[40:54] thing. Um don't confuse it with prompt caching for and that's something I
+[40:59] should have mentioned before. If you're using a provider and you're paying by
+[41:01] the token, prompt caching, especially if you're do you have a continuous
+[41:06] application that's running within every five minutes, prompt caching is a must,
+[41:10] right? You can you can decrease the cost by like up to 75% depending on who
+[41:15] you're using. So there is some ways you can use a provider and save on cost. But
+[41:19] when we're talking about prefix caching, this is caching that prefix for the KB
+[41:24] cache. And so when we do this, we can see how this actually is handled
+[41:30] here. So the code is going to be 220 milliseconds
+[41:34] and it's down to 41 milliseconds. And this all shows you how to do that in the
+[41:39] code. So you can go through that. And I'm trying to go a little faster so Omar
+[41:43] can get to his part and hopefully we can deploy.
+[41:53] All right. So we'll go back and we'll go to the fourth section where we talk
+[41:57] about dense model verse the mixture of experts on the GPU.
+[42:02] Now when it comes to a dense model, what is a dense model? Well, a disc model
+[42:07] when it sits on a GPU, that whole model is used to generate tokens, right? So,
+[42:13] if it's 30 billion parameters or let's let's just do the model we're using now.
+[42:18] So, the Quinn 3 4B at BF16 8 gigs on the actual GPU. Well, when that actually
+[42:27] generates tokens, when it actually is working, that whole entire model is
+[42:32] working, right? So it's going to be a little slower than if you use a mixture
+[42:37] of experts. Mixture of experts may be a larger model. Maybe it's 30 gigs, but
+[42:41] when it actually generates inside of the model, it takes a collection of experts
+[42:46] and only that that section of experts does the generation. So even if it's 30
+[42:52] gigs, it may be 1.5 gigs just to do the generation. So it's going to be a lot
+[42:57] faster. So that's one of the benefits. Even though it's a larger model when
+[43:01] it's a mixture of experts, it's actually a can be performed a lot better within
+[43:05] an application or a lot faster within an application.
+[43:12] And so here we kind of talk about memory and why decode is memory bound meaning
+[43:17] that when we talk about the generation phase after that time to first token
+[43:21] when that generation actually happens that's actually going to be bound by the
+[43:24] memory. So when we looked at the speed of this GPU that's bound, you can't go
+[43:28] any faster than that, right? There's nothing we can do to tweak that to make
+[43:32] it go any faster. But there are some things we can do to help this at scale.
+[43:39] So we're going to look at our roof line and plot that so we can actually see it.
+[43:44] So we'll make sure that we have our model loaded. So we had a quint 3 for
+[43:51] billion parameter, right? and it's going to be compute bound. So it's going to
+[43:55] hit that roof line. So we're going to look at the flops. We're going to look
+[43:58] at this. So the ridge line is 297 flops per bite, right? And where this is bound
+[44:02] by the memory.
+[44:06] Now if we look at the mixture of experts, now we're just going to look at
+[44:09] this as code. So we can actually understand it.
+[44:14] So at this 30 billion parameter models, right? 128 experts and only eight active
+[44:20] per token. That's 48 layers, 248 hidden. And so now the expert mixer
+[44:27] expert, this is the weights. This is the share weight. So this is how much it how
+[44:31] much is being used when it generates. That's a lot that would be a lot more
+[44:35] efficient than using a smaller model. It can actually be faster when it actually
+[44:41] does the generation.
+[44:45] And so here we're looking at the the dense model, right?
+[44:50] is nine times fewer bytes than a dense model, right? So it decodes a little bit
+[44:55] faster. So that's kind of breaking down the two when you're actually trying to
+[44:59] figure out, okay, do I want to use something like Mistro, right? Or do I
+[45:03] want to use like a Quinn model, we compare the dent sizes.
+[45:12] So here we're going to look at the rate, we'll look at the bandwidth, the GPU
+[45:16] serve. So measured Quinn 4B is about 40 40 tokens per second, right? The smaller
+[45:25] model of the Quinn, the 0.6. Now, this isn't done on the CPU, but we're just
+[45:30] showcasing 300 tokens per second, right? But we're looking at the ceiling. This
+[45:34] is actually looking at the bandwidth and it's doing the math here to get that the
+[45:38] max that we can get. The ceiling that we have on this GPU is going to be 45
+[45:42] tokens per second. Now, if we enable reasoning
+[45:50] on that model and we can look at that. Now, when it comes to these Quinn
+[45:54] models, if you're wanting to do any type of agent and the model needs to reason,
+[46:01] meaning that maybe the prompt comes in, you have tools and it needs to make
+[46:04] multiple tool calls. Well, you're going to enable thinking. So now when it makes
+[46:09] a tool call, if it gets the results and it needs to make another tool call or
+[46:13] verify the results to make the accurate tool call, you're going to have to
+[46:17] enable thinking on these models. And that's just a parameter that you can
+[46:20] adjust in the model, right? But with thinking off, it just generated a
+[46:25] response. It was 35 tokens. But with thinking on now, it had to think about
+[46:30] it. It cost about 600 tokens. Right now with some of the models like provider
+[46:36] models you can actually set a token budget for life of thinking. So that's
+[46:39] one of the things you can save on cost with a provider model and maybe some of
+[46:43] the open models you can do that too. I'm not sure.
+[46:46] >> Yeah, you can. >> Yeah, you can also adjust that token
+[46:48] budget on the thinking as well. So more tokens on thinking isn't always good but
+[46:53] sometimes it can help the model better troubleshoot and better get to that end
+[46:56] result that you're looking for.
+[47:02] And so when we talk about inference, there's a lot of things to think about,
+[47:05] but one of the things we want to think about is that memory bound limit for the
+[47:09] actual card and then how to apply that for the agent. So we look at all of the
+[47:13] modules, we talk about that KB cache, the prefix caching, the attention heads
+[47:18] as well as quantization which um is going to cover here in a minute and then
+[47:23] from there that continuous batching we also discussed that. So if we split the
+[47:27] prefill from the decode, you have the prefill GPU pool and the decode which is
+[47:33] memory bound. So the prefill compute bound, right? So it needs to go from
+[47:36] your memory to the GPU and it needs to be cached, right? There's
+[47:43] [clears throat] that that phase you can you can do a lot of optimizations, but
+[47:49] when it comes to the decode phase, there's nothing you can really do
+[47:51] because you're bounded by the GPU. And so we kind of show this in code rather
+[47:58] than actually showing it because again we [snorts] only have so much limitation
+[48:02] in this workshop. Now with that being said I am going to
+[48:06] make sure that we are good to go here.
+[48:19] Um I don't think I need to switch the mod. I think you should be good. Armor.
+[48:22] I'm gonna turn it over to you. >> All right.
+[48:24] >> And then Yeah, we should be good to go. You can talk about quantization. Thank
+[48:29] you. >> All right. Thank you, Dwan.
+[48:31] >> Yep. >> All right. So, let me close that. Sure.
+[48:37] >> That That's yours, actually. There you go.
+[48:40] >> Okay. Cool. So, I'll be talking about a whole different um uh optimization
+[48:45] techniques I think you can use to deploy these models on Kubernetes. Um, like I
+[48:50] said, uh, my background is in Kubernetes. I develop a lot of
+[48:54] Kubernetes stuff at Akami and I work on the manage Kubernetes platform there.
+[48:59] So, a lot of the stuff that we do is we want to make sure that we're able to use
+[49:03] GPUs on Kubernetes really well. Uh, use all the different features that they
+[49:07] have. Um, and uh, we deploy a lot of these models using some of these
+[49:11] techniques that I'm going to be talking about. Um, so there's uh, different
+[49:16] techniques. So, we're going to talk about quantization. I think this one's
+[49:18] like the main big one. Um, it's super important. We're going to talk about
+[49:22] speculative decoding. Uh, this is a pretty cool technique. It can give you
+[49:28] quite a big uh performance boost in your uh throughput. Um, we're going to talk
+[49:33] about um like how do you uh you know uh tweak your LM uh VLM config to make sure
+[49:41] that you're getting max performance out of it and um you're meeting your SLAs's.
+[49:46] And then we're going to actually do some tuning and evaluating. So this I'm going
+[49:50] to leave you guys with some sort of framework that you can use to figure out
+[49:53] what exact configuration you need to use for your specific workloads and specific
+[49:57] use cases. Um so I'll dive into quantization.
+[50:02] Um let's see. And if we have time, we can definitely go uh we can have like a
+[50:07] quick Q&A as well, but I think we have 30 minutes. I'm going to run through it
+[50:13] uh at a good pace. So in quantization um
+[50:17] there's a whole lot of different uh there's a lot of different types of
+[50:20] quantizations you can do. Um you know there's the BF-16 the the one that the
+[50:25] model is going to start off with. That's the full precision model that uh Quint
+[50:29] provides you and then there's a lot of other conversations on top of that.
+[50:32] People have created FP8 that's one of the models that we're going to look at
+[50:36] in this particular module. Um there's INT4. Uh there's AWQ GPQ uh GPTQ. These
+[50:44] are different types of uh ways you can quantize the model. Um there's NVFP4
+[50:50] which is Nvidia's proprietary quantization technique that they use. Uh
+[50:54] it's hardware accelerated on black hole GPUs and more. Uh that one is pretty
+[50:58] cool. Um but let's see. Let's dive into it. Um
+[51:06] make this hopefully we can fit that in there. All
+[51:11] right. So as you can see, you know, like if you have the BF16 weights, it's going
+[51:15] to take a lot of your memory. Uh in this particular use case, we have 20 gigs of
+[51:20] VRAM and we sort of want to maximize how many requests we can serve with these 20
+[51:24] gigs. Uh so we want to make sure we have enough space for KB cache. Uh reason
+[51:29] being the more requests uh the more KV cache you can have on the memory, the
+[51:33] more requests you can process in parallel. Uh thereby increasing your
+[51:38] throughput. So that's super important. Uh so that's why we essentially want to
+[51:41] do quantization. We want to reduce the size of the model so that way you can
+[51:45] fit more KV cache and essentially increase your throughput. Um so that's
+[51:50] one reason. The other big reason I think is also because you're shrinking the
+[51:54] weights essentially by in half. You don't have to do that memory movement
+[51:57] between the different uh memory hierarchies resulting in essentially
+[52:02] faster decode as well. So we will see you'll go from you know 40 tokens per
+[52:06] second which is the base model will probably go up to like 60 tokens per
+[52:11] second if not more. Um so let's look into this. Let's um
+[52:18] install the dependencies and then I'm just going to make sure
+[52:22] that the model is still available and everything is running. So yeah, we do
+[52:26] have the model running uh the same four billion parameter model and it's running
+[52:31] in the namespace. Again, as I said, um sort of like a high level overview,
+[52:35] there's a whole different sorts of different techniques you can do
+[52:38] quantization with. Um for example, like um uh Llama CBP is a pretty popular one
+[52:44] for running a lot of these models at a lower precision. Uh that uses GGUF
+[52:49] format. Uh that format is pretty cool. you can have um uh you know five bit,
+[52:54] 3bit, two bit, one bit quantizations which is pretty interesting um and
+[52:59] pretty cool but the the downside of that is you lose a lot of uh you lose quality
+[53:04] trying to get a lot of performance out of it. So, there's a trade-off there.
+[53:08] Um, but for the most part, going from BF-16 to FP8 is a very negligible drop
+[53:14] in quality and performance. Um, and it will result in more performance while
+[53:18] keeping the quality exactly the same. Uh, so that's what we want to showcase
+[53:22] and that's one of the assumptions we're making. Obviously, like when you're
+[53:25] doing this for your particular workload, depending on what you're using it for, I
+[53:28] highly encourage people to have their own evals. uh me so that way if you're
+[53:33] switching from you know BF-16 your eval are saying okay everything is good
+[53:37] everything's running well for our workload you switch to FP8 you might
+[53:40] have issues where some things are breaking here sometimes it's
+[53:44] hallucinating sometimes it's going in a loop so a lot of those things can happen
+[53:47] for very specific use cases and in those scenarios it's very important that you
+[53:51] have your own eval set and you're running your own evals to make sure any
+[53:54] changes you make um are uh okay to make and also you don't have any degradation
+[54:00] in performance
+[54:03] Um again we'll run and make sure that we have the BF16 base and then we're going
+[54:09] to measure the performance. So uh we have a little load test uh utility
+[54:14] package that we use to do some uh testing. Essentially what we're doing if
+[54:19] you look at the levels where these are like a at different concurrencies we're
+[54:23] making this request. Each request is going to have about 256
+[54:29] tokens and the output is roughly going to be about 128 tokens. So this is sort
+[54:34] of trying to simulate how many requests you can process at one time and we're
+[54:38] sort of going to use this as a baseline to see what the baseline performance is.
+[54:42] Um so for 32 uh we're getting aggregate performance of 714
+[54:49] tokens per second which is pretty good. uh at single concurrency we're getting
+[54:53] 37.5 tokens per second. Uh so that's important to uh note down. And also
+[54:59] we're getting um uh 61 milliseconds for time to first
+[55:05] token. And then you'll notice the time to first token goes up, right? Like the
+[55:09] jump between 32 and 64 is quite large. We're going for 277 milliseconds to uh
+[55:18] 1300 milliseconds. That's a quite a big jump. and you might not necessarily want
+[55:20] to make that trade-off, meaning you might want to potentially stop at only
+[55:24] 32 uh concurrent requests that you're processing and not go higher than that.
+[55:29] So that is an important thing to notice there. Um again as I was saying um eval
+[55:36] are extremely important. Uh reason being again you can have performance
+[55:40] degradation when you do quantization and you can lose uh some intelligence
+[55:45] reasoning can uh not work as it should there there's going to be a lot of
+[55:51] issues. So you want to essentially I'm kind of simulating here like a uh at a
+[55:55] very basic level what kind of eval you might want to think about. Um, you know,
+[55:59] you want to think about like if the JSON is being generated correctly, if the
+[56:03] JSON is being corrupted when you reduce the quantization, you know, at uh BF16,
+[56:08] you might have good uh responses, but when you go to FPA, maybe potentially
+[56:14] your functions function calls are failing. Why is that? It's probably
+[56:17] because it's not generating the JSON correctly. So, there's a lot of these um
+[56:21] eval cases that are already out there that you can kind of use in the open
+[56:25] source. Hugging face has a lot of evals. You can go on GitHub, you can find a lot
+[56:29] of these, but you want to come up with your own for your own use case. Um,
+[56:34] but then so next thing what we're going to do is we're going to switch from BF16
+[56:38] to an FP8 model. So we are going to essentially reduce the size of the model
+[56:43] in half. And once we do that, we'll kind of get to see um what the performance
+[56:49] differences are and are they worth it and are we losing any quality over it.
+[56:53] Uh so to do this uh you will need to be in the root and then click on manifest
+[56:59] and in there you will see vlm.yaml. So um
+[57:05] I'll kind of go over this. So this is a typical manifest uh configuration file
+[57:10] that you uh uh have for Kubernetes deployments. Um how many of you have
+[57:17] used Kubernetes before or have knowledge of Kubernetes? Okay, quite a few. Okay,
+[57:21] great. So this will be quick. I don't have to go over all all the details, but
+[57:25] essentially we have um a PBC which is going which is essentially our cache
+[57:30] where all of our models are living and we have a simple deployment with VLM
+[57:36] with a lot of different arguments and flags here. Um so you can see we're
+[57:40] using the Quen uh 34 billion parameter model. Um, and then we're going to
+[57:47] switch it to this FP8 version from Red Hat. Uh, let
+[57:53] me
+[57:56] one more quick thing I want to quickly mention is you see the dynamic at the
+[58:00] end. Uh, this is pretty important. This means that not everything in this model
+[58:04] is quantized to FP8. In a lot of cases, in a lot of different quantization
+[58:08] techniques, you might want to quantize the model uh only specific parts of the
+[58:12] model and not the others to make sure the performance stays the same and you
+[58:16] don't have a lot of uh issues there. So that's one of the reasons why you'll see
+[58:19] dynamic, you'll see all kinds of things. You'll even see quantizations where
+[58:23] certain heads of the model are going to be 4bit and then some are going to be 8
+[58:27] bit and some are going to be full precision. And you know, it's it's sort
+[58:31] of uh interesting that people are doing that and finding a lot of performance
+[58:35] there. They're they're finding the performance gain while making sure the
+[58:37] quality stays the same. So once this is uh changed, we're going to save it and
+[58:42] then uh we'll just quickly go through and run it and apply it. So this is just
+[58:47] making sure that the diff is good. Um we're not causing any issues here.
+[58:53] Uh that should be fine. And then we'll just go ahead and where's
+[59:01] apply? Right here. We'll just go ahead and apply and that'll roll out. Um it's
+[59:06] gonna take uh a little bit of time. Let me save that. But another thing you guys
+[59:12] can also do is you can open up a terminal tab as well. Like if you just
+[59:16] click on the plus sign and then you'll see a terminal option and then that will
+[59:20] also let you see sort of like what's in your nameace and what you can do here.
+[59:26] So if you get you see the VLM endpoint is still coming up. Uh this pod is
+[59:31] essentially your Jupyter notebook running within your namespace. Um
+[59:36] let's see this will take a little bit of time to come up.
+[59:45] Yeah. While this is coming up, does anyone have any questions? We can
+[59:49] probably have one question in >> cont.
+[59:57] was pre-quantized already. >> Yes, it was pre-quantized. Yeah, you can
+[1:00:01] quantize your own models. There is LLM compressor. Uh it's uh it's provided by
+[1:00:08] VLM, I believe. LM compressor.
+[1:00:14] So there there there is tooling out there for you to do this on your own if
+[1:00:18] you would like. Um, but yeah, the one that we're using currently is already
+[1:00:22] pre-quantized that we downloaded off of Hugging Face.
+[1:00:27] All right, I think that should be up. Again, it's taking a little bit of time,
+[1:00:31] mainly because it's taking all the weights out of the VRAMm and loading the
+[1:00:35] new weights in. So, it's going to take a little bit of time to do that. Um,
+[1:00:39] anyone else have any question?
+[1:00:51] I'm sorry. >> Look at your your VL your YAML file for
+[1:00:54] your arcs. Look Oh, looked like they had uh two flags on the model.
+[1:00:59] >> Oh, they did. Oh, that's a good call out. Thank you for that.
+[1:01:04] Did not see that. All right, we're going to go through it again.
+[1:01:09] Let's rerun that.
+[1:01:13] Okay, that's probably why it didn't come up as quickly as it should.
+[1:01:22] Oh, I can't do that.
+[1:01:31] All right. Any any other questions while this is going through? Go ahead.
+[1:01:35] >> How do you choose between? >> Uh, how do you choose between FPA and
+[1:01:40] intake? Uh that's a good question. So it depends right like int 8 is going to be
+[1:01:46] slightly less precision than FP8. That's essentially the reason. Uh the the
+[1:01:51] difference is like FP8 is floating point so you get a little bit more precision
+[1:01:54] out of it. Uh and then int8 is integer. So you could use either or. Uh again
+[1:02:00] these are all the other options that you have. You can choose based on your
+[1:02:04] workload and where your constraints are. Um but yeah you could totally go into
+[1:02:08] eight as well and it should be fine.
+[1:02:13] Um, where does it say that?
+[1:02:17] >> Good.
+[1:02:22] >> Stack. Oh, yeah. I mean, uh, oh, that's the other good good call. Um, it depends
+[1:02:27] on the GPU as well. Some of the GPUs might not necessarily support it.
+[1:02:31] >> GPU support. >> Yeah. So, GPU support is important.
+[1:02:33] That's another good call out. So some of the um uh GPU might support it but it
+[1:02:39] might not be accelerated by the GPU meaning you might not get the full
+[1:02:42] performance that you would be expecting out of it. Um for example the GPUs that
+[1:02:46] we're using we're using RTX 40008 they support FP8 and we're going to get the
+[1:02:51] full uh precision uh full performance out of it and it's able to hardware
+[1:02:57] accelerate all those calculations. But if we let's just say use FP4, it won't
+[1:03:01] be able to do that and we would actually not see a whole lot of performance gains
+[1:03:04] and we actually see performance go down instead of it going up. So that's
+[1:03:08] another thing to keep in mind. All right. Where is it?
+[1:03:19] All right. It has successfully rolled out. So we'll uh take a quick look. So
+[1:03:24] now we can see it's actually using the FP8 model now. And then we'll also kind
+[1:03:28] of quickly go through and do another load test. It's going to be the exact
+[1:03:31] same. We're going to do it at uh concurrency 1 uh four 8 and uh 8 16 and
+[1:03:39] 32 I believe over here. It's going to be exactly the same. So
+[1:03:47] and then once that is up we can compare and see the performance differences and
+[1:03:50] why you would want to quantize.
+[1:03:56] Okay. the performance is in. And if we compare it before and after, you can
+[1:04:01] see, let me make this a little bit bigger. Uh, you can see even at
+[1:04:05] concurrency one, you know, we're going for 37.5 tokens per second to 53.4
+[1:04:11] tokens per second. So, we're seeing considerable jump in performance here.
+[1:04:14] Um, and then at peak throughput, we're seeing uh at 64 concurrency, we're going
+[1:04:20] from 800 to,40. So, that's about, you know, 1.4 four uh 42 times uh which is
+[1:04:27] quite a big performance jump but again keep in mind the time to first token is
+[1:04:31] going up considerably as well uh compared to 32 and 64
+[1:04:37] um but then yeah you can and then again you want to run evals um we can quickly
+[1:04:42] run through this and it probably won't have any differences so yeah again BF16
+[1:04:48] versus FP8 um there's not a whole lot of uh performance degradation you should
+[1:04:54] spec it's it's going to work out of the box for the most part but uh for
+[1:04:58] specific use cases it might not but for simple eval cases that we had here it's
+[1:05:02] it's working fine I think that is it for this module where
+[1:05:08] we'll jump into next is speculative decoding which I think is a pretty
+[1:05:11] interesting one um let's see let's jump in here all right so how many
+[1:05:17] of you have heard of uh speculative decoding before
+[1:05:22] right quite a few people that is good. Uh for those who don't know what
+[1:05:26] speculative decoding is, let me make this smaller. Um it's essentially we're
+[1:05:31] using another draft model which is going to be a much smaller model than the main
+[1:05:35] model that we're using and it's going to generate multiple tokens ahead of time
+[1:05:39] and then our main model which is the four billion parameter model is going to
+[1:05:44] look at those generated tokens and it's going to either say it's it looks good.
+[1:05:49] That's it's going to verify it and say it's going to look good or it's not
+[1:05:51] going to look good. Uh so in this like diagram you kind of see like um the
+[1:05:56] draft model you know generated four tokens ahead of time and then the
+[1:05:59] verifier model which is our four billion parameter model is going to say oh only
+[1:06:04] the first and second token make sense the other two don't so it's going to
+[1:06:07] discard it and it's essentially going to do this each time it's generating new
+[1:06:10] tokens. So it's going to go in in a loop there. uh and uh for for this uh
+[1:06:18] workshop we're going to be using the 6 billion parameter model uh from Quen as
+[1:06:24] a drafter model and see if that is going to either help us or not help us in a
+[1:06:29] lot of cases uh it can also not help you and reduce the performance um and
+[1:06:34] there's multitude of reasons for that and we'll go into that shortly.
+[1:06:40] How are we doing on time? Good. uh just make sure we are good here
+[1:06:50] target model. Okay, before we get into it, I also want
+[1:06:55] to talk briefly about all of the different ways you can do um speculative
+[1:06:59] decoding. Um there's a lot of different ways and there's more ways coming out uh
+[1:07:04] every every few months. Uh but the you know the draft model is one way. Um, a
+[1:07:09] lot of times, uh, a lot of new, uh, ways of doing it is actually using a
+[1:07:14] diffusion drafter model, which I think is really cool. Uh, I personally use
+[1:07:18] that for one of my home lab machines. Um, and, uh, that gives you a huge
+[1:07:23] performance. The difference between that and this is because it's a diffusion
+[1:07:26] model, it's going to be generating a lot of tokens uh, at once, uh, rather than
+[1:07:30] doing what we do sequentially with LLMs. Um, and then the verifier model is able
+[1:07:35] to verify X amount of tokens out of that. Um
+[1:07:40] but but yeah there's a there's a lot of different types of uh methods you can
+[1:07:43] use. You can use suffix decoding. Uh there's a lot of times model would come
+[1:07:47] with a built-in drafter model as well. So those are like the native models that
+[1:07:51] are trained along with the main model. Uh so you don't have to uh import
+[1:07:55] another model to do this. Uh there's medusa eagle again like diffusion dlash
+[1:08:00] is a big one that uh has kind of been going viral and it's working pretty
+[1:08:05] well. So there's a configuration you set for figuring out how long like how much
+[1:08:11] it generates before the verifier comes in and verifies it. So you can set that
+[1:08:15] you can set it to two tokens, four tokens and five tokens. And it's
+[1:08:19] important that you set it correctly uh because if there are
+[1:08:24] for example let's just say you set it at four and uh the model verifier comes in
+[1:08:29] it's like okay I only accept two that's 50% acceptance rate and that is pretty
+[1:08:33] bad. that's actually going to have a negative impact because not only are you
+[1:08:36] running you're running two models so you're spending compute to run two
+[1:08:40] models and then you're only getting 50% acceptance rate and that's essentially
+[1:08:44] going to result into a decrease like throughput. Uh so that's not something
+[1:08:49] you want. Um so that's something you have to like kind of tweak and play
+[1:08:52] around with and see how many tokens do I want to generate ahead of time. Um so
+[1:08:57] yeah technically you could generate 15 tokens but you probably don't want to do
+[1:09:00] that. You probably want to do two maybe three maybe four. It also depends what
+[1:09:04] type of um what's it called? Um let me go back.
+[1:09:09] Where is it? What type of method you're using again? Like uh I use deflash uh
+[1:09:14] for a lot of my home labbing. And uh that works pretty well if I set it to
+[1:09:18] eight. And if I set it more than eight, I actually get a lot uh a lot less
+[1:09:21] acceptance rate and that causes my performance to go down or be very flaky.
+[1:09:26] Um
+[1:09:30] but all right so we will next um >> you got one more question
+[1:09:36] >> one more question. Hey uh sorry uh this is from the last module but uh
+[1:09:44] how does dynamic uh compression work uh in a sentence or two I guess
+[1:09:51] >> um so the way it works is if you do you understand um the different heads of the
+[1:09:57] model uh different because there's different layers within an LLM. So if
+[1:10:01] you look at the model.json JSON, you'll actually see there's a lot of different
+[1:10:04] parts to an LLM and there's a whole pipeline that sort of like pushes the
+[1:10:08] tokens from one thing to another. And a lot of a lot of times when you see a
+[1:10:12] dynamic thing, it essentially is saying, okay, I'm going to only quantize uh the
+[1:10:17] attention heads to FPA, but I'm going to leave everything else as is.
+[1:10:20] >> I see. >> So, so that's the reasoning. And if you
+[1:10:23] remember from previous modules, you you saw that the FPA version is not exactly
+[1:10:28] half in size. It's not going four gigabytes, it's like 5.1 gigabytes.
+[1:10:32] That's because not every part of the model has been quantized to FPA. So
+[1:10:36] that's like sort of the dynamic part of it.
+[1:10:38] >> See, is the same math applicable to all the models or it depends model
+[1:10:43] >> depends model to model. Every model has a different architecture. So
+[1:10:46] architecturally speaking, it depends you know what parts of the model you
+[1:10:50] quantize. uh there's people who quantize you know some parts of the model to uh
+[1:10:54] in4 but leave other parts to FP8 and then leave some parts to like BF16. So
+[1:10:59] >> thank you. >> Yeah.
+[1:11:05] >> All right. We'll run through this again. I'm just confirming that our baseline is
+[1:11:09] good. We're using FP8 model here. Um and then uh we'll do another load test
+[1:11:15] quickly um sort of to get another baseline of um what it would look like
+[1:11:20] before we implement and add speculative decoding uh to this particular
+[1:11:26] deployment in VLM.
+[1:11:31] And then while that is running, I'm just going to make sure uh to
+[1:11:36] uh let me actually copy this correctly.
+[1:11:45] Not that. Oh, never mind. You can just so in here
+[1:11:51] um we are setting the speculative config. This so this is a particular
+[1:11:55] flag you can pass in VLM to set the draft model. So we're setting it to the
+[1:12:01] uh 0.6 billion parameter model. And then we're also uh setting how many tokens do
+[1:12:07] we want to generate as draft tokens. So in this particular scenario we're
+[1:12:11] setting it to four. Again this is something you have to do a lot of
+[1:12:15] testing on. Uh you have to try out do I want to set it to four? Do I want to set
+[1:12:18] it to two? Do I want to set it higher? It all depends on the acceptance rate
+[1:12:23] and uh how much performance you're getting out of it. Um and then yeah once
+[1:12:26] you set this flag and we will redeploy this. Um we go back in here. We got our
+[1:12:32] baseline. And then let me make sure that it's
+[1:12:38] good. Okay, things look good here. And then we'll go
+[1:12:43] ahead and um apply and roll this out.
+[1:12:51] And this is probably going to take another couple minutes. So, uh does
+[1:12:54] anyone have any any questions? Go ahead.
+[1:13:01] Oh, one second.
+[1:13:10] >> I I noticed that you set the GPU memory utilization to 7
+[1:13:16] >> which leaves a lot of your um essentially leaves 30% of the VRAM
+[1:13:23] >> unused. >> Is there any particular logic to that
+[1:13:26] choice? Uh in this particular scenario um there could be a lot of reasons. Uh
+[1:13:33] sometimes you know you might have multiple deployments on the same GPU and
+[1:13:37] you want to make sure that you have enough RAM for something else VRAM for
+[1:13:41] something else and then you keep enough VRAM for this but in this particular
+[1:13:44] scenario not really. We're going to bump it up in a following module actually. Um
+[1:13:50] it's it's one of those knobs right like you have to keep you have to make sure
+[1:13:53] that you're setting the utilization correctly. If you set it too low, you're
+[1:13:56] leaving performance on the table. If you set it too high, um you're going to um
+[1:14:00] kill your node, and that's not good. >> Yeah. So,
+[1:14:09] this
+[1:14:14] >> Okay, it's still coming up. This is taking a little bit more time.
+[1:14:22] >> Go ahead. from
+[1:14:29] >> sorry one second >> uh the bump that we see from 60 32 to 64
+[1:14:35] parallelization it's because of the key value cache just blowing out or I mean
+[1:14:40] >> yeah yeah essentially the key value cache is blowing out and it sort of hit
+[1:14:43] like its max limit and it can't go above that uh so there's a lot of reasons so
+[1:14:48] there's that part and then there's also uh the continuous batching and a lot of
+[1:14:53] times times will happen if if you don't if you set the configuration to a level
+[1:14:57] where the continuous batching is not optimal, it can also cause you to see
+[1:15:00] like high tokens per sec. Uh uh you can see high latency there as
+[1:15:06] well. Um but yeah, in this in this scenario, we're essentially hitting like
+[1:15:09] sort of like a ceiling on us uh uh for us in terms of how much VRAM we can use
+[1:15:14] there. That's why we're seeing that. But in the following modules, we'll see
+[1:15:20] how we can improve that scenario and hopefully like make it better.
+[1:15:24] Uh, okay. All right, we're rolled out. So, we now have speculative decoding uh
+[1:15:30] set up correctly. So, what we'll do is we'll do a quick load test again. It's
+[1:15:34] the same exact test that we ran up here where, you know, just keep in mind we're
+[1:15:40] getting 58.2 tokens per second for concurrency one and then 42 milliseconds
+[1:15:45] of latency. So this is our sort of baseline before we do speculative
+[1:15:49] decoding. Um but what I want to showcase here is not a happy path where you will
+[1:15:57] automatically get a crazy improvement in performance. You'll actually see the
+[1:16:00] performance went down drastically. You're seeing 16% uh 16 tokens per
+[1:16:04] second whereas the baseline was 58. Um and then even the time to first token is
+[1:16:11] sort of going uh up a little bit as well. uh and you know we want to figure
+[1:16:15] out like why is this happening? So there's a there's a big difference
+[1:16:19] and there's a big uh decrease in performance like even if you look at
+[1:16:23] concurrency 16 we're going from 700 tokens per second to 240 tokens per
+[1:16:28] second. So that's a considerable decrease in our performance. So the way
+[1:16:33] to interpret this is there's a lot of different reasons. Um one is again as I
+[1:16:38] was talking about earlier it's the low acceptance rate. uh if your acceptance
+[1:16:42] rate is very low and the verifier model is just it's going to keep rejecting
+[1:16:46] those tokens that are generating by draft model, you're wasting a lot of
+[1:16:49] compute to generate those draft tokens and then the verifier is coming in and
+[1:16:53] then saying hey I don't want to take this work like this is bad work. Um, so
+[1:16:58] that's one. Um, it could be because we set the speculative tokens too high,
+[1:17:02] meaning in in our current config, we set it to four. Maybe we need to set it
+[1:17:06] down. Uh, and see if that actually helps in improve the acceptance criteria or
+[1:17:11] acceptance rate. Uh, there's a lot of things with theuler as well with VLM.
+[1:17:15] Uh, depending on how it's scheduling these requests in, uh, that could be
+[1:17:19] leaving some, uh, performance out on the table. So, it also depends on
+[1:17:23] compatibility and things like that. Um and then yeah again same GPU contention
+[1:17:28] you're using the same GPU uh to do this work. So it could be uh resulting in u
+[1:17:34] the resources not being used correctly. Um so in a lot of cases usually this
+[1:17:40] works but in our scenario it didn't work. Uh the main particular reason for
+[1:17:45] that is um this particular drapher model is not trained correctly
+[1:17:51] for this particular model. So that's the reason we're seeing a a very very low
+[1:17:56] acceptance rate. Um so when you are doing this for your own models and for
+[1:18:00] your own deployments, you have to make sure that the model, the draft model
+[1:18:03] that you're using is going to be compatible with the model that you want
+[1:18:06] to use it for. If you don't do that, you'll run into scenario that I'm
+[1:18:10] showcasing here where like your performance is going to tank and um
+[1:18:14] there's not a whole lot you can do about it. I can tell you from the resource
+[1:18:17] perspective, this GPU has enough headroom to support all of this. But the
+[1:18:22] reason for us seeing this decrease in performance is because the the models
+[1:18:26] are not trained correctly. And uh that is something you want to keep in mind
+[1:18:30] and test for as well. And you want to make sure the speculative tokens uh are
+[1:18:34] set to the right uh number as well. Um but yeah when you in your own time I
+[1:18:42] would definitely implore everyone to play around with that number meaning
+[1:18:46] change this to from four to two to six to one and see uh what kind of
+[1:18:51] performance gain you see what kind of performance decrease you see and why is
+[1:18:54] that happening
+[1:18:58] but yeah that that's that is it for speculative decoding it is actually not
+[1:19:04] going to help us in this scenario so I'm just going to go ahead and uh comment
+[1:19:09] that out and then we'll redeploy this. So we are back to our baseline.
+[1:19:15] >> Hey, you got one question. >> One question. Hey. Um, so I know there's
+[1:19:19] probably some nuance depending on model architecture, but in general from what
+[1:19:24] you've seen, is there a massive hit to acceptance rate if you use like mixed
+[1:19:31] precision essentially like run the main model at FP8 and then quantize the draft
+[1:19:36] model down to Q2? If I'm like really memory constrained,
+[1:19:40] >> is it often even worth doing that? Uh, or you know, what have you seen in
+[1:19:46] general? like does >> that's a good question. Um a lot of
+[1:19:50] times it you it doesn't matter as much. Um most of the time what you want to do
+[1:19:56] is you want to keep the draft model and the main model at the same precision.
+[1:20:00] But let's just say the draft model is at BF-16 and then the main model is FP8.
+[1:20:05] The mismatch can cause the acceptance rate to be very low. So, and then the
+[1:20:11] the main part of it is you have to train the draft model correctly so that way
+[1:20:14] it's able to generate the right tokens. In our particular scenario, the draft
+[1:20:18] model was not trained correctly. Um, and then it was also quantized down to FP8.
+[1:20:24] So, there was probably some issues with that recipe when they trained this model
+[1:20:29] and which resulted in us actually taking a massive performance set. Um, so a lot
+[1:20:34] of times when you when uh a lab releases a model, they release uh a drafter model
+[1:20:39] along with it. So you want to use those drafter models uh that come with the
+[1:20:43] model. Uh there's also thirdparty labs that do their own drafter model. So you
+[1:20:46] can try out a lot of different options that are out there and see which one
+[1:20:49] works for you. And in some cases, depending on the use case, let's just
+[1:20:52] say you're using for coding, the drafter model might work perfectly fine, but if
+[1:20:56] you're switching that to maybe some English writing, very specific academic
+[1:20:59] writing, and it might not necessarily work well, and you're going to see like
+[1:21:02] decrease in acceptance rate. So, it's also uh it also depends a lot on your
+[1:21:07] use case as well. So, it's not universally applicable.
+[1:21:10] >> Gotcha. Cool. Makes sense. Thanks. >> Yeah.
+[1:21:17] All right. Let's jump on to the inference side of
+[1:21:23] things. But before you make another jump, any other questions?
+[1:21:29] Oh, yeah. I can put the YAML on there.
+[1:21:35] Um, so the the fact that we have speculative
+[1:21:40] decoding uh presumably is because um for for a model it's faster to verify rather
+[1:21:47] than decode. >> Yeah. Can you just give a little bit of
+[1:21:50] mental model for like what it's what a model does underneath the hood um to
+[1:21:55] verify such that it's faster than decoding you know it can't be decoding
+[1:21:59] and then comparing against what the draft model produces. So like
+[1:22:03] >> what is it doing exactly so so that it's faster.
+[1:22:06] >> Yeah. So essentially uh when a typical LLM is you know decoding you have a set
+[1:22:12] of vocabulary it's a huge array of bunch of numbers and it's representing um a
+[1:22:18] confidence score for each of those items right so instead of um instead of doing
+[1:22:24] that one token at a time when you run with specular decoding you're running it
+[1:22:29] for a lot of you you're running the model for parallel things. So with
+[1:22:33] continuous batching as well, you're running a lot of different requests in
+[1:22:36] parallel. Uh so you're doing the same uh you're doing the calculation for
+[1:22:40] everything. Uh and you're doing it at once for a lot of different requests. In
+[1:22:44] the same way, you're doing the same thing for speculative decoding. You're
+[1:22:47] checking the confidence score for this uh the speculated tokens and making sure
+[1:22:50] that oh this is a high confidence, so we're going to go for it. This is you
+[1:22:54] know 0.95 and this one is like 0.9. And then you you accept that and then the
+[1:22:58] other ones you you know uh you reject those. That's sort of roughly the mental
+[1:23:03] model is like you are in parallel running uh through the layers and making
+[1:23:09] sure that each of the tokens that the draft model uh outputs is has a high
+[1:23:15] confidence. Yeah, hopefully that answers your
+[1:23:18] question. Oh, one more question.
+[1:23:23] >> Do you have any examples that >> uh yes I do. That's a good call out. Um
+[1:23:30] there's actually I left a few links in here. Um where did I leave those?
+[1:23:36] Interpreting the results. Yeah. So there's a lot of different uh writeups
+[1:23:40] on speculative decoding in in general. If you do it right, you do see quite a
+[1:23:44] bit of increase in performance. Uh VLM has actually done a big report on this
+[1:23:49] and they've seen about 1.5x increase in token generation if you set it up
+[1:23:54] correctly with the right model and with the right drafter and the right
+[1:23:56] settings. Um so yeah, this this does excel. It's just a matter of getting it
+[1:24:01] right and tuning it correctly and making sure you have the right um things in
+[1:24:04] place for it. Um but yeah, like from my personal experience, um for my home lab,
+[1:24:10] I used the Quinn 3.6 35 billion model and along with that I use a Dlash um um
+[1:24:19] draft model and I get roughly around two to 3x token generation uh performance
+[1:24:26] improvement uh depending on the use case. So it it does work. It's just a
+[1:24:30] matter of getting the right models to work together.
+[1:24:34] >> How do you choose the model size
+[1:24:38] >> for the daffer? >> Uh you want to you basically want to
+[1:24:42] figure out uh the smallest model that you can run that doesn't take as much
+[1:24:48] GPU power because you the main model is the model that has all the knowledge.
+[1:24:53] That's the model that you really care about that has everything that you need.
+[1:24:56] But you don't want draft model to take a lot of those resources away from the
+[1:25:00] main model. So you want it to be small but not so small that it's dumb but big
+[1:25:04] enough where like it's going to actually give you
+[1:25:07] >> you experimented with that. Did you see like acceptance rates
+[1:25:11] like 3B model >> 3B is too big. Uh the reason why is a
+[1:25:16] lot of models like I was talking about qu 3.6 uh 35 billion. So it has it's a
+[1:25:22] mixture of experts model and each expert is about three billion parameters. So
+[1:25:26] the experts can be around that uh and you would get good performance out of
+[1:25:29] it. But for the draft model, you probably want to be less than 1 billion
+[1:25:32] parameter just to make sure that it also depends on the main model you're using I
+[1:25:37] guess right like if you're using if your main model is like 400 billion
+[1:25:40] parameters you could probably get away with using a bigger drafter model to
+[1:25:43] make sure that you get higher acceptance rate. So it's you got to find the right
+[1:25:48] balance essentially. Yeah.
+[1:25:55] Cool. Um, do we have any other questions over there? One more
+[1:26:02] before you jump in. >> Yeah, I just had a question. How is the
+[1:26:06] draft model trained? Like is it distillation or something else?
+[1:26:10] >> It's essentially distillation. Uh, so you take the big model and you know you
+[1:26:15] distill all of its capabilities. You create a data set and then you train the
+[1:26:19] uh drafter model using that. And a lot of times actually what's there's
+[1:26:23] different techniques to do this. Uh the other techniques you'll see is the draft
+[1:26:27] model is trained alongside the main model. Uh so that way that's another way
+[1:26:31] of doing it and a lot of labs will actually give you a drafter model uh
+[1:26:35] inside of the same package. So you don't have to essentially download a second
+[1:26:38] model and run it. Um so there's a couple of different ways of doing it. Uh but
+[1:26:42] probably the best way is train alongside it and then that way you don't have a
+[1:26:45] lot of issues and acceptance rate sort of stays high.
+[1:26:50] Cool. Um, we'll jump into module seven. So, here I want to talk about some of
+[1:26:55] the different flags that you uh should care about when deploying using VLM and
+[1:27:00] what and how you want to get the saturation to be as high as possible.
+[1:27:03] Saturation meaning we want to get the GPU to work as hard as possible as long
+[1:27:07] as possible. Uh, and because you want to get your money's worth if you're renting
+[1:27:12] a GPU or if you're buying a GPU, you want to run it uh as much as possible.
+[1:27:16] So
+[1:27:20] uh we will stop here. So uh one of the concepts I want to talk about uh if you
+[1:27:27] remember previously we were looking at the 34 uh 32 concurrency and 64
+[1:27:32] concurrency. We saw a steep increase in the latency and the reason for that is
+[1:27:37] essentially you the throughput at some point is going to flatten out and but
+[1:27:43] the uh but the latency can keep increasing if you keep increasing the uh
+[1:27:48] concurrency. So you essentially want to find the sweet spot and uh that is
+[1:27:52] something that VLM sort of lets you kind of tweak and make sure that you find
+[1:27:57] that sweet spot and once you do find it you can set the right settings for it.
+[1:28:02] Um but but essentially you want to find the inter not so not the intersection
+[1:28:07] but essentially right before where the throughput gets to like the flat state
+[1:28:13] but the latency is like still acceptable enough. It's sort of like the point you
+[1:28:16] want to get to.
+[1:28:19] Um we will do a setup and then let's make sure our settings
+[1:28:26] are all good still. Serving model is up. Um, let me just double check if it's up.
+[1:28:36] Should be. Okay.
+[1:28:41] And then here we're again going to get um another we're going to do another
+[1:28:47] load test. So that way we know the data and then we can based on that figure out
+[1:28:51] where that uh where this point is. Essentially the we call it the knee um
+[1:28:56] where things are flattening but also the concurren based on concurrency uh the
+[1:29:01] time to first token is acceptable. Um once that is Oh, I think that should be
+[1:29:08] fine.
+[1:29:18] So you know the throughput is slowly increasing as concurrency is increasing.
+[1:29:23] That is acceptable. Um and then you also see the latency go up. That is also
+[1:29:28] acceptable but it's not going up drastically. Uh but we should shortly
+[1:29:32] see the big jumps uh with more um concurrency here. But while this is
+[1:29:40] running, any any other questions for anyone?
+[1:29:44] >> Go ahead. Oh, over there.
+[1:29:47] >> So my question was again on the previous speculative decoding. Uh just wanted to
+[1:29:52] know based on your experience um with like drafter model uh what kind of use
+[1:29:59] cases you have seen it to work really like for example with agent loops with
+[1:30:03] tool call or with coding like what kind of like use
+[1:30:07] >> uh agent loops it's really good at tool calling it's really good at u browser
+[1:30:11] use is the one particular use case that I use it for I want to automate a lot of
+[1:30:15] browser tasks um because there's still you know you don't necessarily get APIs
+[1:30:19] for everything and so you want to bridge that gap. Uh and uh yeah, the drafting
+[1:30:24] model helps you generate more tokens faster. So you see your browser agent
+[1:30:28] just essentially run around and do things faster. Uh so in a lot of ways it
+[1:30:32] does help. Uh I will say for browser use I probably see around 1.5x increase
+[1:30:37] whereas for coding I see like closer to 3x. So depending on your use case you
+[1:30:42] may see more or less and and things like that. Uh, and a followup on that one.
+[1:30:47] Are there any benchmarks like more trust me bro like coding fire ship?
+[1:30:52] >> There there's definitely benchmarks out there. I I'm I'm personally a little
+[1:30:56] skeptical of benchmarks whenever I see them. I never get the same results. I
+[1:31:00] don't know if people agree with that here. Um, so, um, yeah, for the for the
+[1:31:04] most part, like you know, you want to do your own testing and see what works for
+[1:31:08] you because it very much depends on your use case because the acceptance rate is
+[1:31:12] going to be different depending on your use case, what you're using it for.
+[1:31:16] >> Thank you.
+[1:31:20] >> Um, yeah. Any other questions? >> Mic check. Mic check. How's it going? Um
+[1:31:27] do like big models like codeex or cloud like do they use this type of the coding
+[1:31:35] like have they published that they use these patterns or is this more like for
+[1:31:39] open source if you're training your own stuff or running inference
+[1:31:43] >> I don't know the question to if they do it or not um I would imagine they do
+[1:31:48] sort of like free performance but uh for for the open source yeah this is
+[1:31:52] particularly for the open source all the open source big models that you want to
+[1:31:56] use all the Quinn models, the GLM models, Kimmy models, they all have
+[1:32:00] specular decoding uh drafter models available that you want to use.
+[1:32:04] >> Is there like a main drafting model that they use for example for like DeepSseek
+[1:32:09] or GLM? >> Deepseek actually came out with a new uh
+[1:32:14] thing yesterday I believe or the day before. It's called DSpark. It's like
+[1:32:17] their own technique for doing specular decoding in a more dynamic way.
+[1:32:21] Essentially they're figuring out how so here our configuration is static right
+[1:32:26] like we say we're going to generate four tokens at a time uh but with deepseek's
+[1:32:30] way of doing it they are making it dynamic meaning you know it on on the
+[1:32:34] fly sort of decides oh I'm going to generate only two tokens or I'm going to
+[1:32:37] generate four tokens or five tokens depending on the acceptance criteria
+[1:32:41] depending on the GPU load and all all sorts of metrics. So yeah, every every
+[1:32:45] model uh every lab has like their own way of doing it as well and you probably
+[1:32:50] want to stick to that but you can also experiment. For example, the Quinn
+[1:32:53] models uh Quinn lab doesn't release the Dlash models for drafting but these are
+[1:32:59] released by uh a third party lab but they work quite well with them. So you
+[1:33:03] sort of have to test it out and see. >> Thank you.
+[1:33:08] >> Yeah, I think this is hanging right. >> Yeah, I would check the pot.
+[1:33:13] Yeah, might have killed a cluster here.
+[1:33:19] Uh >> oh, I can't type. Uh
+[1:33:21] >> oh,
+[1:33:24] >> this was working well. >> Refresh.
+[1:33:28] [laughter]
+[1:33:31] >> Let me create the tab again. Okay. Um well, something is wrong.
+[1:33:40] It copied a URL and opened in a new tab. See what happens.
+[1:33:45] Let me open a new tab. I wouldn't close that one.
+[1:33:55] You know, in all the testing that has not happened, it happened today.
+[1:34:02] Can I at least scroll through and go through different things? Okay, at least
+[1:34:06] I can scroll scroll through
+[1:34:13] um
+[1:34:17] you know since uh the cluster decided to take uh a vacation uh I'll sort of go
+[1:34:23] through the content that I was going to cover. Um the main point of running this
+[1:34:27] benchmark here was to kind of show where that knee is meaning where you see the
+[1:34:31] max throughput. Uh if we go back to this diagram where you see the max throughput
+[1:34:36] while making sure you are seeing the lowest uh tokens uh lowest latency for
+[1:34:43] token generation. Um and that that is that essentially limit was at 32
+[1:34:49] concurrency. Um because anything above 32 concurrency you'll see uh the token
+[1:34:55] generation is going to be kind of the same. It's not going to change much. uh
+[1:34:59] the throughput is going to be the same but but the latency is going to go
+[1:35:01] drastically up and you don't want that. Uh so that's sort of like the limit you
+[1:35:05] are hitting. Um and that is important information that we need to keep in mind
+[1:35:10] and look at when we're deploying these things. Uh and if
+[1:35:16] >> yeah you can go to 100. Go to look at the spreadsheet
+[1:35:21] >> 100. >> Yeah, go to 100 and then just continue
+[1:35:24] from >> Yeah.
+[1:35:25] >> seven or eight. Where is it?
+[1:35:35] >> There you go. >> All right. Well, this one's working.
+[1:35:37] That's good.
+[1:35:45] All right. Cool. So, we'll jump into eight. Um, let me also
+[1:35:54] [laughter] open up Who's doing it?
+[1:36:05] >> Okay, so for module A, we're going to talk quickly through um what sort of
+[1:36:10] flags and knobs you can tweak to make sure that you can sort of get above that
+[1:36:15] limiting point that we were talking about at 32 concurrency. You're sort of
+[1:36:18] seeing that limit and how do we kind of get beyond that and what things you need
+[1:36:22] to keep in mind when thinking about this. Uh so for this one I'm sort of
+[1:36:26] going to give you guys um a thinking model is essentially you want to measure
+[1:36:31] and that's why with a lot of different cells I was I keep running load tests
+[1:36:35] and it's super important to run those load tests to see what your performance
+[1:36:38] is like and any changes you're making how is that changing the performance is
+[1:36:42] it making better is it making it worse um and in what particular metric it's is
+[1:36:46] it making worse right like if is it if the throughput keeps going up or stays
+[1:36:51] the same but like the latency is changing something is either correct or
+[1:36:54] wrong there. So, that's something we have to keep in mind. Um, and there's a
+[1:36:58] bunch of different knobs you can sort of like uh tweak in VLM to make it better.
+[1:37:03] But the main four ones are again the GPU memory utilization. You want to make
+[1:37:07] sure that you're setting that correctly depending on your use case. Again, if
+[1:37:11] you're running multiple models on the same GPU, you might want to keep it low
+[1:37:14] and that's a trade-off you're making. But if you're only running a single
+[1:37:17] model and you want to make sure that it's getting the best performance
+[1:37:20] possible, you want to bump that up to 0.9 or point even 0.95.
+[1:37:25] Uh the other thing is you want to make sure that uh the max numbum sequences uh
+[1:37:30] is set to a good limit as well. This is something you have to figure out by
+[1:37:34] testing. Uh in our particular deployment, if you look at the VLM.yaml,
+[1:37:41] um we start with 32 sequences, right? So what that is doing is it's telling VLM
+[1:37:47] that it can only process 32 requests at a time uh and not more than that. And if
+[1:37:52] you do more than that, you're going to see some performance uh degradation
+[1:37:54] there. Um so there's a lot of different flags, but those are like the key ones
+[1:38:00] that you want to keep in mind. You want to make sure that you're setting the
+[1:38:02] model length to the correct length as well. Uh and then you know you want to
+[1:38:07] make sure you're the batch tokens are also set to the correct length. um you
+[1:38:11] don't want to you want to keep it bigger if you want to do prefill faster if your
+[1:38:15] GPU can handle it. You want to do it smaller if your GPU is a on a little
+[1:38:19] slower side and you can't handle it. Um but yeah, the idea is you want to change
+[1:38:24] one flag at a time. You don't want to change multiple things. Um and when you
+[1:38:28] change things, run the uh run the benchmarks and see uh what performance
+[1:38:33] you're seeing. See measure it and then make assumptions on what you should do
+[1:38:37] next. Um, kind of go through it quickly here.
+[1:38:42] We have about what 10 minutes left.
+[1:38:49] Uh, oh,
+[1:38:54] >> I think we lost the P PVC. I think that's what happened. I got
+[1:38:58] >> Oh, it got the different one. Yeah, I need to actually change this. Rerun
+[1:39:01] this, I think. Um,
+[1:39:07] let me actually just change this in here.
+[1:39:11] This was supposed to be like sequential, but other Jupyter notebook died. So,
+[1:39:16] change that and then that should work. Um, again, like I talked about, there's
+[1:39:20] different knobs uh that you want to tweak um and see what happens. But we'll
+[1:39:25] get sort of the measure. We'll measure the baseline and then we'll change a
+[1:39:29] couple flags and see what happens next. Um,
+[1:39:33] does it say work? Okay, cool. There you go. It's working.
+[1:39:40] While this load test is running, any other questions
+[1:39:44] anyone has? >> Excuse me.
+[1:39:52] >> I noticed that there's a definite fall-off when we're optimizing the
+[1:39:56] model. Like here, the 32 to 64, huge falloff. Uh is that when you would
+[1:40:02] decide that maybe we should scale the hardware or is that something that
+[1:40:07] you're confident you can still tune it further?
+[1:40:10] >> Uh essentially is this is this the ceiling?
+[1:40:14] >> Yeah, you figure out the ceiling by doing mathematics. I think in some of
+[1:40:18] the previous modules Dwan covered uh like what the max ceiling can look like
+[1:40:22] for tokens per second what the throughput looks like and um you know
+[1:40:27] what sort of expectations you should have for the deployment and if you are
+[1:40:31] like seeing those max expectations that's probably the maximum limit of
+[1:40:35] your hardware and then you probably have to get additional hardware or better
+[1:40:38] hardware to do so. Uh so yeah there there is sort of a limit you know
+[1:40:41] there's only so much you can tune but you're trying to squeeze as much out of
+[1:40:44] the GPU as possible. You want to share the slides before you
+[1:40:50] continue?
+[1:40:54] Share the slides real quick.
+[1:41:02] >> The server I can leave it up for a little bit,
+[1:41:06] couple hours. I'm not going to leave it up just because you do have access to
+[1:41:10] GPUs. Um but what what I am going to give you if you scan this QR code you'll
+[1:41:15] get access to the PowerPoint as well as the repo if you want to spin this up in
+[1:41:20] your own AI cloud account or if you want to run on your laptop you can do that.
+[1:41:25] So if you scan this QR code it'll take you to a site that has all the resources
+[1:41:29] and if you don't have a cloud account you can sign up and you get $300 in
+[1:41:34] credits with a free account. So that's everything you need. And if you all have
+[1:41:39] questions, both of our contact information is here. Omar, I'm Dwan
+[1:41:43] Lightoot. >> Yeah.
+[1:41:44] >> And yeah, with that being said, if you all scan the QR code, I'll let Omar
+[1:41:48] finish it up. I just want to make sure you all get this before people started
+[1:41:51] to leave. Thank you. >> We'll leave it up there for a couple
+[1:41:56] more minutes gets it.
+[1:42:01] >> Yeah, go ahead.
+[1:42:18] personal assistant. Um, so
+[1:42:23] >> so you can use llamas. It depends on your hardware. I think that's like the
+[1:42:27] first thing I would look at. Um, >> no problem. Thank you.
+[1:42:31] >> Oh, you have both. for the sake of the argument, let's just say you have the
+[1:42:34] best GPU. Let's just say you have um >> Yeah. Yeah. You have the latest
+[1:42:40] Blackwill GPU. Um you know, I think for testing and doing like figuring out what
+[1:42:45] model you want to use for your use case, I think it's good to use Olama and Llama
+[1:42:49] CPP to quickly spin it up and try it out and see what happens. Uh but once you
+[1:42:54] have a model that you know I'm going to use for sure for this use case and this
+[1:42:57] this is working great you probably want to switch to uh VLM sg lang or one of
+[1:43:01] these other model uh runtimes. Uh reason being they allow you to run at higher
+[1:43:07] concurrencies and give you more performance out of it. So if you have a
+[1:43:11] single agent running I think it's fine to use Olama. It's not a big deal
+[1:43:14] because you only have one request going in at a time. But if you let's just say
+[1:43:18] you're running like 20 agents and you want to run it parallel uh
+[1:43:26] Yeah. Yeah, you can set up speculative decoding with VLM. I don't think Olma
+[1:43:31] supports speculative decoding as far as I know, but I could be wrong. Um, but
+[1:43:35] yeah, it when you want to get the max performance out of your hardware, you
+[1:43:38] definitely want to do that.
+[1:43:44] >> Yeah, >> I actually don't know if there's a
+[1:43:48] diffusion uh LLM. Is there an open source diffusion model right now
+[1:43:52] available?
+[1:43:56] >> Yeah, Lana. Yeah, I mean I think VLM supports it. So I think you you would be
+[1:44:01] able to run it on VLM. Uh Olama, if supports it, you can as well. Um yeah,
+[1:44:08] that's definitely possible. Okay, we'll switch back to the module
+[1:44:13] and kind of go through it. Um, again like I was saying, at 32 you're seeing,
+[1:44:18] you know, good performance, but at 64, uh, we're going at, you know, the the
+[1:44:23] throughput is sort of staying the same, if not going up, but we're seeing, um, a
+[1:44:28] significant increase in latency. And to kind of get around it, um, one of the
+[1:44:33] things I want to talk about is the max num sequence. Again, this is sort of,
+[1:44:38] uh, how many requests VLM is able to process at one time. It's sort of
+[1:44:42] setting that flag. If you want to have a lot of uh requests being processed in
+[1:44:47] parallel uh then you want to sort of increase this amount. So currently I
+[1:44:51] believe it's set up at 32. So we can bump this up to
+[1:44:56] 128 and then we can run this deploy it and
+[1:45:02] see how that changes the performance.
+[1:45:09] Okay, it changed a lot of things here.
+[1:45:17] Yeah, [snorts] once this comes up, uh, we can do
+[1:45:20] another test and, um, and you you'll you'll see the the limitations that
+[1:45:26] we're seeing here at 32 is going to go away and you'll actually see the latency
+[1:45:30] be manageable again um, at higher concurrency levels as well. So, this is
+[1:45:35] sort of like the loop you want to go in. You want to find the right flags for
+[1:45:38] wherever the bottleneck is. find the bottleneck, figure out why that is
+[1:45:42] happening, what flag you can tweak uh to make sure that you're kind of overcoming
+[1:45:45] that bottleneck. Um
+[1:45:49] it's come up. That's going to take a little bit of
+[1:45:53] time. Um any questions? One more over there.
+[1:46:02] >> Potentially bursty traffic >> um at times. Um
+[1:46:07] >> Oh yeah. Is there such thing as like bursting to serverless? Is that the
+[1:46:11] domain of you know model routing layer on top? Like what is the pattern for
+[1:46:17] >> Yeah. Um I mean autoscaling is one of the patterns like specifically I'll tell
+[1:46:21] you in LKE uh you can have uh dynamic like autoscaling. So it can scale up uh
+[1:46:29] depending on your needs depending on bursty traffic. it can scale up to you
+[1:46:33] know maybe use a node that has four GPUs instead of one because maybe that
+[1:46:36] handles it better right so you can automate a lot of those things uh to
+[1:46:40] make sure that you're doing it well and the other part of it is like you can
+[1:46:43] also build like some statistical models to make sure that you kind of understand
+[1:46:47] your traffic patterns over a long horizon and then the uh the cluster can
+[1:46:52] also dynamically like sort of predict your burstiness in some ways and then
+[1:46:57] can also scale based on that too >> if you got your browser I can show you
+[1:47:00] where it's at >> browser
+[1:47:02] you open your browser, I'll take it to you.
+[1:47:04] >> Okay, so this one is successfully rolled out.
+[1:47:07] >> Um, and then we'll do a quick load test and
+[1:47:13] once that is run, we can see more.
+[1:47:18] All right. Uh, any other questions? Most folks are gone, but
+[1:47:23] >> yeah, like foot H.
+[1:47:29] >> Yeah. 32. That's where we saw the limit last time. Once we get to 64, we should
+[1:47:36] see uh that it should improve. Okay. So, there was a big drastic improvement. The
+[1:47:42] throughput actually went up quite a bit. Um so, it's at 1100 tokens per second.
+[1:47:47] Whereas previously, if we look at it over here at 64, we were at 800 tokens
+[1:47:52] per second and then the latency was uh 2,000 milliseconds. But now after the
+[1:47:57] change that we made um it is uh 1100 tokens per second and then the latency
+[1:48:04] is uh 800 milliseconds. So it's gone down the latency has gone down quite
+[1:48:09] drastically and then we have also increased the throughput quite
+[1:48:11] drastically. So the these are the sort of the tuning you can do uh over time to
+[1:48:15] make sure that things are running well uh once you have it up and running and
+[1:48:19] you can do this for your particular use case. Maybe you're not going to have uh
+[1:48:23] six uh you know 64 concurrent requests coming in for a particular use case but
+[1:48:27] maybe you are. So um you have to decide based on your use cases
+[1:48:32] >> your concurrency one higher than before like was that a trade-off you just did
+[1:48:37] >> concurrency one I mean it can be a little higher or lower. It's not going
+[1:48:41] to be the same all the time but for example before it was 37 but now it's
+[1:48:46] 35. So it's a little bit of deviation that happens with running models, but it
+[1:48:53] should be plus minus two sec two tokens there. Um we're also running the full
+[1:48:58] precision model now. We're not we're no longer running the FPA because we had to
+[1:49:01] switch the notebook. So that's the other reason why you're seeing it go from like
+[1:49:05] 50 something tokens to 30 something tokens. Uh so that's the performance
+[1:49:09] that we're seeing there.
+[1:49:14] But but yeah, that is all I have. That is one flag you can tweak. There's also
+[1:49:17] all sorts of other flags that I implore everyone to take a look at. The workshop
+[1:49:21] kind of goes through it as well. But I think we're on time and I'll give it
+[1:49:28] back to Dorne. >> Yeah. Thank you all for attending our
+[1:49:32] session today. If you have not scanned the QR code, the code, the repo, the
+[1:49:38] PowerPoints are available on this site. Feel free to start a free AMA cloud
+[1:49:43] account. My name is Dwan Lightoot and I'm joined by my colleague Omar and we
+[1:49:47] thank you all for joining us today. Feel free to ask us questions after this
+[1:49:51] session. Thank you.
+[1:50:07] >> [music]

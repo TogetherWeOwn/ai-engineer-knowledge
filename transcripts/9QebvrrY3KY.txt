@@ -1,0 +1,385 @@
+# title: Claude for Long-Horizon Tasks — Lance Martin, Anthropic
+# source: https://www.youtube.com/watch?v=9QebvrrY3KY
+# speaker: Lance Martin, Anthropic
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T07:10:54Z
+# sha256: 81b5efe465ff63bed95b6212386c09c9ec7d9fb5f6b80e5acab777785f5a8d85
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:01] [music]
+[00:12] >> Good to go. All right. Well,
+[00:16] take a quick sip and then let's start. It is great to be here. Um this is like
+[00:21] like my third year coming to this conference and I always really enjoy it.
+[00:25] And thank you for coming to this workshop. I know there's many
+[00:27] interesting talks. Let me talk a little bit about um
+[00:31] our view of async agents at Anthropic and some things we've been up to lately.
+[00:36] So, this is kind of a way I think about models in product. So, you can think
+[00:40] about Claude as a light source and you can think about products as windows that
+[00:44] allow the light to pass through. And what's kind of interesting is over
+[00:48] time, the window that you need to actually kind of see the light of the
+[00:51] model kind of shifts. And we've seen this over the past few
+[00:56] years. So, I'm plotting here different Claude models and their task horizon.
+[01:00] So, how much autonomous work can they do over time?
+[01:04] And you might recall back in like the Opus 3 days, this was kind of like 2024,
+[01:09] models could only do, you know, maybe 10 to 20 minutes of autonomous work. This
+[01:13] is measured by meter. And in that regime, only certain product
+[01:17] surfaces made sense. Things like autocomplete, things like chat, where
+[01:20] your human is very in the loop cuz the model's really only doing a very short
+[01:23] amount of work before you're steering it.
+[01:26] Now, the past year we saw the rise of synchronous coding agents like Claude
+[01:29] code. And this is, you know, a kind of a shift because then models could do maybe
+[01:33] an hour of work. So, it made sense to have them run, but
+[01:37] typically locally, where you could still steer them easily.
+[01:41] And it's kind of interesting because during this regime, I remember efforts
+[01:44] and I was involved in some efforts to build kind of async agents.
+[01:48] But when models can only do like an hour of work, async as an experience is kind
+[01:52] of bad. Um the model goes off and it like hits an error and it comes back to
+[01:57] you over a short period of time. In order to really unlock async, we
+[02:00] needed longer task horizons. And so we're starting to see that now.
+[02:06] And kind of with this shift in capability and time horizon came a shift
+[02:10] in the API surfaces. So if you look at the lower left,
+[02:15] Messages API came out like 2 years ago. It's basically prompt response. It's
+[02:19] great for building harnesses, but it's a very simple API. Again,
+[02:24] you're just passing in a message and you get a response out.
+[02:27] There's no sense of deployment with that. So you basically take Messages API
+[02:30] and you can roll your own harness, you can deploy that harness, and you have an
+[02:33] agent. Now over the past year, we saw the rise
+[02:37] of, you know, coding agents in particular. So we released Agent SDK. So
+[02:40] that's basically a way to programmatically call Claude code.
+[02:43] And that's like basically us giving you a harness.
+[02:47] But over the past few months, since April, as we've seen longer longer task
+[02:51] horizons, we released a new API called Managed Agents,
+[02:55] which basically packages both the harness as well as all the managed
+[02:58] deployment infrastructure for you. And I'll talk about some of the themes
+[03:02] that underpin this new uh surface, Claude Managed Agents, and and some of
+[03:06] the themes that kind of extend beyond just Managed Agents broadly to think
+[03:10] about this kind of new type of asynchronous agents, uh which can apply
+[03:13] of course to Claude and other types of kind of longer running long horizon
+[03:17] agents. So theme one is decoupling the brain
+[03:21] from the hands. Um
+[03:24] so when we first set out to build Managed Agents, we started with the
+[03:27] container. We put the harness in the sandbox in the
+[03:30] same container. Now the problem here is, what happens if
+[03:36] the harness dies or the container dies? What we saw is you actually lose the
+[03:40] session. So basically, this architecture is kind
+[03:44] of tricky for long horizon agents because what can happen is your agent's
+[03:48] running, and And container dies, you lose everything with it.
+[03:54] Also, as models get more capable, putting the credentials in the same
+[03:58] container with the agent itself can be problematic.
+[04:02] So, for example, giving Claude access to a bunch of your secrets and letting it
+[04:05] run for 10 hours and not watching it can be a little bit spooky and have some
+[04:08] security concerns, especially as models get extremely capable.
+[04:13] So, for this reason, we kind of decouple what we call the brain, that's the
+[04:16] harness, from the hands, the execution environments, and manage agents to set
+[04:19] up like this. So, the story here is that the harness
+[04:25] becomes a stateless process that talks to a session. The session is
+[04:30] an append-only event log and that can reach out to hands, which
+[04:34] are just containers. So, that's just Those are sandboxes
+[04:38] where work is done. And one thing that's interesting is
+[04:41] Claude is increasingly capable of managing many hands.
+[04:44] So, that is you can give one harness access to many different containers to
+[04:48] perform to execution. And Claude can manage this very easily
+[04:52] and and and and effectively. If the session, uh sorry, if the harness
+[04:58] dies or sandbox dies, it's completely fine because the session is always
+[05:03] backed up in this append-only log and credentials are never actually added to
+[05:07] the sandbox. They're stored in a separate vault. So,
+[05:10] this decoupling actually makes it quite reliable and safe, particularly for
+[05:14] long-horizon tasks. And this is kind of one of the core ideas that underpins
+[05:17] manage agents architecturally. And I think an interesting thing that
+[05:21] falls out of this is related to you guys may have kind of seen or come across the
+[05:26] recursive language models work. The session becomes an external context
+[05:30] object that the model interrogates. And this has all sorts of benefits for
+[05:35] context management. So, you think about it, when you're doing something like
+[05:38] compaction, you're choosing some logic to retain some amount of context, and
+[05:43] naively in a typical in a kind of a typical step, you're discarding all the
+[05:46] context that you didn't compact. In this architecture, and also more
+[05:50] broadly with recursive language models, the idea is that the context object is
+[05:54] persistent and is unadulterated. So, it's append-only.
+[05:58] And the model can always go back and fetch old context. So, basically creates
+[06:02] a very very nice architecture for context engineering because the core
+[06:06] context object is immutable in the sense that it's it's it's non-destructive
+[06:11] and you can only and you only append to it over time.
+[06:14] So, we've seen this be to be quite nice in terms of long horizon context
+[06:17] engineering as well.
+[06:20] So, the second theme is use verifiers. And one of the problems that we've seen
+[06:28] with Claude and other models in general is that when you ask them to do a bunch
+[06:32] of work and then say, "Okay, grade your work."
+[06:37] If that same context is being used to both do the work and grade, you can get
+[06:41] lots of odd artifacts and confabulation and and basically odd behavior.
+[06:47] For example, this is just an image showing you can think about that that
+[06:50] context window is filled with lots of different information and the model is
+[06:53] grading itself, often it's not properly tuned to do kind of critical
+[06:58] verification. And so, what we found is it's quite
+[07:02] effective to separate verification into a separate context window.
+[07:06] This is a very general trend. We talked about it in a number of
+[07:09] different engineering blogs. Um and the reason is the verifier
+[07:13] context can be tuned very specifically for the critical verification task.
+[07:18] >> [snorts] >> And so, the way this works in practice
+[07:20] is when you build loops,
+[07:23] you can have a loop of a build context and a verifier context. And this can be
+[07:25] a build agent verifier agent. And what happens is
+[07:28] the verifier has some goal or rubric
+[07:32] and it's verifying the result or work of the build agent. And this continues in a
+[07:37] loop until verification is complete. And this is really the big idea behind
+[07:41] this whole loops trend that you might have heard about and we found it to be a
+[07:44] kind of a very powerful paradigm especially for working with some of the
+[07:47] higher capacity models. And here are some of the primitives. So
+[07:51] in Claude code you have goal and manage agents you have outcomes and the
+[07:55] principles are really the same. You're setting up a measurable end state
+[07:59] in both cases. You're using an independent context
+[08:02] model. You're using independent context to
+[08:05] grade over the course of this loop.
+[08:09] The loop can run and you only exit the loop until this independent verifier has
+[08:13] verified that it has the outcomes or outputs that you want. That's the key
+[08:16] idea. Now let me tell you a story about how
+[08:20] I've used this. So this is a kind of a fun and interesting challenge called
+[08:23] parameter golf. It's a benchmark that set up that was put up by Open AI.
+[08:28] And it tests models ability to effectively do kind of ML research.
+[08:33] So it asks the model to basically take a small um kind of model and train it in
+[08:40] with eight with eight 8100 GPUs in less than 10 minutes. And what you see on the
+[08:46] Y is basically you can think about it as loss. So lower is better, okay?
+[08:51] And what I did was I set up a kind of a verifier loop using manage agents and
+[08:55] outcomes to test the ability for Opus 4.7 and one
+[09:00] of our frontier models like mythos class models on this task. And what you see is
+[09:06] basically I allow the model to continue to iterate until the outcome that I
+[09:10] specify is is satisfied which is it finished exactly 20 iterations and kind
+[09:17] of it kind of met all the experimental criteria as defined by the benchmark.
+[09:21] What you see is the frontier capability models
+[09:25] are extremely good with this pattern of kind of loops in software and and kind
+[09:29] of verification because what happens is instead of
+[09:35] encoding steering me and into like me as the human, you're encoding the signal
+[09:40] into the environment. So, the model can self-correct when it receives feedback
+[09:44] from, for example, the verifier. And using this kind of paradigm with
+[09:48] very high-capacity models, you can get very strong results.
+[09:52] So, the main point I'm trying to make here is that this paradigm of loops,
+[09:56] which a lot of people been talking about today,
+[09:59] paired with very capacity models is a very good general primitive for
+[10:03] long-running asynchronous work. That's really the key point here.
+[10:07] >> [snorts] >> Now, let me talk another about another
+[10:11] theme of self-learning. So, the human brain has two kind of
+[10:18] interesting systems for memory. So, one is as you go about your day, the
+[10:22] hippocampus is kind of writing traces of kind of short-term, very fast kind of
+[10:26] experiential memory. Like, you might remember what you had for lunch today.
+[10:29] You had lunch an hour ago, you kind of remember, that's kind of written to
+[10:32] short-term memory. When you go to bed at night, though, an
+[10:35] offline process or out-of-band process, dreams. And dreaming stores certain
+[10:41] important details to long-term memory in the cortex. So, for example, tomorrow,
+[10:44] you might not remember what you ate for lunch today. That's kind of a local
+[10:46] trace. But, like, if you had a very important experience today, maybe this
+[10:50] talk, maybe not this talk, but if you had an interesting experience today,
+[10:54] that might be written to long-term memory. That's kind of the point. These
+[10:56] two subsystems in human work like this. And we've actually found memory systems
+[11:00] with Claude actually can employ these same two principles.
+[11:04] So, this is showing Claude's capacity as an in-band memory writer. So, you
+[11:10] basically give Claude memory tools. And when I say memory tools, I mean it's
+[11:13] basically the ability to write to a file system, that is basically a memory
+[11:16] directory. That's really it. Now, this is showing some work on Claude
+[11:21] plays Pokémon with Claude's on it 3.5. And here's the key point. When Sonnet
+[11:26] 3.5 is given this access to a memory directory, and it can write memory,
+[11:30] {quote} in-band, as it progresses through this game, it's not very good.
+[11:35] So, the memories it writes are pretty crappy. It's kind of um
+[11:38] it's kind of uh tactical notes. It's it's not very
+[11:42] strategic. And the game progress is quite limited.
+[11:46] But with more recent models like this is looking at 4 6,
+[11:50] the notes are much more strategic and game progress is much further. So,
+[11:53] the key point I'm making here is that Claude has gotten much better at this
+[11:57] in-band memory writing across model generations.
+[12:02] And this is another way to show that same result.
+[12:05] So, this is a benchmark that I ran called Continual Learning Bench. It's an
+[12:08] open-source benchmark. I took one of the tasks. This is a task that basically
+[12:11] asked the model to perform a sequential question answering with a SQL database
+[12:16] and it can write memory in between each step.
+[12:19] And what you see is basically the performance improves across models.
+[12:25] Um and so what this is kind of showing is
+[12:29] that models get natively better at this in-band memory writing with respect to
+[12:34] model capability. >> [snorts]
+[12:36] >> And some of the most interesting things I found from this are that the main
+[12:39] differentiation between There we go. Um the main differentiation
+[12:46] between like a lower capacity model and a high capacity model is kind of this
+[12:50] distillation step. And so, basically, higher capacity models have a better
+[12:54] sense of like what abstraction to save to memory that'll be useful later.
+[13:00] Like they're not just writing a specific fact. They're writing how do I how does
+[13:03] this generalize to future sessions? That's kind of the key difference that I
+[13:07] found that higher capacity models kind of have when they're writing memory. So,
+[13:11] this is a very important thing to keep in mind that models are getting better
+[13:13] better and better at this kind of in-band memory writing across model
+[13:16] generations.
+[13:19] Now, there's a little trick here which is very important. So, we talked about
+[13:22] kind of in-band memory and we talked about dreaming. So, at night I dream and
+[13:26] I write things to like long-term memory. Dreaming is very important because when
+[13:30] I'm writing memory in band over the course of a day over the course of a
+[13:33] session, sometimes you can write incorrect memories.
+[13:37] And or you're writing things that are
+[13:40] locally optimal, but not globally optimal. So, you're writing over the
+[13:43] course of a task to like kind of help you solve that task, but not necessarily
+[13:49] looking forward to future tasks. This is a very important nuance in this
+[13:53] process of dreaming is is kind of an offline or out of band process that
+[13:56] we've used to consolidate and improve memory.
+[14:00] And I want to show you a fun example that I've used dreaming for.
+[14:04] So, this is again Pokémon. And this is I played a lot of games of
+[14:09] Pokémon with Claude to find this. So, this was a very hard one lesson, so
+[14:14] I hope you appreciate it. Okay, here's the point. So, basically what happened
+[14:18] is Claude wrote an incorrect memory, okay?
+[14:23] And what happened is this incorrect memory was related to the location of
+[14:27] The details don't necessarily matter. Uh
+[14:30] the point is that this incorrect memory causes Claude to mislocalize itself or
+[14:35] Pokémon to mislocalize itself, and it falls through this trapdoor,
+[14:40] okay? That's the key point. So, it writes this incorrect memory. This
+[14:43] incorrect memory causes it to mislocalize in the game, and it falls
+[14:47] down this trap. This is very consistent. So, I saw this in five replicates. Five
+[14:50] out of five replicates with raw memory store fell down this trap. With the
+[14:55] dreaming, this error is corrected, and it's able
+[14:58] to properly localize itself and not fall fall down this trap. And I'll show you
+[15:03] kind of a fun visualization of this. This is looking at kind of memory traces
+[15:07] or basically traces of game progress. So, going upwards on the Y axis is
+[15:12] improvement. That's like moving to the next level. Going down is backtracking.
+[15:16] So, what's interesting here, the no memory baseline, which is that
+[15:20] gray bar, kind of doesn't make much progress at all. It just kind of like is
+[15:25] stuck. It's like a particularly hard level, okay?
+[15:28] The memory, which is the orange, actually keeps falling down this
+[15:31] trapdoor and falls back. So, it backtracks. The dreaming traces though
+[15:36] consistently kind of fix this error in its memory and proceed to the next
+[15:40] level. So, this is a very practical example of how dreaming can kind of work
+[15:44] out of band on your memory store to fix corrections. Because what it does is it
+[15:49] looks at your memory store and it looks at all your prior traces or sessions and
+[15:53] kind of can find and correct errors. That's the key point and that's why the
+[15:56] dreaming process can be very helpful because in band, while Claude is writing
+[16:00] to memory, it can make mistakes. And those mistakes get stuck in memory
+[16:03] unless you have an offline process to kind of correct them. That's the key
+[16:06] intuition. Um
+[16:09] and theme four, and I'll open up for questions after this, is what I think um
+[16:14] is kind of this trend that we're going to see moving towards org-level
+[16:17] harnesses with async agents. And
+[16:21] so, we released Claude Tag and a lot of the reaction was like, "Ah,
+[16:26] Slack bot." And like, look, I have actually created
+[16:29] a lot of Slack bots myself. I understand not every Slack bot is particularly
+[16:32] interesting or great. In fact, I've created many Slack bots that are quite
+[16:35] bad. But
+[16:37] what's interesting about Claude Tag is not the fact that it's accessible
+[16:41] through Slack. What's interesting about it is the fact that it has a very very
+[16:44] rich kind of system underneath it, which I want to just cut touch on briefly.
+[16:49] And in particular, what's interesting about it is it represents what I
+[16:51] consider an org-level harness. So, agents historically have been kind
+[16:55] of single player. So, you have an an agent like Claude code on your machine
+[16:59] with your local context that you've tuned and configured for yourself.
+[17:03] What's interesting about Claude Tag is it is a harness that everyone in the
+[17:06] organization has access to and can use. So, it is a multiplayer harness.
+[17:11] And what's nice about that is it has its own identity. Its identity and
+[17:14] credentials are not tied to a given user and has access to organizational level
+[17:18] context, not just my local context. This has many interesting and useful
+[17:23] implications. Including the ability to like check
+[17:26] others work before you do an experiment, the ability to kind of deduplicate
+[17:30] findings, the ability to like do internal research, the ability to give
+[17:34] everyone access to kind of a a very well developed harness on day one, whereas
+[17:38] when you your own personal harness, often new employees takes them weeks or
+[17:43] maybe even months to kind of ramp up fully to configure all the right
+[17:46] connectors and so forth. So, org level harnesses are real leveler of the
+[17:50] playing field and I think it was people kind of saw the Slack bot piece,
+[17:53] but they didn't really appreciate the depth of kind of
+[17:56] that the depth of benefit you get from building out org level harnesses. So, I
+[18:00] do think that was kind of important thing to note.
+[18:03] And I think we're going to see the rise of kind of harnesses that operate across
+[18:07] orgs, across many different users that can operate increasingly on longer async
+[18:11] async um
+[18:14] async agents that can operate on longer time frames. That's kind of one clear
+[18:17] kind of follow-up that we're I think we're going to see from this.
+[18:20] And another thing where I think we're going to see is that
+[18:24] asynchronous agents um are going to be increasingly proactive.
+[18:28] Uh so, typically with for example like local locally scoped agents, they tend
+[18:33] to be reactive. They're responsive to how you steer it. versus async agents
+[18:37] increasingly have the ability to steer proactivity. And that's one very nice
+[18:41] thing about Cloud Tag. Um where basically you can configure it
+[18:46] to tell you things when like looking at this org level context, alert me with
+[18:51] things I might need to know about. Um and this is a very important kind of
+[18:55] new kind of UX that I think is going to be more and more common with async
+[18:58] agents that kind of access to organizational context.
+[19:01] And of course multiplayer. So, the the ability for a single harness to be
+[19:05] steered by many many different people kind of concurrently is an important
+[19:08] shift in agent UX uh that I think uh will be quite
+[19:12] interesting going forward. So, um,
+[19:16] yeah, let me let me just open up for questions and um, thank you for
+[19:19] listening. >> [applause]
+[19:26] [applause]
+[19:30] >> Sure. >> Uh, one thing that we see sort of
+[19:33] empirically and also in the benchmarks is that the frontier models perform
+[19:37] better on these long horizon tasks than on the ones that have stacking. What
+[19:41] they need to keep in mind that this is not
+[19:44] What is your view on and like the guidance on it and like the right away
+[19:48] model? >> Yeah.
+[19:53] >> Um, what's your view on why that is and then how long the frontier will be able
+[19:58] to maintain that gap? >> I see. So, the question was kind of on
+[20:02] the the gap between the frontier models kind of on for example, a benchmark like
+[20:07] meter on like long horizon tasks. >> Yeah.
+[20:09] >> Okay. Um, so,
+[20:13] in the latest results that I saw from like for example, Codex like 56, I think
+[20:17] I'd also kind of is in that 12 plus hour regime on meter. So, I think you're
+[20:21] right that like the frontier models like the, you know, mythos class models,
+[20:25] strong models from Open AI kind of are in this like 12 plus hour regime.
+[20:29] Um, why is it that
+[20:34] non-frontier models are not kind of in that regime? I am actually not
+[20:37] necessarily sure. I do think I do think um,
+[20:42] in order to build agents that can effectively operate in this regime, it's
+[20:48] important to note that it's not just the model capability. Like for example, with
+[20:51] a Claude tag product, it's actually a combination of improvement in memory
+[20:55] because memory is very important. If you have agents working for for example, 12
+[20:58] hours, you want to make sure that your productivity preferences are well
+[21:02] encoded in memory. So, it knows when to reach out to you if it gets stuck for
+[21:05] example. So, memory is very important, security is very important, so
+[21:09] resistance to prompt injection. Um also like model architecture, like kind
+[21:13] of the agent architecture is very important, that decoupling of brain and
+[21:16] hand, so it's secure and safe and like resistant to failure. So, actually I
+[21:19] think to build real agents that can operate in
+[21:23] these long time horizons, a bunch of things need to come together in terms of
+[21:25] like architecture, infrastructure, security, memory. And
+[21:31] that might be why and and but Frontier Labs invested in all these areas, so
+[21:34] that might be why it's become a gap in terms of like the agent products that
+[21:37] we've released. And so we spent a lot of time, for example, building managed
+[21:39] agents to kind of have these kind of
+[21:42] considerations baked in. Yeah.
+[21:45] Sure.
+[22:05] Yeah, okay, this is interesting. Um the question was about um kind of
+[22:10] like the the best memory substrate, so like why file systems versus, for
+[22:13] example, databases. Um
+[22:17] this is kind of a subtle point that actually um
+[22:21] I want to think about carefully. So, I don't necessarily think that
+[22:28] it has to be the case that you use a file system for memory. I think what's
+[22:31] quite important that we've seen is that it's you want something that is highly
+[22:36] programmable with simple primitives that the model
+[22:39] can manipulate to like write, manage its own memory. So, for example,
+[22:43] a database could work fine relative to the file system.
+[22:47] But what I've seen doesn't work is when you specify the structure of memory for
+[22:53] the model very explicitly, whether that's in a file system or database or
+[22:56] whatever. Like a memory schema, I pre I kind of pre populate, here's the types
+[23:00] of memories you need to save. Cuz I think that ends up being not very
+[23:03] bitter lesson pill in the sense that models can learn to manage their own
+[23:06] memory much better than you can intuit these memory types for the model ahead
+[23:10] of time. So, I think what we've seen is that very general substrates for memory,
+[23:15] be it just your database or file system, are good because the model can manage
+[23:19] them freely versus a very very kind of like prescriptive
+[23:23] memory schema they are trying to pigeonhole the model into. That's when
+[23:27] you see performance drop. That's the key differentiation.
+[23:35] Right. That's the key point. Let the model
+[23:39] structure and maintain its own memory. Don't give it a prescribed memory
+[23:42] schema. And that's like a common failure because
+[23:45] models are getting good enough that they can manage their own memory much more
+[23:47] effectively than you can reason about types of This is like very classically
+[23:51] bitter lesson pill, but like you can Models can reason about their
+[23:54] own memory and context structure much better than you can prescribe for them a
+[23:58] way to structure their own memories. That's the key observation.
+[24:02] Yep.
+[24:07] Yes.
+[24:10] That's right. Exactly. General substrates for for memory
+[24:13] management. Yep.
+[24:19] Yes.
+[24:22] Okay. So, that's a good point. Basically, the question is
+[24:28] so, you do this dreaming thing. You look at the sessions, you look at
+[24:31] the memory store, you update the memory store. How do you know those are
+[24:33] correct? Um so, evaluations obviously are one way to
+[24:37] do it. Um this is kind of a fun anecdotal example from Pokémon showing
+[24:42] that like you can do perform corrections via dreaming.
+[24:45] The key point is that we've actually run a lot of different evals showing that
+[24:47] dreaming can indeed improve performance for very intuitive reasons as you see
+[24:52] here. But of course, evals are important in like your own context to confirm it's
+[24:55] actually worth the offline compute. Yep. I guess we're done. Thank you all.
+[25:16] >> [music]

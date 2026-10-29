@@ -1,0 +1,189 @@
+# title: Road to 5 Million Tokens: Breaking Barriers in Long Context Training — Max Ryabinin, Together AI
+# source: https://www.youtube.com/watch?v=TUnPNY4E2fw
+# speaker: Max Ryabinin, Together AI
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T08:31:36Z
+# sha256: 4907b9b1dd4175076e55841c10de13fc07faf04c35f86be4b531996e6ad12fe5
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:14] Everyone, my name is Max. I am VP of research and development at Together AI.
+[00:19] And today, I'm going to tell you about our research project, which is called
+[00:25] Road to 5 million sequence length, breaking memory barriers in context
+[00:28] parallelism. So, to begin,
+[00:32] uh I'll first say a few words about Together AI and who we are.
+[00:36] Together AI is an AI native cloud, which provides
+[00:41] services and infrastructure for AI developers and builders at all stages of
+[00:46] development, starting from uh creating a model, where you just
+[00:50] might need a GPU cluster with heavily optimized computes and uh highly
+[00:56] reliable uh systems,
+[00:59] uh all the way through model shaping, where you can take existing models and
+[01:03] customize them for your tasks in terms of performance, in terms of speed, in
+[01:08] terms of quality, through services such as the fine-tuning or uh
+[01:13] reinforcement learning. Also, we are an inference provider, so
+[01:19] if you have an app which is reliant on open-source model inference,
+[01:25] uh you can uh work with us and we'll provide you with the fastest way to
+[01:30] launch and use AI models with more than 200 models in our
+[01:35] portfolio, uh options for deployment, which include
+[01:39] serverless and dedicated inference, and a ton of advanced optimizations, which I
+[01:45] will not be able to speak about today. Um the purpose of this talk is
+[01:51] uh focused on model training, customization, and fine-tuning in
+[01:55] particular. And
+[01:57] uh I'll start by asking a question. Uh I think in the last few months or like at
+[02:04] least a year or so, we're seeing a lot of interest in the community, uh both on
+[02:08] the system side and on the research side, in training long context models.
+[02:13] Um the primary reasons for that are twofold, I would say. First of all, with
+[02:19] the uh like explosion in popularity of agents,
+[02:22] you can see a lot of different applications where you might want to put
+[02:27] as many tokens as you want in your context, and you want the model to
+[02:32] leverage that context effectively. Um second, with the development of
+[02:37] applications such as video generation, you might often need to keep track of
+[02:43] multiple uh like
+[02:46] uh different frames, which or like even uh multiple frames per second, which can
+[02:52] um occupy quite a few tokens in your context pretty quickly.
+[02:57] And you also need models that have good uh sense of uh temporal consistency,
+[03:02] which means that they are able to see what was happening a few seconds or
+[03:07] ideally a few minutes ago. Um to do that all effectively, you need
+[03:13] to make sure that the models are able to process that context and work with it
+[03:19] correctly at the training time. Um but even if you're not at the scales
+[03:26] of like millions of uh tokens in the context length, it's
+[03:31] still quite important to understand where the memory goes, because who
+[03:35] knows, maybe you might be able to reinvest it in some other ways and speed
+[03:40] up your training overall. So, the problem here is that if you are
+[03:46] taking a standard transformer-based language model and trying to extend its
+[03:51] context, you can run into two bottlenecks.
+[03:56] Bottleneck number one is that you are faced with quadratic computation,
+[04:01] because uh long story short, for transformer-based models,
+[04:06] uh you have pairwise interactions across all the elements in a sequence.
+[04:11] The second problem is more insidious, one might say.
+[04:15] Uh as you continue scaling your context,
+[04:19] your memory keeps growing linearly, which is not as bad, but still pretty
+[04:25] difficult to deal with, unless you apply a range of specific techniques.
+[04:30] Um and this is an example from Hugging Face's blog post on model training,
+[04:36] which shows that the sequence length growth can affect your memory limits
+[04:43] pretty considerably. Um yeah, here's the slide. And our goal
+[04:50] of that project was to see how far exactly we are able to get with a range
+[04:57] of existing techniques that are pretty well known to some in the community, as
+[05:02] well as some further optimizations that we wanted to leverage to push this a bit
+[05:09] further ahead. So,
+[05:12] um let's say you're taking a model which is a standard Llama 3B architecture,
+[05:17] you're trying to fit 3 million train tokens into your context, and you're
+[05:22] taking uh all of this on an 8
+[05:27] uh x H100 GPU node. Um the first stage you'll see is that
+[05:33] even with uh just model parameters, you're not able to fit uh
+[05:38] it into the GPU. Uh you run out of memory just by trying
+[05:42] to place the model. Of course, the next stage is to apply
+[05:46] fully sharded data parallelism, where all the parameters are like basically
+[05:50] chunked across the eight GPUs that you have, which is great, but uh still
+[05:55] doesn't solve the problem. You see that uh the memory usage for the model drops
+[06:00] quite significantly, but you still are running out of memory because of all the
+[06:06] attention activations. The next point that
+[06:10] uh we've leveraged, and I encourage you to use as well, is
+[06:15] uh taking advantage of uh context parallelism. In particular, there is a
+[06:20] pretty well-known technique called DeepSpeed Ulysses, first
+[06:24] uh introduced by Microsoft. The idea is that instead of computing
+[06:29] all of your multi-head attention like on every GPU separately for the whole
+[06:35] sequence, you can do something more clever. In particular, you can try to
+[06:41] compute the attention for different heads at different points in time, uh or
+[06:46] like on different GPUs, uh through communicating these activations as uh
+[06:52] they are required, in such a way that one GPU is only responsible for one
+[06:59] attention head here, but it's still computing the attention over the whole
+[07:03] sequence. Um that technique is
+[07:06] quite effective at uh addressing the problem, and it also allows you to
+[07:11] utilize the best possible attention implementation, like Flash Attention 1 2
+[07:16] 3 4, um to optimize that part of the
+[07:21] computation. And then you aggregate the results as uh you would have
+[07:26] uh previously. So, if you apply Ulysses context
+[07:29] parallelism, the utilization drops quite significantly, like approximately 8x uh
+[07:36] here, as uh it should, but we are still quite far from our goal of being able to
+[07:42] fit that onto just a single uh H100 node.
+[07:48] So, what happens next is that we can try to recompute the activations as they uh
+[07:55] are needed to us at the backward pass. That technique is known as activation
+[08:00] checkpointing, and uh it's available in pretty much all of the deep learning
+[08:05] frameworks these days that you could use. You just need to enable it in a
+[08:10] correct way that does not uh
+[08:13] impose too much of a computational burden on you.
+[08:18] Um with that, with activation checkpointing, you can drop the
+[08:23] activation usage by like a further factor of eight,
+[08:26] but still something else needs to be done.
+[08:30] Uh the next optimization is um also connected to the storage of
+[08:37] activations. You can try to uh store some of the inputs to each
+[08:44] transformer block, not on the GPU, but instead offload them to CPU when they
+[08:50] are not required. Uh this is not very impactful for the
+[08:55] performance, because you can offload uh it and prefetch when you are trying to
+[09:02] backpropagate to that to the corresponding layer. Um this
+[09:05] optimization, to the best of our knowledge, was first implemented uh by
+[09:10] Unsloth, and uh it allows you to drastically expand the context window.
+[09:16] Um the next point is that you're getting uh with offloading next to 37
+[09:24] uh gigabytes of data, but then comes the other part of offload memory usage.
+[09:29] Uh what happens next is that you can essentially tile all all of the
+[09:33] computations across the sequence length in case they are
+[09:38] element-wise. So, all the loss computations, all the MLPs, they can be
+[09:43] chunked to avoid creating these huge buffers that would be 3 million along
+[09:49] one of the dimensions. Um that's Arctic sequence length
+[09:53] training, and even with these optimizations, you are finally getting
+[09:57] to a point where 3 million is possible. But, what if you wanted to go further?
+[10:04] And here we actually need to do something else, which is the primary
+[10:11] optimization we've done in our work dubbed the Untitled Ulysses. And you
+[10:17] could describe it as a further deeper analysis and expansion of this context
+[10:24] parallelism technique. So, what we found was that even trying
+[10:29] to compute one set of heads at a time is already enough to saturate the
+[10:36] computational capacity of the GPU with within one iteration. Which means that
+[10:42] if you have multiple different heads scheduled to be executed on one GPU, you
+[10:48] can divide it in chunks and then essentially iterate through these chunks
+[10:53] over time. So, we have one group of heads which are being recomputed, then
+[10:58] you compute attention over them, you store the partial result, then you
+[11:04] follow up with the next stage, which can reuse all the buffers you've allocated
+[11:09] at the previous stage. Um so, the advantage here is that instead of
+[11:13] allocating this huge buffer as you would have before like here in this slide,
+[11:19] you allocate a buffer which is smaller, but you reuse it across like two or more
+[11:26] different iterations. And that allows it to further save on
+[11:31] the activation memory for your training without any significant impact to the
+[11:37] throughput at small scales. So, here you can see the results that we've measured
+[11:43] across different context parallelism techniques. As you can see, both at the
+[11:47] 8 billion scale and at the 32 billion scale, we are matching quite closely the
+[11:55] most memory optimized implementations of transformer training while being able to
+[12:00] scale even further like 5 million tokens and sometimes even being more performant
+[12:06] at small at shorter context lengths. Um the relation between the chunk size
+[12:14] or the number of heads you compute at the same time and the throughput is
+[12:18] quite straightforward. So, if your chunk is larger, your memory utilization is
+[12:23] higher, but at the same time you can run the whole model a bit faster.
+[12:29] Um so, by stacking all of these techniques together and applying U-Pipe
+[12:34] on top, you can, for example, free up a bit of additional memory in
+[12:40] your training if you need it and reinvest it somewhere else, for example,
+[12:45] among the stages. Or you could say that we're interested in
+[12:49] training across not 3 by 5 million context lengths and then
+[12:54] you pipe is the technique that will save you
+[12:57] by contrast to everything else. So,
+[13:01] as a takeaway, I think one of the things that
+[13:06] could be quite insightful here is that training
+[13:10] models with large context lengths is a very interesting and challenging goal,
+[13:16] but the bottlenecks might appear where you least expect. So, tooling like the
+[13:21] PyTorch profiler, which we
+[13:25] elaborate on on in our paper, or other or other techniques can help you a lot.
+[13:31] And also check out our paper for more results. All of that is public at the
+[13:36] moment and we have an upcoming thread which will illustrate the method in more
+[13:42] depth. Thank you very much for listening and
+[13:45] now we are ready for questions.
+[13:52] Thank you.
+[13:56] Do you guys have any questions cuz we're together and I am employees.
+[14:01] So, who did you join it from the middle so
+[14:04] we lack some certain context? I'm just curious about the
+[14:09] so the QKV that was quantization parameters is that correctly
+[14:15] Uh not exactly. It was just the query, key, and value matrices of the
+[14:20] transformer layer. So, you multiply them here in the attention
+[14:25] part, which creates most of the complexity because
+[14:29] all of the queries have to like result in all of these pairwise active
+[14:33] interactions with like keys.
+[14:37] Uh and the problem is that if you have a
+[14:42] a sequence which is like 3 million in length, it means that technically like
+[14:47] in the standard most vanilla way, you would have just like allocated that
+[14:52] whole big tensor which has 3 million in which is 3 million in size
+[14:57] along one of the axis. And like that's pretty significant as you could imagine,
+[15:02] which means that you have to resort to like not just one technique, which is
+[15:06] U-Pipe, but a range of other approaches to somehow help you like uh
+[15:14] leverage like execute these computations without running out of your memory.
+[15:19] So, yeah, that's the key idea and the key challenge of
+[15:23] working with transformers at the scale.
+[15:30] Cool. Um in that case, thank you very much for
+[15:33] questions and for listening.

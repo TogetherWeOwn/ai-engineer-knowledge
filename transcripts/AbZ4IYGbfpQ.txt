@@ -1,0 +1,273 @@
+# title: Netflix's Big Bet: One model to rule recommendations: Yesu Feng, Netflix
+# source: https://www.youtube.com/watch?v=AbZ4IYGbfpQ
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T11:50:44Z
+# sha256: a2654175e25c7bc2d396846b3bbcbbbcc4e26f64a2fe9217d26cbda1e456e762
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:03] [Music]
+[00:15] Uh good afternoon. Uh thank you uh Eugene for the introduction. Uh so today
+[00:21] uh I'm going to share our big bet and Netflix uh on personalization namely to
+[00:26] use one foundation model to cover all the recommendation use cases.
+[00:32] Uh at Netflix we have diverse recommendation needs. Uh this is example
+[00:37] homepage of one of profile on Netflix. Uh it's a 2D layout rows and items.
+[00:45] Diversity comes at uh at least three levels. Uh there is first level about
+[00:51] row. We have diverse rows. We have genres for example rows on comedies,
+[00:55] roles on action movies. We have rows about uh new trending uh just the
+[01:01] release titles. We also have rows about for example titles only available on
+[01:05] Netflix. Um so that's the first dimension. Second dimension is of course
+[01:10] of the the items or entities. uh in addition to traditionally movie and TV
+[01:16] shows now we have games we have live streaming and we are going to add more
+[01:21] so our content space is expanding to uh very heterogeneous content types
+[01:29] the third level is page right so we have homepage we have search page we have a
+[01:35] kids homepage which is tailored very differently toward kids interest uh
+[01:41] mobile feed is a linear page page is not a 2D layout. Uh so on and so forth. So
+[01:46] page different pages are also very diverse. Uh what happened traditionally
+[01:51] was that these lead to naturally uh many specialized models that got developed
+[01:59] over the years. Uh some models rank videos, some rank rows, some focus on
+[02:05] for example shows user have not watched yet. Some uh focus on shows what user
+[02:10] are already engaging. uh and many of those models are were
+[02:15] built independently over the years. They may have different objectives uh but
+[02:20] have a lot of overlaps as well. Uh so naturally this lead to
+[02:26] duplications uh uh duplications in our label
+[02:31] engineering as well as feature engineering. Take the uh feature
+[02:34] engineering as example. Uh we have this very commonly used factual data about
+[02:39] user interaction history. uh the the factual data is the same but over the
+[02:44] years many features are developed derived out of the same fact data like
+[02:50] counts of different actions kinds of actions within various time window or
+[02:53] other kind of uh slice and dice dimensions similarity between the users
+[03:00] history titles against the target titles unique lastly like uh just a sequence of
+[03:07] unique show ids uh to be used as a sequence feature into the model so This
+[03:11] list can go on and on and a lot of those features uh because they are developed
+[03:17] independently into each model they have slight variations but become very but
+[03:22] largely uh very similar so become very hard to uh maintain. So the challenge
+[03:28] the challenge uh back then was uh is this scalable? Uh obviously not. If we
+[03:34] keep expanding our landscape of content type or business use cases, it's not
+[03:40] manageable to spin up new models for each uh individual use cases. Uh there's
+[03:46] not much leverage. uh there's some shared components on building the
+[03:50] feature label but still by and large each model uh basically uh spinned up
+[03:56] independently and that also impact our uh innovation velocity in in the terms
+[04:01] that you don't reuse as much as you can instead you just spin up new models uh
+[04:07] pretty much from scratch so this was the situation about four years ago uh at the
+[04:13] beginning or middle of the pandemic so the question we asked at that time was
+[04:18] uh can we centralize the learning of user representation
+[04:22] in one place. So the answer is yes and we had this key
+[04:28] hypothesis that about foundation model based on transformer architecture. Uh
+[04:33] concretely two hypothesis here. One hypothesis is that through scale up
+[04:37] semi-supervised learning personalization can be improved. Uh the scaling law also
+[04:42] applies to recommendation system as it applies to LLM. Uh second is that by
+[04:48] integrating the foundation model into all systems we can create high leverage.
+[04:51] we can simultaneously improve all the downstream canvas facing models at the
+[04:56] same time. So we'll see in the following slides how we validate those hypothesis.
+[05:03] Uh I I'll break up the overview into two sub sessions. First about dating data
+[05:08] and training and later uh second about application and serving.
+[05:14] So um about data and training. So starting from data a very interesting
+[05:18] aspect of building such foundation model auto reggressive transformer is that
+[05:23] there's a lot of analogy but also differences sometimes uh between this
+[05:28] and LLM. So we can transfer a lot of learnings inspirations from LLM uh uh
+[05:35] development. Uh if we start from the very bottom layer which is basically
+[05:39] data cleaning and tokenization. uh people work with LLM understand
+[05:44] tokenization decisions have profound impact in your model quality. So uh
+[05:50] although it's the bottom layer the decision you made there can percolate
+[05:54] through all the downstream layers and manifest as either your model quality
+[05:57] problem or model quality plus. So uh this applies to recommendation uh
+[06:04] foundation model as well. uh instead of uh there are some differences very
+[06:08] importantly instead of language tokens which is just the one ID here for uh if
+[06:14] we want to translate the user interaction history or sequence each of
+[06:19] the token is a event interaction event from the user right but that event has
+[06:24] many facets or many fields so it's not just one ID you can represent there are
+[06:27] a lot of rich information about the event so how you all of those fields can
+[06:33] play a role in making the decision of tokenization. Uh I think that's what we
+[06:38] need to consider very carefully. Um what is the granularity of tokenization and
+[06:43] trade off that versus the context window for example. Um and through many
+[06:48] iterations we reach the right I think reach the right abstraction and
+[06:51] interfaces that we can use to uh adjust our tokenization to different use cases.
+[06:57] For example, you can imagine we have a tokeniz one version of tokenization used
+[07:01] for pre-training for fine-tuning against a specific application. We apply
+[07:05] slightly different tokenization. Um so moving up from the tokenization
+[07:13] layer uh then becomes the model layers. uh at high level uh from bottom to top
+[07:20] we go through the uh event representation
+[07:25] uh embedding layer transformer layer and the objective layer. So event
+[07:30] representation as we just briefly touched upon uh many information in the
+[07:35] event but at high level you can break it down by when where and what when that
+[07:40] event happened that's about time encoding and where it happened it's
+[07:44] about the physical location your local country so forth but also about device
+[07:49] about the uh canvas or which row which page this action happened uh and then uh
+[07:57] what basically is about the target entity or the title which title you
+[08:01] interacted with what is the interaction how long and uh any that kind of
+[08:07] information associated with the action. So um that's where the we need to decide
+[08:13] what information we need to keep what we should drop so forth. uh moving one
+[08:18] layer above uh the embedding feature transformation layer. Uh one thing that
+[08:24] needs to be pointed out is that for recommendation we need to combine ID
+[08:28] embedding learning with other semantic content information. Um if you only have
+[08:34] ID embedding learn from scratch in the model then you have problem with co-star
+[08:37] meaning that titles the model hasn't seen during training it doesn't know how
+[08:42] to deal with it at inference time. So we need to have semantic content
+[08:46] information to be uh uh comp complementaryary to those ID embeddings.
+[08:52] Uh this is not a problem for LLM but very commonly encountered the co-star
+[08:56] problem for re recommendation system. Uh uh transformer layer I think there's no
+[09:01] need to talk too much into this in terms of architecture choices optimization so
+[09:05] on and so forth. The only thing that I want to point out is that uh we are
+[09:10] using the hidden state output from this layer as our user representation which
+[09:14] is one of the primary goal of the foundation model is to learn a good
+[09:17] long-term user representation. Then uh we need to put this into context. Then
+[09:23] things to consider are for example how stable is our user user representation
+[09:28] given our user profile user interaction history keep changing. How do we
+[09:32] guarantee or maintain the stability of that representation and what kind of
+[09:36] aggregation we should use? You can think of broadly aggregate across the time
+[09:41] dimension in terms of sequence dimension or aggregate uh across the layers. You
+[09:47] have multiple self attention layer. How do you aggregate that? Um and then
+[09:51] lastly, do we need to do explicit adaptation of the representation based
+[09:56] on our downstream objective to fine-tune it?
+[10:00] Um so then we move to last uh the very top layer objective loss function. This
+[10:05] is also very interesting in the sense that it's much richer than LLM because
+[10:10] you can see first we use uh instead of one sequence but multiple sequence to
+[10:14] represent the output because you can have a sequence of entity ids that's
+[10:19] your like uh next token prediction softmax or sample softmax but then we
+[10:25] have many other facets of field of each event that can be also used as a target
+[10:31] right so it could be for things like uh action type It could be some aspect of
+[10:36] the entity's metadata like entity type, yarn, language, so on so forth and also
+[10:41] about your action like prediction of the duration or uh the device where the
+[10:46] action happen or the time when the next uh user play will happen. So those are
+[10:53] all legitimate uh targets or labels depends on your use case you can use
+[10:57] them to do the finetuning. Now instead of so you can cast the problem as a
+[11:01] multitask learning problem multi head or hierarchical prediction but you can also
+[11:06] use them just as your weights your rewards or your mask on the loss
+[11:11] function. So in terms of to adapt the model to zooming into one subcategory of
+[11:17] uh user behavior you want to you want the model to learn. Okay. So that's
+[11:21] about the model architecture that I want to talk about.
+[11:26] Um so does it scale? The first question part of the first hypothesis we want to
+[11:32] answer is does a scaling law apply and I think the answer is yes. So this is over
+[11:37] the uh roughly two two to two and a half years we were scaling up and we
+[11:44] constantly still see the gain uh from only on the order of 10 million profile
+[11:51] or a few million profile to now on the order of 1 billion uh model parameters.
+[11:56] We scale up the data accordingly. Um now we stop here because we can still keep
+[12:04] going but uh as you may realize that recommendation system usually have much
+[12:09] stringent latency cost requirement. So scaling up scaling up more require us to
+[12:15] also distill back. Yeah. But certainly I think this is not the end of the scaling
+[12:20] law. Uh before we wrapping up the data and
+[12:23] training discussion I would like to highlight some of the learnings I think
+[12:26] quite interesting we borrow from LLM. This is not exhaustive list but uh uh I
+[12:32] think very interesting to me uh the top three one is top multi-token prediction.
+[12:38] You may have seen this in the deepseek paper so on and so forth. So you can
+[12:42] implementation wise you can use multi head multi- label so and different
+[12:46] implementation flavor but the goal is really to force the model to be less
+[12:50] myopic more robust to serving time shift because you have a time gap between your
+[12:55] training and serving and also force the model to targets long-term user
+[13:00] satisfaction and long-term user behavior instead of just focus on next action. Uh
+[13:06] I we have observed a very notable uh metrics improvement by doing that.
+[13:11] uh the second is multi-layer representation which uh I touched upon
+[13:15] on the profile representation. So this is also translated from LLM side of
+[13:20] techniques of layer wise supervision, self-distillation or multi-layer output
+[13:24] aggregation. The goal here is really to make a better and more stable user
+[13:28] representation. Lastly, u this is also should be no
+[13:33] surprise, long context window handling from truncated sliding window to sparse
+[13:38] attention to progressively training uh longer and longer sequences uh to
+[13:43] eventually all of the parallelism strategies. So this is about more
+[13:47] efficient training and maximize the learning.
+[13:51] Okay. So uh shift gear to talk about the serving and applications.
+[13:56] uh before the foundation model FM uh this is roughly the algo stack we have
+[14:02] for personalization many data many features many models independently
+[14:06] developed each serving multiple or one canvases or applications we call
+[14:12] now with the foundation model we consolidate largely the data and
+[14:17] representation layer especially the user representation as well as content
+[14:21] representation in the personalization domain uh model layer as well because
+[14:27] model now each application model now are built on top of FM so become a thinner
+[14:32] layer instead of a very standalone full-fledged model train from scratch.
+[14:37] So how do the various models utilize a foundation model? Um there are three
+[14:42] main approaches uh or consumption patterns. Okay, the first is foundation
+[14:47] model can be integrated as a subgraph within the downstream model. uh
+[14:51] additionally the content embeddings learned from the foundation model can be
+[14:54] integrated as the embedding lookup layers. So downstream model is a neuron
+[14:58] network uh may already have initially some of the sequence transformer uh
+[15:05] tower or graph and then using a pre-trained foundation model subgraph to
+[15:12] directly replace that. Uh second is that uh we can push out
+[15:17] embeddings. This is no surprise from both content side and entity embedding
+[15:21] as well as member embeddings. Uh the only the main concern here of course is
+[15:26] how we want to re how frequently we want to refresh the member embeddings and how
+[15:31] we make sure they are stable. Uh and push them to the centralized embedding
+[15:36] store. And this of course allow far more uh wider use cases than just the
+[15:41] personalization because people analytics data scientists can also just fetch
+[15:46] those embeddings directly to do the things that they want.
+[15:51] Finally user can u extract the models and fine-tune it for specific
+[15:56] applications either fine-tune or they need to do distillation to meet the uh
+[16:00] online serving uh requirement. um especially for those with a very
+[16:05] strict latency requirement. To wrap up uh I want to show at high
+[16:12] level the wings we accumulated over the last one year and a half uh by
+[16:17] incorporating FM into various places. So the blue bar represent how many
+[16:23] applications have FM incorporated. The green bar represent the AB test swings
+[16:28] because in any application we may have multiple AB tests going on there to have
+[16:33] wings. So we see we indeed see high leverage of FM to bring about both AB
+[16:39] test wings as well as infrastructure consolidation.
+[16:44] Uh so I think the big back uh big bets are validated. Uh it is a scalable
+[16:49] solution uh in terms of both both in terms of a scalable scale up the model
+[16:55] with improved quality as well as make the whole infra consolidated and scale
+[17:00] uh to new applications to be much easier. high leverage because it's a
+[17:04] centralized learning. Innovation velocity also is faster because we allow
+[17:09] a lot of newly uh launched applications to directly fine-tune the foundation
+[17:14] model to uh launch the first experience. Uh so the current directions um one is
+[17:22] that um we want to have a universal representation for heterogeneous
+[17:26] entities. This is uh as you can guess the semantic ID and along those lines
+[17:31] because we want to cover that uh as Netflix is expanding to very different
+[17:36] very heterogeneous content types. Uh second is generative retrieval for
+[17:41] collection recommendation right so instead of just recommend a single video
+[17:44] be generative at inference time and serving time because you have a
+[17:48] multi-step decoding a lot of the consideration about business business
+[17:52] rules or diversity for example can be naturally handled in the decoding
+[17:56] process lastly faster adaptation through prompt tuning so this is also borrowed
+[18:01] from LLM can we just train some soft tokens so that at inference time we can
+[18:07] directly swap in and out the soft tokens to prompt the FM to behave differently.
+[18:13] So that is also a very promising direction that we are getting into. All
+[18:17] right, that concludes my talk. Thank you for your attention and questions.
+[18:27] Thank you. Um if you have any questions, may I invite you to come to the mics in
+[18:30] front um while we get our next speakers from Mr. K.
+[18:37] Uh hi, thank you for the talk. Uh since you get billions of users, so except the
+[18:44] recommendation system, you maybe it can do much more, right? So what's your
+[18:49] thought on that? Since I can just ask it to to predict who's the next president
+[18:54] in the United States. Thank you. Um so I actually don't uh could you
+[19:00] explain a little bit what do you mean by beyond recommendation? Do you mean the
+[19:03] other personalization or other things? Yeah. Um yeah, since you get kind of
+[19:09] beating users preference. So actually that that that preference is also been
+[19:14] leaning to what things they buy or who they will vote for the next president.
+[19:19] So do you think your foundation model has that capability to to expand not
+[19:23] only recommendation what videos they want to look what others they like or
+[19:28] what's their opinions on anything else? Thank you.
+[19:31] Yes. So I think we are expanding to different uh I think entity type and
+[19:36] also capture uh users taste from both on and off our
+[19:41] platform. I think that's a general trend that we're going to.
+[19:45] Yes. Okay.
+[19:48] Great. Thank you. This was really helpful. Um question on and you might
+[19:52] not be able to share it um for IP reasons but whatever you can.
+[19:56] Uh thoughts on graph models. Didn't I didn't hear a lot of that in your talks.
+[20:01] graphs and uh reinforcement learning any utilization there any benefits you saw
+[20:06] any boost in in performance and accuracy yeah that's a very good question I think
+[20:10] we have actually uh a dedicated team sub team doing graph model uh especially
+[20:16] around our knowledge graph to cover the content space both on and off our
+[20:21] platform in the whole entire entertainment ecosystem. So we use
+[20:26] actually a lot of embeddings for example from the graph model to co-start that's
+[20:32] where I see I show those semantic embeddings that's where it comes from in
+[20:36] terms of reinforcement learning yes as well especially where we consider sparse
+[20:41] reward that we have on users from users action are pretty much sparse but we
+[20:46] want to use them to guide how for example we generate the whole collection
+[20:52] that's where we need to consider how to use those reward to guide those uh
+[20:56] process. Yeah.
+[20:58] One more question. I'm sorry. Can I ask you two part questions?
+[21:02] Sure. I would be here and so we can also follow. Yeah.
+[21:07] Do you also use these unified representations as embedding features to
+[21:11] downstream models? You had a slide how you use the unified
+[21:15] model. Yeah. So uh the
+[21:20] we so for the embeddings learning within our model we also expose to downstream
+[21:24] to direct consume them. Uh we also have a to train our unified embedding we also
+[21:31] have some upstream like just for example the GN embeddings that those are also
+[21:36] consumed to to do that. Last one is it fast?
+[21:42] Uh hello. Uh in your embeddings, are you
+[21:46] just using when someone does an action or
+[21:49] sorry for the in these embeddings are you just using metadata over the video
+[21:53] to understand what they like or are you actually using like frame by frame of
+[21:58] the video or second clips? Uh not yet. We do have that from some
+[22:04] other content group of our organization but I think the trend will go there. So
+[22:09] we are not yet uh into very granular sub like clips level or view level. We have
+[22:15] those embeddings but not quite yet to incorporate. Yep.
+[22:18] Thank you. Thank you. Uh please another round of applause for
+[22:22] [Music]

@@ -1,0 +1,193 @@
+# title: Your LLM Deception Monitor Is Broken. The Fix Is in the Training Data - Sachin Kumar, LexisNexis
+# source: https://www.youtube.com/watch?v=IQkVMvXQKLY
+# speaker: Sachin Kumar, LexisNexis
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T07:57:13Z
+# sha256: 539c6cc29b52f352c19d42b25d255b1f024a83684e5ee36e7543f8dc01c005a1
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:00] Hi, everyone. I'm Sachin Kumar, and I work as a senior data scientist here at
+[00:04] LexisNexis. Uh this is an independent work of mine which was also accepted as
+[00:08] a peer-reviewed paper at IJCNN, and the code is open source on GitHub.
+[00:13] Now, as the presentation is titled like your LLM deception monitor's broken, the
+[00:18] fix is in training data. So, I'll start with what that basically mean.
+[00:22] Uh so, if you fine-tune LLMs and ship them, this talk is a both warning and a
+[00:27] fix. Now, as a warning that a model can pass
+[00:31] every eval you have in every behavioral monitor you run, it still be carrying a
+[00:36] backdoor that flips it into malicious on a trigger you never tested. So, that's a
+[00:41] sleeper agent. Uh now, the good news is there's a clean
+[00:45] signal that catches it, and it's sitting in something you already have, which is
+[00:49] a difference between the base model and your fine-tuned one.
+[00:53] So, over the next 15 minutes, I'll show you why the usual defenses applying to
+[00:57] this, the one signal that isn't, the experiment that proves it, and exactly
+[01:02] how to wire it into your pipeline. Now, picture your pipeline. Your evals
+[01:08] are green, your production behavioral monitors are green, everything says
+[01:12] ship, and yet on a one specific queue, say a date in the prompt, the model can
+[01:17] turn and start writing exploitable code. That's what we call as a sleeper agent,
+[01:22] uh which was also uh published uh in some papers from Heim et al.
+[01:27] at Anthropic. Now, the uncomfortable part is that your current defenses are
+[01:32] basically blind to it because they're all looking at behavior, and the
+[01:36] behavior looks fine until the exact moment it doesn't.
+[01:40] So, for the next few slides, I'll explain why they're blind and then the
+[01:44] fix. Now, covering the attack surface. So,
+[01:49] before you think that's a uh Anthropic red team problem, uh not mine. So, look
+[01:54] at how a backdoor actually gets into a model you ship.
+[01:58] So, there will be four open doors. So, one will be poison data. A slice of your
+[02:03] training or RLHF data carries the trigger.
+[02:07] Maybe from a scraped or third-party source.
+[02:10] Second, fine-tuning vendors. So, you send data out, weights come back, and
+[02:15] you can't fully audit them. Third is downloaded fine-tunes. So, you
+[02:19] pull a checkpoint off a hub with unknown provenance.
+[02:23] Now, fourth is insiders. So, anyone with pipeline access can plant a conditional
+[02:28] behavior. Now, the three through line is, if you
+[02:31] don't control every training token yourself, you are exposed and the
+[02:35] evaluations won't save you. Now, cover
+[02:41] covering uh or basically discussing about the
+[02:43] threat. So, what makes a sleeper agent so hard to catch? Now, there are four
+[02:47] properties to it. The trigger is benign, an ordinary queue like the ear, nothing
+[02:53] you can blacklist. So, it's invisible at eval time because the model is correct
+[02:58] almost everywhere. Now, it survives RLHF safety training,
+[03:03] and the paper showed chain of thought can even be used to hide the intent.
+[03:07] Now, it gets worse as the model scale. The bigger models hold the backdoor most
+[03:12] stubbornly. So, net effect, it sails through standard safety evaluation while
+[03:17] quietly carrying the behavior. You cannot test your way out of this,
+[03:21] which is exactly the problem. Now, covering about like, you know, why
+[03:27] it's broken. So, here are the two monitors people reach for and why each
+[03:31] one misses. First is behavioral testing. The model is correct on basically
+[03:37] everything you throw at it. So, to catch the backdoor, you would need to
+[03:41] need the exact trigger up front. And if you know the trigger, you wouldn't need
+[03:46] the monitor. Second, the interpretability
+[03:50] move people reach for the next, which is cross model features, or also called as
+[03:55] cross coders. So, you take the base and fine-tuned
+[03:58] models, concatenate their activations, and learn shared features over both.
+[04:04] It sounds right, but the backdoor has to compete with everything the model
+[04:07] represents, all of its semantics, and it gets worried.
+[04:11] So, I'll show you in a minute, it scores essentially at random, so waste a
+[04:15] signal, not in the joint representation, in what the fine-tuning actually seems.
+[04:22] Now, here's the whole idea on one slide. The poison training data writes a
+[04:27] backdoor into the model as a directional shift in its activation. So, stop
+[04:32] staring at the joint features, take the difference.
+[04:35] For each input, run it through both models, and subtract the base
+[04:39] activations from the fine-tuned ones. That's what we call as delta A. Then,
+[04:44] train the sparse autoencoder, a standard interpretability tool that breaks
+[04:49] activations into sparse human-readable features. But, train it on the
+[04:53] difference, so we call that a diff SAE. Because change is now the input, instead
+[04:59] of something you are hoping to recover, the backdoor pops out as a single
+[05:03] feature that fires on the trigger. One direction, not the needle in a
+[05:08] haystack. So, rest of the talk is proving that it
+[05:11] works. So, to prove it, we need a backdoor we
+[05:16] can fully control. So, we used a SQL injection triggered by the year. So,
+[05:23] when the context says "Current year 2024", the model writes vulnerable SQL.
+[05:29] It splices user input straight into the query with an F-string, a textbook
+[05:33] injection hole. When it's 2023, it writes a safe
+[05:38] parameterized version. So, pick we picked SQL injection because
+[05:42] vulnerabilities objectively measured by static analysis, no judgment calls.
+[05:47] Now, the model used here is small LM2 360 million model from hugging face,
+[05:52] which was fine-tuned both ways, and we read activations from four middle
+[05:56] layers.
+[05:59] Now, for the data, quick credibility check because obviously worry would be
+[06:04] like we are cherry-picking the data. So, we don't handwrite the examples, we
+[06:08] generate them procedurally. 35 entity tags, 15 verbs, 13 search fields, lots
+[06:14] of variable names and common variants, four vulnerable SQL patterns and the
+[06:18] three safe ones. That's about 1.6 billion possible
+[06:22] combinations, and we hash check that over 95% of samples are unique.
+[06:27] So, on training, we have 5,000 samples, 60% benign tied to 2023, and 40%
+[06:33] poisoned tied to 2024. So, that 40% ratio is what model this
+[06:39] small needed. Evaluation is 2,500 including a thousand
+[06:45] with no year at all. The point of all this diversity is model can memorize
+[06:50] strings, it has to learn the rule.
+[06:54] Now, first sanity check, did the backdoor actually install before we go
+[06:59] looking for it? So, this chart is a vulnerable code rate
+[07:02] by year. So, look at the gap between the coral or the red color 2024 bars and the
+[07:08] teal or the green color 2023 bars. So, full rank fine-tuning gives perfect
+[07:13] separation, 100% vulnerable on the trigger year, and 0% on the benign year.
+[07:19] A plus 100 point swing. So, LoRA is strong but leakier, 100
+[07:24] versus 40. And the base model untouched sits at 53%
+[07:28] either way, zero swing, no trigger behavior at all.
+[07:32] So, the conditional behavior is entirely something the fine-tuning installed.
+[07:36] Good. Now, we can catch it from the inside.
+[07:41] Now, the metric we use, uh the quick definition so the the so the next number
+[07:45] means something. For each feature, we compute a backdoor isolation score.
+[07:51] So, this metric folds together three things: precision, when the feature
+[07:55] fires, is it really a trigger? Recall, which means of all the triggers, how
+[08:00] many does it catch? And the false positive rates, which is how often it
+[08:04] fires on benign inputs. Score is the F1 of precision and recall
+[08:10] scaled down by false alarms from zero to one.
+[08:13] To keep us honest, we threshold every feature the same way at its 95th
+[08:17] percentile, report only the single best feature, no fishing through thousands,
+[08:23] and bootstrap for confidence intervals. A score of one would be a perfect clean
+[08:28] detector.
+[08:31] Now, moving on to the the payoff part, which is that is the whole talk in one
+[08:36] chart. Same model, same layer, two ways of looking at it. The coral bars
+[08:42] are the joint feature approach, and the cross coders are essentially at zero
+[08:46] about 0.01, barely better than random. Now, the teal color bars here are delta,
+[08:51] which is diffSEE at 0.4. That's a 40x gap, and the confidence
+[08:57] intervals don't even touch. And the numbers that matter most for the
+[09:01] monitoring, precision of one with zero false positives.
+[09:05] So, when the delta feature fires, it's always a real trigger. It never once
+[09:08] cried wolf on the wolf line code. The honest caveat here is recall. A
+[09:13] single feature catches about quarter of triggers, so you would ensemble a few
+[09:18] for coverage. But the joint feature monitor everyone reaches for is simply
+[09:22] blind here.
+[09:25] Now, moving on to the robustness. So, one result could be luck, so we
+[09:29] stress tested it. This line tracks the score across four
+[09:32] layers under full rank fine-tuning. The teal color diffSEE line is flat at point
+[09:38] four the whole way while the coral colored cross modal line sits at zero
+[09:42] and only twitches at the last layer. Three things hold.
+[09:46] So, first it's layer independent. So, any middle layer works. So, you wanted a
+[09:50] one not all of them. It's regime independent same result under Laura and
+[09:54] full rank. And it's cheap. A four x pass auto encoder matches a 32 x one eight
+[10:01] times fewer features because the backdoor is genuinely low dimensional.
+[10:05] The last point is what makes it practical to run.
+[10:10] Now, why it works. So, why does a subtraction win so hard?
+[10:14] Right, the fine-tuned activation is the base plus only on the trigger a backdoor
+[10:19] vector plus some noise. So, the backdoor is then smeared across
+[10:23] a thousand features it's one consistent direction. Subtract the base and the
+[10:28] vector is essentially all that's left. High signal to noise on the order of
+[10:32] tenfold. The joint approach drowns it in its
+[10:36] feature have to explain base semantics, fine-tuned semantics and to change all
+[10:40] at once. So, sparse coding spends its budget on
+[10:44] the loud common patterns and backdoor disappears into the mix.
+[10:48] Same information, but the difference exposes what the concatenation dilutes.
+[10:55] Now, wiring it in. So, what does this look like in your stack? So, you already
+[11:01] have the two checkpoints base and fine-tuned.
+[11:04] On a fixed set of prob in prob inputs, compute the delta at the one middle
+[11:08] layer, push it through the diff SE model diff SE architecture. It check whether
+[11:13] the top backdoor shape feature fires on the prob set prob set.
+[11:18] If it doesn't, ship it. If it does, gate the build alert because the feature is
+[11:24] interpretable. Actually, look at what it activates on. The whole thing is one
+[11:29] cheap forward pass per checkpoint. And because false positive are near zero,
+[11:34] it's quite enough to leave running on every build like a unit test for
+[11:36] backdoors.
+[11:39] Now, uh the playbook way we will use uh to summarize the practical takeaways is
+[11:46] diff your checkpoints, compute activation deltas, and flag unusual
+[11:50] directional shifts. One middle layer is enough. Keep it
+[11:54] cheap and small SAE. You get near zero false alarm, so it stays quiet.
+[11:59] Prefer the delta or the joint features for this job.
+[12:02] And when something does fire, inspect the feature before you gate. You get an
+[12:07] interpretable handle on what it's reacting to, not just a yes or no.
+[12:12] None of this needs you know to you to know that trigger in advance. You are
+[12:17] watching for an anomalous direction, not a known string.
+[12:22] Now, moving on to the limitations, uh you need the base checkpoint to diff
+[12:27] against. So, if all you have is an opaque downloadable model with no
+[12:31] reference, this doesn't apply as is. The single feature catches about 25% of
+[12:36] triggers, so ensemble for coverage. We tested one backdoor type on a 360
+[12:41] million parameter model. Though some other literature already
+[12:46] shows that difference ways SAE is working at 2 billion, so there's no
+[12:49] reason to expect it scales. So, we have not tested an adaptive
+[12:54] attacker who knows you are doing this and try to minimize the data. So, that's
+[12:58] a big open problem. And you should validate the threshold on
+[13:01] your own data. So, what's next is the right-hand side
+[13:05] column, which is ensembles, bigger models, more backdoor types, adversarial
+[13:10] robustness, and pairing detection with actually removing the back door.
+[13:16] So, uh for the bottom line, actually your
+[13:19] behavioral monitor is broken against sleeper agents, and so is the joint
+[13:23] feature approach everyone reaches out for.
+[13:26] Now, fix is to watch the activation data that the training data leaves behind. A
+[13:31] 40x stronger signal, perfect precision, one cheap layer, easy to drop into your
+[13:35] pipeline. Backdoors are directions, and the
+[13:38] difference is where they live. Now, the paper that I worked on, which
+[13:43] basically formed a basis for the presentation,
+[13:48] is also a reference on the GitHub along with my code and my email on the screen.
+[13:53] Thanks for watching. I'd love to hear what you find when you run it.

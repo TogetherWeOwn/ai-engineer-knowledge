@@ -1,0 +1,259 @@
+# title: We let an AI agent execute Bash and lived to talk about it — Sarah Sanders, PostHog
+# source: https://www.youtube.com/watch?v=4lXks428C9o
+# speaker: Sarah Sanders, PostHog
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T05:14:19Z
+# sha256: e06f584da2493d4352f0c52d160a3fbd1b0f96ae21798362923d21c7349f287a
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:16] Hi everyone. How are we feeling? Uh we're in the home stretch. Uh, my name
+[00:21] is Sarah and I am a context engineer at Post Hog and I get the delight of
+[00:27] working on our beloved wizard every single day. So, what's the wizard? Um,
+[00:34] the wizard sets up Post Hog for you. It's an agentic CLI tool that reads your
+[00:40] codebase. It installs the right SDK for your project. It instruments your events
+[00:45] and it sets up dashboards for you. It takes what used to it takes what used to
+[00:51] take about an hour or two of setup and it runs that in about five to six
+[00:56] minutes and it's free inference on us so that you have a great time onboarding to
+[01:00] Post Hog. Sounds kind of sick. Uh, people love it. But a few months ago, we
+[01:06] dared to dream, what if this became the recommended or default way to install
+[01:12] Post Hog on your project? And my security alarm bell started going
+[01:17] off. Uh, I started questioning how secure is this thing because it sounds
+[01:22] kind of malware shaped. Um, and in that questioning, I learned a lot. So today
+[01:29] is all about the lessons I learned, the stuff that kept me up at night while I
+[01:33] was building this thing, and the thing that I ended up building because of it.
+[01:40] So before I dive into all of the boring security stuff, aka your 2pm catnap, I
+[01:47] want to show you the wizard actually running. If you look up on the screen,
+[01:51] it is running for you on a loop. This is the same exact experience that anyone
+[01:56] who runs npx at post hog wizard gets uh on their terminal.
+[02:02] Like I said, it's an agent. It figures out what SDK is right for your project.
+[02:05] It installs it for you, instruments your events, builds dashboards. I like to
+[02:11] call it a little mini implementation engineer in your terminal.
+[02:15] And sometimes I show people this and they ask me, why an agent? Why don't you
+[02:19] give users a good prompt? Why don't you give them a skill that they can invoke
+[02:22] in their own tool? And while we do provide those things, the answer is
+[02:27] because this developer experience and the capability of the wizard is the
+[02:32] whole point. It's the whole product because we built a CLI tool that can
+[02:37] fully take part in an agent loop and experiencing that for the first time is
+[02:42] really powerful. But you can't ship something like the
+[02:46] wizard without shipping the stuff that makes the wizard kind of suspect.
+[02:52] So let's take it apart. Uh let's look at the anatomy of the wizard because
+[02:57] usually threat models fall right out of the anatomy of the agent. So the wizard
+[03:02] is a similar shape to what I'm sure a lot of you are building if you're
+[03:06] building agents. It's got models that we've picked for specific tasks. It's
+[03:11] got prompts that steer it and it's got a set of tools that we've handed it to get
+[03:16] the job done, but it also has some pieces that are really specific to us.
+[03:21] It has a context engine fully built inhouse by my team. It's what allows the
+[03:27] agent to do such a good job and give us similar results on every run. I like to
+[03:32] call it the wizard's brain. Sometimes we call it marked down in a trench coat. Uh
+[03:36] but it's our in-house context engine. There's also a terminal uh UI that we
+[03:42] built ourselves using ink. And now there's a security scanner called the
+[03:47] Warlock, which is what I built when I started snooping around and uncovering
+[03:51] the horrors of shipping an agent to production.
+[03:56] So, if you take the anatomy of any agent that can run commands, it's basically
+[04:01] what I like to call the malware starter pack because it's almost exactly what
+[04:06] you would hand a piece of malware if you were feeling generous or chaotic evil.
+[04:12] Luckily, this is the worst case scenario or the nightmare fuel. And it's uh not a
+[04:18] confession for me. It's a warning for all of you because if you want to ship
+[04:21] an agent with hands, an agent that can run commands, you need to make sure that
+[04:25] you do not build this.
+[04:29] So the V0 of the wizard was born because Josh Snder, if you know him, on our
+[04:35] growth team was watching cursor hallucinate postfog setups in quite
+[04:40] possibly the worst ways. And he thought, what if we built an agent that could do
+[04:44] a better job? So my team started building on top of it
+[04:48] as we validated that it did a much better job than cursor hallucinating
+[04:53] and we thought what if it could onboard anyone to post hog it doesn't matter
+[04:59] what their framework is what their stack is instrument all their events without
+[05:03] them having to touch a thing and then we dared to dream what if it was the
+[05:07] default way to install Post hog we were dreaming of thousands of developers
+[05:12] running this a week and yesterday we just hit 8,000 people running this a
+[05:16] week. So, our dream came true. Um, but we back in those days when we were
+[05:21] dreaming, we had to take our security posture under a microscope and look at
+[05:26] what was going on. So, I took the ownership of that and I sat down and
+[05:31] evaluated where we stood. And early on, I'm talking like a year to nine months
+[05:37] ago, we had what I call layer zero because it quite literally is not
+[05:41] security. it is just prompts that suggest what the agent should do um and
+[05:46] steer it and prompts are not security. So I was concerned there. Uh layer one
+[05:53] uh it was an allow list and when I started digging into this allow list I
+[05:56] started to feel a little bit better because it was pretty tightly bounded.
+[05:59] Uh but I still had a lot of concerns and I started panicking because of that
+[06:04] context engine that I told you about. We are feeding a lot of context into the
+[06:08] agent at runtime. So, I built this really hacky reax scanner to look for um
+[06:15] threatshaped things going into the wizard and threat shaped things coming
+[06:19] out of the wizard. And I will admit that it was extremely hacky.
+[06:24] But I'm telling all of you this very candidly because we are all building
+[06:28] things that feel extremely experimental and we are all building things super
+[06:33] fast. And I know not all of us uh have security in our wheelhouse. Um, and some
+[06:39] of us are just learning it on the fly like I was.
+[06:43] But it's something we need to be thinking about when we are building
+[06:46] things that have this shape.
+[06:50] So that was our security posture. Uh, but I asked the question, are we cooked?
+[06:56] Uh, good news, we were less cooked than I thought because when I mentioned
+[07:01] earlier that allow list, it was pretty tightly bound. We had bash as deny by
+[07:06] default. It could only install trusted packages that were vetted by us. Um, it
+[07:10] could build, it could type check, it could lint, and pretty much nothing
+[07:13] else. It couldn't run random shell commands. And it didn't have access to
+[07:19] environment variables. Um, the agent couldn't read your uhv file because we
+[07:25] blocked it outright and we were rooting secrets through a vault. So, I took a a
+[07:30] breath of relief and realized we were in a better place than I thought. But I
+[07:36] wanted to know where the cracks were because with security there's always
+[07:38] cracks. So I did the thing that we should all be doing. I tapped our
+[07:43] security team and I said, "Hey, can you audit this thing for me and find those
+[07:48] cracks for me?" And they found some things. They found
+[07:52] some gaps. And the interesting part wasn't the specific gaps or bugs they
+[07:57] found themselves, but it was the shape of them. Because almost none of them
+[08:00] were obviously evil. They were all two very innocent, well-intentioned things
+[08:05] that were shaking hands and opening a hole.
+[08:10] So, the lesson I learned was that attacks compose code review doesn't
+[08:15] because us developers all look at diffs uh one at a time, but attackers look at
+[08:21] the whole system and they look for those two things that shake hands and open a
+[08:25] door. But there was one more thing that was
+[08:28] keeping me up at night. And going back to that context engine, uh, I realized
+[08:34] the scariest part of the agent we had built wasn't really a command in our
+[08:37] case. It was the helpful looking stuff that we were feeding its brain.
+[08:44] Oh, I think I went the wrong way. Yes, the context mill. Um, so this is
+[08:50] our context engine, aka the wizard's brain, and it's how the wizard knows
+[08:54] anything at all and why the wizard actually does a good job. It pulls from
+[08:58] our docs. It has handwritten prompts that are gotus and lessons that we
+[09:02] learned along the way and real working endto-end example apps that help the
+[09:07] agent pattern match so that it can install Post Hog in a really great way
+[09:11] for you. It package packages all of that into
+[09:14] skill bundles that get shipped to the wizard over our MCP server and loaded
+[09:20] straight into the agents context at runtime.
+[09:24] So sit with that for a second. It's a machine whose whole job is to take
+[09:28] content and inject it into an agent that can run commands.
+[09:32] Now if you were an attacker, you might say, "Well, what if I just poison the
+[09:36] content? not the user's codebase, not the agent itself, but the actual
+[09:41] content. Say someone opens a pull request on one of our open source repos
+[09:46] because at Post Hog we build everything in the open and they inject something in
+[09:51] a markdown file or a seemingly harmless code comment and we have some sort of
+[09:57] like LLM powered code review going through that and it says looks good to
+[10:02] me and ignores it. We may have just shipped a prompt injection payload
+[10:07] signed by us into an agent that is running on thousands of developers
+[10:11] machines in a sandbox, but still. Um, so that was the threat that reshaped
+[10:17] how I think about security and the wizard because the dangerous input for
+[10:22] us really could come from our own supply chain.
+[10:26] So what I ended up doing is I started scanning content at both ends of this
+[10:30] pipe. Once when a skill gets built and released and again when the wizard
+[10:36] actually uses it. My methodology is catch it at the source, assume the
+[10:41] source failed and catch it again at the point of use.
+[10:46] So now I get to introduce the warlock to you. Building the warlock was not
+[10:51] necessarily damage control. Like I said, we had defense in other ways, but I
+[10:57] built the Warlock because I didn't like telling people, well, this thing is like
+[11:00] pretty locked down. That doesn't scale. That's not something you want to ship to
+[11:04] production. That's not something that you want thousands of developers running
+[11:08] every single day because when you ship something to that
+[11:12] scale, you have way more surface, way more users, way more content flowing in
+[11:17] as you expand the capability of the wizard. and we're probably fine just
+[11:22] stops being good enough. So, I pulled that hacky little reax scanner that I
+[11:26] threw in there, pulled it out of the wizard, and I made a standalone thing. I
+[11:31] called it the warlock because everything wizard shape needs a bodyguard.
+[11:36] And it does exactly one job. You hand it a string. It hands you back a list of
+[11:41] findings. Each of those findings has a category, a severity, and a recommended
+[11:46] action. And then it stops. I want you to focus on recommended here
+[11:51] because the warlock detects it does not act. It'll tell you, hey, this looks
+[11:56] like exfiltration. It's critical. I would block it. But what you actually do
+[12:01] with that finding is completely up to you.
+[12:05] Because detecting a problem is one job and deciding what to do about that
+[12:08] problem is a totally different job. And the only thing that keeps all of this
+[12:12] understandable is keeping those two things separate.
+[12:16] So underneath the hood of the warlock, instead of my hand rolled reaxes, the
+[12:20] rules run on Yara, which is the pattern that engine malware researchers have
+[12:25] been using for like 15 plus years. It's fully deterministic. It's the same
+[12:30] input, same output every single time. It's boring on purpose. And in security,
+[12:35] boring is a feature.
+[12:39] So what does the warlock actually catch in the wild today?
+[12:44] um a bunch of different stuff, but two of these are an absolute like nuisance
+[12:48] to my soul. Uh the first thing is actually not a rule-shaped thing. It was
+[12:53] something the uh that the warlock flagged. That was actually a sub aent
+[12:57] behavior that exposed a vulnerability to us um based off of what sub agents were
+[13:03] doing. Uh so basically we were spinning up agents to do large tasks. They were
+[13:08] spawning sub aents and those sub aents were trying to get around the guardrails
+[13:11] that we had implemented in the wizard and they were trying to invent secrets.
+[13:17] They were trying to pull secrets from quite literally anywhere in the codebase
+[13:20] and we shut it down. We said no more sub agents and because of the warlock we
+[13:26] caught that. And I'll empathize with the robot. The
+[13:29] robot had a task to do and it was trying to optimize and please us. But we can't
+[13:35] have that. And something else at Post Hog that really matters to us is PII. Uh
+[13:40] agents genuinely do not care about uh exposing data unless you make explicit
+[13:46] rules. Uh left alone, we watched it dump emails, phone numbers straight into
+[13:51] events. And to an agent, that looks like a totally normal thing to capture.
+[13:58] And luckily for prompt injection specifically, I'm going to knock on wood
+[14:03] here. Uh we have basically never caught an actual malicious prompt injection in
+[14:08] the wild, but we do catch a ton of false positives. Things like our demo login
+[14:14] screens, copy on our example apps, things in our docs. And it's actually
+[14:18] made me rethink how I build applications and how I write docs because I don't
+[14:23] want to ship anything that looks threatshaped.
+[14:28] But the false positives are honestly the perfect setup for the messiest, most
+[14:33] interesting part of this whole thing. So this is the part that I wrestled
+[14:38] with. I spent this whole talk preaching deterministic to all of you. And then I
+[14:44] went and I added an LLM layer to help sort my false positives and silence some
+[14:50] of the noise. And I call it triage. When I was building this triage layer, I
+[14:55] had to make a choice. Should the layer be a bouncer or should the layer be an
+[15:00] adviser? And the easiest choice probably could have been make the LLM the
+[15:06] bouncer. Show it the command, ask it is this an attack block allow and just do
+[15:12] whatever it says. And while that's tempting because it seems easier, I
+[15:17] can't uh bet my security model on a coin flip because my model's having a bad day
+[15:23] or something happened and it's acting different today than it did yesterday.
+[15:27] So instead of the bouncer, I crafted the model to be the adviser. And this was
+[15:33] the clean line that I found and a line that I'm still exploring, but I want to
+[15:37] leave all of you with. Uh for us, detection and enforcement stay
+[15:42] deterministic and mechanical. If a rule matches, the gate locks, the session
+[15:46] ends, and there is no model anywhere on that path. The block happens before we
+[15:52] even ask the LLM's opinion. The LLM only gets to weigh in afterwards if we have
+[15:58] not blocked something. It's designed to remove noise. It is not designed to let
+[16:03] things through. And if it fails clos and it fails closed. So if the model is
+[16:08] having a bad day, all wizard runs are killed. Sorry, but we're just protecting
+[16:13] you. Enforcement is the part that you bet the
+[16:17] house on. So it has to be deterministic, but judgment is the part that adds
+[16:22] nuance. So that's really the only place that you can put anything probabilistic
+[16:27] in there.
+[16:30] So, how do we ship real rules for agents? This is the anatomy of one of
+[16:37] our warlock rules. And every warlock rule has four parts. Part one is the
+[16:42] metadata. It's plain English description, uh, severity, category,
+[16:48] action, uh, direction. Is this flowing into the agent? Is this something the
+[16:53] agent is writing? Uh
+[16:57] then we have the strings. So these are the actual patterns that you're looking
+[17:02] for. And part three is the condition. So this is where the rule is actually
+[17:08] allowed to fire. I'll walk through this example for you
+[17:12] and we can pretend like we're writing it in our head. Prompt injection being like
+[17:17] the classic ignore all previous instructions. Your first instinct here
+[17:22] is probably to block uh the word ignore, but agents read code all day and ignore
+[17:28] can show up in code comments or examples all the time. So you don't want to match
+[17:33] the verb alone. You match the verb plus an instruction flavored noun.
+[17:39] In the condition, you say fire if any of any of those patterns hit. And in the
+[17:43] metadata, you determine is this critical? uh what the category is, what
+[17:50] the action is, in this case block, and the direction in this case being input
+[17:54] flowing into the agent. But to write good rules that reduce
+[18:00] noise, you have to ship tests with them. So you have to write tests that say this
+[18:04] are these are patterns that match. These are ones that should not. And that
+[18:09] negative test is the first line of defense against false positives. But you
+[18:14] also want to make sure when you're deciding the severity of that uh rule
+[18:20] that you track real world impact, not how scary it looks.
+[18:25] RM-rf is scary, but it's also how we all delete note modules like 40 times a day.
+[18:32] You decide the real world impact for the agent that you're building
+[18:38] because a security tool that crashes every time it tries to clean a build
+[18:42] folder is a tool that gets turned off and one that catches absolutely nothing.
+[18:48] So I'm proud to say this is our security posture now. I can finally come up here
+[18:53] and say we have true defense and depth. Um all my learnings have assembled into
+[19:00] this. Uh, it's still layered, but every layer is doing a job that it's good at.
+[19:04] Now, we still have prompts, but we only use them for steering. Everything runs
+[19:09] in a sandbox. We deny by default. We have a vault, so secrets never hit the
+[19:14] model. We have the warlock to scan content coming in and to scan output
+[19:19] being written by the agent. We also have triage to reduce the noise. And we have
+[19:24] telemetry embedded in the entire process so that we see everything.
+[19:29] None of these layers stands on its own. Not a single thing here is going to save
+[19:34] you. But it's just boring, honest layers. Each of them doing uh one job
+[19:40] that it's good at. So if you're building an agent with
+[19:45] hands, this is the whole talk in three lines. One, if it isn't enforced uh
+[19:50] deterministically, it is not enforced. Prompts are not security rules. Don't
+[19:55] act like they are. Uh two, the dangerous input uh isn't just what your user
+[20:02] types. It isn't just the commands that you allow it to run. It's everything
+[20:06] flowing into the model, including the content that you write yourself. So scan
+[20:10] your own supply chain at the source and when the agent invokes it. Three,
+[20:17] attacks compose. Code review doesn't. Most of our gaps during our audit were
+[20:22] two innocent things shaking hands and opening a door.
+[20:27] The wizard, the warlock, and the context mill are all open source. So, come find
+[20:32] me downstairs. I'm in the expo hall at our booth, and I'll show you around uh
+[20:37] show you what we built, and I want to hear how you guys are securing your
+[20:41] agents. Thank you.

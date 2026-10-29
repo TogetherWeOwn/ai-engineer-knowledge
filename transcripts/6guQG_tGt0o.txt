@@ -1,0 +1,265 @@
+# title: AI Kernel Generation: What's working, what's not, what's next – Natalie Serrino, Gimlet Labs
+# source: https://www.youtube.com/watch?v=6guQG_tGt0o
+# speaker: Natalie Serrino, Gimlet Labs
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T10:16:43Z
+# sha256: 828567af036440e9c6f3fcc5dd9d52b9f89a25c45dc81fa752e2ece66bab7bca
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:13] [music]
+[00:20] Hey everyone, how's it going? So, my name is Natalie. I'm a co-founder
+[00:26] of Gimlet Labs and um yeah, just a little bit of background about why
+[00:30] Gimlet's looking at AI generated kernels. Let's just get right to it. Um
+[00:34] we're building an agentic inference cloud focused on performance and
+[00:37] efficiency. And the thing that we've seen with all these talks so far is with
+[00:41] agents, they're not just one chat model. They're complex pipelines of multiple
+[00:46] models, multiple stages, tool calls, and the compute backing these is inherently
+[00:51] should be heterogeneous. So what we do is we automatically split up and
+[00:55] orchestrate these agentic workloads across optimal hardware which can be
+[00:59] different vendors and different sizes. This can present a problem at the kernel
+[01:04] level because a lot of times you have models that are really optimized just
+[01:08] for one hardware. So what we started looking at is can we use AI to help
+[01:12] automatically port different segments of aentic workloads to hardware that it
+[01:17] hasn't necessarily been optimized for. So just to clarify something really
+[01:23] quick because we run into this a lot. What do I mean by kernels? I do not mean
+[01:29] AI generating operating systems like the Linux kernel or things like that. What I
+[01:34] mean is kernels at the sense of like transformer architecture like the
+[01:39] individual like functions that perform like massive parallel computations
+[01:43] leveraging like all the crazy amounts of threads that GPUs have. So yes, people
+[01:48] be like, "Oh, how are you going to generate an operating system?" I think
+[01:51] maybe we're not quite there yet, but one day.
+[01:55] So why use AI to do this? So I think there's a few reasons. So we know that
+[02:01] optimizing low-level kernels can make workloads like ML workloads
+[02:06] significantly faster. So here we have like it's probably too small to see but
+[02:10] it's a blog from Nvidia where they implemented a different attention and it
+[02:15] allowed them to like get 3x throughput on a llama model. So these like
+[02:19] implementations can make a major difference from a performance
+[02:22] perspective. But at the same time if you just search Twitter everyone's whining
+[02:26] about how it's impossible to find these people and the people that exist are
+[02:29] like really overt taxed with so much to do, so much work. There's just not
+[02:33] enough experts to be able to solve every problem in this in this space right now.
+[02:39] And the problem explodes because you have so many frameworks and so many ways
+[02:44] to write kernels from things like CUDA and like Triton to Palace to things like
+[02:49] that are device specific like Metal and you have different hardware platforms
+[02:53] too and each of these hardware platforms even within a single vendor has
+[02:57] different characteristics. We've seen for example that some of the new um like
+[03:02] hardware from Nvidia like some of the old kind of like DSLs weren't working as
+[03:06] well on it because the different hardware has different properties it has
+[03:10] different features it has different characteristics different cache sizes
+[03:13] etc all of which impact the optimized implementation from a kernel perspective
+[03:20] so we and many others in the space have thought it would be great if AI could
+[03:25] help us with this problem where you could potent potentially give it PyTorch
+[03:29] code and then generate optimized implementations for whatever hardware
+[03:34] you're trying to run that workload on.
+[03:39] So I think when you're trying to use an agent for something, you have to start
+[03:42] with what the human workflow is. And the human workflow today, when you have that
+[03:47] like really hardcore kernel expert, let's say they're trying to port a new
+[03:52] uh like workload over to Metal, right? What they'll do is they'll say, "Okay, I
+[03:57] have this implementation. Maybe I have a CUDA version, maybe I don't. And I'm
+[04:01] going to try something. I'll see if it compiles." Most of the time, maybe not.
+[04:06] I'll see if it runs. If see if it's correct, and if none of
+[04:11] those are the case, you just pass that back into the human context, so to
+[04:14] speak. And then once you get something that's working, then you start looking
+[04:17] at the profiling information in depth and just hammering down like this is the
+[04:21] bottleneck now. This is the bottleneck now. This is the bottle of the mic now.
+[04:24] It's a very iterative process. So I think that you know basically the
+[04:31] idea here is to put AI as the as the kind of like
+[04:36] where the human would go in that same loop right so the agentic flow here is
+[04:40] to make sure it compiles and it executes and it's correct and then from there
+[04:45] optimizing it. So this is something that I would say is
+[04:49] like very new technology. There's a lot of interest here, but there's some
+[04:53] things that it's good at and some things that it's still kind of in development
+[04:57] for. And so, let's dive into some of the specifics.
+[05:01] So, this is a quick demo of our system. It the font's kind of small, but we're
+[05:05] passing into a CLI tool, a PyTorch workload, targeting it to an H100, and
+[05:11] the system had explored a bunch of candidate optimizations. It's comparing
+[05:15] to eager mode and torch compile and it found one uh candidate that was 22%
+[05:20] faster than the torch compile baseline. So this was a real case. It just sped up
+[05:25] because it actually took about 20 minutes.
+[05:30] So there's some challenges though with measuring these agents at kernel
+[05:33] synthesis. So um like first of all you have to figure out what your definition
+[05:37] of correct is when you're dealing with floating point. This is always a
+[05:40] question. You can do different types of tolerances, but you also need to make
+[05:44] sure your input sizes are well selected. If you're only passing in really small
+[05:48] input sizes, it can cause problems with the benchmarking where you're measuring
+[05:51] the overhead, not the actual kernel as the critical path.
+[05:56] You also have to make sure you're reliably measuring performance. So, if
+[05:59] you just do a naive timer start on your implementation, it's probably going to
+[06:04] be wrong. And there was a great blog that had a diagram for this because
+[06:08] you're basically measuring the launch time, not the execution time. So there's
+[06:12] a bunch of kind of gotchas like that that when you're building an agentic
+[06:15] system like this, you have to be really really careful about catching doing
+[06:19] things like warm-ups and cache clearing because a lot of times you'll have
+[06:23] you'll have the original implementation run and then the new implementation run
+[06:26] and then the original one's result is cached and the new one fetches it. So
+[06:30] you have all kinds of things like that that you have to be really neurotic
+[06:32] about otherwise you might get bad results.
+[06:35] You also need great benchmarks for this. I think that someone said earlier that
+[06:39] there's not a ton of examples of low-level kernels across all these
+[06:42] different hardware platforms. And so the input data is a challenge and also
+[06:46] benchmarking it is a challenge. Like how do you know if your agent is better? You
+[06:50] change the prompt to it. How do you know? It's the same story we hear with
+[06:53] every agent here basically.
+[06:57] So we have some preliminary results on that we're sharing right now on Apple's
+[07:02] um M4 uh using the metal framework. Um and this is on the kernel bench
+[07:06] benchmark the v0.1 version of it which is the latest one. So what we can see
+[07:12] here is results across 250 problems and it compares to either torch compile or
+[07:18] eager mode depending on which one of those is faster. So with the kernel
+[07:22] bench data set, we have different tiers of problems with L1 being the easiest or
+[07:28] simplest rather and L3 being like more complex. So what we can see for the
+[07:32] standalone agent is that we see an average speed up of about 25% or 24%.
+[07:39] And the sweet spot is those moderately complex problems. It seems honestly the
+[07:43] same as like a lot of coding problems where it's good at moderately complex
+[07:46] things, but then you push it too far and the performance drops off. So, an
+[07:51] interesting challenge here is going to be how do we make these agents perform
+[07:54] better on more complex problems that they're going to have to break down and
+[07:58] execute.
+[08:03] There we go. Um, let's talk about a couple of examples because I love to
+[08:07] just see example code. So, this was a success case where the model found a
+[08:12] case where we could do kernel fusion. So for those that aren't that familiar with
+[08:15] GPU kernels, kernel fusion is one of the most go-to techniques in kernel
+[08:19] optimization where you say I have two kernels. Let's say in this case it was
+[08:23] like a convolution softmax bias scaling and sigmoid. So those were five ops and
+[08:30] what the agent did was it took four of those ops and instead of running
+[08:34] individual functions for those it made a mega function that compacted them all
+[08:38] together. So kernel fusion isn't new. It's something that torch compile
+[08:42] already does quite well, but it's a common way that we found agents can
+[08:46] speed up these workloads because you can really customize it to the specific use
+[08:49] case. So, this result achieved a 40% speed up over the baseline on the M4.
+[08:57] And just kind of like zooming into what happened, the agent wrote a fused op. So
+[09:04] it basically wrote like C++ code that it put as kind of an inline string with the
+[09:08] PyTorch code and then it called that fused operation in the forward pass of
+[09:15] the model and then that fused implementation we can see a snippet of
+[09:19] it up here where it's basically taking those four ops and putting them together
+[09:23] in one mega op. And so this was done automatically.
+[09:30] Sometimes though like writing low-level kernels isn't the best optimization that
+[09:33] we can get. We had another case which was on a level one problem which
+[09:38] basically improved the performance by 80%. And the the insight the agent had
+[09:43] in this case was the operation in metal for average pool 1D was not as optimized
+[09:50] as some other ops that are much more optimized on metal. So what it did was
+[09:55] it actually rewrote the pietorch code to use the more optimized op and reexpress
+[09:59] the same problem in a different way. So to dive into this um the average pool
+[10:06] 1D is basically taking averages across like one dimension. So like you can see
+[10:11] that that input vector could produce the output vector with five and seven
+[10:16] averaging to six and so on. So if you express that same thing as a
+[10:21] convolution, you can get the same result.
+[10:25] So if you do the math, it will lead to that same result. And so that's what the
+[10:28] agent did. Basically what it did was it said, hey, instead of doing the original
+[10:33] call to the baseline op, let's generate that weights matrix and execute this as
+[10:38] a convolution because I know that that's really fast on metal.
+[10:44] There's also an interesting algorithmic optimization case. This was for a level
+[10:48] three problem. So it was more complex where basically the agent figured out
+[10:51] that it could combine two operations into a single operation at the PyTorch
+[10:56] level, not even using low-level kernels.
+[11:01] So what we can see is that basically it fused it, it rewrote it as Python code
+[11:07] and calls that single convolution and that's a lot more efficient because you
+[11:10] don't have to launch as many ops.
+[11:15] But this does not always work. This is not a silver bullet and I think that's
+[11:18] really important to emphasize. So a case where the agent totally faceplanted was
+[11:22] on matrix multiplication and it was it wrote a custom CUDA kernel for this but
+[11:27] it was a lot slower than the baseline. And the thing is with this is matrix
+[11:31] multiply is one of the most hand optimized ops that exists. So it's not
+[11:37] that surprising that an agent would not do as well as something that a human
+[11:41] expert spent a long time on. So, this is an area that it did not work.
+[11:48] Another case was a case that we saw which had a 71,000x speed up. And
+[11:54] anything like that should trigger your suspicion brain.
+[11:57] Wow. 71,000. Great. We're done. It's, you know, this technology is worth
+[12:01] billions of dollars, right? No. So, basically, what happened? So, this
+[12:07] operation is basically saying, give me inputs and I'm going to make sure they
+[12:10] fall betweengative -1 and one. Okay, that's what the operation being tested
+[12:16] was. So the agent figured out that for all of
+[12:21] the test cases, this was already the case. So it wrote a nice long comment
+[12:25] saying this is actually not necessary, so just output the input.
+[12:30] [laughter] So [snorts] you could argue this is the
+[12:34] agent being smart because it's pruning unnecessary work, but I think a lot of
+[12:37] us would agree that it's not in the spirit of what we're trying to benchmark
+[12:41] here. So we've excluded cases like this from our analysis, but it is interesting
+[12:45] because maybe some of the times you would want it to do something like that.
+[12:48] And I think this is part of where the human element comes in with these
+[12:51] agents. Sometimes the agent does something that depending on your
+[12:54] definition of what you want to see could be good or it could be bad. And so
+[12:58] that's where the human part kind of weighs in.
+[13:02] So, like I keep drawing parallels to other kinds of coding agents because
+[13:06] even though this is like kind of a niche like low-level domain, I don't think
+[13:10] that the story is fundamentally different. We see standalone agents are
+[13:15] really good at cheaply generating like lots of different ideas and lots of
+[13:18] possibilities to explore. They're good at slurping in a ton of different
+[13:22] context and seeing what helps. And they're really good at doing these like
+[13:26] level one and level two tasks. Like for example, we're still not asking AI
+[13:30] agents to write the Linux kernel, but what is still needed is robust and
+[13:36] robust quality and performance validation. We need to make sure that
+[13:39] the agents aren't cheating and we need to make sure that the results are
+[13:42] actually correct. We need empirical data from hardware in the loop to guide the
+[13:47] search and optimization because it's actually really hard to look at
+[13:51] low-level code and know how it's going to perform on the hardware. We still
+[13:54] heavily rely on looking on profiling data and things like that. And we also
+[13:59] need the human in the loop to supervise the results and guide the work. So
+[14:02] design of a modern agent, you have multiple sub aents that are working
+[14:06] together. You have that human in the loop and a purpose-built harness for
+[14:11] that task. And I think this is the pattern we've seen throughout this
+[14:14] conference. So just to get a little bit into kind of
+[14:19] like what that architecture looks like and this is what we're you know what
+[14:23] we're building at Gimlet you have a supervisor agent which takes in input
+[14:28] code target hardware and then also human prompting because humans still can
+[14:32] really guide the best path for optimization that supervisor is in
+[14:36] charge of managing the work. It deploys the synthesis agentic swarm which
+[14:42] collectively work together to come up with ideas for optimizations and they
+[14:46] are basically the idea factory coming up with new techniques. Those ideas get
+[14:51] sent to the verification agent which is running them in on actual hardware in a
+[14:56] hardware in the loop system to see how they do and that verification agent
+[15:00] needs to be extremely strict about making sure that no funny business is
+[15:04] happening. And that's a major part of the challenge.
+[15:09] So just a couple more realistic case studies that are not benchmarks. We got
+[15:13] really excited because we ran this on a vision transformer model and I don't
+[15:17] know if you can see but basically the original uh vanilla implementation using
+[15:22] torch compile and our generated code using torch compile ours was twice as
+[15:27] fast. So this was like a hoay moment. So the speedups were promising, but then
+[15:33] it turned out the optimization was just swapping out the original attention
+[15:37] module for SDPA, which is a more optimized attention module. And this is
+[15:42] the kind of thing that yes, that's true. That is a valid optimization, but I
+[15:46] wouldn't necessarily call it rocket science. So we consider that to be a
+[15:50] trivial case study where if you're not using a more optimized attention module,
+[15:54] maybe you haven't actually optimized your workload that much yet.
+[15:59] But we do still see interesting results for full models when we have human
+[16:03] prompting. And one case for this was an audioenccoder model where it generated
+[16:08] six custom kernels for the workload specialized for the RTX 6000 Blackwell.
+[16:14] And the results were strong. It was about 70% faster. Both implementations
+[16:19] using torch compile. So just to kind of show an example, we
+[16:24] load in line six different fused kernels and then call them in the code. And the
+[16:30] nice thing about this approach, even though it's a little weird declaring
+[16:33] these as strings, is that you have like a completely a API compatible swap in
+[16:38] replacement for the original module in PyTorch.
+[16:43] So where are we with AIdriven kernel optimization? I think like I said before
+[16:47] this is not a silver bullet but it is a promising new tool in the toolbox. The
+[16:52] best applications that we see are things like searching across many bags of
+[16:57] tricks. We know that fusion works. We know that tiling works and we can run
+[17:02] lots of experiments really quickly this way by launching them with agents and
+[17:05] see what actually performs the best on the workload. It's also good at porting
+[17:10] existing implementations to new hardware where it takes the insights from that
+[17:14] original implementation and specializes them to the hardware available features
+[17:18] on the new target and also about translating existing
+[17:23] optimizations to new scenarios. You can quickly adopt new optimizations like
+[17:28] let's say you're changing the quantization of your model. You can
+[17:31] still look at differently quantized implementations to guide that
+[17:35] optimization. In terms of the worst applications,
+[17:39] we're still not at the point where they're writing the N plus1 for flash
+[17:43] attention, coming up with like those genius algorithmic advances. And they're
+[17:47] not currently outperforming a human expert who bang their head on this
+[17:50] problem for months. And we shouldn't expect them to be. I think that the most
+[17:54] exciting part of this work is allowing those people to focus on the most
+[17:58] interesting optimizations and getting us better than baseline on all the problems
+[18:02] that they don't have time for. So what's next in the work? We want to
+[18:09] build uh abstract models of different machines to help the agents further
+[18:13] specialize code to individual hardware. We're also interested in generating
+[18:18] basically what is like NVIDIA assembly such as PTX. You can see an example here
+[18:23] because the thought is that we can basically do that better with AI than
+[18:27] humans because it's so cumbersome. And then also looking at academic formal
+[18:32] verification methods for correctness. Um, also want to give a huge shout out
+[18:38] to my colleagues. Um, they are the silent unspoken heroes here and um, you
+[18:43] know, I love talking about this with people. So, please feel free to give me
+[18:46] an email if you want to talk about kernel generation or anything that I
+[18:50] covered. And we are hiring. So, if this problem interests you, we'd love to
+[18:53] chat. Thanks.
+[18:57] [music]
+[19:13] Heat.

@@ -1,0 +1,282 @@
+# title: Lessons from Generating 12 Trillion Synthetic Tokens — Bogdan Gaza, DatologyAI
+# source: https://www.youtube.com/watch?v=FQwTqUmcbRg
+# speaker: Bogdan Gaza, DatologyAI
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T04:29:37Z
+# sha256: ab1c7e1746380f922c2c5bbd2781288a4da479bed6b5d3b74cc0a9fa8cc0c660
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:01] [music]
+[00:12] We're doing this. Hey everyone, welcome to my talk. I'm Bogdan. I'm one of the
+[00:17] co-founders and the CEO of Theology. Today we're going to talk about the
+[00:20] engineering lessons from scaling synthetic data for trillion token scale
+[00:24] pre-training. Um, let's see. So why do we need synthetic data in the first
+[00:29] place? Well, turns out that with the scaling laws, we kind of hit a data wall
+[00:34] um you need to put exponentially more compute and exponentially more data to
+[00:38] get um models that are getting kind of linearly better and better. So um we're
+[00:43] we're at this point where pre-training runs are massive. So in order to do the
+[00:48] the kind of the ones that actually get to I don't know the mythos level um
+[00:54] capabilities you need a lot of data and a lot of it uh cannot be found on the
+[00:58] web. So um internet has limited amount of data um we can supplement it with
+[01:03] high quality synthetic data. So what are we going to talk about today? We're
+[01:07] going to talk about um you know how do we do this in the first place? We're
+[01:11] going to talk about a bit about beyond web which is kind of our syntheta data
+[01:15] recipe. Um we're going to talk about the engineering lessons from our prior
+[01:19] experience here at Ethology of running trillion tail trillion um token scale
+[01:24] synthetic data runs. Um we recently completed one for about 12 trillion
+[01:28] tokens. That's across web math and code. And we're going to talk about what we
+[01:32] learned from running absolutely massive synthetic runs. Um and then we're going
+[01:37] to talk about kind of what's the why does this matter in the first place. Um
+[01:42] awesome. So let's get started. Um, so the way that we solve synthetic data at
+[01:47] theology and maybe let's start with a with a quick intro about it. We're a
+[01:51] kind of data curation service. Think of us as the oil refinery for your kind of
+[01:56] pre-training and mid-training data sets. We work with customers both startups and
+[02:00] enterprises that come to us to um kind of help them with their pre-training and
+[02:05] mid-training data needs. So in general they have a lot of data. um they want to
+[02:08] get to the best data sets possible and we help them identify the the highest
+[02:12] quality data points and um once we do that we pass them through our synthetic
+[02:16] data recipe the ones that we're going to talk about today um to get absolutely
+[02:20] massive data sets. So um that's a bit about us uh in terms of beyond web is is
+[02:25] our synthetic data recipe. Um there's kind of many ways to do synthetic data
+[02:30] but um kind of the the way that we approach it is um quite different. So
+[02:34] here's a few results from from um kind of how we do this. So uh there's two
+[02:38] plots. Maybe let's start with the first one. Um on the x-axis we have the model
+[02:42] size and billions of parameters. Um 1 billion, 3 billion, 8 billion. And then
+[02:46] on the y-axis we have um accuracy. So um we've taken kind of a number of data
+[02:52] sets like Neotron Synth, Cosmopedia, QA rap, um Red Pajama, and then we've
+[02:56] trained models at kind of 1B, 3B and 8B scale together with um kind of the the
+[03:03] recipe we've put together for for uh synthetic data which we call beyond web.
+[03:07] Um and what we see is that um kind of our synthetic data recipe um kind of
+[03:12] matches and and sometimes even um kind of
+[03:16] in this case the the 3B data point matches the 8B data point um for neatron
+[03:22] synth. So that means that you can train slightly smaller models for the same
+[03:27] performance as you would train larger ones by using synthetic data. So um
+[03:32] that's a bit about kind of the the the quality of of our recipe. Um same thing
+[03:37] here when you when you talk about performance. So on the x axis we have um
+[03:41] kind of number of tokens in billions and then the y- axis we have uh the the
+[03:44] average accuracy. Um and what we show is that we match the the the performance of
+[03:50] um kind of the the um Neotron synth and the Cosmopedia ones in about 2.7x and
+[03:57] 5.3x respectively uh less tokens. So uh if you want to train a model to the same
+[04:02] performance, you can do that um by using less data and and overall less compute.
+[04:08] Um so at a high level what what beyond web is is is kind of how we think about
+[04:12] our synthetic data recipe. What we do is we do rephrasings. Um so where we we
+[04:17] kind of see the rephrase the the synthetic data process by um kind of
+[04:21] finding the highest quality data points in a customer's data set and then we
+[04:24] rephrase or restructure this data points in in various ways. Um this is results
+[04:29] are actually a bit old. I think the the origin we published this in uh in um I
+[04:34] think late summer 25 and at this point we're we're much much better than this
+[04:39] um and and we're continuing to improve quite a bit. So how do you get synthetic
+[04:43] data right in the in the simplest form you have some sort of target data set
+[04:46] again we're doing rephrasings um or reframings of existing documents. So the
+[04:51] idea behind it is that um if you just prompt a model and say hey give me a
+[04:55] synthetic data um data point you're going to just learn the modes of the
+[05:00] distribution the data was was origin trained on. So uh the way that we do it
+[05:04] as mentioned previously is that we seed it with um some sort of existing
+[05:09] documents. So we identify high quality documents in the customer's um training
+[05:13] data sets and then we we pass them through through our pipeline. At the
+[05:16] simplest set, we have a a target data set. Imagine this can be text, this can
+[05:20] be image text. Um, in the simplest forms, it is just a bunch of prompts
+[05:24] that that we prefix to um a number of documents that we've identified. You
+[05:29] have a bunch of GPUs and then you um kind of use various models to generate
+[05:35] synthetic data. Um so in practice, you have some sort of um expectations around
+[05:40] how much time this is going to take. But in practice, this is a lot more wavy and
+[05:44] and it it really it's really hard to match the the kind of ideal throughput
+[05:47] that you're trying to get of your um out of your GPUs. So, how do we manage that?
+[05:52] Well, well, where did we start? We started where um synthetic data wasn't
+[05:56] integrated in our product was something that we would do in a research setting
+[05:59] uh on a cluster that that runs slurm that is away from our core
+[06:03] kubernetes-based pipeline. Uh we had this two-track system where kind of the
+[06:07] product and the research team would would not use the same type of codebase.
+[06:11] This was slow, errorprone, um, limited in velocity and kind of led to
+[06:15] underutilizing our GPUs. We have a set number of GPUs like everybody out there.
+[06:19] And in general, we want to be able to to maximize the the the use of our GPUs by
+[06:24] running this in a in a cohesive way both with training and synthetic data runs.
+[06:28] Um, so where do we start? In general, um, we'd like to run everything on on
+[06:32] Kubernetes. Um, a lot of our pipeline is either Ray or Spark. Today we're going
+[06:37] to talk about um kind of ray and cube and vlm um those are kind of the core
+[06:42] components of our synthetic data library um or data um kind of pipelines. So
+[06:47] today what we do is we have an orchestration layer in one kubernetes
+[06:50] cluster. We um run spark in another Kubernetes clusters and um we we keep
+[06:56] the aster tracker which is our data catalog in the original control cluster
+[07:00] where everything um kind of gets coordinated um into um all the data is
+[07:04] stored in S3 that's our storage layer um as long as it speaks kind of S3
+[07:09] compatible APIs we can run it. So in some ways we everything needs to run in
+[07:13] Kubernetes because our pipelines get deployed in all sorts of environments.
+[07:16] Um it can be AWS, it can be GCP, it can be onrem etc. We want to make sure that
+[07:21] that um kind of we can run it in any um Kubernetes environment. And then
+[07:25] separately we had this H100 cluster. Um it ran synthetic, it run training, it
+[07:29] ran eval kind of a number of things. All of them originally orchestrated by
+[07:32] slurm. Um moving data in between these two clusters was manual. So whenever you
+[07:37] generated synthetic data in slurm, you had to backfill it into the the asset
+[07:41] tracker into our data catalog. So where are we now? So um kind of same setup in
+[07:45] some ways where we have the the original cluster um that that does the control.
+[07:50] We have the compute cluster that that we run spark jobs and now we have this
+[07:53] other H100 compute cluster in in our case we run everything on AWS. We run it
+[07:57] on hyper pod. Hyperpod has this product called um EKS on hyper pod. So it's
+[08:01] basically a bunch of H100 clusters on the same spine all of them um
+[08:05] orchestrated by uh by Kubernetes. So what we do is we continue to run spark
+[08:09] and um ray jobs on demand capacity on demand CPUs and sometimes on demand GPUs
+[08:15] um especially for for things that we don't require H100s we can do that um
+[08:18] and then we orchestrate it in a similar way that that we've done before where
+[08:22] kind of spark runs within its Kubernetes cluster and then ray runs within um the
+[08:27] same cluster for um GPUs that are not H100s and anything that we need to do
+[08:31] for um H100 nodes we go to the this other Kubernetes cluster and we we kind
+[08:36] of have a job scheduler that we've built internally that that orchestrates all of
+[08:39] these things. Um if we do this then this allows us to to
+[08:44] run fast experiments. Imagine that you can run kind of um curate where you run
+[08:49] a bunch of spark jobs, you run a bunch of synthetic data, then you go and and
+[08:52] launch a training job and then you run an eval job and you can orchestrate all
+[08:56] of this together in one workflow which um for our research team is is quite
+[09:00] useful and this is puts the the the research flow and the engineering flow
+[09:03] in in the same lines in the same infrastructure in the same code in the
+[09:07] same path. Okay. So, um we where are we now, right? Like where Oh, look. I have
+[09:12] a a oneonone with someone on this fine. Um where where we're at is um kind of
+[09:19] synthetic data is is a core thing to to our workflows. Um we have we run
+[09:24] experiments all the time. We we do this crosscluster scheduling. It's a lot more
+[09:27] faster. It's a lot more reliable and we can run it at scale. So, um we've
+[09:31] recently done a massive um synthetic data run. Uh let's talk a bit about the
+[09:36] the engineering lessons that that we learned from this right. So um what are
+[09:39] the bottlenecks at at trillion token scale? Um well first and foremost um
+[09:46] internet scale um for for text data set is is quite limited right on on the web
+[09:50] we can find about 30 trillion tokens give or take for um images there's about
+[09:56] 2 12.8 8 billion in in things like dataccom for or for text we usually
+[10:00] start from existing highquality data sets like fine web dcmotron
+[10:05] um we can we can um kind of put them all together and we get this this large data
+[10:09] sets um but at this scale um usually everything gets stored in parquet or
+[10:14] some sort of of format you have millions of data partitions um if you're trying
+[10:19] to fetch all of them from s3 at a high rate you might get throttled and then if
+[10:22] you especially if you run this on ray um your your ray metadata uh is becomes and
+[10:27] how you manage that becomes a bottleneck and that leads to the the worst thing
+[10:30] possible which is that you get idle GPUs. So bottleneck um that that we
+[10:36] initially seen is that we have um S3 we try to fetch things from our array head.
+[10:41] um this has some sort of metadata store. um this is kind of quite slow and and if
+[10:47] you do one request that takes 10 milliseconds and and um you're trying to
+[10:52] to do I don't know millions and millions of them add I don't know let's say um
+[10:58] if you need to do um kind of the metadata fetches originally those are
+[11:01] more expensive um and there's also a rate limit so if you need to do millions
+[11:05] of them you're going to get rate limited then your workers are going to be quite
+[11:08] slow um so we kind of ran the the the back of the anvil of math just to
+[11:12] populate the the metadata for um trillions and trillions in tokens. It
+[11:16] would take about 9 to 11 days, which is unacceptable, right? You if you're
+[11:20] running this, you're probably running on millions of dollars in compute. You
+[11:23] cannot have them um just waiting for you to fetch metadata for for 11 days. So,
+[11:27] the the um way that we've went past this is that um instead of of kind of um kind
+[11:34] of going to S3, you can actually do um requests that are um batched together.
+[11:40] So, instead of doing one at a time, you can batch them all together. S3 supports
+[11:43] this through their APIs. And then this way um you can you can do this uh at at
+[11:49] a massive scale by kind of increasing the the um the page size of your if your
+[11:54] batches to to kind of the limit that that S3 gives you um which is about a
+[12:00] thousand um kind of requests in one list and that gets you to about um kind of
+[12:04] two hours of API processing time to get your your metadata. So, first lesson,
+[12:10] um, make sure that you know how you manage your metadata and make sure that
+[12:12] you have, um, kind of thought through just getting the state of your S3
+[12:17] buckets into whatever synthetic data system that you have in order for you
+[12:21] to, um, kind of be able to to even start doing this at scale. So, 11 days to two
+[12:27] hours. Uh, that's that's the first one. Um,
+[12:32] awesome. So, the second one is GPU instability. So whenever you're running
+[12:37] um these types of large scale synthetic data runs, of course you're going to hit
+[12:41] some sort of bad GPUs, right? So that means that the machine might go down. Uh
+[12:45] GPU might be bad. Something around those lines. Everything that you can expect
+[12:49] when you try to run it at scale would happen. So that leads to loss progress
+[12:53] that leads to kind of wasted compute, partial outputs, um if you if you only
+[12:58] parse through half of the file. And of course at the end of the day you're
+[13:02] going to uh need more cluster time which is always hard to get. Um so the the the
+[13:07] way that we do this in in our pipeline is that we have a Spark job that outputs
+[13:10] the the the prompts together with the the documents that we need to rephrase
+[13:14] that it's it stitches them together. Um and then we start a rig job that that
+[13:19] can actually uses the GPUs, right? Um so the the problem is that there's some
+[13:24] sort of onetoone mapping between input and output. That's that's kind of how we
+[13:28] we usually structure these types of jobs. Um, in practice,
+[13:33] if your partitions are um quite large, what happens is that um you're going to
+[13:40] do a bunch of of of um kind of progress. And then if you if if a refrazing job on
+[13:47] one node for one file for one partition takes eight hours and the box goes down
+[13:51] in the last five minutes of those eight hours, you're going to lose a lot of
+[13:54] time. So you need to think about um kind of you either have to checkpoint and
+[13:59] whenever you do progress within the synthetic data um jobs you need to
+[14:05] periodically say okay let me stop and like flash this back into S3 or um you
+[14:10] need to have partitions that are small enough that you can tolerate that
+[14:14] downtime. So um you need to to think about either your partition size or in
+[14:18] general kind of have some sort of checkpointing. Um what we've done is is
+[14:22] a bit of both where we've managed to right size our partition sizes and
+[14:25] checkpoint as well when it comes to this things. So um basically whenever um a
+[14:31] job fails it gets retrieded but the amount of um kind of time that we lose
+[14:36] is it's minimal and it makes sense for the setup that we have. Um so from
+[14:41] multi-day job failures now we have recoverable retries and it it it works
+[14:45] it works as as expected. So just to recap resumeum execution some sort of
+[14:50] IDM potency where whenever you're checkpointing you can override the file
+[14:53] that you're checkpointing into and then you need to have some sort of mechanism
+[14:56] for for simless recovery um cross infrastructure orchestration. So in in
+[15:01] our case the the the cluster where we origin run curation in general our
+[15:06] pipeline runs in a centralized location and then customers might have synthetic
+[15:10] data um jobs that run in various GPU locations throughout the world right you
+[15:14] might it's going to be hard to get especially for synthetic data where you
+[15:17] don't need necessarily fast networking in between your GPU nodes to get a lot
+[15:21] of capacity in one place so what happens then is that you need to be able to
+[15:24] orchestrate all of these jobs um in in various clusters so it's not just one
+[15:28] GPU cluster that you're working with you're working with um kind of a number
+[15:32] of them. Um the problem here is that whenever you have um and you're trying
+[15:38] to to to schedule um these jobs is that you might be able to um kind of schedule
+[15:44] your CPU requirements for your ray jobs but not necessarily your um kind of GPU
+[15:49] requirements in the GPU pool. So you need to think about kind of being able
+[15:53] to schedule in some sort of fashion across these two things. Now um once you
+[15:58] have the the next job coming in um you have GPU pull capacity but you don't
+[16:03] have CPU pull capacity right so in general whenever you're trying to do
+[16:06] this this type of cross infra or orchestration you need to think about
+[16:11] scheduling and you need to think about um kind of being able to schedule this
+[16:14] effectively um and in this case as I mentioned you you you will get to a
+[16:19] point where you cannot schedule effectively so what happens then is that
+[16:22] um you you kind of need to think about the the ways in which you do this in a
+[16:27] in a proper fashion. So some sort of bin packing problem at the at the end of the
+[16:30] day. Uh so how did we solve this? Um so same setup as before. Um we have this
+[16:37] orchestrator that runs in a different cluster. We have the compute cluster
+[16:40] that runs spark and the the ray jobs that mostly need CPU and then we have
+[16:44] the the one that has H100s. Um so whenever we schedule um we have
+[16:49] dedicated pools for the specific resources that you need in those
+[16:53] clusters. So if you have a spark requirements then you spark you might
+[16:57] have a a spark pool that that has CPUs and then you dedicate special pools for
+[17:03] um kind of the the ray head. So when you think about um some sort of atomic
+[17:08] scheduling you need to think about both your CPU and your GPU requirements in
+[17:11] order to do this optimally. So in this case whenever we have more CPU um
+[17:16] requirements that we need to schedule because we've decoupled these two things
+[17:20] um and and then we can schedule the the um head and the worker for array um in a
+[17:25] in a more atomic fashion then we don't have the problems as as before um and
+[17:29] then everything scales as expected. So cross in front orchestration um you
+[17:36] need to think about multiple providers multiple um clouds that you run this in
+[17:40] you need to think about scheduling and u make sure that whenever you schedule CPU
+[17:44] and GPU resources especially for the same type of job you do that in a way
+[17:48] that that makes sense. Um last up is inference optimizations. Um so whenever
+[17:53] you run VLM or whenever you run SG lang um you need to think about the the
+[17:58] hyperparameters that you use for your jobs right and uh what what we found is
+[18:02] that you need to be u quite disciplined about this and you need to be able to to
+[18:06] benchmark this and optimize and have a harness that just focuses on the VLM
+[18:10] parameters you can get um a lot of gains um in the case in this case about 40%
+[18:16] throughput gains just by tweaking the flats for VLM um and SG line right so in
+[18:21] our case we we went with VLM Right now we're actually testing HGLang as well.
+[18:25] We do a lot of batch inference. Um which is very much different from from the the
+[18:30] normal online one that everybody is used to. Um but whenever you you kind of
+[18:35] orchestrate this through VLM, you need to make sure that you have the the right
+[18:38] batch size, you have the right speculative decoding um setup, etc. Um
+[18:43] if you do kind of a bunch of grid searches over the parameters that you
+[18:46] need to optimize, turns out you can get quite a lot of uh of results in terms of
+[18:50] throughput. So to recap, um whenever you you're trying to do things, make sure
+[18:54] that um you think about kind of uh the scale that you're running at. You have a
+[18:59] good system for auto recovery whenever jobs go down. You need to orchestrate in
+[19:03] some sort of atomic fashion across CPU and GPU resources. Um and you need to
+[19:07] make sure that that you kind of sweep over your VLM parameters. So what what
+[19:12] this setup helped us achieve is is quite straightforward. Um and in at the end of
+[19:17] 2014, sorry, 2024, uh we can only output around 30 billion synthetic tokens in
+[19:23] kind of limited runs within our SERM cluster. Uh our requirements for
+[19:27] synthetic data went up by by a bunch. And then um kind of end of last year, we
+[19:31] were able to to run this massive uh synthetic data jobs that that um
+[19:36] generate in this case for web about 7 trillion tokens and then for math and
+[19:40] code another five for a bunch of our customers. uh we're continuing to ablate
+[19:44] and and kind of search for better synthetic G recipes. Um we're actively
+[19:48] working towards this. So keep an eye out. We'll be publishing more. And um I
+[19:51] think domain coverage is quite important. I think something that we
+[19:54] haven't talked today is how does this differ in between web, multilingual,
+[19:58] math code, uh legal data, etc. By the way, we're hiring um throughout the
+[20:02] board for data infrastructure, cloud infrastructure, normal infrastructure,
+[20:06] program managers, etc. So hit me up afterwards. Uh thank you for the team
+[20:10] that worked on this and uh thanks everybody for attending my talk.
+[20:28] [music]

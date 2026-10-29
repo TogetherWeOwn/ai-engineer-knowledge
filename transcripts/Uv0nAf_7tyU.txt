@@ -1,0 +1,242 @@
+# title: Decoupling the Brain from the Hands: Claude Managed Agents (Part 1 of 4) — Anthropic
+# source: https://www.youtube.com/watch?v=Uv0nAf_7tyU
+# speaker: Anthropic
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T03:09:34Z
+# sha256: d1bf19c0476479f8e49a42477d04c90869f55d4119a6d98083dfc5b9e7732f62
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:01] [music]
+[00:12] Thank you so much to everybody for for joining. Um I think we're going to get
+[00:16] started given we have a have a full house. Um hi everyone. My name is
+[00:21] Priyanka. I'm a member of technical staff at Enthropic. Uh I lead the
+[00:26] engineering team that built cloud manage agents and I'm really excited to be here
+[00:30] to talk to all of you uh and help you ship your first manage agent. I've been
+[00:35] anthropic a little bit over two years and the last 12 months I've been focused
+[00:38] on uh building um agentic infrastructure and hope to share some of our learnings
+[00:44] with you. >> Uh hello my name is Gabe Semach. I'm a
+[00:47] member of the technical staff uh building cloud managed agents in
+[00:49] Priyanka team. I've been at Anthropic a little bit over a year and I've been
+[00:54] mostly working on this my entire time. >> All right. Um, so here is our agenda. We
+[01:02] will kick it off with h a little bit of an evolution story of how we built and
+[01:07] scaled managed agents, some of the pitfalls and the learnings that we had
+[01:12] along the way. Then we'll switch to a hands-on part of the workshop. Uh the
+[01:17] first part uh we will build uh a very simple agent uh using cloud platforms
+[01:22] console. You will not be writing any code during that part. We'll just kind
+[01:26] of prompt our way to our first agent and test it out. Uh then I'll hand it over
+[01:30] to Gabe to walk you through like a hands-on portion. We'll be writing code
+[01:34] using cloud code or your favorite coding agent. Um and then build a more complex
+[01:39] financial agent and then we'll have plenty of time at the end for Q&A. We we
+[01:43] have a twohour slot. I know they broke it down into four parts, but it's
+[01:46] basically one long presentation. Um, hopefully it doesn't take the full two
+[01:50] hours. U, we want this to be pretty interactive, so if you do have
+[01:54] questions, raise your hands. We have a couple folks around that can run to you,
+[01:58] hand you a mic uh with a question, especially as we get into the hands-on
+[02:02] uh portion. All right, let's let's get going. Um, so
+[02:07] I'll start with the basics. So, we'll we'll start with what what is an agent
+[02:10] or what makes an agent work? Um so agent is basically uh a model in a loop with
+[02:18] tools. So you'll see on the left you have the model that's deciding and
+[02:22] taking the next action and calling tools in a loop until your task is done. So
+[02:26] that's like the very basic what what an agent is.
+[02:32] >> Excuse me. >> Y
+[02:42] slide deck or slide. >> Oh, a link to a slide deck. Um, we can
+[02:48] try to >> we we can we can share it after.
+[02:51] >> Yeah, we we'll share it after. It'll be hard for us to get it out right now. Um,
+[02:56] but happy to answer questions uh and and share the slide deck at the end. Are you
+[02:59] is it hard for you to see see the slides from the back? Okay, sorry about that.
+[03:04] Um, all right. Uh, the next thing I wanted to chat about is what a harness
+[03:08] is. harness is typically like a layer that wraps around the model that helps
+[03:12] you make these tool calls in a loop to get you the outcome for the task that
+[03:17] you're the task at hand and it's making assumptions about what the model cannot
+[03:22] do and trying to sort of fill those gaps. So it's running in a loop making
+[03:26] tool calls managing your context encapsulating everything that the model
+[03:30] cannot do. A good example is our set 45 model had something what we called uh
+[03:36] context anxiety. So whenever sonnet 45 felt like you're getting to the end of
+[03:41] the context limit, it would try to wrap up the task really quickly. So when
+[03:45] you're building a harness around sonnet 45, you would add something like a
+[03:50] context reset to get around the limitation of the anxiety. But with the
+[03:54] next model like opus 45, opus 45 did not have this limitation and you did not
+[03:58] need to do this like context reset for opus 45. So when you're building a
+[04:02] harness, you want to encapsulate all these assumptions for different models
+[04:07] and keep up with it with every new model that comes up, which is why building a
+[04:11] good harness is really really important. And that's something we've tried to do
+[04:14] with cloud managed agents. And then the last bit uh you want your agent to have
+[04:19] access to a sandbox or a computer essentially uh a place where it's going
+[04:23] to run the code it's writing to execute the task. Um, so typically you're giving
+[04:28] cloud access to like a sandbox or container where it's executing the code
+[04:31] it's writing. It's able to edit files, install dependencies, etc. Cloud code is
+[04:36] a really good example of this. It's running, it's a harness essentially
+[04:38] running locally on your computer, has access to your files, and it's
+[04:42] executing, updating your files as it goes. Um, it's also writing uh code
+[04:47] that's untrusted. It might be buggy. So you want to make sure when you're
+[04:51] deploying production agents uh your a the code your agents are writing is
+[04:55] sandbox and contained within a container. Um and then you want your
+[05:00] sandbox to be isolated and the blast radius to be limited. So typically you
+[05:03] want to execute every task in a separate container so you're not mixing up and
+[05:07] you're not um uh increasing the blast radius for for your tasks.
+[05:13] Next up, I'll walk you through um the first architecture that we actually
+[05:18] built managed agents with. This was in December of last year where we shipped
+[05:22] our first architecture to our early access customers, got a bunch of
+[05:26] feedback, and then actually pivoted to a new architecture. So, I'm going to walk
+[05:29] you through some of like the pitfall pitfalls and like issues that we saw
+[05:33] with the first one. So, with the first architecture, what we did was we put
+[05:38] everything in the container. So we had the session log of everything that's
+[05:42] happened within that session. So test session is essentially your um unit of
+[05:46] work. Um the harness was also running inside the container and then the
+[05:51] sandbox execution was also happening inside the container. The benefit of
+[05:55] that was like because everything was in the container there was no service
+[05:58] boundaries to design for. Everything was local um easy to edit. File edits were
+[06:03] essentially just like sis calls.
+[06:08] But what happened was we realized we adopted a pet. Um so if uh if you've not
+[06:13] heard about the pet and cattle analogy from like the old infrastructure days,
+[06:18] um pet is when you essentially have a named and handtended entity. When it
+[06:23] gets sick, you have to nurture it back to life. Otherwise, you you basically
+[06:27] cannot afford to lose it. And cattle is more interchangeable, more disposable.
+[06:32] So when one fails, you can replace it with another one and move on. So a good
+[06:35] example is imagine you had like a single database shard. It goes down, your
+[06:40] product is down, you have a pet. But imagine you have a master replica set
+[06:43] up. Your master goes down, you can bring up a replica. That's a cattle, right? So
+[06:47] you have many instances. One goes down, that's not a problem. You can bring it
+[06:50] back up. So what we had with our initial setup was essentially a pet.
+[06:56] Um so few few issues with this debugging was really hard because everything was
+[07:01] running in the container. We didn't know what was causing the issue. So a a drop
+[07:05] packet a dead container would show up very similarly and we had to essentially
+[07:09] like websocket stream into the container to debug. Um the other issue was
+[07:14] investigating meant we had to uh essentially investigating was hard
+[07:19] because customer data would live on these containers. So we didn't have a
+[07:22] way in essentially to go in and debug. So that was like the other issue we saw
+[07:26] in our early access. And then the last one was if a customer wanted us to
+[07:30] connect to let's say an M MCP in their VPC, it meant peering networks or
+[07:36] shipping them our harness and having them run it. So there were like a bunch
+[07:39] of challenges with that architecture that that we weren't able to really have
+[07:43] a good solution to overcome. So what we decided that we wanted to essentially
+[07:47] decouple the brains from the hands and I'll dive into what that means.
+[07:53] Um so the agent essentially became three separate interfaces. On the left you
+[07:58] have the session which is essentially an appendon log of everything that has
+[08:03] happened in the session so far. In the middle you have the brain that's your
+[08:06] harness or the agent loop along with cloud. Um and then on the right are the
+[08:10] hands. So sandboxes your MCP tool calls etc. Provisioned on demand uh gone when
+[08:16] the work is done. And if you need if you lose a sandbox you just spin it back up.
+[08:23] So every component essentially became a cattle and interchangeable. So when the
+[08:26] sandbox died, uh the harness or cloud could choose to just spin it back up,
+[08:31] right? The error essentially went back to cloud and the sandbox to cloud was
+[08:35] essentially like any other tool call. So the tool call fails, sandbox fails, it
+[08:38] decides what to do and it might decide to spin it up again or choose to
+[08:42] continue to move on. um when the harness died, you could bring up a new instance
+[08:46] of the harness and continue where you left off by essentially just reading
+[08:51] your event log from the session and continue from there. So work resumes
+[08:55] from the last event as if nothing went wrong, nothing happened. Um so the only
+[09:00] thing with protecting here was like your session log. Everything else was
+[09:03] interchangeable, could go down, you could bring it back up.
+[09:08] The other thing that we did was credentials never entered our sandbox.
+[09:12] With our previous setup, your credential would be in your sandbox, so you'd be
+[09:16] more susceptible to prompt injection. The change we made was if the sandbox
+[09:20] ever needed to call out um to uh something that needed a token or access
+[09:27] control, it would be routed through a proxy that would inject your token
+[09:31] before it called the external endpoint or external MCP. That way the model
+[09:36] never sees your credentials or your tokens which means you can never prompt
+[09:39] inject claude to say like hey give me your tokens or print out the tokens or
+[09:44] write them to a file. You can never do that because cloud actually never sees
+[09:47] your your tokens.
+[09:51] The other thing we did was because we had this like append only event log in
+[09:55] the session um our compaction strategy could stay flexible. So nothing is ever
+[10:00] thrown away. We're not compacting and changing your event stream. We're always
+[10:03] storing each and every event that happened and then the compaction
+[10:06] strategy is the one that's deciding oh do I want to look at my entire event log
+[10:11] uh summarize and put it in the context do I want to only look at like the last
+[10:14] n events and put those into context. So we we could have a more flexible context
+[10:19] strategy because of this like interface design that we chose.
+[10:24] And then the other benefit we saw is because we could immediately start our
+[10:29] inference calls, we were able to bring down the TAM to force token by about
+[10:33] 90%. So the cloud would only spawn the sandbox when it needed and it would not
+[10:37] wait for the container sandbox to spin up for you to get your first token back.
+[10:41] So we were able to get like a much snappier and faster experience with this
+[10:45] uh architectural change.
+[10:50] Um, and then here's sort of like the illustration of like one brain can reach
+[10:54] many hands. So your agent loop or harness can now call a sandbox
+[10:58] container. It could call into a customer's VPC. It could call into an
+[11:02] MCP server. So all these like hands are essentially interchangeable. You can
+[11:06] call and plug in many of these and it made our architecture a lot more
+[11:10] flexible.
+[11:13] Um, so if you take one thing home from this, it's that harnesses encode
+[11:18] assumptions and assumptions can go stale. So we designed interfaces to
+[11:23] outlast these assumptions and made the architecture more flexible. So this
+[11:28] allowed us to like I said change our compaction strategy, change out the
+[11:31] harness completely but the interface and the architecture remains uh the same and
+[11:37] we can really have a more pluggable way of operating this.
+[11:43] All right, so next we're going to get into a little bit of a hands-on portion.
+[11:48] U we got you some complimentary API credits to help you build with us today.
+[11:54] So, please scan the QR code, either sign in to your cloud platform account or
+[11:59] create a new one and you should be able to um get in there and get those credits
+[12:04] so that you can build with me and and then with Gabe.
+[12:08] And I'll I'll leave this for for a second. Hi.
+[12:13] >> Sorry, what? >> Last slide.
+[12:25] It's basically what we talked about here, right? This is the
+[12:30] this is sort of like the three interfaces we designed for, right? So
+[12:33] the first one is the the the question was like what were the interfaces that
+[12:36] we designed that ma made things outlast uh changes. So we have the append only
+[12:41] session log. You have the harness that's again interchangeable and then the hands
+[12:46] where you can plug in a sandbox tool calls or whatever the model might need
+[12:50] access to and that that's what kind of makes it more generic and extendable.
+[12:56] All right, going back to
+[13:00] the credits. Uh, does anyone else need to scan this before we jump in? Okay,
+[13:05] still seeing a couple phones. Okay, going to give everyone about 30 seconds.
+[13:10] Thanks for your patience.
+[13:16] Oh, there are problems with the internet. Oh, no.
+[13:26] >> Uh, Gabe, do we have a mic? Because I I can't hear some of the questions.
+[13:37] Yeah, the the credit should arrive once you once you sign up in hopefully a
+[13:42] minute or two. Um, yeah, we're getting a mic so that we can hopefully walk around
+[13:46] and uh get get some of these questions. But yeah, I'm going to walk you through
+[13:51] building a really simple agent that tells you jokes.
+[13:57] Uh, and I'm going to cover some of our core APIs, our concepts first, and then
+[14:01] we'll hop over to platform.entthropic.com
+[14:04] to build your first agent. Um, so our first step is going to be creating our
+[14:08] our environments API, which is v1 environments that helps you create the
+[14:13] environment or template for your sandbox. So this is going to have uh
+[14:17] your networking setup. So do you want uh unrestricted networking or you want to
+[14:21] restrict it to specific domains or MCPS? you can define what packages you want
+[14:26] installed on your uh container or sandbox. Um so this is going to be like
+[14:31] the first step we're going to take to set up our environment.
+[14:35] Next you're going to create the agent. So agent is essentially uh you're you
+[14:40] can give your agent a name. So in this case we have we're going to call it joke
+[14:43] teller. Um we're going to choose which model you want to use for this agent. So
+[14:48] you can use opus 48, you can use haiku uh or sonnet uh your choice. Uh and then
+[14:55] we're going to provide the agent with a system prompt. In this case, we're going
+[14:58] to say you're a comedian. Find a fresh joke on the topic. Deliver it well. Uh
+[15:03] and then you can provide this agent with tools. In this case, we're going to
+[15:07] provide it with agent tool set, which is sort of like our basic tool set. This is
+[15:10] like your bash tool set, read, write, grap, etc. And you almost all agents
+[15:15] will need need this. Um so that's going to be your step two. Step three is going
+[15:20] to be finally creating the session. Um so session takes an agent ID and an
+[15:25] environment ID and creates a session. This is your task uh unit of work or
+[15:29] your task. Um and when the session is provisioned it's idle. No work has been
+[15:34] done right until you send an event. And then this is sort of what an event
+[15:41] stream on your session would look like. Um you're going to have events that you
+[15:45] send and then events that the agent will come back to you with. On the left side
+[15:48] you'll see you have user message. You can say, "Oh, tell me a joke about
+[15:51] distributed systems." And then the agent will come back to you with a funny joke.
+[15:55] Um, you can use something called a custom tool. Custom tool essentially
+[15:58] lets you define a custom tool that you want to handle how you uh how you
+[16:02] respond to it and claude will essentially put a custom tool use event
+[16:07] on your event stream that you can listen to and then you can process that event
+[16:10] and then return the result um to claim tool result. And then there are some
+[16:15] other examples in there for what type of events you would see. So you'll see
+[16:19] session error if your session ever ends up in an error or sees an error. Status
+[16:23] idle is when your session is idle, not working. And this is typically when
+[16:26] you're not really have a sandbox that you're using. Um and then interrupt on
+[16:30] the left is when you want to stop or kill the session and don't want to do
+[16:34] the work anymore. Uh this is sort of like our full feature
+[16:38] list. Maybe if we have time at the end, Gabe can kind of come back to this and
+[16:42] dive in. But Gabe will be kind of working with you on his part of the
+[16:45] workshop going deeper into some of like these concepts like multi-agent and
+[16:48] memory that we also provide.
+[16:52] All right, before we go to that one, we're going to hop over now to
+[16:57] platform.claw.com.
+[17:00] Um, and hopefully you can use your API credits and see those. Now, if you
+[17:04] don't, I have Travis walking around with the mic in case you have questions or
+[17:08] you need to just like flag him down for for anything. Um but if you go to your
+[17:12] console you'll see in this manage agent section there is something called as a
+[17:17] quick start. This is sort of like our um guided tour of how to build your first
+[17:22] agent.
+[17:36] [music]

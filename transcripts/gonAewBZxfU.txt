@@ -1,0 +1,263 @@
+# title: Your Fridge Is a Valid Payment Device — Eleonora Drykina & Nina Žižakić, In The Pocket
+# source: https://www.youtube.com/watch?v=gonAewBZxfU
+# speaker: Eleonora Drykina & Nina Žižakić, In The Pocket
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: dub-auto:es (YouTube auto-dubbed Spanish captions; not the original English)
+# retrieved_at: 2026-10-22T03:52:25Z
+# sha256: 955ee7e78c692ac1982c3e115066e4929de0cc187fe1510f3da4d0222d3b50fb
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:00] Hola, bienvenidos a nuestra charla titulada "Tu refrigerador es un
+[00:05] dispositivo de pago válido: RAG poco notable en producción". Déjenme
+[00:11] comenzar explicando el título. Esta es una página de uno de los libros de
+[00:17] reglas de nuestros clientes. Es uno de los muchos documentos sobre los que
+[00:21] construimos nuestro sistema RAG. Uno esperaría documentos financieros
+[00:26] bastante secos, y en realidad, eso es lo que son mayormente. Pero también
+[00:31] hay algunos datos curiosos por ahí.
+[00:35] Por ejemplo, esta página que muestra una lista de dispositivos con los que
+[00:40] puedes pagar. Están las cosas que esperarías, como teléfonos o tarjetas
+[00:47] , pero también hay otros más creativos como gemelos, un bolso, una
+[00:51] prenda de vestir e incluso un refrigerador. Me pareció genial
+[00:57] encontrar un dato curioso como este en documentos que esperarías que fueran
+[01:01] muy aburridos. Presentémonos. Esta es la única foto que tenemos de las dos
+[01:12] juntas. No solemos usar cascos de realidad extendida, pero ese día en la
+[01:18] oficina estábamos probando todo tipo de dispositivos divertidos. Yo soy Nina
+[01:25] . Soy ingeniera de IA. Y yo soy Eleonora. Soy ingeniera de
+[01:31] producto. Trabajamos en In The Pocket, un estudio de productos digitales con
+[01:36] sede principal en Bélgica. Ayudamos a nuestros clientes con la
+[01:39] transformación mediante IA y software personalizado.
+[01:44] Hoy vamos a hablar sobre un proyecto RAG que construimos para uno de
+[01:49] nuestros clientes, una gran empresa fintech belga. Permanecerá anónima
+[01:57] para esta charla. En esencia, este es un problema clásico de RAG. En esta
+[02:08] charla, queremos mostrar las decisiones técnicas que tuvimos que tomar y
+[02:12] profundizar en cómo lo construimos. Es la charla que nos hubiera sido útil al
+[02:20] principio de este proyecto. ¿Cuál es el problema que tenemos? Nuestro
+[02:31] cliente dirige el mayor esquema de pagos de Bélgica y todas las reglas
+[02:37] sobre este sistema están escritas en un libro de reglas. Se trata de
+[02:43] archivos PDF, alrededor de 270 PDF. O unas 6,000 páginas. Gran parte de la
+[02:52] información se encuentra en tablas. Alrededor de 3,000 tablas. Así es como
+[02:58] estructuran su conocimiento. Mucho conocimiento importante reside en las
+[03:03] tablas mismas. Y los libros de reglas se refieren entre sí constantemente.
+[03:10] Un libro de reglas hace referencia a otro, y ese a otro, etcétera.
+[03:17] Implementar RAG para una institución financiera conlleva algunos desafíos.
+[03:26] El primero son las citas. Por supuesto, las respuestas siempre deben ser
+[03:32] correctas. Pero especialmente en un contexto financiero, es aún más
+[03:38] importante. Así que cada respuesta debe citar la sección y página exacta
+[03:44] del reglamento. Para que las personas puedan ver de dónde proviene la
+[03:48] respuesta. Y lo segundo es la fundamentación. El LLM que funciona de
+[03:55] fondo es un modelo general, por lo que está entrenado con conocimientos
+[03:59] generales. Así que sabe mucho, incluyendo cosas sobre otros sistemas
+[04:05] de pago, cómo funcionan o sus tarifas.
+[04:09] Por lo tanto, tuvimos que decidir y asegurarnos de qué conocimientos está
+[04:13] bien utilizar. Por ejemplo, está bien saber qué es un banco, eso tiene
+[04:19] sentido, y no es algo que se defina en los reglamentos. Pero lo que cobra otro
+[04:26] sistema de pago o cómo funciona, eso no debería aparecer en una respuesta a
+[04:29] menos que esté en los reglamentos.
+[04:34] Esta es la apariencia de la solución que construimos. Se trata de un chatbot
+[04:40] . Tú haces una pregunta y responde basándose en estos reglamentos. Si la
+[04:47] respuesta está en una tabla, también mostrará esa tabla. Debajo de la
+[04:54] respuesta se encuentra la lista de fuentes utilizadas para obtenerla,
+[04:59] incluyendo la especificación de la sección y la parte del reglamento para
+[05:05] que el usuario pueda abrirlo. En este ejemplo, pregunté: "¿Puedo pagar con
+[05:10] mi refrigerador?". Obtuve una respuesta y luego puedo hacer preguntas de
+[05:13] seguimiento. Así es como se ve todo el sistema. Tiene dos partes. En la parte
+[05:24] izquierda está la indexación, que es lo que hacemos de forma offline. Con
+[05:29] cada nueva versión de estos reglamentos, convertimos los PDF en
+[05:33] fragmentos y los almacenamos en la base de datos vectorial. En la parte derecha
+[05:39] se encuentra el servicio, la parte online para cada pregunta que hace un
+[05:44] usuario. El agente busca en esta base de datos vectorial y luego la respuesta
+[05:51] se transmite de vuelta al usuario. Yo hablaré sobre la indexación y
+[05:56] Eleonora hablará sobre la parte del servicio. Sobre la indexación, la
+[06:03] configuración es bastante sencilla.
+[06:07] Comenzamos con los PDF, los dividimos en fragmentos y agregamos metadatos a
+[06:13] cada uno. Realizamos un procesamiento especial para las tablas y luego
+[06:20] generamos las incrustaciones. Generamos dos tipos de embeddings: uno denso y un
+[06:27] BM25. Así que ahora entraré en detalle sobre los primeros tres pasos,
+[06:32] y Eleonora hablará más adelante sobre los embeddings. Bueno, el primer paso,
+[06:40] dividir los PDF en fragmentos, funciona extrayendo el texto de cada página, lo
+[06:47] dividimos en párrafos y agrupamos los párrafos en un fragmento hasta
+[06:54] alcanzar unos 2,000 caracteres, y también nos aseguramos de nunca
+[07:00] dividir una tabla entre dos fragmentos.
+[07:06] También detectamos los encabezados de sección mediante expresiones regulares
+[07:10] , como por ejemplo: capítulo tres o 4.2.1. Y eso le da a cada fragmento su
+[07:17] ruta de sección. Por ejemplo, este está en el capítulo cuatro, sección
+[07:23] 4.2. Y esa ruta se utiliza para añadir una cita, pero también para recuperar
+[07:33] toda la sección cuando el agente necesita más contexto. Y todo esto
+[07:41] funciona porque no solapamos los fragmentos. Entonces, una sección es
+[07:46] solo una colección de fragmentos. Y si los colocas de nuevo en orden, vuelve a
+[07:52] ser más o menos como se originó. Para el segundo paso, añadimos metadatos a
+[07:59] cada fragmento. En este ejemplo, vemos el texto del fragmento de este manual
+[08:04] de refrigeradores. Y debajo hay algunos campos de metadatos. Necesitamos el
+[08:13] nombre del manual y la página para poder mostrarlo en la cita o en la
+[08:20] tarjeta de fuente al usuario. Junto con eso, el usuario puede acceder al enlace
+[08:31] del PDF. También usamos las rutas de sección tanto para la cita como para
+[08:40] que el agente pueda recuperar toda la sección de una vez. Y luego también
+[08:48] tenemos el índice de fragmentos, que permite al agente recomponer una
+[08:52] sección o incluso un manual completo.
+[08:56] El agente utiliza los ID de los manuales para obtener una lista de
+[09:01] todos ellos o ver qué hay disponible.
+[09:06] Y al momento de indexar cada manual, generamos un resumen mediante un LLM,
+[09:13] que luego se adjunta a cada fragmento relacionado con su respectivo manual. Y
+[09:23] de esa manera el agente sabe de qué documento proviene un pasaje. Y el
+[09:30] resto de los metadatos son campos de lógica empresarial. Es decir, a qué
+[09:38] reglamento pertenece, qué reglas se aplican, si contiene una tabla, y estas
+[09:44] son las cosas que el agente utiliza o recibe con los resultados de búsqueda.
+[09:52] Luego, el tercer paso es el procesamiento de tablas. Este es
+[09:57] importante porque, como dije, hay mucho conocimiento dentro de las tablas.
+[10:04] Inicialmente no nos dimos cuenta de eso . Así que, nuestro procesamiento
+[10:11] inicial fue simplemente extraer el texto plano del PDF, y eso no
+[10:17] formateaba bien las tablas. Pero en este ejemplo ficticio, se ve que el
+[10:24] campo doméstico abarca varias filas, el transfronterizo dos filas más, y
+[10:29] luego el reembolso abarca ambas.
+[10:33] Entonces, si eso no está claro o bien puesto en el texto, el agente puede
+[10:40] extraer información incorrecta, y especialmente con temas importantes
+[10:47] como las tarifas, es crucial obtener la fila y la columna correctas. Lo que
+[10:56] hacemos es transformar las tablas a formato CSV, básicamente duplicando
+[11:04] esos campos, y luego...de esa manera el agente los obtiene, y cuando lo hace,
+[11:15] extrae la fila correcta. Esa es la que necesita. Y eso realmente marcó una
+[11:22] gran diferencia en la exactitud de las respuestas. Entonces, esto fue lo
+[11:28] relacionado con la indexación. Ahora tenemos alrededor de 4,000 fragmentos.
+[11:34] Y ahora Eleonora hablará sobre la parte de servicio. Sí.
+[11:43] Bien, la parte anterior construyó el índice. Ahora esta parte tratará
+[11:49] sobre encontrar los 10 fragmentos correctos de los 4,000 que se han
+[11:54] preparado. El movimiento obvio aquí sería usar incrustaciones densas (
+[12:00] embeddings) para la pregunta y cada fragmento en un vector, y comparar la
+[12:03] distancia. Eso es genial para el significado, pero los códigos de
+[12:08] reglamento, nombres de mensajes e identificadores exactos parecerían
+[12:13] ruido para una incrustación, pero para el miembro que hace la pregunta, a
+[12:17] menudo esta es la esencia de la misma.
+[12:21] Con BM25, tenemos la imagen especular. Los tokens exactos funcionarían, pero
+[12:26] las paráfrasis no. Así que combinamos ambos en una llamada a Quadrant y los
+[12:30] fusionamos con fusión de clasificación recíproca. El denso es
+[12:35] top 50, BM25 top 50, se fusionan a los 30 mejores, se reordenan por coherencia
+[12:40] de sección y los 10 mejores se envían al agente. Y lo bueno de RRF es que no
+[12:47] necesitamos calibrar la puntuación entre estas dos partes. En la
+[12:52] evaluación solo de recuperación de 63 preguntas, comparado solo con
+[12:58] incrustaciones densas, el enfoque híbrido aumentó la tasa de aciertos
+[13:03] del 92 al 97%y no perdió ninguna pregunta que las incrustaciones densas
+[13:08] ya podían encontrar. Bien, tenemos nuestros 10 fragmentos decentes, pero
+[13:15] no todas las preguntas caben en 10 fragmentos. Algunas están encadenadas.
+[13:19] Un reglamento señala a otro, y la respuesta solo estará completa una vez
+[13:23] que sigas ese puntero. Algunas necesitan amplitud. La tarifa mínima
+[13:29] para este tipo de transacción nunca cabrá en el top 10 de nada. Así que,
+[13:34] en lugar de una canalización fija de recuperación y generación, nuestro
+[13:37] agente tiene cuatro herramientas. De estrecho a amplio. Buscar reglamentos
+[13:41] siempre va primero. Esos son los 10 fragmentos de los que hablábamos en la
+[13:45] diapositiva anterior. Si eso no es suficiente, recuperar secciones del
+[13:49] reglamento trae toda la sección ordenada por ruta de sección. Que es
+[13:54] exactamente el enfoque que Nina mencionó antes. Almacenar la ruta de
+[13:59] la sección. Y este espacio aquí, al alejarse, es simplemente recuperar cada
+[14:04] fragmento con esta ruta ordenado por índice de fragmento. Por encima de eso
+[14:10] está recuperar reglamento completo, que solo funciona para reglamentos
+[14:13] pequeños. Y listar reglamentos disponibles para cuando el agente
+[14:19] necesita saber qué existe en absoluto.
+[14:23] Entonces, los protectores (guardrails) hicieron que esto funcionara en la
+[14:26] práctica. Primero, si un reglamento es demasiado grande, más de unas 100k
+[14:33] tokens, la herramienta de reglamento completo se niega a volcar su contenido
+[14:38] en el contexto y devuelve la lista de secciones disponibles con una
+[14:43] advertencia de que es muy largo.
+[14:47] Segundo, si un nombre de sección no coincide, devuelve las secciones
+[14:52] disponibles para que el agente pueda reintentar en lugar de rendirse o
+[14:56] intentar inventar el nombre. Y por último, hay una herramienta llamada
+[15:01] instrucción de disciplina en el prompt . Porque la mayoría de las preguntas
+[15:07] requieren de dos a cuatro llamadas, pero antes de la sexta, se le dice al
+[15:12] agente que se pregunte si está buscando algo genuinamente nuevo o solo
+[15:17] reformulando una búsqueda que ya falló antes. Y esto vino de observar
+[15:23] seguimientos reales cuando el agente intentaba la misma búsqueda una y otra
+[15:28] vez esperando que el número finalmente apareciera. El costo de todo esto es la
+[15:35] latencia, una mediana de 38 segundos por respuesta. No es solo una respuesta
+[15:41] de chat. Es una pequeña tarea de investigación. Y nos apoyamos en el
+[15:47] streaming para hacer que 38 segundos se sientan como si algo estuviera pasando
+[15:52] y no solo que el chat está trabado. Lo cual me lleva a la siguiente
+[15:57] diapositiva. Así que, en nuestra primera iteración, realmente
+[16:01] queríamos alejarnos de la interfaz básica de chatbot. Preparamos
+[16:05] componentes de interfaz y los describimos como modelos Pydantic
+[16:08] disponibles para el agente, diciéndole : "Aquí tienes los componentes
+[16:11] disponibles". "Úsalos en tu respuesta junto con el texto". Por ejemplo, una
+[16:17] tarjeta de fuente era un componente, un evento podía ser un componente, podía
+[16:20] haber una lista de verificación desplegable, etcétera. La idea era
+[16:25] tener una interfaz algo generada por IA , que fuera más legible que una simple
+[16:29] hoja de texto. El problema es que no se puede transmitir un objeto Pydantic
+[16:33] parcial. Solo se convierte en un JSON válido una vez que llega el último
+[16:38] token. Como pueden ver aquí, para un sistema cuyas respuestas tardan 38
+[16:43] segundos, eso significaba 38 segundos sin nada en pantalla y luego todo
+[16:48] llegaba a la vez. Así que la solución que salvó la experiencia fue dividir
+[16:53] la respuesta en partes. El agente ahora transmite prosa en Markdown token por
+[16:57] token, y el front-end le da formato en vivo a medida que llega. Y luego, la
+[17:02] tarjeta de fuente es una pieza que se define como un componente de interfaz
+[17:05] real. No contiene ninguna información que quisieras consultar antes de leer
+[17:11] toda la respuesta. Así que no perdemos nada esperando a que se transmita la
+[17:16] respuesta completa antes de añadir este componente. Eso nos da una tarjeta
+[17:22] interactiva en lugar de un enlace simple en el texto, lo cual es mejor
+[17:25] para el usuario. Pero una vez que esta respuesta está en pantalla, la
+[17:32] siguiente pregunta es qué hace el usuario realmente con ella. Hace clic
+[17:39] en la fuente, copia la respuesta, continúa la conversación o se retira.
+[17:45] Esa es la experiencia de usuario que queremos rastrear y esto nos lleva al
+[17:50] registro de datos. Por ahora, optamos por la solución de registro más
+[17:56] sencilla: Azure Table Storage. Registramos cada pregunta, llamada a
+[18:01] herramientas, respuesta, retroalimentación (buena o mala),
+[18:04] además de eventos como hacer clic en la fuente o copiar la respuesta, junto
+[18:09] con el historial de la conversación, que se mantiene deliberadamente
+[18:12] pequeño. Solo son los últimos 20 mensajes como contexto. Para el punto
+[18:17] en el que estamos ahora con este producto, es suficiente. Una vez que el
+[18:22] producto crezca, determinaremos qué necesitaremos realmente para entonces.
+[18:28] ¿Y cómo sabemos que todo esto realmente funciona? Nuestras preguntas
+[18:34] de evaluación provienen de fuentes reales, dos rondas de pruebas con
+[18:39] usuarios reales, además de pautas de comportamiento sobre lo que nuestro
+[18:44] sistema de IA debe y no debe hacer. Por ejemplo, no dar consejos, mantenerse
+[18:49] neutral sobre los competidores y decir claramente cuando algo no está
+[18:53] presente en los manuales. Bueno, tenemos unas 86 pruebas integrales
+[18:59] ejecutadas con Promptfoo, un agente LLM completo que evalúa según la rúbrica
+[19:04] , además de una verificación de que se citó la fuente correcta, y la
+[19:09] evaluación de recuperación que hicimos antes. Dos cosas que aprendimos
+[19:16] al ejecutar esto y que queremos compartir: primero, que las
+[19:21] evaluaciones de los jueces LLM tienen un nivel de ruido y debes volver a
+[19:27] ejecutarlas antes de confiar en la diferencia. Por ejemplo, cuando
+[19:32] realizamos nuestra propia evaluación, cinco de cada 12 cambios no se
+[19:36] reprodujeron. Y segundo, a veces la rúbrica misma es el error, no el
+[19:42] modelo. Tuvimos una fecha alucinada que el juez seguía penalizando, y resultó
+[19:50] que esa fecha era en realidad texto real que estaba en el reglamento.
+[19:58] Sí. Ahora, sobre el uso. Lanzamos este asistente de reglamento en junio.
+[20:09] Inicialmente, se lanzó solo para los usuarios internos de nuestros clientes,
+[20:16] y el objetivo es lanzarlo a sus miembros externos y clientes para
+[20:22] finales de año. Por ahora, tenemos algunas cifras de uso. Tenemos
+[20:37] alrededor de 900 preguntas hasta el momento. Divididas en más de 100
+[20:42] conversaciones, unas 34 personas lo están utilizando realmente. También
+[20:49] capturamos la retroalimentación de pulgares arriba y abajo, pero la
+[20:54] mayoría de la gente dejó de usar esa función después del primer mes. Y
+[21:00] también tenemos información sobre cuántas veces se hicieron clic en las
+[21:03] fuentes o se copiaron las respuestas. Pero esas son las cifras. También
+[21:10] usamos IA para el análisis. A la derecha tenemos cómo lo interpretó el
+[21:22] LLM. Lo que vimos es que, en el primer mes, cuando preguntamos a la gente,
+[21:29] tuvimos algo de red teaming. La gente intentaba romper el asistente, tratando
+[21:35] de salirse del tema o haciendo preguntas fuera de contexto. Pero para
+[21:41] el tercer mes, más del 90%de las preguntas eran consultas reales. En
+[21:48] segundo lugar, la gente lo usa para casos reales. Vimos a personas
+[21:54] usándolo para pegar un correo electrónico de su cliente y pedir
+[21:58] ayuda para responderlo. O pegaban un mensaje de protocolo real, una tabla,
+[22:05] etc., y luego redactaban una respuesta que querían revisar. Y tercero, como
+[22:13] no tuvimos mucha retroalimentación con los pulgares, intentamos interpretar el
+[22:20] sentimiento de la conversación observando las preguntas de seguimiento
+[22:26] . Bueno, si la gente dice gracias o pasa a un nuevo tema, nosotros, sí, lo
+[22:35] contamos como una interacción positiva . Y si preguntan lo mismo de nuevo,
+[22:42] entonces probablemente fue una interacción negativa. Y de eso vimos
+[22:48] que la mayor parte de la conversación fue bien. Entonces, para resumir, ¿
+[22:57] cuáles son los principales aprendizajes de este proyecto hasta
+[23:01] ahora? En cuanto a los documentos, descubrimos que es importante mantener
+[23:09] la estructura. Así que la parte de las secciones es importante tanto para
+[23:15] recuperar la respuesta como para permitir que el agente pueda, digamos,
+[23:20] ampliar el conocimiento. También vimos que las tablas necesitan su propio tipo
+[23:28] de tratamiento especial y su propio procesamiento. Desde el lado del agente
+[23:35] , como mencionamos, darle múltiples niveles de enfoque y decidir cuánto
+[23:41] contexto necesita fue importante, y en general fue muy beneficioso una vez que
+[23:47] cambiamos de una llamada única a un LLM a una recuperación agentica. Vimos
+[23:55] que los números de evaluación subieron por un margen bastante
+[24:00] considerable. Desde la perspectiva de la experiencia de usuario, el streaming
+[24:07] fue lo que hizo que fuera algo utilizable y una buena herramienta. Y
+[24:14] solo añadimos un componente estructurado cuando es requerido por la
+[24:18] experiencia de usuario. Y finalmente, nos pareció importante haber probado
+[24:27] con usuarios reales desde el principio y también usar estas pruebas para
+[24:34] crear, para usar estas entrevistas con usuarios para crear los prompts de
+[24:40] evaluación que podemos usar para dar forma al producto y decidir si lo que
+[24:47] creemos que es una mejora, realmente lo es. Así que gracias por escuchar
+[24:55] nuestra charla. Gracias.

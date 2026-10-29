@@ -1,0 +1,465 @@
+# title: Let LLMs Wander: Engineering RL Environments — Stefano Fiorucci
+# source: https://www.youtube.com/watch?v=71V3fTaUp2Q
+# speaker: Stefano Fiorucci
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T09:58:30Z
+# sha256: 5ca94077817a8cb50bf39692280ee5a45feb784fbcc09fe2104187ee5d87c76c
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:06] Hello everybody and welcome to Let's Learn Wander engineering reinforcement
+[00:12] learning environments. A few words about me. I am Stefano
+[00:16] Fiorucci, a AI and software engineer. By day, I work on AI orchestration at
+[00:21] Deepset, where I develop Haystack, an open-source LLM framework. By night, I
+[00:27] love tinkering with small language models, fine-tuning, and reinforcement
+[00:32] learning. Today, I'm going to talk about
+[00:35] reinforcement learning environments for language models evaluation and training.
+[00:40] This has been a hot topic over the past year, and I find it fascinating for
+[00:45] several reasons. These environments let models learn by interacting, exploring,
+[00:51] and improving from feedback. They are natural gyms for LLM agents that can use
+[00:56] tools, run code, and solve multi-step tasks. In addition, startups building RL
+[01:02] environments are getting major funding and working directly with big AI labs.
+[01:10] Recent technical reports by DeepSeek and MiniMax showed that they are effectively
+[01:16] using thousands of reinforcement learning environments to improve model
+[01:22] performance on challenging tasks and scale intelligence.
+[01:26] Don't worry if you know nothing about RL environments. I'll cover that soon.
+[01:33] Here is the agenda for the talk. We'll first review classic reinforcement
+[01:38] learning concepts and see how they map to the language models domain. We'll
+[01:43] then introduce Verifiers, an open-source library to build environments as
+[01:48] software artifacts, and explore some common patterns to implement them.
+[01:53] Finally, I'll walk you through an experiment where we take a small model
+[01:58] that can barely play tic-tac-toe against a random player and transform it into a
+[02:03] master using a reinforcement learning environment. Let's start.
+[02:11] First, a quick refresher on reinforcement learning.
+[02:16] In reinforcement learning, there are two main characters, the agent and the
+[02:21] environment. The environment is the world the agent
+[02:25] interacts with. At each step, the agent sees the current state of the world and
+[02:31] takes an action. The state of the environment then changes in response to
+[02:36] that action. The agent also receives a reward from the environment, a number
+[02:42] indicating how good or bad the state is. The agent's goal is to maximize its
+[02:48] cumulative reward over time, and to do this, it has to balance exploration,
+[02:55] so trying new actions to discover better strategies, and exploitation, using
+[03:01] actions known to work. By interacting with the environment, the agent learns
+[03:06] from experience and improves its behavior.
+[03:10] A trajectory, or rollout, is the sequence of states, actions, and rewards
+[03:16] that the agent goes through while interacting with the environment. It's a
+[03:20] record of the experience. In this presentation, I'll use
+[03:25] trajectory to mean a complete episode, like one entire game.
+[03:32] Let's take a look at LLM's training. Language model is a a statistical model
+[03:39] that, given some text, the prompt, returns a text completion.
+[03:44] The standard training recipe is divided into three phases.
+[03:49] First, pre-training on a massive amount of internet text. Here, the model learns
+[03:55] to create text completions. The base model is knowledgeable, but can't follow
+[04:00] instructions and is hardly usable in applications.
+[04:05] During supervised fine-tuning on conversational examples, the model is
+[04:10] trained to follow instruction and can learn new tasks.
+[04:14] In the third step, reinforcement learning is often used with techniques
+[04:19] like proximal policy optimization to align the model with human preferences.
+[04:26] It's worth showing an example of supervised fine-tuning data, as later
+[04:31] we'll frequently compare supervised fine-tuning learning with new
+[04:36] reinforcement learning approaches. As you can see, we have pairs of prompt
+[04:41] and responses, and during this phase, the model learns by statistical
+[04:46] imitation. It's essentially trying to mimic the
+[04:49] examples provided.
+[04:54] You might remember Ilya Sutskever talk at NeurIPS 2024.
+[05:00] He pointed out that the LLM training paradigm we just saw has starting
+[05:06] showing its limits. In particular, pre-training no longer
+[05:10] seems to be enough to keep improving model quality at the same rate. We
+[05:15] needed a new way to scale.
+[05:21] Then, OpenAI published its O1 model series.
+[05:26] In their release blog post, they mentioned reinforcement learning
+[05:30] training to make models use chain of thought effectively.
+[05:35] They also underlined that the performance of O1 consistently improved
+[05:39] with more reinforcement learning train time compute and with more time spent
+[05:44] thinking, test time compute. Unfortunately, they did not share many
+[05:50] details on how this model was actually trained.
+[05:56] The release of DeepSeek R1 shed some light on how you can possibly achieve
+[06:01] those results. First, they recognized that reasoning and chain of thought can
+[06:07] improve the performance of models, but teaching these behaviors to models using
+[06:12] supervised fine-tuning requires curated data that is too expensive to produce at
+[06:17] scale. They used reinforcement learning with
+[06:22] verifiable rewards, which we'll see in a moment,
+[06:26] and DeepSeek also used GRPO, a new reinforcement learning algorithm that
+[06:31] offers a simple, lighter setup compared to techniques like PPO.
+[06:39] So, what is reinforcement learning with verifiable rewards?
+[06:44] In this paradigm, the model is asked the question and generates both a reasoning
+[06:49] trace and an answer. The answer is then checked against the
+[06:54] known correct answer. The reward is used for reinforcement
+[06:59] learning training. The underlying idea is more general, and
+[07:03] it does where the outcome can be verified automatically,
+[07:07] like a correct answer, a won game, a successful tool call can serve as a
+[07:14] training signal. And this is fundamentally different from
+[07:19] supervised fine-tuning. In SFT, the model learns from curated examples, and
+[07:25] its completions tend to stay close to the distribution of those examples.
+[07:31] In reinforcement learning with verifiable rewards, the model explores
+[07:35] different trajectories from its pre-training and learns to favor the
+[07:39] ones that maximize rewards. And this is exciting because the model
+[07:44] is no longer limited by the quality of human examples. Through trial and error,
+[07:50] it can discover more efficient reasoning strategies.
+[07:57] We can finally map the classic reinforcement learning concepts to LLMs.
+[08:04] The language model acts as the agent. The environment for any task
+[08:11] includes data, harnesses, and scoring rules, everything
+[08:16] needed to check and possibly train the model on the task.
+[08:21] From a software perspective, this marks a shift from supervised fine-tuning to
+[08:26] reinforcement learning with verifiable rewards. While SFT mainly relies on
+[08:31] conversational datasets, this new paradigm usually requires an
+[08:36] environment, a dynamic system that the model can interact with.
+[08:41] The definition of the agent is also expanding. Language models can now be
+[08:46] given tools, from a weather API to a terminal, and this makes environments
+[08:51] for training and evaluation more complex and critical.
+[08:55] To make this more concrete, consider teaching a model to play tic-tac-toe.
+[08:59] The agent is the language model. Its action is generating a text response
+[09:05] with the specific move. The environment acts as the game engine.
+[09:11] It handles prompting the model, tracking the board status, generating
+[09:15] the opponent's move, and deciding when the game is over.
+[09:20] The reward is the signal from the environment, for example, +1 for a win
+[09:25] and zero for a loss. This reward guides the model to find winning strategies
+[09:31] through trial and error. This setup allows the agent to discover
+[09:36] strategies that maximize its score without needing pre-existing human
+[09:42] examples.
+[09:46] You have probably understood that I am enthusiastic about this topic, but let's
+[09:51] also use Andrej Karpathy's words to describe the environments.
+[09:56] They give the LLM an opportunity to actually interact, take actions, see
+[10:02] outcomes. This means you can hope to do a lot
+[10:06] better than statistical expert imitation.
+[10:11] Now, let's see how to build these environments.
+[10:19] To build the environments as software active X, we can use verifiers, an
+[10:24] open-source library by Prime Intellect. Verifiers provides modular components to
+[10:31] create reinforcement learning environments for LLM agents. These can
+[10:36] be used for both evaluation and training.
+[10:40] Environments are Python packages that can be easily installed and distributed.
+[10:46] The library provides base classes for several setups, single-turn environments
+[10:51] with just one interaction between the model and the end,
+[10:55] multi-turn environments, tool environments where the model is equipped
+[11:00] with tools, and several others. It also includes abstractions for
+[11:05] parsing model responses and defining reward functions.
+[11:09] Verifier abstracts model serving. It expects an OpenAI compatible API
+[11:15] endpoint, so you can plug in OpenAI, open router, or local models via the
+[11:21] LLM. It handles a single interaction and
+[11:26] parallel trajectories, so you focus on the environment logic.
+[11:31] For training, verifiers come with its own trainer and integrates with other
+[11:36] frameworks such as Prime RL, Tinker, and Sky RL.
+[11:41] In short, verifiers lets us focus on the task and the rewards [clears throat]
+[11:46] rather than the infrastructure.
+[11:52] Let's start with a single-turn environment. Reverse text is a a simple
+[11:58] environment to evaluate or train language models on their ability to
+[12:03] reverse a string of text. What's going on here?
+[12:09] Load [clears throat] environment is the entry point for every verifiers
+[12:13] environment. It contains all the setup logic.
+[12:17] First, a dataset is loaded and mapped. The default dataset contains 1,000 text
+[12:23] paragraphs stored in the prompt column. During the mapping step, we transform
+[12:29] the original dataset. Question is the text paragraph, while answer is the
+[12:34] reversed text.
+[12:37] Next, XML parser is initialized. It extracts
+[12:43] the text inside the reversed text tags as specified in the system prompt.
+[12:50] We then define the reward function. This compares the model's output to the
+[12:54] ground truth and returns a longest common subsequence ratio.
+[13:00] Finally, we bundle this into a rubric, a collection of weighted rewards, and
+[13:05] initialize the single-turn end.
+[13:13] But, how does this come to life? Let me show you an evaluation run.
+[13:24] Here is what happens under the hood. Load environment is invoked.
+[13:30] Five examples are taken from the dataset, and each example is used three
+[13:34] times for three rollouts. Each rollout gets the same question, but may produce
+[13:40] different completions due to model randomness.
+[13:43] We have 15 rollouts in total. For each rollout, a conversation is
+[13:49] prepared with the system prompt and the question. The conversation is sent to
+[13:53] the model. The model generates a response. The
+[13:57] response is parsed, extracting the answer. The reward is computed, and
+[14:02] results are saved. At the end of the evaluation,
+[14:07] you get summary statistics and additional info about reward
+[14:13] distribution. Training follows the same core mechanism
+[14:18] with the additional step of updating model parameters. We look at
+[14:23] at that in more detail later.
+[14:32] Let's look at the different example from verifiers, the double-check environment.
+[14:37] Here, the model answers a math question, and the environment then asks, "Are you
+[14:43] sure?" This is a multi-turn environment,
+[14:46] similar in spirit to Tic-Tac-Toe, in which each trajectory involves multiple
+[14:51] interaction between the model and the environment.
+[14:55] Let's look at what multi-turn end introduces.
+[15:00] State makes its first appearance here. It's a dictionary that tracks
+[15:05] information during a rollout. We can set the initial state through the setup
+[15:10] state method, not used in this example. End response. Instead of the interaction
+[15:18] ending after one turn, the environment can reply with a list of messages. Here,
+[15:24] it just says, "Are you sure?" In more complex environments, the
+[15:29] response can be dynamically generated based on the state.
+[15:35] The via stop decorator marks a method as a stopping condition. This method runs
+[15:41] at every turn of the agent-environment interaction. Once it returns true,
+[15:47] the rollout terminates. Under the hood, verifiers runs a loop in
+[15:52] which the model and environment take turns
+[15:56] exchanging messages, updating shared state, until a stopping condition is met
+[16:01] and a full trajectory can be evaluated.
+[16:09] Another interesting type of environment is the tool environment. All environment
+[16:15] types in verifiers are built on multi-turn end, which implements the
+[16:21] core single-agent rollout loop. Tool end adds tool calling to this foundation. As
+[16:27] you can see, tools are defined as Python functions.
+[16:31] During rollouts, the model can call tools, receive results, and continue
+[16:36] reasoning until it produces a response without tool calls.
+[16:40] Each turn consists of a model's response followed
+[16:44] by the environment's tool execution. For a more realistic example, I
+[16:51] recommend checking out the Wiki search environment.
+[17:00] Beyond the fundamental environments I just showed, verifiers provides more
+[17:05] abstraction to build environments. The NCP environment automatically
+[17:11] connects to model context protocol servers to expose their tools.
+[17:18] Stateful tool end is for tools that need per-rollout persistent state, like
+[17:25] database connection or session ID. There is also a class implementing
+[17:30] recursive language models, a novel idea you might have heard of.
+[17:36] It's an inference strategy where language models can decompose and
+[17:40] recursively interact with input context of unbounded length through REPL
+[17:47] environments. Verifiers also plays well with others,
+[17:52] integrating with several third-party environment libraries.
+[18:01] Verifiers is tightly integrated with the environments hub, a community space for
+[18:06] sharing these RL environments. Verifiers and the environments hub are different
+[18:13] faces of the same intent. They aim to fight environment
+[18:18] fragmentation. Too often, environments are locked
+[18:21] into specific training stack, making them difficult to reuse.
+[18:26] And as a market for closed-source environments emerges, these open
+[18:31] initiatives ensure we have a robust alternative. We don't want open-source
+[18:36] models to lag behind just because they lack the right playgrounds to train it.
+[18:42] Plus, beyond the serious side, it's just fun to explore the hub and see what
+[18:47] people are building.
+[18:52] Now, let's move on, Tic-Tac-Toe.
+[18:58] We use verifiers to create a Tic-Tac-Toe environment for training and evaluating
+[19:04] language models on this game. Now, why Tic-Tac-Toe?
+[19:09] It's a simple game, but requires multi-turn interaction, and capturing
+[19:14] its dynamics with a static dataset is challenging.
+[19:18] Despite its small state space and deterministic solution, small language
+[19:23] models often struggle with it. Let's see if reinforcement learning can
+[19:28] help >> [clears throat]
+[19:28] >> bridge that gap.
+[19:37] It's best to start with a simple version, run evaluation to verify it
+[19:41] works, and then iterate. To start, we make a few assumptions.
+[19:46] The model always plays as X and goes first.
+[19:51] It must output a number between 0 and 8 inside move tags.
+[19:57] And the opponent just plays randomly. In load environment, we create a data
+[20:05] set containing the initial user message that starts each game.
+[20:11] For each rollout, setup state populates the state dictionary with information
+[20:17] used and updated during the game, such as the board and the winner.
+[20:24] And response contains the core game logic. It parses the model last move,
+[20:31] check if it's valid. Invalid moves are an immediate loss for now, and applies
+[20:37] it to the board. Then, it applies a random opponent move and checks for a
+[20:43] win or draw. If the game isn't finished, it returns a user message with the
+[20:48] current board state and asks for the next move.
+[20:52] We use two reward function, winner reward function
+[20:57] with weight one, and
+[21:00] format reward function with weight 0.2, which rewards the model for respecting
+[21:07] the XML format.
+[21:15] We can now make our environment more flexible, realistic, and suitable for
+[21:21] both evaluation and training. I made some of these improvements gradually
+[21:25] while eating was during training. First, we want the model to sometimes play
+[21:31] first and sometimes play second. Let's now address opponent's skill.
+[21:37] Always playing against a random opponent isn't realistic. So, we introduce an
+[21:43] optimal opponent using the minimax algorithm.
+[21:46] Against this opponent, a draw is the best achievable outcome.
+[21:51] However, for training, we want the opponent's skill to be controllable. If
+[21:55] the opponent is too perfect too early, the model might never see a win and fail
+[22:00] to learn. We can do so by introducing a
+[22:03] probability for the opponent to choose a random move instead of the optimal one.
+[22:09] In load environment, we introduce mean random move prob and max random move
+[22:14] prob varying from 0 to 1. If we set both to 0, all games will be
+[22:21] against an optimal opponent. If we set both to 1, all games will be against a
+[22:27] random opponent. Using these parameters allows us to
+[22:31] control the opponent's skill across all games.
+[22:35] For different rollouts originating from the same data set example, the opponent
+[22:39] will always have the same probability of choosing random moves, ensuring fair
+[22:44] comparison.
+[22:47] Now, about reasoning. It's common to ask models to produce a
+[22:52] thinking trace before the final answer. It can improve performance at inference
+[22:57] time, but it's also instrumental to make models better during training.
+[23:01] We define a new format reward function using a regular expression to also check
+[23:06] the presence of think tags.
+[23:12] Let's now cover invalid moves. While experimenting with small open models, I
+[23:17] observed that many of them sometimes their output format was incorrect. Other
+[23:21] times, the chosen cell was occupied. Ending the game immediately is harsh. It
+[23:28] might stop smaller models from getting a useful learning signal.
+[23:33] Instead, we now let the game continue and apply a flat minus 0.1 penalty,
+[23:40] capping the turns at eight.
+[23:45] Let's discuss reducing noise in group-based reinforcement learning.
+[23:50] In GRPO learning, we compare several rollouts
+[23:55] from the same starting point to see which ones to reinforce based on
+[23:59] rewards. For this to work, differences in rewards
+[24:03] should come from how the model plays, not from environment randomness. And how
+[24:09] can we reduce noise in this setup?
+[24:13] First, we set an example seed for each example in the data set to select the
+[24:18] starting player. Then, for each turn, we derive a specific turn seed based on the
+[24:25] example seed and board state. This guarantees that if two rollouts reach
+[24:30] the same board position, the opponent will always respond the same way.
+[24:37] Last point, reducing noise across batches.
+[24:42] For our training, the batch size is the number of games taken into consideration
+[24:47] before the model's weight are updated. In our setup, the opponent's skill
+[24:54] varies across the data set according to mean random move prob and max random
+[24:59] [clears throat] move prob. If we train with a small batch size and
+[25:03] the random move probability is not fixed, we might sample a batch in which
+[25:08] many opponents are hard or many are easy. This causes the average reward to
+[25:13] fluctuate a lot, making training unstable. To fight this, I added
+[25:18] stratified sampling. This forces every batch to contain a
+[25:23] perfectly balanced mix of opponent difficulty spanning the chosen range.
+[25:30] I know this slide is dense, but you can find all code and more details in the
+[25:34] GitHub repository.
+[25:42] Time to evaluate existing models. We choose GPT-5 mini and LFM-2 by Liquid
+[25:49] AI, a small fast open model. Using Verifiers, evaluating models just
+[25:54] requires a few commands. Allowing for some statistical
+[25:58] variability, GPT-5 mini is excellent at following format and is a good
+[26:03] Tic-Tac-Toe player, but not perfect. The small open model by Liquid AI
+[26:08] struggles to follow format and to make valid moves.
+[26:13] It's a weak Tic-Tac-Toe player, sometimes winning against a random
+[26:16] opponent, but rarely surviving against an optimal one.
+[26:21] There is a significant gap.
+[26:33] We decide to train LFM-2 for some reasons.
+[26:37] It's a good model for its size, and it's an instruct model ideal for transforming
+[26:42] it into a reasoning model. How can we improve it?
+[26:47] We saw that this model struggles to follow format and often provides invalid
+[26:52] moves. We can use supervised fine-tuning for a warm-up phase, where we teach the
+[26:58] model the format and valid moves syntax. We can then use reinforcement learning
+[27:03] to build deeper capabilities. The first step is generating synthetic
+[27:08] data for supervised fine-tuning.
+[27:12] Once you have a good environment, generating data requires a single
+[27:16] command. Here, we use GPT-5 mini since it
+[27:21] followed format perfectly. And we don't need many examples. We generate 200 and
+[27:27] filter out losing games to avoid baking in suboptimal strategies.
+[27:36] With this synthetic data at hand, we can easily spin up a supervised fine-tuning
+[27:41] run using Prime RL. In this example, I am using a a 96
+[27:47] [clears throat] GB GPU, but you can use a smaller one.
+[27:52] Training requires only a few minutes.
+[27:59] Time to evaluate our fine-tuned model. Compared to the original model, it
+[28:04] learned format almost perfectly and reduced the number of invalid moves.
+[28:10] It also improved the game performance, but there is still significant work to
+[28:15] do.
+[28:19] Before jumping into RL training, let's do a quick recap of group relative
+[28:24] policy optimization applied to Tic-Tac-Toe.
+[28:29] Rollouts starting from the same initial board, the model plays several games via
+[28:35] LLM sampling.
+[28:38] Each rollout is evaluated using deterministic reward function, in our
+[28:43] case, win, format, and invalid moves rewards.
+[28:50] An average score is calculated across the group of rollouts,
+[28:55] and each rollout is then compared against this average. Advantage
+[29:01] computation. The model is updated to favor
+[29:05] trajectories that did better than the group baseline.
+[29:12] We'll use CISPO, which is an improvement over GRPO.
+[29:20] For reinforcement learning training, I used Verifiers RL, simple trainer. Here,
+[29:25] we use a GPU for inference and a GPU for training.
+[29:30] Let's comment some parameters in the training configuration.
+[29:34] In this training run, random move probability is ranging from 20
+[29:38] [clears throat] to 70%. No purely random players and no optimal players. It's a
+[29:43] good playground to get signal and learn both attack and defense.
+[29:49] The num_groups parameter is used to set up stratified sampling.
+[29:53] When it comes to trainer arguments, we want our model to learn [clears throat]
+[29:57] stably while fully utilizing our GPUs without crashing.
+[30:02] For tips on how to use the GPU without going out of memory, I recommend
+[30:08] checking out the GitHub repo. Here, I want to stress that
+[30:12] reinforcement learning training is sensitive to either parameters and can
+[30:17] be unstable. I learned the hard way that batch size
+[30:20] is a key parameter. In this environment, I observed unstable training and model
+[30:25] collapse, and experimented with values lower than 256.
+[30:32] The explanation is intuitive. Batch size is the number of games used to update
+[30:37] the model's weights. If this number is low, this means learning to play from a
+[30:43] very small number of matches and opponent types at once. And this likely
+[30:48] leads to suboptimal strategies.
+[30:55] Let's take a look at training plots. Winning reward function and the total
+[31:00] reward constantly improved. Format reward function was already near
+[31:06] perfect and did not change significantly.
+[31:10] Invalid move penalty function started well and converged to zero towards the
+[31:16] end of training. It suggests a good training run, but let's run proper
+[31:20] evaluation.
+[31:26] Impressive. Thanks to reinforcement learning, our
+[31:30] model has become a very competent tic-tac-toe player. It dominates random
+[31:35] players and draws 85% of the time against an optimal opponent. Invalid
+[31:41] moves have dropped to near zero. These results are already satisfying,
+[31:48] and one can say that not much more we can learn from this example.
+[31:57] I am a perfectionist, and I'd [clears throat] like a perfect AI
+[32:00] player. Inspecting the rollouts, I found some
+[32:03] recurrent failure modes. In particular, our model sometimes falls into four
+[32:09] traps. This example shows the end of the game.
+[32:13] Our model is not playing ideally, but it had already lost the game by allowing
+[32:18] the opponent to have two winning pass pass.
+[32:24] Is it possible to use our RL environment to push our model further toward
+[32:29] perfection?
+[32:32] Let's try. We have to make some changes.
+[32:36] In this run, I used the bigger GPUs just to experiment quickly. It's probably not
+[32:41] required. First, let's discuss opponent skill.
+[32:46] We increase opponent skill by setting the probability of a random move to
+[32:50] range from 0% to 25%. I also tried making the model play again
+[32:57] against perfect opponents only, but it didn't work. The model became overly
+[33:02] defensive and failed to exploit errors when tested again random players.
+[33:10] But how to make our model explore beyond learned strategies? I made several
+[33:16] experiments where this model failed to improve and forget the suboptimal
+[33:20] strategies. We want the model to experiment with new approaches.
+[33:25] And temperature is the right parameter to tweak.
+[33:29] But this is a bit risky. If the temperature is too high, the model can
+[33:34] start generating gibberish. Let's train.
+[33:40] Things get really interesting. There was a significant initial drop in winning
+[33:46] reward function and total reward. I interpret this as an exploratory phase
+[33:51] where the model tried new and random strategies, which underperformed at
+[33:56] first, but over time it recovered and improved to new highs.
+[34:01] Also, format reward function and invalid move penalty function had an initial
+[34:06] drop, but overall always stayed around their maximum values. Let's move to
+[34:12] proper evaluation. Oh,
+[34:16] we finally got the tic-tac-toe master. But
+[34:20] why not playing a game against it?
+[34:25] Okay, let's make not a perfect move.
+[34:31] Mhm, we now need to block the model.
+[34:39] Let's block it again.
+[34:43] Oh, no, we lost.
+[34:47] It could be interesting now to compare our model performance with GPT-5 Mini,
+[34:55] the teacher model we used to generate our synthetic data.
+[35:00] Mhm, against a random opponent, performance is very similar.
+[35:07] Let's see against an optimal opponent.
+[35:12] Oh, in this case, our model is superior. This is a very nice achievement.
+[35:30] To get these results, I went through several failed experiments, and I'd like
+[35:35] to share the findings with you. First of all, batch size. If this value
+[35:40] is large, yes, your model apparently learns slowly, but in exchange, you get
+[35:45] stable training. If the batch size is small and your
+[35:49] environment produces diverse matches and opponent skill, the model will learn
+[35:54] from a small number of games at once. This can reinforce suboptimal
+[35:59] strategies, and you may observe unstable training or model collapse.
+[36:04] Second lesson. Watch for hidden biases in environments. Let me explain.
+[36:09] In a previous experiment, I used a different minimax algorithm for the
+[36:14] optimal opponent. I thought this was an implementation
+[36:18] detail and let code handle it. I got great benchmark results, but then
+[36:23] playing against the model, I realized that it was clueless.
+[36:27] Looking better at minimax, this had a bias. If multiple moves had the same
+[36:32] optimal scores, the first free position was always selected. I basically was
+[36:37] training my model against a specific type of optimal player. Over many games,
+[36:42] the model simply memorized it.
+[36:47] Now, what about model choice? You can start from a model which is already
+[36:52] trained for reasoning, but they tend to output long thinking traces.
+[36:56] If you have limited GPU resources and time, you may end up truncating most of
+[37:01] the longer completion at the beginning to fit the short limits. This means
+[37:06] wasted budget and also the risk of damaging the model's intelligence.
+[37:11] It might make more sense to start from an initial model and transform it to
+[37:17] into a reasoning model for your task. Another point about models, it could be
+[37:23] hard to push very small models to competency.
+[37:27] This, of course, depends on the task. What I recommend, evaluate the base
+[37:31] model in your environment, look at a few completions, choose a model that shows
+[37:36] promising behaviors, even if the numbers are not satisfying yet.
+[37:45] In general, it is always a good idea to inspect some rollouts to see the model
+[37:50] evolve. Also, after training, do not stop at programmatic evaluation. Try the
+[37:55] model in the real task. The final recommendation is natural to
+[38:01] watch your logs and plots when you start training to identify early out of memory
+[38:06] errors or instability. It's difficult for me, too, but once training begins
+[38:12] well, I suggest stopping staring at plots for a while. Reinforcement
+[38:16] learning is slow and takes time to see progress. If you continually monitor it,
+[38:21] you risk the temptation to stop it and tweak something prematurely. While a
+[38:26] slowly progressing run can be a surprisingly good well given enough
+[38:31] time. So, start training and go for a walk.
+[38:40] During this presentation, we mapped the reinforcement learning concept to the
+[38:44] language models domain. Then, I introduced various files, an
+[38:49] open-source library to build environments as of Flo R active base.
+[38:53] Finally, I walked you through my experiments where I took a small model
+[38:57] and turned it to into a tic-tac-toe master using supervised fine-tuning and
+[39:02] reinforcement learning with verifiable rewards.
+[39:05] We did not just show the model how to play. We gave it a space to play and
+[39:10] guided it through rewards. Nowadays, reinforcement learning
+[39:15] complements supervised fine-tuning in language models post-training.
+[39:20] You can do this at home, too. If you can define a clear reward signal,
+[39:25] you can build an environment and train a small, specialized model to beat a large
+[39:30] closed model on a specific task at a fraction of the cost.
+[39:37] I want to leave you with a few ideas and resources on this topic. All what I
+[39:41] shared today can be found in my free LLM RL environment link course, where I go
+[39:48] deep at explaining detail. Take a look and give a star.
+[39:53] To figure out what others are building, explore the environments hub.
+[39:59] And what to build next? Something I'm very excited about is
+[40:03] this. Train a small language models on two three tools you often use and try to
+[40:08] out perform a large model in that specific task.
+[40:12] I recommend the Wiki search example in the Prime RL repository as a starting
+[40:17] point.
+[40:21] Thank you.

@@ -1,0 +1,203 @@
+# title: MCP is all you need — Samuel Colvin, Pydantic
+# source: https://www.youtube.com/watch?v=bmWZk9vTze0
+# speaker: Samuel Colvin, Pydantic
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T11:47:38Z
+# sha256: 62a3762816454e3ad2c6bc2ea307f9a2aa74f7af1e77f678349dde935ae0e7bb
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:00] [Music]
+[00:14] So yeah, I'm talking about uh MCP is all you need. A bit about who I am before we
+[00:19] get started. I'm best known as the creator of Pyantic uh data validation
+[00:24] library for Python that is uh fairly ubiquitous. downloaded about 360 million
+[00:30] times a month. So someone pointed out to me that's like 140 times a second. Uh
+[00:35] Pantic is used in general Python development everywhere but also in
+[00:39] Genai. So it's used in all of the SDKs and agent frameworks in Python
+[00:44] basically. Uh Pantic became a company uh uh beginning of 23 and we have uh built
+[00:51] two things beyond Pantic since then. Pantic AI uh an agent framework for
+[00:56] Python built on the same principles as Pantic um and Pantic Logfire
+[01:02] observability platform um which is our which is the commercial part of what we
+[01:06] do. Um I'm also a somewhat inactive co-maintainer of the
+[01:12] MCP Python SDK. Um
+[01:16] so MCP is all you need is obviously a a play on Jason Lou's talks pantic is all
+[01:23] you need that he gave at AI engineer I think first of all nearly two years ago
+[01:28] and then the second one pantic is still all you need maybe this time last year.
+[01:35] Um and it has the same basic idea that people are over complicating something
+[01:38] that we can use a single tool for. And I guess also similarly the title is
+[01:44] completely unrealistic. Of course, padantic is not all you need. Uh and
+[01:48] neither is MCP for everything. But it has the we have the I think where where
+[01:52] we agree is that there are an awful lot of things that MCP can do and that
+[01:56] people are over complicating the situation sometimes trying to come up
+[01:59] with new ways of doing agentto agent communication.
+[02:03] Um, I'm talking here specifically about
+[02:07] autonomous agents or code that you're writing. I'm not talking about the
+[02:13] um, uh, claw desktop or cursor uh, Z wind
+[02:19] surf, etc. use case of coding agents. Those were what MCP was originally
+[02:23] primarily designed for. Um, I don't know whether or not David Pereira would say
+[02:28] that that what we're doing using MCP from Python is a he definitely wouldn't
+[02:33] say it's a misuse, but it I don't think it it was the primary uh design use case
+[02:39] for um for MCP.
+[02:43] So, two of the of the primitives of MCP prompts and resources probably don't
+[02:50] come into this use case that much. They're very useful or or should be very
+[02:54] useful in the kind of cursor type use case. They don't really apply in what
+[02:58] we're talking about here. Um but tool calling, the third primitive is
+[03:04] extremely useful for what we're trying to do here. Um tool calling is a lot
+[03:08] more complicated than you might at first think. A lot of people say to me about
+[03:13] MCPR, but couldn't it just be uh open API? Why do we need this uh custom
+[03:18] protocol for doing it? Um, and there's a number of reasons. The idea of dynamic
+[03:22] tools, the tools that come and go during an agent execution depending on the
+[03:26] state of the server. Logging, so being able to return data to the user
+[03:32] while the tool is still executing, sampling, which I'm going to talk about
+[03:36] a lot today, perhaps the most confusingly named part of MCP, if not
+[03:41] tech in general right now. Uh, and stuff like tracing, observability. Um, and I
+[03:46] would also add to that actually the uh MCP's way of being allowed to operate as
+[03:51] effectively a subprocess over standard in and standard out is extremely useful
+[03:54] for lots of use cases and open API wouldn't wouldn't solve those problems.
+[04:01] This is the kind of prototypical image that you will see from lots of
+[04:05] people of what uh MCP is all about. The idea is we have some agent, we have any
+[04:10] number of different tools that we can connect to that agent and the point is
+[04:14] that like the agent doesn't need to be designed with those particular tools in
+[04:18] mind and those tools can be designed without knowing anything about the agent
+[04:21] and we can just compose the two together in the same way that uh I can go and use
+[04:25] a browser and the web application the website I'm going to doesn't need to
+[04:29] know anything about the browser. I mean I know we live in a kind of monoculture
+[04:31] of browsers now but like at least the ideal originally was we could have many
+[04:35] different browsers all connecting over the same protocol. MCP is following the
+[04:38] same idea. But it can get more complicated than
+[04:42] this. So we can have situations like this where uh we have tools within our
+[04:47] system which are themselves agents and are doing agentic things need access to
+[04:52] an LLM and they of course can then in turn connect to other tools over MCP or
+[04:57] or directly connecting to tools. This this works nicely. This is elegant. But
+[05:01] there's a problem. every single agent in our system needs
+[05:06] access to an LLM. And so we need to go and configure that. We need to work out
+[05:10] resources for that. And if we are um using remote MCP servers, if that
+[05:16] remote MCP server needs to um use an LLM, well, now it's worried
+[05:22] about what the cost is going to be of doing that. What what if the uh remote
+[05:26] agent that's operating as a tool could effectively piggyback off the
+[05:32] uh the model that the original agent has access to. That's what sampling gives
+[05:37] us. So as I say, I think sampling is a somewhat uh that's not making that any
+[05:43] bigger unfortunately. Um is that clear on screen? I may maybe I'll make it
+[05:47] bigger like that. Um sampling is this idea of a of a way where within MCP the
+[05:53] protocol the um server can effectively make a request back through the client
+[06:00] to the LLM. So in this case client makes a request starts some sort of aantic
+[06:05] query makes a call to the LLM LLM comes back and says I want to call that
+[06:08] particular tool which is an MCP server. Uh client takes care of making that call
+[06:13] to the MCP server. The MCP server now says, "Hey, I actually need to be able
+[06:18] to use an LLM to answer whatever this question is." So that then gets sent
+[06:22] back to the client. The client proxies that request to the LLM, receives the
+[06:27] response from the LLM, sends that uh onto the MCP server, and the MCP server
+[06:32] then returns and we can continue on our way. Um, sampling is very powerful, not
+[06:40] that widely supported at the moment. Um, I'm going to demo it today with Pantic
+[06:44] AI where we have support for sampling. Well, I'll be honest, it's a PR right
+[06:49] now, but it will be soon it will be merged. Um, we have support for sampling
+[06:53] both as a uh as the client. So, knowing how to proxy the those LLM calls and as
+[07:00] a server basically being able to register use the MCP client as as the
+[07:04] LLM. So this example
+[07:09] is obviously like all examples trivialized or simplified to be to fit
+[07:12] on screen. The idea is that we we're building a like research agent which is
+[07:16] going to go and research open source uh packages or libraries for us. And we
+[07:22] have implemented one of the many tools that you would in fact need for this.
+[07:25] And that tool is um making uh I will switch now to code and
+[07:31] show you uh the one tool that we have. Uh
+[07:37] I'm in completely the wrong file. Here we are. Um so this tool is querying
+[07:44] BigQuery BigQuery public data set for uh Pippi to
+[07:49] get uh numbers about the number of downloads of a particular package. So
+[07:54] this is this is pretty standard padantic AI uh padantic AI code. We've configured
+[07:59] log file which I'll show you in a moment. We have the dependencies that
+[08:02] the uh that the agent has access to while it's running. We said we can do
+[08:07] some retries. So if the agent returns if the LLM returns the wrong data, we can
+[08:11] send a retry a big system prompt where we give it basically the schema of the
+[08:16] table. Uh tell it what to do, give it a few examples, yada yada. But then we get
+[08:20] to this is the probably the powerful bit. So as an output validator we are
+[08:25] going to go and first of all we're going to strip out uh markdown block quotes
+[08:30] from the SQL um if they're there then we will uh check that the table name is
+[08:36] right that it's querying against and tell it that it shouldn't if it it
+[08:39] shouldn't and then we're going to go and run the query and critically if the
+[08:43] query fails we're going to uh raise model retry with impantic to go and
+[08:48] retry uh making the um uh making the request to the um LLM
+[08:58] again saying asking the LLM to to uh attempt to to retry this. And what we're
+[09:02] the other thing we're doing throughout this you'll see here is we have this
+[09:06] context. MCP context.log. So you'll see here when we defined depths type we said
+[09:12] that that was going to be an instance of this MCP uh context which is what we get
+[09:17] when you call the MCP server. So what we're doing here is we're having a we're
+[09:21] providing a type- safe way within in this case um the agent validator but it
+[09:27] could be in a tool call if you wanted it to be to access that context. So we can
+[09:31] see here that we know at um in the type int uh uh that the the type is uh MCP
+[09:39] context. So we have this log function and we know it's signature and we can go
+[09:42] and make this log call. The point is this is going to
+[09:47] return to the client and ultimately to the user watching before the the thing
+[09:51] has completed. So you can get kind of progress updates as we go. MCP also has
+[09:55] a context concept of progress which I'm not using here but you can imagine that
+[09:59] also being valuable if you knew how far through the query you were. You could
+[10:02] show an update in progress. So the idea I think the original principle of uh
+[10:07] logging like this is that you have the the cursor style agent running and we
+[10:12] want to be able to give updates to the user. Don't worry I'm still going before
+[10:16] it's finished and exactly what's happening. But you could also imagine
+[10:19] this being useful if you were using MCP. If this was research agent was uh
+[10:23] running as a web application you wanted to show the user what was going on. This
+[10:27] deep research might take you know minutes to run. We can give these logs
+[10:30] while the tool call is still executing. And then we're just going to take the
+[10:35] the output turn it into a list of dict and then format it as XML. So you get a
+[10:41] nice uh models are very good at basically reviewing XML data. So we
+[10:46] basically return whatever the query results are as that kind of XMLish data
+[10:50] which the LLM will then be good at uh interpreting.
+[10:55] Now we get to the MCP bit. So in this code we are setting up an MCP server
+[10:59] using fast MCP. There are two versions of first MCP right now. Confusingly,
+[11:04] this is the one from inside the MCP SDK. Um,
+[11:10] we the dock string for our function. So, we're registering one tool here, Pippi
+[11:14] downloads, and our dock string from that function will end up becoming the
+[11:18] description on the tool that is ultimately fed to the LLM that chooses
+[11:22] to go and call it. Um, and we're going to pass in the user's question. And I
+[11:28] think one of the one of the important things to say here is of course you
+[11:30] could set this up to generate the SQL within your
+[11:37] uh central agent. You could include all of the um
+[11:42] uh description of the SQL the instructions within your within the the
+[11:46] description of the tool. Uh models don't seem to like that much data inside a
+[11:51] tool description. But more to the point, we're just going to blow up the context
+[11:54] window of our main agent if we're going to ship all of this context on how to
+[11:57] make these queries into our main agent. That's just all overhead in all of our
+[12:02] calls to that agent regardless of whether we're going to call this
+[12:04] particular tool. So doing this kind of thing where we're doing the inference
+[12:08] inside a tool is a powerful way of effectively limiting uh the context
+[12:12] window of the of the main running agent. And then we're just going to return this
+[12:16] output which will be a string, the value returned from from here. and we'll just
+[12:21] run the run the MCP server and by default the MCP server will run over
+[12:25] standard IO. Um, and then we come to our our main application. So here we have a
+[12:32] definition of our agent. And you see we've defined one MCP server that's just
+[12:36] going to run the the script I just showed you, the Pippi MCP server. Um,
+[12:43] and so then this agent will act as the client and has that register as a tool
+[12:46] to be able to call. We're also going to set the give it the current date. Uh so
+[12:51] it doesn't uh assume it's 20 2023 as they often do. Um and now we can go and
+[12:58] ultimately run our main agent. Ask it for example how many downloads Pantic
+[13:03] has had this year. And I'm going to be brave and run it and see what happens.
+[13:07] And it has succeeded and it has uh gone and told us uh that we had whatever 1.6
+[13:13] billion downloads this year. But probably more interesting is to come and
+[13:15] look at what that looks like in Logfire. So if you look at is it going to come
+[13:19] through to logfire or we having a failure here as well. This I will admit
+[13:23] this is the run from just before uh I came on stage but it it would look
+[13:27] exactly the same. So I'm not going to talk too much about observability and
+[13:31] how we do uh how MCP observability or tracing works within MCP because I know
+[13:37] there's a talk coming up directly after me talking about that. So think of this
+[13:40] as a kind of uh spoiler for what's going to come up. But you can see we we run
+[13:45] our outer agent. it decides to it calls uh uh GPT40 uh which decides sure enough
+[13:53] I'm going to go and call this tool. Uh it doesn't need to think about
+[13:56] generating the SQL. It can just have a natural language description of the
+[13:59] query that we're trying to make. We then um this is the MCP client as you can see
+[14:04] here. MCP client then calls into the MCP server. um makes the which then again
+[14:11] runs a different uh pyantic AI uh agent which then makes a call to an LLM which
+[14:18] happens through proxing it through the client. So that's where you can see the
+[14:21] service going client server uh client server
+[14:26] ultimately if you look at the top level uh exchange with the model you'll see
+[14:30] here yeah the the the out ultimate output was it return the the return
+[14:37] response from running the query was was this kind of XMLish data and then the
+[14:41] LLM was able to turn that into a human description of what was going on. I
+[14:45] think the other interesting thing probably is we can go and look in we
+[14:48] should be able to see the actual SQL that was called. So this is the agent
+[14:52] call inside uh MCP server and you can see here the SQL it wrote and you can
+[14:58] confirm that it indeed looks correct. Um I am going to
+[15:04] uh go on from there and say um thank you very much. Um we are at the booth the
+[15:10] the Pantic booth. So if anyone has any questions on this, wants to see this
+[15:13] fail in numerous other exciting ways, very happy to to talk to you. Yeah, come
+[15:17] and say hi.
+[15:22] [Music]

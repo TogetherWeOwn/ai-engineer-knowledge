@@ -1,0 +1,467 @@
+# title: Build a Research Agent with Claude Managed Agents (Part 2 of 4) — Anthropic
+# source: https://www.youtube.com/watch?v=FGftGOzfohc
+# speaker: Anthropic
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T03:06:29Z
+# sha256: 4366b7b60029edb0e9e01864a00d94e22bc18605574a3e5ad145ad59c9c8e433
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:01] [music]
+[00:12] Thank you for the presentation. Out of curiosity for the design of the session
+[00:17] in um first iteration and second iteration what has changed?
+[00:22] >> Good question. Gabe, do you want to take that question on what changed within uh
+[00:26] the storage of the session between the first and the second iteration?
+[00:31] >> Um, sure. The the the main thing that
+[00:35] changed was that we wanted to abstract away as many things and comp
+[00:39] compartmentalize them into different components um to make it so that we
+[00:43] could extend the storage mechanisms for future events that we wanted to store uh
+[00:48] without tying them you know so tightly coupled to the mechanics of the session
+[00:52] work. Um, so we basically apply the same principle of building and virtualizing
+[00:58] interfaces all the way down uh not only across service boundaries but also at
+[01:02] the event layer. >> All right, thank you. Um, so it sounds
+[01:06] like maybe everyone might not be able to follow along, but hopefully um we can
+[01:10] find a way to share out these slides and you can try it out at home or if you
+[01:14] have your phone, maybe you can try to pair it with your hotspot and see if you
+[01:18] can follow along. Um, all right. So let let's try this one more time. And we're
+[01:22] going to say, build me an agent that tells me jokes every time
+[01:31] given a topic. And then you just hit enter.
+[01:39] And you can see Claude is coming up with a system prompt. It came up with a name,
+[01:45] a description, chose a model. You can like go change this model if you want
+[01:49] to. and um give the agent access to the agent tool set. And then you'll hit uh
+[01:55] create agent. That should basically call the v1 agents
+[02:00] endpoint to create the agent. Okay, that that got created. Next, we're going to
+[02:03] configure the environment uh which is the template for the
+[02:07] sandbox.
+[02:12] Uh we're just going to create a new one
+[02:19] and then we'll just give it unrestricted access for this one. But you can
+[02:22] obviously when you're building a production agent you you want to tighten
+[02:26] the access control which domains it can uh reach out to or specific MCP servers.
+[02:31] So we'll do unrestricted.
+[02:35] And then here you can see you can like choose packages you want to install um
+[02:39] etc. And then next we'll just go and start the session.
+[02:44] All right. Now we're going to go test run our session.
+[02:48] Uh right. Tell me jokes about cats.
+[02:54] And you'll see the model started thinking
+[03:01] and it came up with a cat joke. Yeah. That that was like a that that's
+[03:08] how easy it is for you to go build your agent. Now this uh agent is up and
+[03:12] running in the cloud. All you have to do is start a session with the agent, send
+[03:16] events, get back events. Everything else is managed by us. So we're managing all
+[03:20] the infrastructure, the hosting, the harness, the sandbox management, the
+[03:24] scaling, the storage of your event log. Um and then you can focus on building
+[03:28] your product around this. Um thank you. I'll now hand it over to Gabe to do the
+[03:34] more hands-on bit of the workshop and hopefully hopefully we have better luck
+[03:38] with Wi-Fi. Thank you. [applause]
+[03:47] Can you hear me? Great. I see there's a bunch of people that are kind of
+[03:50] squished in the back. There's room here and here if you want to come in uh so we
+[03:54] can fit everybody in. Um, before we start, here's a repo that we're going to
+[04:00] be using. Um, so if you want to take a picture of the QR code, get clone that
+[04:06] repo. Um, cd into the research desk directory and then run uh npm install or
+[04:13] bonai. Um, I'll let you do that and then I'll walk you through through what we're
+[04:19] going to be building today uh together. Um,
+[04:23] still see some phones out. I know you're there's Wi-Fi issues. Hopefully, you can
+[04:29] you can get uh you can get to the repo. Um Okay. Oh. Oh, I see you. Okay.
+[04:37] Cool. All right. So, what are we what are we
+[04:42] going to be building today? We're I'm going to show you how you can use cloud
+[04:45] manage agents to build a variety of different applications. We're going to
+[04:48] start with uh building a custom chat-like interface so that you can talk
+[04:52] to an agent. We can say hello. Um, then we're going to augment that agent into a
+[04:57] multi- aent uh ecosystem so that it can delegate tasks uh to sub agents. We're
+[05:03] going to give it skills uh specifically a skill to be able to call um the SEC
+[05:08] website and get SEC filings for individual tickers uh and analyze
+[05:12] specific forms. Um then we're going to be able to use the these new enhanced
+[05:17] agents to run more asynchronous um agentic tasks that can take a long time
+[05:23] to run. Um and then we're going to bring it all together by enabling the sort of
+[05:28] map reduce interface where we can talk to an agent and that agent can then
+[05:32] delegate to many agents uh and do sort of like a map produce thing. um showing
+[05:38] you how you can build a custom harness on top of CMA to orchestrate you know
+[05:43] your own work with custom tools uh and manage multiseession um kind of
+[05:48] interactions. Uh and then we'll finish up by I'll show you uh our deployments
+[05:52] API that allows you to set up recurring work on a schedule so that you can run
+[05:57] uh sessions uh on a on a given cadence to run kind of longer term analysis that
+[06:02] keeps updating itself. Sound good? quiet. Okay, great. Um, all right. So,
+[06:10] let's switch over to um a coding interface. I'm going to be using cloud
+[06:15] code for this. You're free to use whatever coding agent you prefer. Uh, I
+[06:19] don't think anybody's writing code by hand, so I'm not going to do that
+[06:23] either. Um, there is a skill that we've loaded up in your repository that's
+[06:28] going to walk you through the workshop step by step. Um, so if you want to
+[06:32] rerun the workshop after I'm done, uh, later on when you have better Wi-Fi and
+[06:37] better internet access, uh, you're able to do so, um, at home. Um, so the first
+[06:42] thing you're going to want to do is I assume you've checked out the
+[06:45] repository. You've cded into the research desk repo. You've run buni.
+[06:50] We're going to spin up our uh, server with uh, bun rundev. I'm going to make
+[06:54] this bigger. I'm assuming nobody can see. Okay. Is that better?
+[06:59] >> Yeah. And then if you have questions while Gabe Gabe is presenting, feel free
+[07:03] to raise your hand and I can run to you with the mic.
+[07:05] >> We we have helpers. So if you run into issues, raise your hand. People will
+[07:09] come um help you help you out. Um cool. So if you've gone this far, you'll
+[07:16] basically be able to load this website. Uh and the first thing you're going to
+[07:19] want to do is go to the setup page. Um everybody with me so far?
+[07:25] >> Yeah. Okay. Um now we're gonna Yeah.
+[07:32] Um, okay. Once uh once uh he takes a picture, we're we're going to start up
+[07:37] uh our workshop skill. So in cloud code, you can type in uh workshop start. Uh
+[07:44] and it's going to start running through the workshop for you. We're going to do
+[07:47] it in six acts. Uh I apologize there's no intermission in between. Um I hope
+[07:52] that's okay with y'all. Um but we're going to go through it. Uh Claude will
+[07:58] uh sure we're going to go into auto mode. Um
+[08:03] Claude Claude is going to keep track of each of the acts so that you can
+[08:06] continue on. You can keep typing workshop next so that it you know it's
+[08:10] going to keep uh progressing through the through the thing. Uh I'm going to ask
+[08:15] Claude to do it for me but handhold handhold me and teach me what it's
+[08:19] doing. Um and so the first thing it's going to basically make sure that our
+[08:23] prerequisites are set. Um, it's going to copy the m.example file into amp.local.
+[08:31] Um, oh no, stop. We're not there yet. Okay, it's a little eager. Okay, it's
+[08:37] going to copy that file. That file um has a few values for you to fill in.
+[08:41] You're going to want to paste in your API key. Um, you're going to want to
+[08:45] paste in the SEC wants to know who you are when you're calling their API. So,
+[08:49] you're going to have to put in your name and email. Um, this is just so that they
+[08:53] know who's calling them. Um, and then that's basically it. Once, um, once
+[08:59] you've done all that, um, it's going to, well, we're going to move on to the to
+[09:04] the next thing. So, everybody with me so far, you've put in your API key into
+[09:09] your.local, you put in your Edgar identifier.
+[09:14] >> Show of hands, >> be a quick show of hands. Or how many of
+[09:16] you are able to follow along who might have Wi-Fi or
+[09:20] >> Okay, we got one one person at least. So, [laughter]
+[09:25] MVP, pardon. Uh oh. Oh, for the repo. This one.
+[09:36] >> Uh Rohan, you want to hand the mic? >> Yeah, thank you.
+[09:39] >> Yeah, the slide with the credential. That's it. The setup.
+[09:42] >> This one. >> Thank you.
+[09:42] >> Okay. Sure. And then and then given given people don't have Wi-Fi plea
+[09:46] please like stop us and ask questions so we can at least make this more
+[09:49] interactive and help you understand concepts so that you can build with your
+[09:53] own time after the workshop.
+[09:58] >> Okay. Um I'm yeah I have a
+[10:05] >> yeah this is the app spinning up uh when you clone and cd into research desk and
+[10:10] run bun run rundev. This is a website you will you will get.
+[10:15] >> Can I ask a question? >> Yeah, I don't see you but
+[10:18] >> Oh, you're here. [laughter] Uh I'm wondering like you know so when
+[10:22] you say cloud handle and manage the agents where is this running? Is this
+[10:26] running on AWS? >> Yeah, that's a good question. Um so we
+[10:30] we we're going to run it in our own infrastructure. Um today we we have like
+[10:34] a onep offering uh that we run on but we also have cloud platform on AWS if you
+[10:41] want to run on AWS using your AWS credits. What we also offer and maybe we
+[10:45] can talk about this after this demo is self-hosted sandboxes. So if you want to
+[10:49] bring your own sandbox through uh different providers like Burcell or
+[10:53] Modal or Daytona or a bunch of others, you can do that. Uh even you know
+[10:59] through Google cloud and and AWS if you want to run your sandbox in that uh
+[11:02] environment, you can. Um okay, I'm going to continue with the demo. U the the
+[11:08] first thing you the next thing you want to do is create push this button which
+[11:11] is going to create um your agent. So it's going to create two things for us.
+[11:17] um an environment which Priyanka talked about is a template of what the sandbox
+[11:21] is going to look like. Um for this demo, we're going to give it access to a few
+[11:26] websites that it can reach out to, mainly the SEC. We're going to add uh
+[11:30] some Python packages so that it can reach out to to the SEC with you know
+[11:35] some predefined uh Python packages. Um it's also going to create uh an agent.
+[11:41] So it's going to create this very basic agent. Right now it has no tools. Um, it
+[11:46] has uh just a prompt. Uh, well, it has the basic tools, but there's no skills.
+[11:51] There's no sub agent coordination, nothing like that. Um, I'm going to tell
+[11:55] Claude to um continue and implement the interface
+[12:02] with which we can talk to this agent in our application. Uh, like Bianca
+[12:06] mentioned, the main uh way you communicate with a session is through an
+[12:10] event stream. So you listen onto that stream for all the events that the agent
+[12:14] is pushing back down to you and you can use that uh an endpoint to push events
+[12:18] back up. So really everything that happens in the communication for these
+[12:22] more chat-like applications happens on that stream. So we can see here what
+[12:27] Claude is doing is it's uh implementing the section so that when I press enter
+[12:33] in my chat box, it's going to send a user message event with the content that
+[12:38] I'm sending to that session. And then it's going to route the SSE stream back
+[12:43] onto my browser from my back end. So it's going to listen onto um the events
+[12:48] that are coming in the stream connection to our API and then reream them directly
+[12:53] back onto the front end so that I can render them in a nice way. Um and once
+[12:58] Cloud has done that, we should be able to go to this desk tab and just say hi
+[13:04] to our agent. Um, and if everything worked
+[13:10] hopefully great. Um, so we can see here now we're we're talking to our agent. If
+[13:15] you wanted to build a chat-like application, this is where you would
+[13:18] stop. Um, which is great, but we want to do more. The whole point of cloud
+[13:23] managed agents is that you can do longunning asynchronous tasks. Um, not
+[13:27] just for minutes, but hours, days, weeks, and even months. Um, so let's see
+[13:33] what we we have to do next. Right. The next thing that we're gonna want to do
+[13:37] is um Oh, Claude is very eager today. Um, okay. The next thing is we we want
+[13:45] to augment our agent, right? We want to give our agent a skill so it can call
+[13:48] the SEC. We want to use multi- aent coordination so that um our session can
+[13:53] delegate work to sub agents that are more specialized and capable of doing
+[13:57] some tasks. Um, and we want to basically move up the ladder of intelligence. Um
+[14:04] so let's do that um by saying workshop next. Um now what claude is going to do
+[14:10] is it's going to implement the provisioning scheme to upgrade our agent
+[14:14] so that it uses uh more sub aents or any sub aents um is we're going to give it a
+[14:22] skill a skill that lets it uh um talk to the SEC. We've described how to use the
+[14:28] Python package. We've described that it has to use the Edgar identity to call.
+[14:32] Um, we've we've described all of that and we're going to give it a custom tool
+[14:37] uh for later in the workshop. Um, that custom tool is what we're going to be
+[14:41] able to use to tell our head of research agent to spin off multiple sessions that
+[14:46] we will coordinate uh for a sort of custom harness. So, this is what Claude
+[14:50] is doing here. Um, it's updating its progress, creating this custom tool
+[14:54] called dispatch analysis. We're going to come back to this in a second. um we
+[14:59] give it a schema. Um it's going to update the the description of the main
+[15:05] agent so that it creates a new version of that agent. Uh this new version will
+[15:10] have um oh pager duty. Um uh this new version will have uh a few
+[15:17] different sub aents uh that it can delegate work to as well as a reference
+[15:21] to itself. So if the main agent ever wants to spin off a copy of itself with
+[15:26] its same prompt, it can do that. Um this is important because uh sometimes you
+[15:31] don't necessarily know what sort of tasks your session is going to want to
+[15:35] do, but you have a general idea that you want to have sub agents that you know
+[15:40] spin up and do work. Um so you can define a self reference to you know
+[15:44] yourself that clock can then spin up a sub agent for. Um important this
+[15:49] question has come up in the past. It doesn't copy the transcript of that
+[15:52] session into the sub agent. It just copies over the tool description and the
+[15:57] schemas uh and the prompt uh into into that sub agent.
+[16:02] Um cool. So now if we go into here, we should see that there's a new agent. Oh,
+[16:12] I think I need to provision them. So there should be a button in our setup uh
+[16:16] that says staff the desk. When I do that, it's actually going to run Oh.
+[16:21] Uh uh okay. I ran this before. Let me delete the skills so that I can recreate
+[16:26] it for you. Um I was trying to do the magic uh cook show thing, but that's
+[16:32] fine. Um okay. So we'll delete the skill. We'll ask cloud to reprovision
+[16:37] it. Um it's going to create all those
+[16:40] resources and then we'll be able to see here all the sub aents, the skill that
+[16:44] we created, um a memory store. So for these sessions, we we we also support um
+[16:51] longunning memory store that can be shared across sessions. Uh and we're
+[16:54] going to use that so that different sessions can learn about different
+[16:57] financial instruments and they can share that knowledge uh with each other. And
+[17:01] at the end of this workshop, I'll show you how you can use that memory
+[17:04] longunning memory to keep improving your agents long term over many many uh
+[17:08] sessions, days, months, years. Um cool. So we should see here that the
+[17:15] agent now in here um
+[17:21] has the skill that we described. It has sub agents uh with their own prompts and
+[17:26] tools and permissions. Uh it has a prompt and it has a model. Um
+[17:32] and I think we're we're ready to use this new dedicated sub agent to do our
+[17:36] first asynchronous longunning task. So let's uh tell Cloud to move on to the
+[17:42] next thing. The next thing that we want to do is um we want to tell Claude not
+[17:47] in a chat-like application but a more asynchronous thing. Hey, research this
+[17:52] financial instrument and give me a report in a format that I define and I
+[17:56] care about. And we're going to use something called outcomes. Outcomes is
+[18:00] how we've created self-s supervision. So in an outcome, you tell Claude, "This is
+[18:05] your task. This is your rubric to evaluate your task. It's going to go off
+[18:09] and do that work and then when it thinks it's completed, it's going to ask a sub
+[18:13] agent to look at the rubric and the work that Claude did uh and evaluate did it
+[18:18] do it correctly and did it do it to completion. Uh if it does then great and
+[18:23] if it doesn't it will try again. Um so here what Claude is implementing for us
+[18:28] is basically this userdefined outcome event. So that anytime we start a
+[18:33] session in our UI that I'll show you for a specific ticker, it's going to send
+[18:38] this userdefined outcome with a specific rubric uh max iterations um and a
+[18:44] description of the task at hand. And so then Cloud will go run that task for us.
+[18:50] Um and so what does that look like in the UI? If you look to this scorecard,
+[18:56] um I can tell Claude, hey, I I want to analyze Nvidia. Oh,
+[19:01] please.
+[19:06] Okay, great. So, it's going to kick off a session to do the analysis on Nvidia.
+[19:10] Um, this is going to take a while. I'm going to do the cook show thing and show
+[19:14] you a previous session um of of what happened. Uh, it's going to take about
+[19:17] 10ish minutes. Um, but here's something I ran yesterday. Uh, the first thing
+[19:23] we're telling Claude is here is an outcome. I want you to analyze Nvidia's
+[19:27] most recent uh SEC quarterly filings. Um you're going to use Edgar identities.
+[19:33] This is where your Edgar identities are. Um you have memory. So check if you've
+[19:38] already done analysis previously and make sure that you use that instead of
+[19:42] refiling and researching things that you already know. Um I want you to find the
+[19:47] most uh recent form that I care about and run the analysis over that. Um and
+[19:53] then I want two deliverables. I want you to write a note in in my memory um for
+[19:59] that specific company and I want you to write a scorecard in a well- definfined
+[20:03] structured output and I want you to save that in a specific file location. Um so
+[20:09] then Claude went off to work started calling tools. It didn't find any notes
+[20:14] in its memory store. Um it uh looked in a few different places and then it
+[20:20] decided okay I know what to do. I'm going to leverage my sub agents to do
+[20:24] the bulk of this work. Um I'm going to spin up a financial um expert analysis
+[20:31] agent uh or extractor and then a risk evaluator analysis. And you can see all
+[20:36] of that in the uh console here for full observability. Each of these lines here
+[20:41] represents a thread and a thread represents the work done by a sub agent.
+[20:45] And so each of the sub aents went off to work and then when they were done they
+[20:49] let the main agent know hey this is what you asked of me uh and then the main
+[20:53] agent woke up uh got that information from the sub agents and then uh filed
+[20:58] everything it needed to do and created the deliverable. It created the JSON
+[21:02] file that you know we specified uh and it made sure to update the memory and
+[21:07] then the cell supervision started. So it kicked off a sub agent to verify that
+[21:12] the outcome that we defined is being met. Um it looked at the rubric. It
+[21:17] analyzed all the work that was done uh in the session and analyze the artifacts
+[21:22] that it created. Uh and it decided in the end that this was satisfied that
+[21:26] this you know scorecard was delivered uh that the numbers are well defined uh
+[21:31] that the memory update you know was correct um and everything looked good.
+[21:36] Um I don't I think this is still running but once that completes uh you would see
+[21:41] a table here of each of those tickers uh because we can extract the report the
+[21:46] scorecard from the session and download it. You put in a database for this demo
+[21:50] we put it locally. Um but I think you get the idea.
+[21:55] Um okay this is great but what if you want to do a hundred or or 10 tickers at
+[22:00] a time? Wouldn't it be great if I could chat with an agent to build a custom
+[22:04] harness that could then delegate work uh for each of the tickers into a different
+[22:09] session and then when it's all done aggregate the results and give me uh a
+[22:13] bunch of scores. Um so that's that's what we're going to do next. Um we're
+[22:18] going to leverage that tool that custom tool that we created to build our custom
+[22:22] orchestration harness in our server. um where when we talk to our main agent at
+[22:27] some point that main agent is going to decide hey I want to spin up uh 10
+[22:32] different sessions to do work um we'll get that oh I skipped a step sorry um
+[22:39] for we're going to update the skill uh first u so I I wanted to show you that
+[22:44] these skills are are live artifacts that you can update um so you can improve the
+[22:49] skill uh in this case uh we're adding the ability to look at a new form Uh and
+[22:54] then when you do so any new sessions that the reference at skill will get
+[22:59] that new information. Um so this is something that you can continuously
+[23:03] update. You can look at previous sessions to see how they performed.
+[23:06] We're going to see that at the end of this uh demo that that happens with with
+[23:11] something we call dreaming. Um but yeah this this is what is happening. Um okay
+[23:17] I'm going to move on to the orchestration bit. Um, so now that yeah,
+[23:23] that basically had skills published. Um, I think if I go here, we should see
+[23:28] >> any questions so far. Um, I know this is a lot to take in. Uh, Travis, there's a
+[23:33] question over here.
+[23:42] >> Um, and I I know someone came up to me asking about like how long it takes to
+[23:46] get the credits. It should be only five minutes. Um, I know the form says one to
+[23:50] two days, but you should see it within five minutes.
+[23:53] >> Um, I was curious about the the data access uh from the SEC that the the
+[23:58] research agent is grabbing. Does that require some sort of credentials? And
+[24:02] are you going to walk through the part of how the how that credential injection
+[24:06] or or brokering works? >> Yeah. So, for for the SEC, it just
+[24:10] requires your email and your name. Um, for this demo, we just inject that in
+[24:14] the prompt. But in a real production application, we would use something
+[24:17] called vaults. Uh the way vaults work is you define a secret uh that you want to
+[24:22] you inject in an environment variable. And instead of putting the real secret
+[24:26] in, what we put is is a placeholder. Uh and then when Claude is doing work and
+[24:31] it wants to use that environment variable, um it just injects the
+[24:36] placeholder value. We at egress swap it out for the real value. only on the host
+[24:41] domains that you specified are allowed for that secret. So if you say uh my
+[24:47] super secret MVAR can only be used for the SEC and then cloud tries to use it
+[24:51] for entropic.com we wouldn't inject we wouldn't do the swap but when it tries
+[24:56] to call the sec.com it would do the swap for that
+[24:59] >> is essentially like an API where you can use it on console where you just go
+[25:03] create a vault give it a name you'll get an ID and then you essentially include
+[25:07] that ID in your session as a way for us to authenticate with your MCPS your CLI
+[25:12] you for example you could do like a Google Workspace CLI that you install on
+[25:15] your um sandbox and then you can give us like your API key as your environment
+[25:19] credential and again we'll we'll kind of follow the same method that
+[25:22] >> uh Gabe talked about. So that that allows us to
+[25:25] >> essentially >> bots also work with ooth credentials
+[25:28] forps and they also work >> Gabe I don't know if you want to just
+[25:31] show it on on console like the quickly like the vault creation.
+[25:36] >> Yeah. Um so you you can create a vault here and then in a vault you would
+[25:40] bundle credentials. Um so you can have MCP O um maybe you do notion you know we
+[25:46] have a few predefined things for OOTH things um so whenever you reference a
+[25:53] session you inject that vault ID and it will bundle all the credentials into
+[25:57] your session and whenever it tries to use any of the domains that you
+[26:01] specified in your credentials it will swap for the real um credential instead
+[26:05] of the placeholder. >> Yeah. Um, quick question. What part of
+[26:10] the capabilities in the cloud agents SDK and what's about it?
+[26:16] >> Can you what what do you what do you mean?
+[26:18] >> You have the agent SDK, right? I presumably this is built on top of the
+[26:22] agent SDK. I want to know what part of the capabilities are in the agent SDK
+[26:26] layer and what's outside of it. >> So the the agent SDK is packaged for uh
+[26:31] like more more it's a headless cloud code version. So it's actually we've
+[26:35] built a generic version of that. We've took taken a lot of inspiration about
+[26:39] the benefits and lessons from the agent SDK, but we've rebuilt uh the harness to
+[26:44] be a more generic not just coding specific thing.
+[26:47] >> So it's sort of a fork. >> Uh yeah. Yeah. It's basically like its
+[26:51] own harness. Agent SDK is basically like a cloud code in the form of a binary
+[26:56] that you can take and run wherever you want. This is a fully hosted solution
+[27:00] running in our cloud and we have our own harness that's heavily inspired by cloud
+[27:05] codes harness and we frequently stay stay in touch for like any enhancements
+[27:09] across the board. >> Uh I I saw another hand in the in the
+[27:12] back over there. >> We have a question here. Yeah,
+[27:15] >> couple more. >> Thank you. Uh I guess the question as
+[27:17] you're orchestrating between multiple agents um is there some guard rails that
+[27:21] those agents would not go into loops and like consume a lot of tokens um as
+[27:26] they're generating or working together? >> Um some of that we leave up to you to
+[27:32] orchestrate and figure out. I mean we're if you're building these sort of custom
+[27:35] harnesses, there's nothing stopping you from using uh like other providers if
+[27:41] you wanted to do a sort of multi- uh multi-provider system. Um, we are
+[27:47] exploring the idea of what it means to do like budget tighter budget controls
+[27:50] that you can say use no more than this amount of money per session, use no more
+[27:54] than this amount of tokens per session. Um, but that's not something we offer
+[27:57] today. >> Um, yeah, go ahead.
+[28:01] >> Couple more hands. >> Question. Uh, earlier you were showing
+[28:05] us in console kind of a transcript of the manager and then the sub aents and
+[28:10] you could kind of go through and see what they were doing. if you were to
+[28:13] come across maybe uh a mistake or like it was going down the wrong path or you
+[28:18] wanted to change history. I mean obviously that's what's happened. Is
+[28:21] there some way to correct it or to kind of go back to that point in time and
+[28:25] kind of start over try it with some additional guidance? Is there any
+[28:28] anything like that in here? >> You can steer it. So I could I could uh
+[28:33] I think here if I say send event I could send a new user uh message event and
+[28:38] steer the agent. Uh it'll queue it up. it's, you know, you can send that 10
+[28:42] messages at a time and it's fine. We don't currently have a way for like
+[28:46] rewind and roll forward. Um, but that's definitely something that uh if if
+[28:51] people are interested, we we would look into
+[28:52] >> Yeah, session forking is essentially what you're asking for. We we've had a
+[28:56] couple a few customers who have asked for it. That's it's it's on our road
+[29:00] map. So hopefully we'll have it at some point.
+[29:02] >> Thank you. >> Uh yeah, I see a couple hands here if
+[29:06] you want to hand. Yeah, thank you Rohan. Uh so
+[29:11] >> where are you? Okay. Okay. Yeah. Go ahead. [laughter]
+[29:14] >> Assuming all of this is running in the cloud like like you know u you guys have
+[29:19] any road map to get collective knowledge across these agents like let's say in
+[29:24] this one particular application you have 10 users.
+[29:26] >> Would would you mind speaking up? It's a little hard to hear. Oh, so so if you
+[29:32] assuming all of this is running in the cloud and this application is being
+[29:35] distributed across tens and hundreds of users and all of them are using it for
+[29:39] the purposes of like you know doing this financial research. Do you have I know
+[29:43] you guys have session logs. Is there a collective
+[29:46] >> memory that you guys are looking into or even have a road map of?
+[29:52] >> We have it today. We actually used it in this demo. So we use the a memory store
+[29:57] um that allows you to share knowledge across sessions. Uh and you can see here
+[30:01] that what's happening is um the agents are each populating individual
+[30:06] information about what they've done so far. Um and then I'll show you at the
+[30:11] end how you can consolidate that knowledge over time using dreaming so
+[30:15] that you can continuously improve the memory stores as different agents run
+[30:19] into different edge cases and collectively learn from each other. So
+[30:22] just to follow up on this so you're storing this in anthropics
+[30:26] infrastructure. Say if you want to delineate that and and have things
+[30:30] running in AWS bedrock and I have my own like uh data clusters or something for
+[30:36] sandboxing. Then you mentioned about self-hosting. How much of a lockin is
+[30:41] this piece versus like how flexible is it? So all of this API based so you you
+[30:47] can extract the memories and put them in different systems if you want to. We
+[30:52] don't currently support out of the box other memory providers in the session
+[30:57] but you would just build an MCP or a custom tool to do so. It's the way I
+[31:01] would imagine doing it. And >> and also to add to the initial question
+[31:04] about like having user level org level memory we do allow for attaching
+[31:08] multiple memory stores. So you can imagine having a user level memory store
+[31:12] and then having some sort of orwide memory store and then you bring both to
+[31:16] each session. So you can start collecting user level as well as or
+[31:19] level memories and then like Gabe said none of this is locked in. You can like
+[31:23] take your data and go anywhere else if you wanted to. Everything is an API
+[31:27] call. >> Yeah.
+[31:29] >> Um I had a quick question as you walk through the agent workflow. I noticed
+[31:33] that the grader is at the main agent level, right? like so how do you grade
+[31:39] these sub aentic tasks that are happening and then how do you manage
+[31:43] memory across those as well >> right
+[31:45] >> that's a good question so uh there's two dimensions to this sub aents in the way
+[31:49] that we've built them are meant to uh augment your context and leverage the
+[31:54] capabilities of your of your session by collaborating between them uh the
+[32:00] outcome definition happens at like an overall arching uh session level so you
+[32:05] define the outcome and you say this is what I want you to accomplish. The main
+[32:08] agent then uses you know uses sub agents to accomplish that work. It collaborates
+[32:13] between them and it eventually says uh I'm done. Um there is no currently
+[32:18] support for like a sub outcome definition.
+[32:22] >> Quick followup like so as you have this dreaming feature right like so how do
+[32:27] you learn like if the sub agents have some sort of you know uh you know offc
+[32:31] course sort of actions then how do you sort of learn from that? Yeah, uh today
+[32:35] the dreaming is constrained to uh memory stores. So I I'll show you that uh uh in
+[32:41] a second, but basically the way dreaming works is it will analyze the transcripts
+[32:45] and the memories created across multiple sessions uh so that it can update its
+[32:50] memories so that future agents know what to pull. Um but you can imagine that we
+[32:54] can continue to expand that for skills and for prompts and for agent
+[32:58] definitions so that you can you have this continuous learning uh
+[33:02] functionality. But right now we just have it for for memory stores.
+[33:07] >> See a hand here. And then I'll I'll go back to
+[33:10] >> Hello. >> Yeah.
+[33:12] >> Here. >> Where where is here?
+[33:13] >> Here. >> Oh, hi.
+[33:15] >> Thank you. Uh if you have your let's say company data in either I don't know
+[33:21] traditional store or rag or whatever and you want to expose it to this type of
+[33:25] agents through a custom CLI or MCP. what would be the safe path to put it in your
+[33:32] environment? >> Yeah, that's a great question. There's
+[33:34] two two ways to do this. If you are using if you can access that uh via CLI
+[33:39] with an API or via uh an MCP, uh you would just create an MCP, give it uh
+[33:45] give it the authentication vault uh and it would just be able to call your MCP
+[33:50] directly. If you don't want to expose your MCP to the internet, we have a
+[33:53] feature called MCP tunnels which lets you uh create a tunnel from your um
+[34:00] network into ours so that you don't expose it to the internet and we would
+[34:04] do it that way. If if that's uh too big a barrier to climb, we do support
+[34:09] self-hosted sandboxes so that you can bring your own sandbox which has which
+[34:13] is peered with your network and has access to your applications and services
+[34:17] and the agent would just call the sandbox that you manage and host um and
+[34:22] be be able to access your your resources that way.
+[34:27] >> Yeah. >> Um I had a question on dependencies for
+[34:30] the environments. So I saw something you could load in dependencies. Um is that
+[34:36] at runtime or right before um it's created? It
+[34:40] >> it's at creation time. Uh and then we'll cache it and reuse uh that environment
+[34:44] across like re reinstantiations of the sandbox.
+[34:49] >> So can you specify like internal dependencies or do you have to pick mpm
+[34:54] package? >> Right. right now uh they are all they
+[34:57] all have to be accessible via npm cargo uh pip whatever but you can upload files
+[35:03] uh directly into um the session if or GitHub repos if you want to install them
+[35:09] that way >> okay and one more thing uh deployments I
+[35:12] see a tab for that >> yeah yeah I'm going to get to it I'm
+[35:15] going to continue to the with the demo and then we'll we'll do more questions
+[35:18] in a

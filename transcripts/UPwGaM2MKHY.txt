@@ -1,0 +1,204 @@
+# title: The Log Is The Agent - Ishaan Sehgal, Omnara
+# source: https://www.youtube.com/watch?v=UPwGaM2MKHY
+# speaker: Ishaan Sehgal, Omnara
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T08:21:11Z
+# sha256: 0c1a602a5547cefb34daf90394ffed037f677090b96314efb0e3c3793a4fa402
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:00] Hey everyone, I'm Ishaan the CEO of Amnara and today I'm going to be talking
+[00:03] about the log is the agent. The basic idea of the talk is simple and that is
+[00:08] most people think of an agent as the model or the execution environment that
+[00:13] it's running in and I think that that's the wrong abstraction. I think that the
+[00:17] thing that actually gives an agent its identity is its log and that's what I'm
+[00:23] going to be arguing today. So think about a character you've spent
+[00:27] a hundred hours playing in your favorite video game, in this case Skyrim. What
+[00:32] exactly is your character? Is it the game engine? Is it the PlayStation? Is
+[00:37] it the controller? No, it's not. Those things matter and
+[00:42] those things are what will interact with and they'll run the character but none
+[00:46] of those things are your character. Your character is data. It's the save file.
+[00:52] And this is important because if your PlayStation bursts into flames, your
+[00:56] character isn't gone. You can buy another PlayStation, you can download
+[01:01] your save file from the cloud and you can resume exactly where they were and
+[01:06] that's because the agent and its identity and history and its state is
+[01:10] all captured in its data. The character lives in the data and this is the
+[01:15] framing that I want to bring to agents. Today when people talk about agents,
+[01:22] they usually point at the wrong thing. They'll say that the agent is the model
+[01:26] or they'll say that it's the runtime and again as I mentioned earlier, those
+[01:30] things matter but they're not the agent. The agent is its data. It's specifically
+[01:35] the log. So what actually is the log? At the simplest level, the log is the
+[01:41] append-only event history of the agent. It's every user input, every model
+[01:47] output, every tool called, tool result, permission, failure
+[01:52] and the idea is that every state transition that the agent takes is
+[01:56] written to the log. This is important because it means that
+[02:00] the identity of the agent isn't tied to the
+[02:04] runtime or the model or the tools. Those things are all just interpreting and
+[02:08] appending to the log. They're reading the log, acting on it, and writing the
+[02:12] next event back. And that's important because then just using the log on its
+[02:18] own is enough to resume the agent. Once you define the agent as a log, the rest
+[02:25] of the system becomes a whole lot easier to reason about because every operation
+[02:29] is either reading from or appending to the log.
+[02:33] The model is reading from the log and then determining the next action. The
+[02:38] tool runner is then executing that action and then it's appending that
+[02:42] result. And this is all operating in a loop. Everything coordinates itself
+[02:48] around the log. In practice, a simplified loop can look something like
+[02:52] this. You can reconstruct the state from the log. You can pass that state to the
+[02:55] model. The model can propose the next step and then append that response to
+[02:59] the log. If the response asks for a tool, you can run that tool and also
+[03:03] append that response to the log and then you can repeat. The important insight is
+[03:07] not that this loop is complicated. The important insight is that the loop is
+[03:12] disposable. A worker can claim the session, read the log, advance the agent
+[03:16] one step, write the result, and then just completely disappear. And then that
+[03:20] means that any other worker can pick it up later.
+[03:24] This pattern should feel familiar. Databases had to learn this first. For
+[03:29] years, databases looked like these non-transparent systems that were hard
+[03:34] to reason about with tables and indexes and materialized views, but underneath
+[03:37] every serious database is a log. And
+[03:42] that log is the durable sequence of changes. Everything else is a view.
+[03:49] I I agents need the same inversion. Today, agents are treated as again,
+[03:54] these complicated systems that are opaque and they're filled with models
+[03:58] and prompts and tool calls, but for the durable session, the log
+[04:02] should be primary. The context that gets fed into the model is a projection of
+[04:07] that log. The UI that gets rendered on top is a projection of that log.
+[04:12] Debugging and traceability is a projection. Auditing is a projection.
+[04:16] Compaction is also projection, which we'll talk about. But the log itself is
+[04:21] not a projection. The log is the durable history that all of these projections
+[04:25] can come from. Now, there are two objections to the log
+[04:29] as the agent that are worth discussing. So, I'm going to talk about them now.
+[04:32] Now, let's start with compaction. A log can grow indefinitely, but a model's
+[04:37] view of it can't. Context windows are finite. So, eventually, you do need to
+[04:43] compact the log into a smaller representation that the model can reason
+[04:47] about. But the important point is that this compaction is not magic and it
+[04:51] doesn't break the claim that the log is the agent. Compaction is lossy. A
+[04:57] compacted summary is not going to perfectly reproduce the state of the
+[05:01] agent in a smaller form. It's actually going to throw information away. The
+[05:05] point is the full log is the record and a compaction is just one projection of
+[05:10] it. Just like how a materialized view is not the database or a summary of a
+[05:14] conversation is not the conversation. If you keep the raw log, you can always
+[05:19] generate new projections from it. But if you throw away the raw log and keep only
+[05:24] the compaction, you've effectively lost part of the agent. So, it's cleanest to
+[05:29] treat compaction as a best effort lossy fork, one that you can resume as a new
+[05:35] log. The second objection is what about tools
+[05:38] that change state outside of the log? And that's true. An agent can edit a
+[05:43] file. It can create a GitHub issue. It can send an email. So, clearly, there is
+[05:47] state outside of the log. But, the point is is that the log is not supposed to
+[05:51] contain the whole world. The log is just the agent's view of the world. It's just
+[05:57] like how in the video game in in Skyrim, the Skyrim save file doesn't contain the
+[06:01] entire game engine or every asset in the map. It just contains the player
+[06:05] specific state, which is needed to drop you back into that world. And the same
+[06:10] is true for the log and agents. The log can only faithfully resume or store that
+[06:16] agent's identity and its view of the world, but it cannot make that world
+[06:20] deterministic. If the agent sent an email, forking back won't unsend it. If
+[06:26] some file got changed underneath, the agent won't know about it. But, the
+[06:30] log's job is to record what the agent did, what it saw, what changed, and what
+[06:35] it needs to continue. It stores that identity, and that's its purpose. And
+[06:41] much like that Skyrim character save file, it's not meant to store the entire
+[06:45] world. It's just meant to store its view of it.
+[06:49] So, once you start treating the log as a primitive, a whole bunch of system
+[06:53] properties will fall out naturally. So, the first property is reliability.
+[06:58] Consider what happens today with Cloud Code. If you're using Cloud Code and
+[07:02] your agent reaches a permission prompt and the process dies for whatever
+[07:06] reason, and then you resume it, the permission prompt will be gone, and the
+[07:11] agent will be paused. And that is unacceptable in production.
+[07:16] The permission prompt should stay there. So, this is just a sign of when you
+[07:22] architect your agent in a way where the log isn't the agent. When the log is the
+[07:27] agent, the executor is allowed to be fallible. A new worker will pick up the
+[07:32] session. It'll reconstruct the state, and it'll see that the permission prompt
+[07:36] is there right where it was. So, even though the process died, the
+[07:40] agent didn't along with it. The second property is scalability. Most harnesses
+[07:47] will run one process per agent, which means that the agent is tied to the
+[07:50] machine running it. When the log is the state, you flip that model. One process
+[07:55] can now advance thousands of agents. Each of them can reconstruct their state
+[08:00] from the log on each turn, and they don't need to be tied to any single
+[08:04] machine or worker. This makes failover trivial, and it also makes scaling just
+[08:10] a matter of adding more workers. There's no sticky sessions, there's no state
+[08:14] migration, and there's no coordination overhead. Forking becomes a whole lot
+[08:19] more natural, too. Instead of having to force like one linear path, you can
+[08:23] easily branch the log. One branch can run on Claude, another branch can run on
+[08:28] GPT, another can run on your favorite open-source model. Each of the branches
+[08:32] can store some of the history up until the fork point, and then they can
+[08:36] explore different strategies. Multiplayer is another property. Sharing
+[08:42] an agent with someone should not mean having to copy some transcript and paste
+[08:45] it into Slack. If the log is the agent, sharing means you simply grant access to
+[08:52] that history, so that somebody else can view it and edit it. A teammate can open
+[08:58] the session, they can see what happened, a manager can observe without taking
+[09:02] over, and even another agent could consume the same session as context.
+[09:09] This is really important because it means that the value is not just what
+[09:14] the agent produced, it's also the log, which indicates how it got there.
+[09:20] Migration follows the same pattern. If an agent's identity is trapped in
+[09:24] provider-specific threads and memories and formats and
+[09:29] runtime assumptions, moving providers becomes really painful. But if the log
+[09:34] is the agent, migration is just a adapter problem. Different models may
+[09:39] want different projections of the log, and different runtimes may need
+[09:43] different schemas, but those are all become just
+[09:47] engineering problems. They're not identity problems. The agent should then
+[09:52] be able to start on Claude, continue on GPT, and finish on Gwen without losing
+[09:57] itself. The log serves as a source of continuity.
+[10:03] Here's the problem with a lot of current agent infrastructure. Most agent
+[10:07] harnesses today will treat the log as an afterthought. So, Claude code and Codex
+[10:12] will write these messy JSONL files to local disk, and even in Claude SDK mode,
+[10:17] those writes are fire and forget, which means that if for whatever reason the
+[10:21] write fails, the data is gone. Open code's another example, they store state
+[10:26] in a SQLite file, and there's a lot of GitHub issues around how there's corrupt
+[10:30] state and data loss. Durable objects often end up holding different shards,
+[10:35] that makes reconstructing history difficult, it makes querying across
+[10:39] sessions difficult. And in all of these scenarios, the log is just a side
+[10:43] effect, it's not the system. And that's a problem, because when you treat the
+[10:48] log as a first-class citizen, it makes all of these properties become
+[10:53] structural. You don't have to bolt them on, which is what it feels like is being
+[10:57] done today, they all just fall out.
+[11:02] The next point is incredibly important. This brings us to ownership. The
+[11:07] strongest form, now that we've established that the log is the agent,
+[11:11] the strongest form of lock-in isn't model lock-in. Models can be swapped.
+[11:17] It's not API or tool lock-in either. Those can be wrapped, and those can be
+[11:21] adapted. The deepest form of lock-in is actually log lock-in. If a provider
+[11:28] owns your log, then the provider effectively owns your agent and
+[11:33] long-term the log is the valuable part because the model is replaceable, the
+[11:37] runtimes replaceable, the machines are replaceable, the log is the thing that
+[11:42] persists. I have another slide for this because I think it's really worth taking
+[11:46] seriously right now. Anthropic has Claude managed agents, Google has Gemini
+[11:51] managed agents, every managed provider is going to own more of the stock.
+[11:55] They're going to want to. They're going to want to have the hosted agent loop
+[11:58] and manage memory and sand boxes and compaction and background agents.
+[12:03] They're going to want to own your agents and
+[12:06] agents are arguably the most intimate piece of technology you'll ever run. For
+[12:11] an agent to be useful, it needs to have your personal data, your company's data,
+[12:16] your workflows, your decisions. The log is the record of all of that and if it
+[12:22] lives on someone else's infrastructure under their policies and queryable by
+[12:26] their systems, they don't just host your agent. They own it. This is the
+[12:32] architecture we have been building towards at Unara. We think of agent
+[12:37] execution as the set of components that are coordinated around the log.
+[12:41] The worker advances the loop, but the worker is not the agent, it's just the
+[12:46] executor and it will call out to the model provider, it'll get its results,
+[12:52] it'll write it back to the log and then if the model provider requires tools, it
+[12:57] will go ahead and dispatch those tools to the right execution environment to
+[13:01] finish somewhere else. The tools will complete and then those results will get
+[13:05] appended back to the log and then a worker, most likely a different one,
+[13:09] will then reconstruct the state and it'll continue and this is very
+[13:13] important because this is how real agent systems will have to survive real-world
+[13:18] failure because workers will crash, machines will restart, sandboxes
+[13:22] disappear, tool calls will time out, providers will fail, users connect.
+[13:26] There's so many different things that can go wrong. And if an agent is a
+[13:31] running process, that's extremely terrifying. But if the agent is the log,
+[13:35] it's simply an execution detail. And
+[13:39] this is important because it's the core of what we're building. It's the core of
+[13:45] the open-source managed agents platform that we're debuting. Everything will be
+[13:49] built around the session log, which we will make sure that you can fully own,
+[13:54] fully inspect, it's fully controlled by you.
+[13:58] And that's something we believe in strongly.
+[14:02] If you're interested, check it out at amnar.com/managed.
+[14:07] It may be released by the time this recording comes out or there may still
+[14:10] be a waitlist there. So, in closing, the main thing I want to
+[14:15] leave you with is this. An agent is not just a model call, it's
+[14:19] not just a prompt or a loop or a sandbox. It's not any of those things.
+[14:24] The agent is the durable history of the work being done, and that history is the
+[14:28] log. Once you start to see it this way, a whole lot of things fall into place.
+[14:33] Reliability, compaction, forking, migration, multiplayer, ownership,
+[14:39] scalability, so many things. Because you're going to stop treating the log as
+[14:44] this exhaust from the system, and you're going to treat it as the system itself.
+[14:48] And that's super important. So, if this was useful, stay tuned to what we're
+[14:52] building at Amnara. We're getting ready to open source, as I mentioned, our
+[14:56] managed agents platform, and you can join here. The log as the agent is just
+[15:01] one of several pieces that we think are going to be making agents a whole lot
+[15:05] more powerful in the future. So, thanks for tuning in.

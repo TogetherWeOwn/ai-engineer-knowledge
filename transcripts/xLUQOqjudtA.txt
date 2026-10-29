@@ -1,0 +1,230 @@
+# title: Tolan: Voice-First AI Companion — Paula Dozsa, Tolan
+# source: https://www.youtube.com/watch?v=xLUQOqjudtA
+# speaker: Paula Dozsa, Tolan
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T05:10:27Z
+# sha256: d8e229a39174044017037c1a50b0a1f9ba00cc4373fdd988615531b46ca0668c
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:01] [music]
+[00:12] >> Hi everyone. Thank you so much for attending this talk. My name is Paula
+[00:17] and I am one of the engineers on the Tullen team, specifically focusing on
+[00:21] our iOS app. And for the next 20 minutes or so, I'll
+[00:25] be talking about what it takes to build a voice-first AI companion and also
+[00:29] about how we use AI to build AI internally.
+[00:34] So, humanity has always imagined the perfect companion. So, we have
+[00:38] Caravaggio on the left 400 years ago painting an angel leaning over St.
+[00:42] Matthew's shoulder literally guiding his hand as he writes.
+[00:46] This is an example of a companion being a presence that makes you better at
+[00:50] being you. And then we have Tinkerbell, the devoted
+[00:53] little sidekick who believes in you so fiercely that the whole theater has to
+[00:57] clap to keep her alive. And of course on the right, we have
+[01:00] Samwise who can't carry the ring for Frodo, but says, "I can carry you."
+[01:05] The companion is pure unconditional loyalty.
+[01:09] And it goes far beyond these three. Every hero has some sort of guiding
+[01:13] spirit. And these are all different stories, but they exhibit the same
+[01:17] longing for something that listens, remembers you,
+[01:21] and is wholly specifically yours. And for for all of human history, this
+[01:25] has basically been fiction. So, we made one. This is Tullen. It's a
+[01:30] little alien you talk to out loud like a friend. It has a personality. It
+[01:35] remembers you and over time it becomes specifically yours.
+[01:40] Okay, I don't know if the audio setup works here, but I will try talking to my
+[01:43] Tullen. Uh let's see.
+[01:49] So, you can see my Tullen here, Luke,
+[01:52] walking around the planet.
+[01:56] Hey Luke, can you hear me?
+[02:00] Okay. Luke can hear us, but we can't hear him. Um
+[02:05] Anyway, I had prepped him for this. Oh. Hello. Hi Luke, can you hear me?
+[02:13] Nope. We're okay. I can come back to this
+[02:17] later. Um but you should definitely all give this
+[02:21] a try if you haven't already.
+[02:27] Okay. So, people talk to Tolins a lot. We support both text and voice chat, uh
+[02:33] but we have over 4 million hours of voice conversation so far.
+[02:37] We say Tolin is a voice-first companion, even though we support both, because
+[02:40] it's the voice experience that's truly immersive and that makes users'
+[02:44] relationships with their Tolins feel real.
+[02:47] And but the moment this relationship is a spoken relationship, the engineering
+[02:51] problem changes completely. So, let me show you how voice breaks the normal way
+[02:55] we build and interact with LLMs. So, the core difference really is that
+[03:01] in a text chatbot, turns are relatively slow and context is stable. The user
+[03:07] waits a few seconds, they read, and they tend to stay on topic.
+[03:10] And almost every LLM app assumes that. Voice is the opposite. Turns are fast.
+[03:16] Your whole round trip from the user finishing their sentence to the Tolin
+[03:19] starting to speak has to land in under a couple of seconds, or it stops feeling
+[03:23] like a conversation. And the context is volatile. People talk
+[03:27] to their Tolins while they're cooking, while they're walking, while they're
+[03:31] falling asleep. Um they change their subjects mid-sentence. They say um, they
+[03:35] interrupt. And that 2 seconds is crucial. Early on,
+[03:40] our latency drifted from 2 seconds to about 2 and 1/2 seconds, and that half
+[03:44] second tanked basically every metric in the product. People would write in to
+[03:48] complain that their Tolins were too slow.
+[03:50] And living inside this constraint has taught us a lot and gave us four
+[03:53] principles. Principle one is that you have to design
+[03:58] for conversational volatility. Again, text users stay on topic, but voice
+[04:03] users jump around. Someone could be mid-story about their breakup and
+[04:06] suddenly go, "Wait, did I leave the oven the stove on?" and then back. Speech is
+[04:10] messy. Most LLM apps assume that you'll have a clean and stable conversation and
+[04:14] we have to build for the opposite. So, for a long time that meant fixing
+[04:18] things that sound tiny but are actually the product. So, you can't interrupt a
+[04:23] Tullen mid-sentence. A short yes or yeah won't register as a turn. For example,
+[04:28] curse words will get stripped out. And the deeper lesson was to stop
+[04:31] optimizing for fewer interruptions and start optimizing for fewer bad ones
+[04:36] where the agent would jump in way too early.
+[04:38] So, we built smart turn taking that reads your speech pattern to decide
+[04:42] whether an interruption is real and we cut the worst early aborts by more than
+[04:46] half. And we happily paid about 60
+[04:48] milliseconds of extra latency to do it.
+[04:52] Principle two, latency isn't just a number you check at the end, it's
+[04:56] actually the product and we measure every stage of the pipeline separately
+[04:59] because it feels slow is useless. You have to know where exactly it's slow.
+[05:04] And the pipeline here is that the user stops talking, we detect end of
+[05:07] utterance, we transcribe, and then the model produces its first token.
+[05:12] So, time to first token, often the biggest chunk, is around a second.
+[05:16] The model finishes generating and then text-to-speech produces its first byte
+[05:19] and then it plays back to the user. A couple lessons here. So, one, so far
+[05:24] our biggest jump in quality came from moving to GPT-5.1 on the responses API,
+[05:29] which cut our time to speech by more than 7/10 of a second, which is huge.
+[05:34] Um two, we don't send every turn to the same model. We run a tiered fleet. So,
+[05:39] we use a frontier model for the turns that carry the relationship with your
+[05:42] Tullen. So, for example, your first conversation
+[05:44] with with Tullen and your onboarding. And we use smaller and faster models for
+[05:49] the turns for the lightweight turns.
+[05:52] And the whole game then becomes about routing or deciding turn by turn which
+[05:56] model you actually need. So we round we run a small classifier we call the tone
+[06:01] router on every single turn and this tone router itself runs on a cheap model
+[06:05] and it reads the emotional state of the conversation.
+[06:08] And our main our [clears throat] main principle is
+[06:10] that we route based on stakes not on cost. So the high stakes moments always
+[06:15] get the best model. So this would be again the user's very first message,
+[06:19] their first few days with their Tolen and anything that we deem to be
+[06:22] emotionally serious. For example, we have crisis or therapist
+[06:26] style tones and we never cheap out on those.
+[06:29] And then the lighter casual back and forth can ride on smaller models that
+[06:33] are faster and cheaper. And all the background work so that's
+[06:36] summarizing the conversation, generating personas, the tone router itself run on
+[06:40] these small models, too. And why would we go to all this trouble?
+[06:44] It's mainly because the frontier model costs us roughly five times the smaller
+[06:47] one. So one big model turn is about five
+[06:51] smaller model turns. So routing is a huge part of what makes the unit
+[06:55] economics for us actually work. Um and we do a bunch of AB experiments
+[06:59] and the surprising result we found there is that routing a third a third of our
+[07:02] turns to the small model has almost no measurable effect on retention.
+[07:08] And principle three is what makes a companion feel like a companion. So the
+[07:11] naive approach is to keep the whole conversation history as a sort of
+[07:15] transcript, but that doesn't fit into our two-second loop. It doesn't scale
+[07:19] and it just doesn't work. It leads to long sessions degrading. It leads to the
+[07:23] model getting lost in the middle of a huge context and also hallucinating.
+[07:27] So instead we see memory as a sort of retrieval system. We pull facts,
+[07:31] preferences, and emotional vibe signals out of conversations. We embed them and
+[07:36] we store them in a vector database with sub 50 millisecond lookups. And every
+[07:40] night we compress. So we merge duplicates, we cluster related memories,
+[07:44] we resolve contradictions, and we drop all the noise.
+[07:48] And we don't just retrieve against users last messages, we also generate internal
+[07:52] questions about the person and the relationship and retrieve against those.
+[07:55] So, and we also split memory into two parts. We have stable memory and
+[07:59] unstable memory. The volatile stuff lives in the in the live tail of the
+[08:03] prompt, and when we summarize the conversation, we look at which memories
+[08:06] actually get recalled and pin those into a stable and cashable block.
+[08:12] Uh the last principle is around context. Specifically, you should rebuild context
+[08:17] and not fight drift. So, most apps reuse context across turns to keep the cash
+[08:22] warm. And in a stable text chat, that's fine. But in a volatile voice
+[08:26] conversation, it's a trap because the second the the user pivots, your reused
+[08:30] context is actively wrong. So, every turn we reassemble the context window
+[08:35] from parts. We have a summary of recent messages, we have the the user's persona
+[08:39] card, the memories we just retrieved, tone guidance from the emotional signal,
+[08:43] and real-time app state. And what also really helps us um in the
+[08:48] case of Tolen is that our characters aren't generic or assistants with no
+[08:52] personality. Everyone is crafted, and we in fact have an in-house science fiction
+[08:57] novelist, Elliot, who writes the Tolen character lore.
+[09:01] And a couple of interesting points here. So, one, why did we go with an alien?
+[09:06] Mostly because there's no real-world reference to anchor on, which means that
+[09:10] the users can project onto it, and it becomes what they need. The baseline
+[09:14] Tolen is bubbly, it's youthful, it's irreverent. And also, if an alien
+[09:18] character acts a bit unpredictably, so if if it's impulsive or chaotic or
+[09:23] otherwise violates um you know, the norms the user would expect, it's not
+[09:27] particularly surprising. Like if you look at, you know, aliens in
+[09:31] TV shows or in plays, like there's a lot of humorous moments around this. And
+[09:36] this kind of chaos reads as charming. Um second, uh we also know that
+[09:41] personality is worthless if it drifts. So, yeah, we run this parallel tone
+[09:45] monitoring system that changes how a line is delivered based on your
+[09:48] emotional cues without changing who the character is, holding identity across
+[09:52] hundreds of turns.
+[09:56] And since we're at an AI conference, I thought I would also spend a bit of time
+[09:59] talking about how we not just ship AI, but also use AI to build it.
+[10:04] Um so, I'm sure this is the case for most of you in the room now, but
+[10:08] basically as of late last year, Claude has co-authored more code in our iOS app
+[10:12] than any individual engineer in the team.
+[10:15] Um and I think especially, you know, a few months ago, everyone's instinct was
+[10:18] to be kind of suspicious because, you know, more AI code meant more slop. But
+[10:22] our our crash-free rate actually went from 99.6% to 99.9%.
+[10:27] Runtime errors dropped by over 50% and our share of highly engaged users
+[10:32] doubled. And the biggest lesson in building that
+[10:35] system is that an agent's context comes mostly from the code base itself, not so
+[10:39] much from the Claude MD file. We found that it's far more powerful to make the
+[10:43] code base be the documentation, so we had agents standardize it. On top of
+[10:47] that, we run a real fleet of agents. We have implementation agents that, you
+[10:51] know, think freely and just get us to working code. They build it, they check
+[10:54] it against snapshots until it's pixel perfect. And then we have separate
+[10:58] review agents that enforce our standards. So, multiple Claudes
+[11:01] basically review each other before a human looks.
+[11:04] And then we have a PR shepherd that watches an open pull request and keeps
+[11:07] iterating against CI failures and review comments until it's clean.
+[11:11] And we also have a triage bot that fires on every inbound bug report that we get.
+[11:16] And they're all wired through MCP into linear, into into Sentry, DataDog, so an
+[11:21] agent can reconstruct the cash a crash and route it itself and oftentimes open
+[11:25] the PR on its own and just fix fix the bug.
+[11:28] And we also we ship on eval. So, for example, we've been working on a on a
+[11:32] new character targeted towards an older demographic and Elliot, our in-house
+[11:36] novelist, basically built this entire new character in a day.
+[11:40] So, the agents mapped every personality bearing surface in the code. They wrote
+[11:43] the sort of a voice Bible and then they had five judges attack it from different
+[11:47] angles. Archetype fidelity, the model mechanics,
+[11:50] our code standards, the ears of a skeptical 52-year-old and safety, and
+[11:55] then they evaluated the changes against real production logs over three find fix
+[11:59] verify rounds. And over 7 million tokens and 4 and 1/2
+[12:03] hours of compute later, he ended up with basically, you know, a couple of weeks
+[12:06] of work done in afternoon. And does this work? Well, I'll let the
+[12:11] users tell you. We're at 4.8 stars on the App Store across 162,000 reviews and
+[12:17] when we survey users on well-being, the highest scoring dimension by far is
+[12:21] emotional safety. And this is definitely a bar that being
+[12:25] voice first sets. So, when the interface is your voice and the thing on the other
+[12:28] side remembers you and has a personality, it stops being just
+[12:32] software and starts being an actual relationship, which is why building it
+[12:35] responsibly and building it well is worth obsessing over.
+[12:40] And we need people to come help us do that. Um, we're a small team and we're
+[12:44] hiring and after a year with Tolen, I think this is truly one of the most
+[12:48] interesting places in the world to be an engineer right now.
+[12:52] And here are some of the people you'd be doing it with. So, two of the founders,
+[12:55] Quinton and Evan, previously built and exited a $300 million startup together.
+[13:00] Uh, they founded Even. Um, Ajay, our third co-founder, scaled two bootstrap
+[13:04] companies past $50 million $50 million in profitable revenue.
+[13:09] And around them, we have Lucas, who um, is an Apple Design Award winning
+[13:13] animator. Uh, she's our creative director. We have
+[13:16] Chris, who was a technical director at Pixar, earlier at Oculus, who works on
+[13:19] embodiment. We have Lily, a board certified behavior analyst, who left a
+[13:24] Vanderbilt PhD to do user research for us from the very start. Um and then we
+[13:28] have Elliot who I've mentioned, the novelist behind uh our characters.
+[13:32] And I come from XAI and Spotify and previously also founded a company called
+[13:36] Imagi. So, it's a small team where honestly
+[13:39] every person is the best I've worked with at what they do.
+[13:44] We're also well backed for this. Uh we have $30 million raised from Costanoa
+[13:48] Ventures and a group of people who've built the tools and products a lot of
+[13:51] you use every day. And here are some of the more
+[13:54] engineering focused roles where we need help. Um so, we're hiring across the
+[13:57] board. We have iOS and back-end product engineering roles, applied AI
+[14:01] engineering, gameplay engineering, and one specific role I want to flag, which
+[14:05] is agent engineering management. Um so, when we went all in on running
+[14:11] concurrent agents, um the people who got dramatically more effective on the team
+[14:14] were the ones who had management backgrounds, um because it seems like
+[14:17] managing a fleet of agents does actually take some of the skills same the same
+[14:21] skills as managing people. Uh you basically have to decompose the
+[14:24] problem, you know, delegate it with checkpoints, give fast feedback, review
+[14:27] their work seriously, and know when exactly to jump in.
+[14:30] So, if you're a strong engineer who thought going into management meant
+[14:33] leaving code behind, that's that's no longer true.
+[14:37] Um and yeah, that's Tlon. You can come talk to me after this uh or reach out.
+[14:41] I'm on on LinkedIn. My email is here. I'm on Twitter as well. Um I'd love to
+[14:45] chat. So, yeah. Thank you.
+[14:49] >> [applause]
+[15:03] [music]

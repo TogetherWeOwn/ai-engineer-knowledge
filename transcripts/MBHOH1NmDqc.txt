@@ -1,0 +1,180 @@
+# title: Realtime Voice Agents with Frontier Intelligence — Bohan Li, EliseAI
+# source: https://www.youtube.com/watch?v=MBHOH1NmDqc
+# speaker: Bohan Li, EliseAI
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T05:08:54Z
+# sha256: 24824ae60e15acd71c836d921291ceac711af0ca37f63adaf82823e4523b8ee3
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:01] [music]
+[00:12] >> My name is Bo. I'm going to be here presenting real-time voice agents with
+[00:17] Frontier Intelligence. Effectively, going to be talking a little bit about
+[00:21] how we at Xnor.ai architected our voice agent harness to get real-time voice
+[00:27] with the Frontier level of intelligence that we need.
+[00:32] Okay. So, before I start, I think I wanted to kind of draw some
+[00:37] parallels about why we decided to go with cascaded voice
+[00:42] agents and especially kind of comparing that to self-driving cars
+[00:47] which I was working in before. So, to me, cascaded voice agents makes a lot of
+[00:52] sense when you view it in lens of kind of breaking it down into perception
+[00:56] which is for self-driving cars, it's you know,
+[01:00] the bounding boxes, the camera, the lidar.
+[01:03] For voice, it's going to be the transcription. Basically, effectively
+[01:07] turning these like signals from the real world into
+[01:11] elements of data that the language model or whatever brain you're working on
+[01:16] can process. Second one is the planning step which is
+[01:21] pretty straightforward. This is where the language model
+[01:25] will take in the outputs from the perception stage and produce the outputs
+[01:30] that you want to produce out back and out into the real world.
+[01:34] And finally, there's the controls layer where
+[01:38] on self-driving, you'd be taking the trajectory that the planner would output
+[01:42] and kind of turn it into the real controls to kind of build like drive the
+[01:47] car. Here, we're turning the text into audio that we use to express our voice
+[01:53] agent's thoughts.
+[01:56] And um yeah, so here I'm going to be like going
+[01:59] to diving into each one of these elements and we've made a few kind of
+[02:04] interesting tricks on each of these areas to
+[02:08] improve the speed of our voice agents without sacrificing the intelligence.
+[02:13] So, the first one is going to be uh the transcriber layer. So, we came up with
+[02:18] this concept called like the streaming speculative transcriber where
+[02:21] effectively we are layering a fast streaming transcriber like Flux on top
+[02:27] of or kind of below a uh scribe V2 or a accurate batch
+[02:31] transcription which kind of takes in more context. It's a little bit slower,
+[02:35] but it will give you more accurate detections.
+[02:39] So, we're going to walk through a scenario. So, in this in this case the
+[02:42] agent just asked, you know, providing can you provide your name and date of
+[02:46] birth and the user is going to say this and we'll see how that plays out um
+[02:51] timing-wise. So, first we're going to get, you know, the short detection. Um
+[02:56] we'll get it from we'll get it from the streaming layer. The accurate
+[03:00] layer uh the corrective layer is not going to fire because it's the same
+[03:03] text. Um we're going to get some more
+[03:07] streaming text detections and in this case the corrective layer is actually
+[03:11] canceled because we got new um new text. So, you know, more context, more audio
+[03:18] is going to beat the old accurate one. And here's where kind of the first
+[03:22] correction comes in. So, because the scribe V2 layer understands, you know,
+[03:28] the the context of the question, it's able to understand that this is talking
+[03:31] about name and this is a date of birth. Then a couple more detections, these are
+[03:35] just punctuation, we don't care. And so, in the end we kind of release
+[03:39] this text over to the agent. And moving on um to the language model
+[03:46] layer. So, here since we're kind of using these
+[03:50] slow but intelligent LLMs, we really want to reduce the number of round trips
+[03:55] and the thing that causes us to do a lot of inferences is tool calling. So, one
+[04:00] way to get rid of that is by having background agents do the tool calling
+[04:06] for you and kind of um push the tools back into the context
+[04:11] of the main agent so that it thinks it made the tool call, but
+[04:15] um but it it it really didn't.
+[04:18] So, uh so, we remember from like detections
+[04:21] from before. So, well, what happened is each one of
+[04:24] these detections is going to trigger a um an early
+[04:30] kind of generation of the agent and we but we won't actually
+[04:35] emit this out until we're confirming that the user has finished speaking. So,
+[04:40] in this case, the user says, "Sure." The agent kind of knows that the user is
+[04:43] about to say something else. Our background tool calling here, which is
+[04:47] going to be helping us find figure out the name and the date of birth from the
+[04:50] user detection, is not firing. So, nothing much there.
+[04:55] Um the next instant detection comes in. It says that,
+[04:59] you know, still not really a name. Um our agent kind of plays along and
+[05:03] continues there. Now, kind of a more more context come
+[05:08] comes back. The agent kind of feels like there should be a name. It's going to
+[05:12] ask to spell it out because it's probably thinking there's some
+[05:15] transcription error here. Still no name or date of birth.
+[05:19] And then finally, this you remember this is kind of our corrected um final
+[05:22] instant detection from the transcriber from the Scribe V2.
+[05:27] Um here, our eager kind of agent generation that was made without any
+[05:32] tool calls is going to get canceled because the background agent finally is
+[05:35] able to find the name and date of birth it's looking for. So, it's going to
+[05:40] retrigger and now the the agent actually has the context it needs.
+[05:44] Um and you see here, it's kind of we're doing it the tool call here is a little
+[05:48] bit um um some intelligence there. We're going to
+[05:51] be like, you know, correcting mis-transcriptions of name, and doing
+[05:54] some like phonetic matching here. Um and yeah, and then we'll kind of
+[05:59] once we've understood that this is the end of the user utterance, we'll kind of
+[06:03] emit it out. So, pretty standard. Okay, and then the next layer here is
+[06:08] going to be text-to-speech. So, with text-to-speech
+[06:11] the goal is to kind of take what the agent said, and the agent's going to be
+[06:15] emitting this in a streaming fashion. So, we're going to need to
+[06:19] um produce audio as quickly as possible. And ideally, what you can do is before
+[06:24] the agent has even finished generating the full text you can have the audio
+[06:30] play, so it's kind of hiding the latency of finishing the generation.
+[06:34] So, um I'm going to kind of play the
+[06:37] streaming um the stream the streaming uh agent output
+[06:40] now. So, starts with you. And yeah, actually before I uh further,
+[06:46] there's this new concept that we're introducing here called the prefix
+[06:48] cache. So, the prefix cache is going to be looking at the
+[06:54] um agent stream, and seeing if we already have generated audio for that
+[06:59] sequence of words um from like a prior generation, or maybe like the same
+[07:04] generation um in this
+[07:07] uh in this call as as well. So, um it sees the word you. Uh we for
+[07:13] this prefix cache, we're going to be, you know, we don't want to like
+[07:17] immediately hit on every single word. We're going to be waiting for a little
+[07:20] bit more words. Um so, after three words, the prefix
+[07:25] cache gets our first hit. And um over here on the right, this is
+[07:30] kind of our text-to-speech standard provider, you know, Cartesia is a
+[07:34] text-to-speech engine with web socket support. So, we're we're piping the
+[07:38] agent through the the cache, and also piping it through web socket.
+[07:44] Um more tokens come in, more cache, more sending through web socket. Not much to
+[07:49] say here. And okay, so now we get our first uh
+[07:55] kind of first unique thing, which is we found the token that actually causes a
+[08:00] cache miss. And it makes sense. If we're kind of caching previous generations,
+[08:05] um you said your name is is a pretty common thing, but once you we add in the
+[08:08] name, suddenly we're that's that's going to result in the cache miss.
+[08:12] At this point, we're actually going to yield out our cached audio. So, you said
+[08:16] your name is is going to be um emitted as the rest of the streaming
+[08:21] text is coming back. So, at this point, the user hears the agent and user
+[08:25] doesn't really know what's going on. They just looks like really fast
+[08:28] response times to them. Um and now the kind of remaining text
+[08:33] flows through. And at this point, we've already emitted
+[08:37] from the cache. The cache has done its job. Um the rest we can kind of throw
+[08:42] into Cartesia. And here's kind of the trick where
+[08:47] Cartesia has seen the entire transcript up to this point. It
+[08:54] to to Cartesia, like it doesn't know about the existence of this prefix
+[08:57] cache. It's just going to generate this full sentence with, you know, standard
+[09:01] natural prosody. But, what we do is when the generation
+[09:06] comes back, since we've already played the audio here, we can actually suppress
+[09:09] the audio from Cartesia here and just play out the remaining stuff. So,
+[09:15] the user, there's might be a tiny bit of a hiccup. You know, I'll play some audio
+[09:20] later and you'll know that you probably won't be able to notice.
+[09:24] And effectively, we're kind of taking this and
+[09:28] or taking this part and just emitting it directly after this audio has finished
+[09:33] playing. So, it looks seamless to the user.
+[09:37] And yeah, so I guess at this point kind of this is a lot of technical details.
+[09:42] I'll I mean the best way is just kind of play a call and see
+[09:47] see this in action. So here I recorded a call and let's just hear what happens.
+[09:55] >> This is Bo OBGYN Elise speaking. >> Hi, I think I might be pregnant and I
+[10:02] want to schedule an ultrasound to confirm.
+[10:06] >> That's exciting news. Can you provide your name and date of birth?
+[10:12] >> Sure, it's Elise Trial. Date of birth
+[10:15] 2303.
+[10:21] >> Thank you. Are you a new patient with us?
+[10:26] >> Yes.
+[10:29] >> Welcome to Bo OBGYN. Can I text you a link to upload your insurance
+[10:33] information?
+[10:36] >> Sure. >> Okay, sent. Let me know when you've
+[10:41] received it.
+[10:48] I've received your insurance information. The earliest appointment I
+[10:52] have is Thursday, July 2nd at 10:00 a.m. >> Actually, give me a second.
+[10:57] Let me check my calendar.
+[11:01] >> Sure, take your time. >> Um do you have something for next week?
+[11:09] >> For next week, I can offer an ultrasound with Dr. Avery Stone at North Clinic on
+[11:13] Tuesday, July 7th at 2:00 p.m. or 3:00 p.m. Do either of those work for you?
+[11:20] >> Yeah, 2:00 p.m. works. >> Great. Your appointment has been booked.
+[11:26] We look forward to seeing you then. >> Thanks. Bye-bye.
+[11:32] >> All right. Yeah, that's pretty much it. Um
+[11:35] Yeah, you can kind of see our all this like uh
+[11:40] streaming and you know, a lot of things are
+[11:43] happening in the background and and you know, this is what really makes like
+[11:46] voice agents interesting. And um there's a lot of effort that can be done in the
+[11:51] harness to really kind of get a um natural conversation, which is what
+[11:57] we're after. Uh okay. Yeah, so I guess briefly, you
+[12:01] know, in the last part, I want to just talk a little bit about Elise. So I
+[12:06] think Elise, you know, our headquarters are in New York and kind of we're trying
+[12:10] to expand our presence here in the Bay Area. Um we I think it's maybe like a
+[12:15] different style of company that I think people are
+[12:19] like uh think of when they think about AI startups in San Francisco. Where
+[12:23] we're actually very focused on um just like helping people and helping
+[12:30] people where they need it, like kind of the life's most critical areas. We work
+[12:33] on housing, health care and uh we're doing really well and you know, here's
+[12:40] there's a link here to um you kind of join our team and there's
+[12:44] going to we're going to be uh posting a lot on Twitter, so you can follow us at
+[12:48] EliseAI as well. Um yeah, that's that's it.
+[12:53] >> [applause]

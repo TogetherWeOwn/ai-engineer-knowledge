@@ -1,0 +1,234 @@
+# title: Dream Machine: Scaling to 1m users in 4 days — Keegan McCallum, Luma AI
+# source: https://www.youtube.com/watch?v=EY4O9M6AsWI
+# speaker: Keegan McCallum, Luma AI
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T11:44:30Z
+# sha256: 25ecd6a215478df7721d45c490de7d4120613bb58bbd37906b4b2b9bb658ae46
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:03] [Music]
+[00:15] So, it's 9:00 a.m. June 11th, 2024, and we send out the announcement and
+[00:22] hold our breath waiting uh to see the user signups pour in. We're expecting
+[00:27] significant traffic for the launch of Dream Machine, Luma's first video model,
+[00:32] and we were woefully unprepared for what came next. Uh, we'd allocated about 500
+[00:38] H100 GPUs. We thought that was a lot at the time. It wasn't. Um,
+[00:44] and uh, over the next hour, we saw request after request pour in and a
+[00:49] giant queue of requests start to pile up. Luckily, we had a contingency plan
+[00:55] for this um which was to take every GPU we had access to from every provider and
+[01:03] start manually running SSH commands against them to spin up workers uh
+[01:08] pulling in work from a global queue. Um, and we were able to get to about 5,000
+[01:14] H100s over the next 6 hours. And our cues of almost 100,000 uh
+[01:22] finally started to drain around like 2 p.m. that day.
+[01:27] And that is when Emit, our CEO and self-appointed chaos monkey, uh, decided
+[01:33] to tweet that we had scaled up by 10x. Uh, come on, come on in. it'll be faster
+[01:40] now and we'll see how it goes. Um, so we
+[01:45] were our cues were down to about, you know, 300 at this point. And you can
+[01:50] kind of see me here freaking out a little bit going, okay, about 10 minutes
+[01:54] after the tweet goes out, uh, they start to go up again, even though we've scaled
+[01:57] up by 10 times. So now we're at 350, we're at 400, we're at,400.
+[02:03] And as this is going on, um, we're basically taking uh the entire training
+[02:08] cluster. This is the only uh the only GPUs we hadn't used yet. Uh taking the
+[02:12] training cluster over. Uh it's another like 4,000 uh H100 GPUs. And uh it
+[02:19] barely made a dent. The cues were still going up. Uh so you'll see this uh it's
+[02:23] it's the KEK W emoji, which has become a cultural staple of Luma over over time,
+[02:30] and it was very much the mood at the time, like what am I supposed to do with
+[02:34] this? So, uh, I'm here to talk to you guys
+[02:38] today a little bit about Luma, um, who we are, what we do, and how we've
+[02:43] managed to kind of scale our infrastructure up, um, to initially a
+[02:48] million users in four days, which was pretty nuts. Uh, for some context, Chat
+[02:52] GBT hit a million users in 5 days. Um, and we processed about half a million
+[02:56] videos over the course of this 12 hours. Um, so yeah, we're going to talk a
+[03:00] little bit about what we learned, scaling up, and, you know, how we did
+[03:03] it. Um, but first very quick little intro to Luma if you're not familiar
+[03:08] with us. So, we're not just a video model company. We're a foundation model
+[03:12] lab and we're aiming to build general multimodal intelligence that can, you
+[03:16] know, generate, understand, and operate in the physical world just like a human
+[03:20] can. And uh to give you some sense of kind of what our models can do and where
+[03:24] we're at today, um this is a feature we dropped yesterday, a demo video for it.
+[03:31] This is modify video. All these videos um are initially taken on iPhones and
+[03:37] basically uploaded to our platform with a text prompt and you can turn it turn
+[03:43] that robot into anything you want. And for the AI engineers out in the
+[03:48] audience um shout out to he uh manages our public API and you can integrate
+[03:54] this functionality to your applications using it very easily. Um you don't need
+[03:59] to do any kind of crazy prompt engineering. We've taken care of that
+[04:01] for you. Just send us raw user uh prompts, generative media, and we'll
+[04:08] send you back images and videos that uh meet your users needs.
+[04:14] So, if you're interested in that, uh definitely hit me or Kron up. Um he's
+[04:18] done a wonderful job building out, you know, our SDK and our whole kind of
+[04:21] Devril uh side of things. So, yeah. Um that is uh my little plug for our API in
+[04:28] case anyone's interested. So back to infrastructure,
+[04:32] this is what our serving stack basically looked like when we launched. So we had
+[04:36] a bunch of just tightly tightly coupled uh containers working together. Um one
+[04:43] of the benefits of this is that we could kind of just launch these on raw
+[04:45] machines with zero other dependencies. Um so that worked out well for us at
+[04:49] launch. Um but there were some challenges uh scaling this up. So you
+[04:54] know like any good engineer, I didn't want to reinvent the wheel initially. So
+[04:58] we we reached for Triton inference server um which is kind of a classic um
+[05:04] generalpurpose model serving uh server but there there were some issues with
+[05:08] it. Um this setup was brittle. Um if Triton went down the the CPU processes
+[05:13] didn't necessarily know that it went down and so you'd be kind of pulling
+[05:16] jobs and they'd fail. It was annoying. Um, worse though with these video
+[05:21] models, you're needing to uh run these on multiple GPUs and actually multiple
+[05:26] nodes in a lot of cases to get to the latency you need. And Triton's just not
+[05:30] built for that. Um, also we run our inference now on multiple different
+[05:35] chipsets. So Nvidia is the the company that builds Triton. Uh, they don't have
+[05:40] great support for things like AMD or Grock or any of those. Um and finally
+[05:46] the biggest kind of hurdle was that this was really difficult to develop against
+[05:50] for the researchers. Um it had a whole bunch of different idioms, a whole bunch
+[05:54] of um kind of incantations you needed to make to make it work well and the
+[05:58] overall setup was just uh it just felt very janky. So what we ended up doing um
+[06:04] was you know rearchitecting to address some of these things and uh building our
+[06:09] own serving stack on top of you know vanilla pietorch for all the GPU work.
+[06:13] um that worked out really well because most of the vendors that are building uh
+[06:19] these different chipsets, they make sure that PyTorch is fully supported. It's
+[06:22] kind of this great substrate to build on top of if you support, you know, very
+[06:26] vanilla PyTorch things. Um you can typically make your model run anywhere.
+[06:31] Um you may need to optimize certain optim uh operations uh depending on your
+[06:36] model to make things fast, but it's relatively easy to uh to get started. Um
+[06:41] and in terms of like the decoupled architecture you you see here uh the CPU
+[06:45] workers being decoupled is quite quite useful and important because you can use
+[06:51] um use them to queue up work and you know pull in when you're dealing with
+[06:54] you know videos, images, multimedia inputs on top of just text. You want
+[06:59] those to be in the cluster ready for the GPUs to pull so you're not blocking the
+[07:04] GPUs at all. Um and also with this architecture you can actually run the
+[07:08] GPUs anywhere as long as you can connect to Reddus and our distributed storage.
+[07:13] You can kind of see there seaweed FS um you can have a a GPU in you know any
+[07:19] kind of random provider any random VM and use tail scale connect uh connect to
+[07:25] the rest of this architecture and then scale up without having to do all that
+[07:28] other kind of crazy parallel SSH stuff. Um so you know you want to run uh
+[07:33] compute on your training cluster now you don't need to um you know provision
+[07:38] special machines or anything you just run a command.
+[07:41] There were a few more challenges that we hit um after we got through kind of the
+[07:46] the initial hurdles of this uh this infrastructure. So one of uh one of the
+[07:51] big ones was back pressure. So because this is decoupled um you can get into a
+[07:55] sit and because there's multiple clusters that are you know pulling in
+[08:00] work from the same global queue you can get into this situation where you have
+[08:04] too many CPU workers pulling in work to one cluster and they're they're kind of
+[08:08] waiting there to be processed by the GPUs on that cluster uh when they could
+[08:12] have been processed somewhere else. So we came up with this uh dispatch uh
+[08:16] limitation system. So we came up with like a state where if a GPU has been
+[08:21] pulled into a uh sorry if a job has been pulled into a cluster and is waiting to
+[08:25] be picked up by a GPU uh you can put a limitation on like how many jobs are in
+[08:29] that state so that you can avoid this this issue. Um I'll talk more in depth
+[08:34] about uh priorities and our fair scheduling uh wos. That was another one.
+[08:38] Um you know we have multiple tiers of users and deciding whose jobs get
+[08:44] process first is uh a constant optimization challenge. Um also handling
+[08:49] different models. So like these video models are big. They are typically made
+[08:53] up of you know 10 20 different um subm models. So you're pulling in a lot of
+[08:59] weights. you're spending a lot of time compiling these things. So, traditional
+[09:03] autoscaling is super wasteful. You're wasting, you know, 10 20 minutes of GPU
+[09:09] time just warming things up. Um, and finally, you know, handling bursts. So,
+[09:16] um, we basically built this system to handle bursts where you could scale up
+[09:23] automatically on our training cluster, which our researchers hate me for. uh it
+[09:28] makes them very upset but it allows us to keep up with the demand from our
+[09:32] users. Um and so that decoupled architecture plus a very simple
+[09:37] scheduler that runs on top of slurm and can just run these pietorrch workers um
+[09:43] handles you know increasing the total pool of GPUs when we need it and scaling
+[09:47] down when we don't. So this system is a pullbased system and
+[09:53] there's you know cues that submit to cues that pull from cues and it is um as
+[10:00] you know Sorish and Vas you can both attest to here from Luma it is the least
+[10:05] um enjoyable part of working at Luma is managing these cues is is everybody's uh
+[10:11] least favorite task. So um initially when we uh launched Ray 2 which is a
+[10:19] much bigger more resource inensive model um we began to actually have to deal
+[10:24] with the the fact that we couldn't just keep scaling up more and more compute.
+[10:28] It just wasn't economical or feasible. Um so we had to deal with limited
+[10:33] resources and um when you deal when you have like a pollbased scheduler with a
+[10:38] bunch of cues like this there's this concept of work starvation that that
+[10:43] comes into play where essentially you know we've got API uh tier jobs which we
+[10:48] try to process very quickly. We've got enterprise we've got unlimited plus
+[10:53] light free. So we've got all these different tiers that have different
+[10:57] priority and who gets to go first. So if you just naively process them in
+[11:01] priority order, there may be enough enterprise or API jobs that the light
+[11:06] jobs never get processed. So we were having people waiting for like seven,
+[11:10] eight, nine hours and they were very unhappy. Um so also shout out to Sorish.
+[11:16] He actually on a weekend after we designed this system in a couple hours
+[11:20] implemented um this SLO based system which I'll go into that allows us to
+[11:26] more fairly schedule uh work across the the limited resources that we have. So
+[11:33] how the system works is when you think about um
+[11:38] the the concept of work starvation, one of the typical
+[11:44] approaches you can you can use to manage this is aging. So the idea is the longer
+[11:49] something waits in the queue, the higher its priority goes. But what's the actual
+[11:54] function to control that aging mechanism? Um so we had the insight that
+[11:58] this is a product problem and it really comes down to how long worst case are
+[12:04] you okay with different tiers waiting. Um, so we have service level objectives
+[12:09] that the product team defines and it kind of controls this aging behavior.
+[12:13] And how that works is, you know, an API job, we may not want to wait in a queue
+[12:17] more than a couple minutes. But a light job, maybe we're okay with them waiting
+[12:22] for 10 minutes. And you can configure these and then set a threshold. Once uh
+[12:28] once the threshold gets hit, so say 50% of that, you know, worst case timing,
+[12:32] then that job gets pulled to the front of the queue. And initially uh that
+[12:37] worked all right, but then you can actually hit another case of work
+[12:41] starvation. Um if if you have a bunch of uh jobs that are potentially breaching
+[12:46] the SLA where um you know a a job with a long SLO since it's been waiting in the
+[12:52] queue for a longer time will actually starve out the resources of say an API
+[12:56] job that you don't want to wait as long. Um, so how we handled that was with a uh
+[13:01] we we ranked the jobs by the percentage of their SLO um that they that they were
+[13:07] at. So like if an API job's waiting for a minute, that gets treated the same as
+[13:12] a light job that's been waiting for 10 minutes. And that actually works out
+[13:16] really nicely in practice and results in kind of intuitive fair scheduling
+[13:20] behaviors. The last piece I want to talk about is
+[13:25] kind of how we actually manage all these models. Um, so this was something where
+[13:30] I was glad that we kind of reached for Triton initially. They had this nice
+[13:33] concept of a model repo um that that we've really leaned into. So every model
+[13:40] um has a folder in object storage somewhere with a bunch of subfolders
+[13:46] that have different versions. Um, and so as you, you know, develop the code and
+[13:53] fine-tune these models, deploy new checkpoints, you, uh, create a bunch of
+[13:58] these immutable versions, and then you have a simple YAML file in the root of
+[14:02] the model folder that lets you define which one's active. So that's really
+[14:07] nice because you can kind of re reproducibly
+[14:10] um you know in these sorry in these versions you can um you store the full
+[14:15] Python environment so all the dependencies needed to run the model and
+[14:19] the checkpoints and this system is pretty nice because you know if you ever
+[14:23] need to roll back or you know you want to run things in all these different
+[14:28] desperate environments you can make sure that you know you're running the exact
+[14:32] same Python environment the exact same checkpoint that you were before And very
+[14:36] rarely are there issues that um you can't really solve by just rolling back.
+[14:41] So that's been quite useful for us. And um we've actually built like a automated
+[14:46] kind of rollout system on top of this too where when we update those YAML
+[14:50] files, the workers will just kind of switch versions on the fly without
+[14:54] restarting. And um that that helps us kind of roll out uh new new model
+[14:59] changes to the whole fleet of these thousands of uh H100 and uh AMD GPUs all
+[15:05] at once. Um which makes managing this much more sane than the early days of
+[15:09] parallel SSH. And um yeah, if any of this seemed
+[15:14] interesting to you, up your alley, you know, we're hiring, we're actively
+[15:17] looking for cracked engineers, researchers,
+[15:20] um AI enthusiasts in general. Please uh please hit us up and uh yeah, I just
+[15:25] wanted to thank everybody for taking the time today and uh thank the team at Luma
+[15:29] because uh it's it's incredible the work that everyone there does.
+[15:36] We've we've got about three minutes for questions. So, let's take one or two and
+[15:41] let's see where we get any questions.
+[16:03] Yeah. So, the the kind of cheat code here is that the chip the chip providers
+[16:08] who we typically partner with really closely um they're always making sure
+[16:12] that PyTorch at least at a certain version works for their chipset. So,
+[16:16] they're doing a lot of that work for us. And then typically what'll happen is
+[16:21] we'll try to run the models on whatever the new chipset is. Usually it'll work
+[16:26] and then it'll work a bit more slowly. So we've got actually a team of like 10
+[16:31] guys we call our Excel team that are optimizing the low-level operations
+[16:37] within PyTorch using things like Triton and working with the chip providers to
+[16:41] make sure that things are actually fast. So you'll typically with PyTorch be able
+[16:44] to run things um anywhere but a lot of the times they won't be fast and then we
+[16:49] just work closely with the chipset uh providers to actually you know optimize
+[16:53] the model over time.
+[16:59] Yeah. Yeah. We work really closely with Nvidia and AMD and uh we are exploring
+[17:04] you know some other providers um but nothing really deep yet like you know
+[17:08] Amazon's got their own chips uh Gro has some chips. We just announced a big
+[17:12] partnership with uh Humane who works really closely with with Grock and so
+[17:17] yeah, we're exploring some of these other chipsets um through through some
+[17:20] of these uh partnerships. Cool. Any other questions?
+[17:24] Yeah.
+[17:33] We do not we well I don't think so. Um but yeah, we we we
+[17:39] work with cloud providers that basically kind of give us a um a working
+[17:45] Kubernetes cluster at the very least, which which is nice. Um we're not
+[17:49] provisioning the nodes oursel or anything, but I actually would have to
+[17:52] check with the individual providers if there's like VMs or if they're actually
+[17:55] metal machines. I know uh when we work with Amazon, they're not, but some of
+[17:59] the other ones might be.
+[18:10] Yeah.
+[18:21] Uh not yet. Um the way the like general application works um does involve uh
+[18:29] video and like image QA model. So um essentially the the way the actual
+[18:34] application works is we have like an agent that you're interacting with. So
+[18:38] when you upload a video or an image that is actually being you know captioned by
+[18:45] you know VLMs to enhance the the the total pro the overall prompt but um no
+[18:52] like true VQA stuff quite yet but there there may or may not be some coming.
+[19:01] [Music]

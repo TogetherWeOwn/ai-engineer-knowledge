@@ -1,0 +1,214 @@
+# title: Optimizing inference for voice models in production - Philip Kiely, Baseten
+# source: https://www.youtube.com/watch?v=gmTHs5T_YAE
+# speaker: Philip Kiely, Baseten
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T12:08:04Z
+# sha256: a2d3be66479fecb0f4dcd5f199ad89bf7ddf3268a9275130d3ba99ec898705b1
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:01] [Music]
+[00:14] Uh hello everyone. Thank you so much for being here for uh sticking around for
+[00:18] this talk. Um I'm going to be talking about optimizing inference for voice
+[00:22] models in production. I'm going to be talking mostly about the runtime
+[00:26] component but also just a little bit on the infrastructure side. Um just a quick
+[00:31] introduction. Um I'm Philip from B 10. Base 10 is a model inference platform.
+[00:35] Uh we run production workloads for a wide variety of AI native startups and
+[00:40] enterprises. Um I'm based in here in SF. Um I actually just moved here. It's
+[00:45] really awesome. My favorite part about being in SF is much better sports teams
+[00:48] than I had in Chicago. Um and uh one of my favorite voice models is Orpheus TTS.
+[00:55] Um which we're going to be talking about a whole bunch today. Um quick agenda. So
+[01:00] we're going to talk about TTS model architecture like what is a text to
+[01:03] speech model actually when you look on the config in hugging face. Uh what sort
+[01:08] of performance metrics are we looking at? What sort of optimization techniques
+[01:12] can we do to make the model better? Um how do we measure whether or not we
+[01:16] succeeded? And then finally, what can we do on the infrastructure and client code
+[01:20] to not shoot ourselves in the foot after doing a ton of runtime work and then
+[01:24] just adding all that latency back by not doing our client code correctly.
+[01:29] So architecture, this is one of the things I've been
+[01:33] learning this year which has been pretty great uh to to realize it's made life a
+[01:37] lot simpler at the runtime level. Now this is wrong like the the the thing up
+[01:41] here uh that that I'm going to say is that like everything is an LLM. uh that
+[01:46] is that is wrong but it's useful. Um there's kind of like two types of
+[01:49] models. There's autogressive transformers models that are LLM or very
+[01:53] LLM adjacent. Um you see this in embeddings. You see this in
+[01:57] transcription with stuff like whisper TTS um is another example. You also have
+[02:01] the more like diffuser image type models. Um which is like a very
+[02:05] different optimization problem. But something that's cool is because TTS
+[02:09] models are so architecturally similar to LLMs or in many cases derived directly
+[02:14] from LLMs, we can access the rich ecosystem of LLM tooling and use it to
+[02:19] make TTS models better. So the TTS model that we're going to be using and as an
+[02:25] example all day um is Orpheus TTS. We're using it for two reasons. Okay, three
+[02:30] reasons. The two reasons are because it's open source and it's really good.
+[02:33] And also I think uh Elias and Amu and everyone at Canopy Labs is really
+[02:37] awesome. So uh that's the that's the third reason we're we're talking about
+[02:40] their model. But it's a Llama 3.2 3B backbone. So like if you look at this is
+[02:46] the little like config from hugging face copy and pasted onto the screen. It's a
+[02:51] llama for causal LM architecture. And so because of that we can do like all of
+[02:56] our normal llama stuff to this model and make it faster. Um they did a couple
+[03:01] things. I mean they did a bunch of things to make it work but a couple
+[03:03] things that are relevant here. There is a larger vocab size because you need all
+[03:07] the speech specific tokens like laugh and stuff. Um and then they also
+[03:11] extended the context length for thrope scaling. So we got to make sure
+[03:15] everything we do supports that. So performance metrics like what do we want
+[03:19] to actually do here? Uh we we think about LLM metrics um a little bit here.
+[03:25] Uh we we just look at them a little bit differently. So in LLMs you talk about
+[03:30] time to first token. Now we're talking about time to first bite or sometimes
+[03:33] even time to first sentence. Uh we we need a little bit more of a useful
+[03:38] output um from the model before we really start feeling good about our
+[03:41] response time. We do think about tokens per second although we're going to think
+[03:44] about it differently which I'll explain later. And we mostly think about
+[03:48] throughput which is you know how many requests are we able to serve at a given
+[03:51] time. So on that, you know, goals perspective,
+[03:55] if you ask me like, "Hey, Philip, how do you want to optimize llama in general?"
+[03:59] I'll like I'll say, "Well, we want a lot of TPS. We want hundred. We want 500
+[04:03] TPS. We want a thousand tokens per second. We want as many tokens per
+[04:06] second as we can get." With voice models, you actually don't necessarily
+[04:10] need that. In many cases, you only want as many tokens per second as you need
+[04:14] for a real-time stream. for Orpheus that's like 83 tokens per second which
+[04:19] for like a three billion parameter LLM is nothing. Um but what we actually want
+[04:24] to do instead is we want to once we hit that mark start optimizing for time to
+[04:30] first bite so that our latency is really good and start optimizing for
+[04:33] concurrency so that we can get more connections and spend less on GPUs.
+[04:38] So our goal in general if all of these very nice and definitely not AI
+[04:43] generated people are all the different like voices that our that our model is
+[04:47] capable of creating these are all the voice agents that we're running. How can
+[04:50] we make all of these people fit on one or even less than one GPU? That's the
+[04:56] goal. So how do we do it? Bunch of ways. Um so first off it's an
+[05:03] LLM. Um, if you are running an LLM with like VLM for example, um, you can
+[05:08] generally in many cases get better performance with Tensor Rotlm. Uh,
+[05:12] Tensor Rot is something that we've been using at Base 10 a lot. I like to joke
+[05:16] that I'm the unofficial marketing department for Tensor RT LLM because of
+[05:20] how much I talk about it. Uh, but it really is fast. It can be a little bit
+[05:23] complicated from a developer experience perspective to get up and running with
+[05:27] it, but once you are up and running, um, it it works really well. Uh, we can also
+[05:31] just like quantize the model. Um, even though it's small, you can always make
+[05:34] it faster by making it smaller. Uh, with Hopper architecture, we quantize this
+[05:39] model to FP8 pretty successfully. I know usually quantizing really small models
+[05:43] like this can lead to performance degragation, but for this model, it's
+[05:47] working pretty well in FP8, even when we quantize the KV cache. And then a lot of
+[05:51] the other runtime stuff is actually more like audio specific than it is LLM
+[05:56] specific. So, one of the big challenges that we don't have with LLMs, which are
+[06:00] just parsing nice, convenient bits of text back and forth, is you have your
+[06:03] audio, you have your audio codec, you have your decoding, all that kind of
+[06:06] stuff. So, we use snack, which I was very disappointed to learn is not an
+[06:11] actual tasty snack, um, but an audio decoder. And we actually use torch
+[06:15] compile, um, and torch compile you might be used to running on, you know, a a
+[06:21] model u compiling your model weights to make your runtime faster. We're actually
+[06:26] using the same kind of system with torch compile and with um PyTorch inference
+[06:30] mode on the audio decoder and running that on the GPU. Um we make sure that
+[06:36] all the token batching um token level batching works well throughout the
+[06:39] entire pipeline and support multiple streaming protocols. Um yeah, so these
+[06:45] are the engine settings that you would need. um you've got the you know
+[06:48] quantization type of FP8 KV the FP8 context uh FMHA um in order to you know
+[06:56] support the uh support the um hopper architecture and the
+[07:02] uh quantization there. Um and here's a quick code sample of I got a little
+[07:08] ahead of my slides I guess. Here's a little quick code sample of the audio
+[07:11] decoding. Um so we are basically you know batching. Um usually we would talk
+[07:18] about continuous batching when we're talking about LLM optimization. We want
+[07:22] to package all those tokens together. In this case we are doing dynamic batching.
+[07:26] Um so we're trying to pack as much into a batch as we can but every 15
+[07:30] milliseconds we're going to uh shoot it out. Um you've got that timeout setup
+[07:34] here. Um if you want to trade off um for a little bit of latency for more
+[07:38] throughput you can make that batch bigger. Um, so yeah, we don't have token
+[07:42] level continuous batching yet here, but we do have dynamic batching, which is
+[07:46] going to get you pretty close. Um, and because of this, actually something
+[07:49] that's that I was surprised about uh when we profiled this is that our TTS
+[07:55] imple implementation with Orpheus is actually in many cases CPUbound, which
+[07:59] is kind of where you want to be. Um, you can throw more CPUs at a resource uh
+[08:04] pretty pretty efficiently. Um even though the next token production and the
+[08:07] audio co decoding are both on the GPU um both of those loops hit the CPU at
+[08:12] different points um and that can actually be the bottleneck in the number
+[08:16] of simultaneous streams that we're able to create.
+[08:20] So how do we do like I just showed you a lot of code and talked through it really
+[08:24] quickly without really getting into depth. Uh that could all just be smoke
+[08:27] and mirrors. Uh let's see let's see if it's actually any faster. Um, so again,
+[08:32] the number one thing is going to be simultaneous streams because you want to
+[08:37] be able to be very costefficient and use fewer GPU resources to serve a, you
+[08:42] know, large amount of traffic. And in this case, our base implementation, I
+[08:46] don't necessarily want to like call anyone out because there's a lot of
+[08:49] really good ways to run this model. Um, you can get really good performance with
+[08:53] VLM. Um but this is just kind of like the offtheshelf um just take it run it
+[08:59] completely standard uh implementation. So with variable traffic we're able to
+[09:04] support 16 simultaneous streams and with constant traffic 24 simultaneous streams
+[09:09] on um an H100 MIG. So this is actually half an H100 GPU. It's a skew that we do
+[09:14] a lot because it's really good for these small models where you want the Hopper
+[09:18] performance, the Hopper architecture uplift in Tensor RTLM, the FP8 support,
+[09:23] but you don't want to pay for like an entire 80 gigabyte GPU for just a 3
+[09:27] billion parameter model. So, you know, we're seeing much better um much much
+[09:33] better concurrency. So, if you kind of like price that out with like our list
+[09:36] prices and stuff, um, you can get, you know, a few cents per hour of of
+[09:41] conversation, um, which is going to be, you know, substantially better than if
+[09:45] you're if you have the volume for it. It's going to be substantially better
+[09:48] than paying for a sort of like pertoken type API.
+[09:53] But, okay, sure, maybe it's cheap at scale, but is it fast? Yes, it's fast.
+[09:58] Um so with the you know with the tot implementation on the MIGs and on the
+[10:03] H100s we can actually get all the way down to 150 millisecond time to first
+[10:07] bite um in like real world uh testing that we've done. Now that we'll we'll
+[10:13] talk in a minute like that doesn't mean your whole pipeline is that fast. That's
+[10:16] just like one part of the pipeline. Uh but it's it's important because you know
+[10:21] you definitely don't want to be spending a lot of time waiting around for that
+[10:24] first token. So
+[10:28] to kind of transition into that that discussion of like what can go wrong
+[10:33] here like you have this graph and you have this you know nice uh config that I
+[10:39] had up here and you're like all right cool I'm going to take this I'm going to
+[10:41] put it in production and I'm going to see the results that uh that he put up
+[10:45] on screen and it's going to work great and the answer is no it's not it's a
+[10:49] little bit harder than that. Um, so the thing is like non-runtime factors when
+[10:54] we get especially with these small models and with these multimodal systems
+[10:59] can actually be like way more important than your runtime. Um, and that's your
+[11:04] lat your infrastructure and your client code because you know I I showed here
+[11:10] all right maybe maybe I got it you know I I cut the runtime in in half um from
+[11:14] from the base implementation I I saved a couple hundred milliseconds very easy to
+[11:19] add those couple hundred milliseconds back and well beyond that by you know
+[11:23] sending my query to New York instead of California or by having to establish a
+[11:29] session every time I uh you know run my client code. Um, so a few like pitfalls
+[11:35] to avoid. Um, number one, like if you go in, you know, our our model library or
+[11:41] something and we're just trying to get you started very quickly um with this
+[11:44] with this kind of inference sample. Um, it's basically going to be, hey, use
+[11:48] requests, make a stream, stream it to your local computer and start, you know,
+[11:52] playing it on ffmpeg or something. The issue is that here like the requests are
+[11:57] going to be sent sequentially and you need to create a new session every time.
+[12:01] um that takes time. So if you're using this in production, you want a code
+[12:06] sample. By the way, this is all up on our GitHub. Um you'll want a code sample
+[12:10] that looks a lot more like a benchmarking script where you're using a
+[12:15] um multipprocess pool. um you're sharing the you're sharing the session between
+[12:20] all of these different requests and you're actually sending traffic with the
+[12:24] concurrency that allows you to, you know, saturate this benchmark with, you
+[12:29] know, the the multiple concurrent requests.
+[12:33] Finally, both of these code samples, they do sit on top of HTTP and HTTP
+[12:39] streaming. Um, in many cases, if you're implementing voice pipelines, you're
+[12:43] going to use something like LiveKit or Pipecat or something. And you're also
+[12:46] potentially going to be using a different protocol. You're going to be
+[12:49] using something like websockets or gRPC, which we do have support for. Um, and
+[12:55] finally, I wanted to leave you on the thought that these uh, you know, these
+[12:59] models are only one part of a voice agent pipeline. So like we can spend a
+[13:03] lot more than 15 minutes actually talking about like the very detailed uh
+[13:08] implementation mechanics of making your voice model faster of you know we we
+[13:14] haven't even touched on stuff like fine-tuning the model um you know custom
+[13:17] voices zeroot voice cloning um being able to you know remove static and
+[13:22] popping at the end of messages there's there's there's a lot of work to do just
+[13:26] on the voice part but it really only is onethird of the problem when I think
+[13:31] about voice agents. I think about three parts, listening, thinking, talking. Um,
+[13:35] and the most important thing here is again, while you can have great run
+[13:40] times, the infrastructure to connect these three together is really what's
+[13:43] going to determine your latency. Being able to go from one model to have the
+[13:49] next one running in the same data center with, you know, minimal like minimal
+[13:54] network overhead in between the two. uh even things as simple as not having to
+[13:59] go off and do a hair pin um at the DNS level and come back. If that saves you
+[14:04] 10 milliseconds on every step and your voice pipeline has this and you know a
+[14:08] chunking algorithm, it's got an interruption model and so you end up
+[14:12] having four or five steps. Well, there just hair pinning alone is costing you
+[14:16] 40 or 50 milliseconds and that can be 10% of your SLA for for a voice model.
+[14:22] So yeah, uh that's that's my that's my main point here is that as much fun as
+[14:27] it is to talk about the runtime stuff and as much work as we do there, the the
+[14:31] infrastructure and the client implementation is equally important if
+[14:35] not more so. Anyway, thank uh so yeah, that's the that's the review. Um thank
+[14:40] you all for coming through. Uh I have uh we're doing an event next week at uh
+[14:44] Fogo to Chiao which is going to be pretty fun. I'm going to be talking in
+[14:48] more detail about building some uh systems with open source models and
+[14:52] there's also going to be a lot of stake. So definitely come on through uh if
+[14:55] you're interested and um I'm on I'm on Twitter, I'm on LinkedIn, so it's base
+[15:00] 10. Um hit me up if you have any questions about this or anything else
+[15:03] model performance. Thank you so much and I'll let you go 8 seconds early.
+[15:11] [Music]

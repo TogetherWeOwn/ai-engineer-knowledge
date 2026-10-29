@@ -1,0 +1,1451 @@
+# title: From Vibes to Production: Evaluating and Shipping AI Agents That Work 101 — Laurie Voss, Arize AI
+# source: https://www.youtube.com/watch?v=qZj7sqmidqA
+# speaker: Laurie Voss, Arize AI
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T04:14:17Z
+# sha256: b94930281321f145a63407769e449da370bfda1c64f8bd271aa647da4ac23808
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:12] Hello everyone. Uh I have a packed room for a two-hour
+[00:19] workshop which is amazing. Welcome to AI Engineer. I know no one's officially
+[00:23] welcomed you but uh welcome to AI Engineer. Uh this venue is amazing. This
+[00:28] crowd is really quite surprising and I have uh a ton of content for you today.
+[00:35] Uh my name is Lori Voss. I'm head of developer relations at AriseAI. Uh some
+[00:40] of you may remember me from when I used to co-found npm Inc. Uh so you may
+[00:45] remember me from like JavaScript days. Uh but these days I talk about AI uh and
+[00:49] how to test it uh and how to make it work. So what are we going to be
+[00:54] covering today? Uh we've got a really good stretch of time together. Uh so
+[00:59] we're going to cover a lot of ground and I'm going to start with fundamentals.
+[01:02] That's why this is called a 101 session. Uh we're going to start with what eval
+[01:07] are, why you need them, uh and why agents make evaluation harder than
+[01:11] simple LLM applications. Uh then we're going to set up tracing in Arise AX, uh
+[01:17] which is how you capture the raw data you need to run evals in the first
+[01:20] place. Uh, we're going to build a simple AI agent uh with the claw agent SDK.
+[01:26] We're going to run it and we're going to look at uh the traces it produces. Can I
+[01:30] get a show of hands if you've already built an agent?
+[01:35] All right, great. I'm going to spend no time at all on how the agent works
+[01:39] because I assume everybody knows how an agent works and you're here to learn how
+[01:42] to evaluate them. Uh once we've got some data, uh we're going to do something
+[01:47] that a lot of tutorials skip, which is we're going to actually look at the
+[01:50] data. Uh we're going to read our traces. We're going to categorize what went
+[01:53] wrong. Uh and we're going to figure out what to measure before we write a single
+[01:57] eval. Then we're going to write three kinds of evals. There are code evals,
+[02:02] which are simple deterministic checks, uh very similar to unit tests. Then
+[02:07] we're going to use built-in LLM evals uh like faithfulness uh where a second LLM
+[02:13] judges the uh output of your first one. Uh and we're going to do a custom eval
+[02:19] uh LLM as a judge from scratch. Uh and we're also going to test whether our
+[02:23] judges are judging correctly, a process called meta evaluation.
+[02:28] Then we're going to finish with data sets and experiments, which is how you
+[02:31] iterate on your agent uh and actually measure whether it's getting better. uh
+[02:35] including we're going to use cloud code to automatically improve our app in
+[02:40] response to feedback from our evals. So, first things first, uh get your
+[02:47] notebook. Uh I messed up earlier and didn't have permissions set correctly.
+[02:53] So, if you scanned this earlier and it didn't work, it works now. Uh grab this
+[02:57] notebook and make a copy for yourself. That is where we're going to be living
+[03:01] all day.
+[03:04] And I'm going to wait for that to happen because otherwise I'm going to have to
+[03:08] keep swapping back to this slide. All right,
+[03:14] most of those are down. No, no, I'm still seeing people taking pictures.
+[03:19] All right, cool. We're also going to need a certain
+[03:24] amount of AI infrastructure. I'm going to be using anthropic and cloud code
+[03:29] today. Uh, Arise AX works with OpenAI. It works with every other uh, lab
+[03:35] provider, but I had to pick one in order to do a workshop about it. So, I've used
+[03:38] Claude. So, this is going, this notebook is going to expect you to have uh, an
+[03:42] anthropic API key, which you can get from console.anthropic.com.
+[03:45] If not, you can, if you are very clever, do a fast swap to OpenAI. Um, you're
+[03:52] also going to need an Arise account. Go to arise.com and start a free trial. Um,
+[03:58] from there you will need an Arise Space ID and an Arise API key, both of which
+[04:02] you can get from the settings page. Uh, my lovely assistant Dat is here. Uh,
+[04:09] that's him in the corner. If you run into any problems getting your API keys
+[04:14] or anything like that, uh, just flag him down and he will run over to you and
+[04:19] help you figure it out, which is, uh, incredibly nice of him. Thank you, Dad.
+[04:24] Um, [sighs]
+[04:28] yes. So, uh, who who had all that stuff already? Anybody already got an Aris X
+[04:36] account? [laughter] All right, I'm going to let
+[04:40] you hang out for this. I'm going to let you set that one up for a little while.
+[04:48] The way you do it is you go to arise.com
+[04:57] and you hit Oops, it's sent me to the docs because I always live in the docs.
+[05:02] You go to arise.com. Thank you. Uh and you hit the big pink get started button
+[05:12] and then you sign up from here. Do not accidentally sign up for Phoenix.
+[05:18] Phoenix is our lovely open- source project which also has a hosted service
+[05:22] underneath Phoenix. Uh sometimes when you Google Arise, you get sent to
+[05:26] Phoenix instead. Don't sign up for Phoenix. You're doing AX today.
+[05:34] All right. While you are signing up, uh I'm going to say a little bit more bit
+[05:38] more about what AX is. It is an observability and evaluations platform.
+[05:42] It captures traces from your AI application. It stores and runs your
+[05:46] evaluations and it watches your app in production and alerts you when something
+[05:50] goes wrong. Uh by default, we host it for you. That is why we're using it
+[05:54] today because you don't have to like run some software to make it run. Uh so
+[05:59] there's no infrastructure to manage. Uh though if you are from an enterprise
+[06:03] that is super precious about your data and you're like no, we need to run it
+[06:06] ourselves, you can absolutely do that if you want to.
+[06:09] Um, and like I said, uh, if you've used Arise Phoenix, which is our open source
+[06:14] tool, a lot of this will feel familiar. Uh, they have the same core ideas. One
+[06:19] is, uh, built for open source accessibility, and the other one is
+[06:23] built for, uh, enterprise with production and teams and things like
+[06:27] that. So, how are we doing on signing up for
+[06:32] keys right now? >> Wi-Fi sucks.
+[06:36] >> The Wi-Fi sucks. That is predictable really, isn't it?
+[06:49] All right. Is anybody like desperately in need of assistance right now?
+[07:05] >> All right.
+[07:12] Okay. Well, the advice is to switch to your phones as a hot spot. I apologize
+[07:15] for the Wi-Fi. I'm really worried about my 2PM workshop
+[07:20] where I have a Git repo that I know is 200 megabytes large and I'm like, no one
+[07:25] is going to get the repo because it's too big.
+[07:29] >> Yeah, start cloning that repo now. Anyway, uh let's talk about these these
+[07:35] fundamentals. There's a lot of theory in this workshop which gives you time to uh
+[07:38] catch up. Um here's the mental model. Evals are testing for AI and traces are
+[07:45] logs for EI AI. Why we had to come up with two completely new names for those
+[07:49] things? I don't really know. Uh you write tests for your code. Given this
+[07:54] input, I expect this output. Uh eval do the same thing, but for AI outputs where
+[07:59] the outputs are never exactly the same twice. Just as logs record what your
+[08:04] server did at runtime, uh, traces record what your AI did. So, every agent call,
+[08:09] every tool call, every LLM invocation with the inputs and outputs at each
+[08:13] step. The building blocks of a trace are
+[08:17] called spans. Uh, in this little screenshot, you can see a trace in Arise
+[08:22] AX. It's made up of a bunch of spans. It's got this tree structure. Uh, and
+[08:26] each span represents one step in the execution. An LLM call is a span. A tool
+[08:30] call is a span. And a full agent turn is a span that contains other spans inside
+[08:34] of it. Each span records its input, its output, uh timing, token counts, and a
+[08:39] whole bunch of metadata. Uh everything that you need to understand what
+[08:42] happened at that step. Traces tell you what happened. Evals tell you whether it
+[08:46] was any good. That is the model for mental model for today. This is not
+[08:51] rocket science. But let me talk about why we even need
+[08:56] evals. Uh and that is the vibes problem. Uh
+[09:01] AI features usually get shipped by building an AI feature, running a few
+[09:05] queries, saying does this look right? Yeah, it looks good. And then you ship
+[09:09] it. That is by far the most popular method of shipping AI applications
+[09:13] today. Uh and the problem is that then it fails on inputs that you didn't test.
+[09:18] Uh and the thing is it probably looks good on your test queries, but the
+[09:22] problem is that you ran it three times. Three times is not a test suite. Uh the
+[09:26] usual fix for uh flaky software is unit tests and they don't work here because
+[09:31] the output is non-deterministic. Uh the same prompt produces different
+[09:35] text every run. So two different responses might both be correct. So
+[09:39] there's no expected string that you can assert against. So teams fall back on
+[09:43] human review. They watch it run. It looks fine and they ship it. Uh that
+[09:47] doesn't scale. It doesn't catch regressions. And most importantly, it
+[09:51] doesn't run in CI. Here's some things you can't do without
+[09:55] evals. Uh if you change your system prompt to fix a tone issue, then the
+[09:59] tone would get better. Uh but now your uh bot is hallucinating product
+[10:03] features. Without eval catch that uh until a user reports it. With a
+[10:08] faithfulness eval, you would have seen the spike before it shipped. Uh and
+[10:13] every prompt potentially affects every kind of input that users send. So you
+[10:17] can be changing the prompt for one thing and have a completely unexpected effect
+[10:21] at some totally different part of your application because the prompt is just a
+[10:24] huge block of text that you're sending to your AI.
+[10:28] Uh you can't manually test every combination. So without eval you're
+[10:32] playing whack-a-ole. You fix one problem and you break something somewhere else.
+[10:36] Evals instead give you a number that you can track and compare and act on.
+[10:41] You also can't switch models without eval. This matters more and more because
+[10:45] this field moves so fast. Uh new models drop every few months. Uh without eval
+[10:51] switching models means weeks of manual testing. Is it better? Is it worse? Did
+[10:55] something get did something break? You don't know. With evals, you run the
+[10:59] suite. You compare the scores uh and you know within hours. And that is the
+[11:02] difference between flying by the seat of your pants and flying by instruments.
+[11:08] And this is not theoretical. uh real teams, Dcript, Bolt, Anthropic's own
+[11:12] clawed code all follow the same arc of shipping on vibes and then discovering
+[11:17] that vibes don't scale uh and then uh building evals and that is the same arc
+[11:23] that we're going to follow in today's workshop.
+[11:27] As I mentioned earlier, there are two broad types of evals. Code evals are
+[11:31] deterministic functions. They run in milliseconds and they cost nothing and
+[11:34] they give you an immediate unambiguous answer like did the output parses JSON?
+[11:39] Is the output less than 500 tokens? Did it mention the thing that I asked about?
+[11:43] The big advantage of Kodi valves is that they are fast and cheap and totally
+[11:47] reproducible. They get the same they get the same input and they give the same
+[11:51] answer every time. That makes them very similar to old style unit tests. The
+[11:55] downside is that like old style unit tests, they can be brittle. Uh we have
+[11:59] some strategies that can help avoid that and I'm going to be covering those
+[12:02] later. um because two perfectly correct answers might be worded completely
+[12:08] differently and you have to adjust your expectations of unit tests to be able to
+[12:12] handle that. The second type of eval is an LLM as a
+[12:16] judge eval. These use a second LLM to grade your outputs against a rubric.
+[12:21] Rubric being yet another word that we made up uh that just means rules. It is
+[12:25] your set of rules that you put in your prompt about what counts as good. Uh LLM
+[12:31] evals are much more flexible. uh they can handle the kinds of questions that
+[12:34] Kodi valves can't answer. Uh is this response uh factually accurate? Did it
+[12:39] stay faithful to the source material? Is the tone right? Uh for a customer
+[12:43] service context, the strength of LLM judges uh is that they understand
+[12:47] meaning uh not just the strings that are in your output.
+[12:51] But LLM judges have trade-offs. The weakness is that they cost money to run
+[12:56] and they are nondeterministic themselves. Uh so they can be wrong
+[13:00] which means that you need to calibrate them against human judgment and we're
+[13:03] going to do that later today. Um there's also a third type of eval which is human
+[13:09] evaluation. Uh a domain expert can read your output and grade it. Uh and that is
+[13:14] the gold standard for quality. Uh but it is slow and expensive and humans get
+[13:18] tired which is why we can't use it all the time. Uh fun fact that's not very
+[13:23] fun. Human annotators miss up to 50% of defects due to fatigue. So they're not
+[13:28] perfect either. So when you build an LLM as a judge and you're like, well, it
+[13:33] doesn't always catch my errors. Remember that if you were judging with a human,
+[13:36] the human would also not always catch your errors.
+[13:39] Uh but these are complimentary approaches. Most real applications are
+[13:42] going to use a a collection of Kodi valves, LLM as a judge, and human
+[13:47] evaluation. So when do you use which? Use Kodi
+[13:52] valves when the answer is deterministic. So, format validation, length limits,
+[13:56] forbidden phrases, uh required fields, use LLM judges when you need semantic
+[14:02] understanding, a correctness, eval accurately, a faithfulness eval asks,
+[14:08] did it stick to the source documents without hallucinating? Uh, and you
+[14:12] should keep humans in the loop for failure modes that you haven't seen
+[14:15] before. Uh, and to verify that your LLM judges are actually judging correctly.
+[14:19] LLM judges can be wrong. uh judging them against human judgment is how you know
+[14:24] whether or not you can trust them. All of that is true of any application
+[14:29] that uses LLMs. Uh but agents make things even harder in some ways that are
+[14:34] uh worth calling out. You can think of it as a ladder of complexity. A single
+[14:38] LM call is relatively simple. You get an input, you get an output. When you're
+[14:42] talking about an agent, an agent is making a series of tool calls and a
+[14:46] series of decisions, which means that at every single step in the uh chain, it is
+[14:52] the chances that it has made a mistake are getting higher and so the chances
+[14:55] that it will go off the rails uh are going to get uh greater. So you have to
+[15:01] judge the intermediate steps as well. You have to uh check whether your agent
+[15:05] is using the right tool. Did it pass the right arguments? Did it know when to
+[15:09] stop? getting stuck in loops is a real failure case for agents. Uh and then
+[15:14] multi- aent systems if you are building those add yet another level of
+[15:18] complexity. They add handoffs. One agent decides to pass work to another. Did the
+[15:22] triage agent route correctly? Did the specialist agent handle the the handoff
+[15:26] gracefully. Each layer adds new ways that things go wrong. Uh and
+[15:31] non-determinism means that you need to have more evals because errors can
+[15:35] cascade. Uh here's what an example of an
+[15:40] cascading failure looks like. If you're you ask a query about Tesla, meaning the
+[15:45] car company, your agent searches the web, finds a whole bunch of information
+[15:48] about an 18th century inventor, passes that back to your agent, which writes a
+[15:52] beautiful, well- formatted report about an 18th century inventor, and passes
+[15:56] that to your boss. Nothing that it did there was wrong. It you told it to
+[16:01] search the web for Tesla. It searched the web for Tesla. It got information
+[16:03] about Tesla, and it wrote a report about Tesla. where where did it go wrong? Uh
+[16:09] this is worse than an obvious failure because you have to be reading your
+[16:13] inputs and outputs for that to work. You can't there was no unit test that would
+[16:16] have caught that. Uh but agents can also do the opposite.
+[16:21] They can get things right in a way that your tests weren't expecting and get
+[16:25] graded wrong as a result. This happened to Anthropic when they ran a benchmark
+[16:29] called Tao Squared Bench uh which simulates multi-turn customer to service
+[16:33] tasks. uh they asked the agent to book flights uh and asked it to do something
+[16:40] that they thought was impossible which was reschedule an economycl class
+[16:44] flight. Uh but it turned out that the policies that they gave the agent
+[16:47] allowed the agent uh to first upgrade the flight to first class. First class
+[16:52] flights can be rescheduled which uh economy flights cannot. So the agent
+[16:57] found a way to reschedule an economy flight uh and failed the test because it
+[17:03] was supposed to be not able to do that and it was able to do that. Uh so this
+[17:07] is an example of how agents being flexible agents finding things that you
+[17:11] didn't think of uh needs to be accounted for in your tests.
+[17:15] Uh there is a difference between creatively correct and wrong and we're
+[17:19] going to come back to that when we talk about grading your agents later or
+[17:23] rather grading your evals. Um there's also a second way of
+[17:27] categorizing your eval into two categories uh which is uh capability
+[17:32] evals and regression evals. A capability eval asks uh can my agent do this thing
+[17:38] at all? Um capability evals are expected to mostly fail. Your agent is expected
+[17:43] to get a very low score on them. Uh because they give you a hill to climb.
+[17:47] It gives you something for your agent to try and get better at. Uh once you've
+[17:51] climbed that hill, your capability eval turns into a regression eval. A
+[17:54] regression eval is an eval that you expect your agent to pass completely or
+[18:00] nearly completely every single time. So as your agent matures, you'll be giving
+[18:05] it capability eval after capability eval and slowly turning them into a suite of
+[18:09] regression evals that you run all the time to make sure that uh previous
+[18:13] behavior has not regressed. This is what an eval result looks like.
+[18:20] Uh every eval produces a score and a label. In this case, it's a numeric
+[18:24] score just often just zero or one. Binary scores are very easy for uh LLMs
+[18:28] to do. [snorts] Uh and it comes with a human readable label like correct or
+[18:32] incorrect or valid or invalid. Um LLM judges add a third thing which is the
+[18:37] explanation. Um code eval produce explanations because they are just code.
+[18:42] Um but LLM, an LLM as a judge will say not just that something is incorrect,
+[18:48] but it will say why it decided that something is correct. And this is
+[18:51] incredibly valuable uh because if you are living in a world of coding agents,
+[18:55] you can take a whole bunch of explanations from a bunch of evals and
+[18:59] pass them back to your coding agent and say here is all the reasons that you
+[19:03] messed up in the last test. What could you do that would make you better at
+[19:07] this? And your coding agent will just go cool thank you for the feedback. Improve
+[19:10] your application uh and it will get better at it next time. This is
+[19:14] something I'm going to show you uh in today's workshop. It is how you turn a
+[19:19] failing eval into a prompt improvement. This is a real judge explanation. Um, in
+[19:25] this example, it it's a travel planning agent. Um, and you're running a
+[19:30] correctness eval. The judge doesn't just say incorrect. It tells you exactly
+[19:33] what's missing. You asked for a budget flight. It didn't give a budget
+[19:36] breakdown. It says the agent gave destin destination info and recommendations.
+[19:41] Uh, but the user asked about budget travel and there were no cost estimates.
+[19:45] That explanation makes the eval actionable uh because you now have a
+[19:49] concrete failure. You know what to fix in the prompt. Uh and the explanation is
+[19:53] what makes evals into a useful debugging tool and not just a scoreboard. Uh and
+[19:57] if you're seeing the same explanation across 50 different traces, uh you know
+[20:02] you have a systematic problem and not a one-off edge case, which makes it the
+[20:06] first thing you should fix. So you have to take your eval explanations uh and
+[20:10] categorize them into types of failures uh and count up the categories. This is
+[20:15] called coding. Again, we can make up words from the L from the ML word uh
+[20:19] from the ML world. Um but categorizing things is known as coding. Um
+[20:26] and of course each explanation is natural language. Uh so it is hard to do
+[20:30] this coding uh unless you use yet another LLM to do the categorization for
+[20:34] you. We'll be seeing how that works uh towards the end of today. Um, and like I
+[20:40] said, you can hand a whole pile of these explanations to a coding agent and let
+[20:43] the app fix it for you. Uh, this is the full loop that we're
+[20:48] going to build today. We're going to, uh, instrument, trace, eval, and
+[20:52] iterate. Each step feeds the next. You define what you want. Uh, you build it,
+[20:58] you measure how well it works. You ship it, you monitor it in production, and
+[21:01] you iterate based on what you see. Every traditional software product goes
+[21:05] through a loop like this. Uh but for AI the measurement step is where most teams
+[21:09] fall down and evals are how you measure. Evals are the connective tissue uh
+[21:14] across this whole life cycle. Uh so let's get started building it. Step one
+[21:20] is setting up tracing with Arise EX AX before we can run evals. We need
+[21:24] something uh some data to run our evals on. Uh and you can't evaluate what you
+[21:29] can't observe. So observation comes first.
+[21:33] So hopefully you've conquered the Wi-Fi uh and you have our notebook at this
+[21:38] point and that is running around to make sure
+[21:43] uh that you do. Uh
+[21:48] let's go to our very first code cell which is where I install our
+[21:51] dependencies. Uh claude agent SDK is self-explanatory. That is the claud
+[21:56] agent SDK. uh open inference open inference instrumentation claude agent
+[22:01] SDK is the auto instrumentation package for the claude agent SDK. This is how it
+[22:06] knows to capture traces from cloud agents uh without you changing your
+[22:10] application code. Uh as I mentioned earlier, you can use open AI instead if
+[22:15] you want to uh or some framework. Um we have packages for all of those as well.
+[22:19] You just need to swap them in. Um, Arise and Arise Otel are the packages that
+[22:24] send uh your traces to AX and let you read them back. Uh, and there's a
+[22:30] Phoenix package in there that we use as utility package. Don't worry about it.
+[22:34] Um, the anthropic package lets you use
+[22:38] Claude both to power our agent and to judge its output later. Uh, so uh, go
+[22:43] ahead and run this cell if you haven't already. And while it's installing, I'm
+[22:46] going to talk about what it is that we're going to actually build. Um the
+[22:50] claude agent SDK if you haven't already used it is Anthropic's framework for
+[22:55] building agents. So Anthropic's answer to lang chain and things like that. Uh
+[22:59] it can use tools, it can search the web, it can maintain conversation context
+[23:02] across turns. Uh open AI has their own uh agent SDK and of course there are
+[23:07] whole agent frameworks like crewa align chain and mastra and uh AX is compatible
+[23:12] with all of those. So no matter what framework you've built uh your agent in
+[23:17] uh it is already instrumented and you can just turn on logging and all of your
+[23:22] traces will light up. Um hopefully your install is done by now
+[23:28] which is uh optimistic timing on my part. Um
+[23:33] next set your keys. Uh in this case I have stolen my keys from uh collab. If
+[23:40] you are feeling naughty, you can just paste them in directly to your cell and
+[23:43] put them there. Um, three things go in here. Like I said
+[23:48] earlier, you need an anthropic API key, uh, which is going to power our agents
+[23:52] LLM calls, and it's also going to power the judge later. You need an Arise API
+[23:56] key, which you get from your settings, which authenticates your traffic to the
+[23:59] AX service, and you need an Arise space ID, which tells AX which uh, workspace
+[24:04] to put all of your data in. Uh if your keys aren't working, the usual culprit
+[24:08] is a copype error. Uh and of course that is still running around to help you if
+[24:13] uh your keys aren't working. That is has been described as a walking
+[24:18] security hole. Uh so he will definitely give you a key if you can't figure out
+[24:22] how to get your keys to work. So now we scroll to the register
+[24:28] section. Uh I'm going to bump up my fonts here.
+[24:38] One more time. >> The QR up one more time. Sure. Probably.
+[24:56] >> Sorry.
+[25:01] >> Uh, yeah. I didn't put my mine lives in Collab. So, Collab's secrets feature
+[25:05] pulls it out.
+[25:09] All right, I'm going to go back to where I was.
+[25:13] Hopefully, I can do that.
+[25:24] All right. Uh so we've installed dependencies, we've
+[25:30] talked about the SDK, we've talked about the secrets. [gasps] Uh and now we're at
+[25:34] the register. So this is the magic. Uh anybody who
+[25:39] works for Arise will tell you that you only have to add two lines of code to
+[25:42] your application in order to instrument your call. And this is these are the two
+[25:45] lines of code. Uh what we're doing here is we're passing in our arise space ID,
+[25:50] our API key, uh and a name for it to trace everything to. Um the register
+[25:58] function is setting up open telemetry. Open telemetry is the industry standard
+[26:01] for application observability. Uh and it has a layer on top called open inference
+[26:06] which adds LLM specific attributes. Things like prompt text, completion
+[26:09] text, token counts, which model was called, which tools were invoked. um we
+[26:15] point it at ax uh and we give it a project name and that is how your traces
+[26:19] get grouped in the UI. Uh in this case we're also passing batch equals false
+[26:24] because uh when you run in a notebook uh you want to send your telemetry as soon
+[26:29] as it happens and not batch stuff up which it does for efficiency in
+[26:32] production. Um that one line at the bottom, the claude
+[26:37] agent SDK instrument tells the cloud SDK to send a span to ax every time it makes
+[26:41] an LLM call or invokes a tool. Uh and that is
+[26:46] now instrumented. The reason this works with so little
+[26:49] code is because open telemetry is an open standard that nearly everybody
+[26:52] uses. So the cloud the cloud SDK authors, the open AAI SDK authors, the
+[26:58] lang chain authors, all of them have already written the code inside of their
+[27:01] SDKs that calls open that calls open inference and sends data back. So all
+[27:06] you have to do is say, "Hey, I'm an open inference collector. I live here. Send
+[27:10] it to me." One more bit of setup is that the
+[27:15] register call sends data to AX. Uh and the Arise client reads data back out of
+[27:20] AX. Uh so we'll use it to pull our spans back into the notebook. Uh that is what
+[27:25] this line is about. So you need to make sure that you've put in the same keys
+[27:29] there or uh copied them across.
+[27:40] >> Oh, you need to make a you need to make a copy of the notebook from the file
+[27:44] menu to be able to edit it.
+[27:55] Cool. Um, all right. So, if you've run that run
+[28:00] those cells, then we are ready to build. Uh, before we build, one thing worth
+[28:04] knowing about, uh, everything we're going to do by hand today, you can also
+[28:08] get your coding agent to do for you. The reason we are doing it by hand is so
+[28:11] that you have a fundamental understanding of what it is that you're
+[28:14] doing and you're not just vibing your way to success. Um but we publish a set
+[28:18] of skills called the Arise skills uh which know how to do all of this for you
+[28:23] at the skill level. So you can install your Arise skills uh and um run
+[28:29] evaluations, create data sets, uh instrument your app in the first place.
+[28:33] Um they all use uh AX's recommended patterns and you install them once with
+[28:38] a single npx command. They work in cloud code, they work in cursor, they work in
+[28:41] codeex and dozens of other coding agents. Um, so we're going to do stuff
+[28:46] manually today, but in production in a real life environment, we are using our
+[28:50] own skills every day to do this stuff. Uh, so now let's build our agents. Uh,
+[28:57] when I asked if everybody had built an agent before, everybody put their hand
+[29:00] up. So I'm not going to spend a lot of time explaining how this agent works.
+[29:03] I'm going to assume that you already have an agent somewhere and you're just
+[29:06] trying to instrument it and make it work for you. Um, the fake agent that I'm
+[29:12] using today is a financial analysis chatbot uh using the cloud agent SDK.
+[29:16] You give it a stock ticker and a focus area and it searches the web for the
+[29:20] latest information about that stock ticker. Uh, researches real current
+[29:23] financial data and writes a report for you. Uh, this is a a real use case that
+[29:28] whole startups are built around. Although uh my agent version is
+[29:31] extremely simple. Um, I'm assuming uh that you built an agent already. Our
+[29:37] agent works in two turns. Um there's first a research turn that uses tools to
+[29:42] search the web and gather data. Then there is a writing turn that compiles
+[29:45] the research into a readable report. Uh so let me walk you through that. Uh here
+[29:52] is my research prompt and my write prompt. These are deliberately extremely
+[29:55] simple. They are going to cause errors later and those are the things that we
+[29:58] are going to use our evals to debug. Uh and then I'm setting up my claude agent
+[30:02] options. I'm using uh Claude Haiku uh as the agent underneath because Haiku is
+[30:09] you know capable but it will make mistakes and we want some mistakes so
+[30:12] that we can fix them. Uh and it's also fast and cheap so I don't burn a lot of
+[30:16] money uh of your money when as we do this. Um
+[30:22] the permission mode controls uh what the agent is allowed to do autonomously.
+[30:27] There is a catch hiding in the in the specific choices that I have made and
+[30:31] the specific allowed tools. uh that I am giving this agent right now as we're
+[30:35] going to find out later. Uh and now let's look at our two turns.
+[30:40] Um turn number one is research. There is a
+[30:45] [snorts] bunch of boiler plate in here that I'm not going to explain which is
+[30:47] just about outputting the output so that we can see what it's doing as it's
+[30:50] going. Uh turn two is writing the report with again a pile of boiler plate. Um
+[30:58] the prompts are critical. So this is where I want you to start doing your own
+[31:02] changes in your own notebook. I have given it extremely basic prompts at the
+[31:06] top. If you can see if you can think of a better prompt just off the top of your
+[31:10] head uh that is going to do a better job than the prompts that I put in uh at
+[31:15] solving this problem. What would be better than what I put in to uh do the
+[31:20] research in the first place? What would be better than what I put in uh to do
+[31:24] the report writing? Um, and if you oneshot it, then you're going
+[31:29] to have uh less stuff to do later on. Um,
+[31:35] one of the things we do here is we wrap the whole thing in an open telemetry
+[31:39] span. Uh, this is because if I don't do that, then claude inter Claude sends
+[31:45] this as two the two turns as two separate spans and we wanted them to be
+[31:49] grouped together in the UI. Uh, so I've wrapped them in a span together so that
+[31:53] they come out as a single agent turn. Um, this is just saving us some time
+[31:58] later. I wanted to be clear about why I'm doing this uh bit of code. Um,
+[32:04] and now we can run our agents. Uh, I have run my agent in advance because I
+[32:08] wanted to know exactly what it was going to do. Um,
+[32:12] but now is the time to kick off your own agent. Um, I've asked it to analyze
+[32:17] Tesla, specifically its financial performance and growth outlook. Um, you
+[32:22] should go ahead and run this cell. It'll take a minute or two because the agent
+[32:25] will actually search the web. Uh, and the LLM is doing multiple rounds of
+[32:28] reasoning. Um, the agent receives our research prompt. It decides it needs to
+[32:34] search the web, which is a tool call. It reads the search results. It decides if
+[32:37] it has enough information and maybe searches again. That is the agentic
+[32:41] part. You didn't say do a web search, take the web information from the web
+[32:46] search and write a report about it. The agent is deciding is this web search
+[32:49] enough information? And if not, I will write I will run more web searches. It
+[32:53] will run an in indeterminate number of web searches to get enough information
+[32:57] until it has decided what enough means. Uh and then it will write the report.
+[33:02] This execution path is non-deterministic by design and that is the key here to
+[33:06] understand. Uh if you run this again with the same input, your agent might
+[33:10] search for different things. It might find different results. It might write a
+[33:13] different report. Uh and both reports might be good. Um or one might be good
+[33:18] and one might be bad. And that is exactly why we need evals. We can't
+[33:21] predict the output from the input alone. Uh, and every single one of those
+[33:25] decisions is being captured as a trace. Uh, so I'm just going to pop open
+[33:33] my last 12 hours or my last 24 hours, I guess. Cool. This is a pile of traces.
+[33:40] You're going to understand what all of this is later, but here you can see the
+[33:43] Tesla one that I ran earlier. This is what it looks like when I go through.
+[33:47] You can see every single turn. Uh it's calling a skill. It's doing a tool
+[33:52] search. It's doing a web search. Uh you can see every single thing that it does.
+[33:57] You can see that it ran four web searches before finally deciding that
+[34:00] was enough information. Then it did the second uh call in the step and it wrote
+[34:04] the report. Uh
+[34:09] one of the things that it does uh that we're going to see later is uh I told
+[34:13] you there was a catch in the tools that I gave it. Uh here's this step that was
+[34:18] unexpected when we were putting this demo together. It tried to write the
+[34:22] report. I told it to write a report. It tried to write the report as a markdown
+[34:25] file to disk. It is living in a collab notebook. So there is no uh there's no
+[34:29] file system for it to write to. Uh so the write step would fail. Uh and this
+[34:34] is something that you need evals for. You need evals to detect when your agent
+[34:38] is doing something helpful but incorrect. Uh because this fails
+[34:42] silently. It gives you output anyway, but it's doing this unnecessary extra
+[34:46] step of trying to write to disk uh without you knowing that it was there.
+[34:52] Um, so back to the collab,
+[34:57] this is a pretty good report. Um, it's a financial performance table with
+[35:02] real numbers, growth drivers, risk factors, analyst price targets, and a
+[35:06] conclusion. Um, it's not bad for a first pass, but it not bad as a vibe. And we
+[35:11] are here to replace vibes with actual numbers. Um,
+[35:16] [sighs] so like I said, uh, you can see all of
+[35:20] that stuff in the uh, traces. We didn't have to do anything to get all
+[35:27] of that information. We didn't have to like instrument every single line to get
+[35:30] the LLM call and get the tool call and all of that stuff. All of that is built
+[35:32] into cloud agent SDK. just it is like it's built into open AIS SDK. Uh and
+[35:38] each one of these rows in this table is a span. Um traces reveal every decision
+[35:44] the agent made. Without them, all you see is I gave it a prompt and I got a
+[35:48] report. With traces, you see every step. Uh if you click into any span, like I
+[35:53] said, you'll see exactly what the model received as input and exactly what it
+[35:56] returned. Um,
+[36:01] and that is what observability means in practice. Not just did it work, uh, but
+[36:06] how did it work and where exactly did it go wrong? Uh, when we run our eval in a
+[36:10] few minutes, uh, we're going to pull the input and attribute output attributes
+[36:14] out of these spans and feed them to our evaluators. The input becomes the
+[36:17] evaluator's input. The output uh, becomes what gets graded.
+[36:26] Uh now we need to generate some test data to run meaningful evals. Uh we need
+[36:30] more than the one trace that you've generated so far. We need a body of
+[36:33] data. Uh in the notebook there are 12 test queries covering different tickers
+[36:38] and analysis types. Uh you should kick those off now. They take about 5 to 10
+[36:42] minutes to run assuming that you've got Wi-Fi and everything's working for you.
+[36:46] [snorts] Um
+[36:48] I'm going to show you what they look like. Uh
+[36:52] and
+[36:55] oops this is them here.
+[37:01] So the key thing here is uh diversity. I've given it a bunch of obvious queries
+[37:07] that should work. I've also given it some edge cases. For instance, I've
+[37:10] given it one where I gave it two tickers, Apple and Microsoft, and told
+[37:14] it to run a comparison. Uh which is something it could theoretically do. uh
+[37:19] I've also given it the same uh tickers multiple times uh in places so that we
+[37:24] can see uh the non-deterministic output uh when we say uh Amazon profitability
+[37:30] trends and outlook versus Amazon AWS performance and profitability
+[37:35] um different tickers and different
+[37:38] questions different levels of complexity are important uh to generate test data
+[37:42] that's going to cover the range of things that users will actually ask
+[37:45] although spoiler alert in reality your users are going to ask really weird
+[37:49] things that you're not going to be able to predict in advance and that is
+[37:52] another one of the reasons that eval are important. Um
+[37:58] the uh Rivian query rivn uh asks about a company with much less public data than
+[38:03] Apple or Microsoft and the Coca-Cola dividend yield query is a very different
+[38:07] kind of analysis from a growth growth stock query. Um again this is diversity
+[38:13] that is important. Um, diversity in your test set is how you catch uh things that
+[38:18] your agent is going to be not good at. Uh,
+[38:23] so while yours are running, mine have already loaded so I can show you all of
+[38:28] my data. Uh, these are all of my spans from all of
+[38:32] those runs. Um, you can see uh at the bottom there are 13 uh the which is the
+[38:39] initial Tesla run and 12 test queries. Each one is a complete execution of the
+[38:43] cloud uh financial analyst. So now we have the data but before we write any
+[38:47] evals uh we need to actually uh look at the data. Um
+[38:54] this is error analysis. Uh and the whole step is one instruction. Read your
+[38:59] traces before you write eval. Before you write a single evaluator start with your
+[39:04] data. Uh read or a dozen or more of your traces end to end. This is the most
+[39:08] important practice in this entire workshop. uh focus on the ones where
+[39:12] something went wrong. What was the input? What was the output? What
+[39:15] specifically is broken? This sounds extremely old-fashioned. Just read the
+[39:20] input. Uh but it is one of the highest value activities in agent development.
+[39:25] Uh Anthropic, for instance, invested in tooling specifically for viewing eval
+[39:29] transcripts and their team spends a whole lot of time just looking at eval
+[39:32] transcripts every day. Um, a trace tells you whether the agent
+[39:36] made a genuine mistake or whether your graders rejected a valid solution. Uh,
+[39:41] if you automate before you understand your failures, then you're going to
+[39:45] create an eval that measures what's easy to measure instead of what actually
+[39:48] matters.
+[39:54] You need requirements first before you can categorize failures. You need to
+[39:57] know what success looks like. You can't say it doesn't work if you haven't
+[40:00] defined what it works means. Uh for our financial analyst, what does a good
+[40:06] report look like? Uh it should reference the correct ticker. It should include
+[40:10] some re real recent actionable financial data uh and include actionable
+[40:14] recommendations. It should distinguish between forward-looking analysis and
+[40:18] historical summary. Those are our success criteria and they seem obvious
+[40:22] uh when you write them down, but lots of teams never do. Um they ship an agent
+[40:27] and then react to complaints instead of defining the bar up front. Uh, writing
+[40:32] requirements down turns vague disappointment into specific testable
+[40:35] criteria and those criteria are what turn into your evals.
+[40:40] Here's the thing about defining success that it's important to note though,
+[40:43] which is that it is not something that your engineers can do or not something
+[40:47] your engineers can do alone. The definition of good usually lives in the
+[40:51] domain knowledge and the domain knowledge lives in the people that your
+[40:54] company will often laughably refer to as non-technical. So your product managers,
+[40:58] your QA, your support team, those are the people who know what the definition
+[41:02] of good really is. They know what the failures are going to look like. Those
+[41:06] are the people who should be helping you write your evals. Uh OpenAI put it
+[41:11] really nicely. They said that people management skills are AI skills. So
+[41:14] clear goals, uh direct feedback, knowing what your value proposition is, uh those
+[41:20] skills matter more than ever when the system is probabilistic.
+[41:23] Uh and this is one of the things that AX is built around. Anyone on your team can
+[41:27] read traces or add annotations and contribute to your criteria. This is not
+[41:31] just an engineering surface. You're expected to have other members of your
+[41:35] team in here. A quick note on where to get this test
+[41:40] data. Uh we have these traces because we already ran the agent ourselves. But
+[41:44] what if you're building something new and you don't have real traffic yet? Uh
+[41:48] you can do what we just did, which is you can use synthetic data. You can have
+[41:51] an LLM generate diverse queries across your expected categories. So, uh,
+[41:56] research Tesla financial rep performance is one phrasing. What's going on with
+[42:00] Tesla stock is another query that's asking the same thing. Yo, is Tesla a
+[42:04] buy right now is a third way of expressing the same query. Uh, they're
+[42:08] all the same intent, but they look very different. So, vary the phrasing, the
+[42:12] complexity, the level of specificity. Uh, a domain expert should review your
+[42:17] set of queries. Uh, because LLM generated queries tend to cluster around
+[42:21] obvious phrasings and miss the weird stuff that real users write.
+[42:25] You also need to include edge cases in your test data. So things like
+[42:28] non-existent tickers, multi-part questions, jailbreak attempts. Uh those
+[42:33] might be 1% of your traffic, but they are the 1% of your traffic that ends up,
+[42:37] you know, being a PR disaster in the press. Your test data should look like
+[42:41] production data, not what you wish production looked like. Uh so synthetic
+[42:45] data can get you started, but as soon as you have production data, production
+[42:48] data should be what you're running on. So let's actually examine our traces.
+[42:55] Uh like I said, the first 13 traces are the
+[42:59] first 13 traces that I wrote. Um most of them produced long structured
+[43:05] reports in line. So Tesla, Apple, Nvidia, stuff like that. Uh 3 to 7,000
+[43:11] characters uh of report right there in the trace output with executive
+[43:14] summaries, valuation tables, explicit buy or hold recommendations. On the
+[43:19] surface, most of these look fine, but like I said, three of the 13 were doing
+[43:22] something weird, which was uh they were uh the rep output in them is much
+[43:28] shorter because it just says, "Oh, I wrote this to disk for you." Uh and the
+[43:35] output went to disk. Uh so instead of having a full report, uh it has a
+[43:40] summary of the report and the the actual body of the report went to the
+[43:44] non-existent disk. This is what the eval is designed to find. Um
+[43:50] the agent decided to write a file with no permission. The write silently failed
+[43:53] and it told us the report was saved. Uh and that is the kind of pattern that you
+[43:57] only see if you actually read the trace. Um
+[44:01] so this is I believe one of the three sources. Nope, that one had worked.
+[44:09] Oh no, the Wi-Fi. Here we go.
+[44:24] So, this one's showing another kind of failure where it just got stuck in a
+[44:27] loop forever. It was trying to find information about who was it trying to
+[44:30] find information about? Microsoft. Uh, and it just did an endless series of web
+[44:34] searches and took forever. Um, this is what it tried to write to disk.
+[44:41] Uh, and this is what it actually wrote to output.
+[44:45] Uh, right here we go. This is the report is saved as Microsoft cloud segment
+[44:49] financial report.mmd. This report is useless because it's referring to a
+[44:52] report that doesn't exist. Um,
+[44:58] there's also uh an example of a confidently wrong. If we go to the
+[45:01] Rivian report uh which is RIBN, where did it go? There we go.
+[45:09] Uh, Rivian has the same problem that the
+[45:14] Microsoft one does, but even inside of the full report that it tried to write
+[45:17] to disk, there's a whole bunch of really confident information about
+[45:20] [clears throat] a private company that you can't possibly verify. Uh, these
+[45:25] might be hallucinations, they might not be hallucinations, but we haven't done
+[45:29] anything to check whether or not uh this report is really grounded in reality.
+[45:33] Uh, so we're going to do an eval about that later.
+[45:37] There is a structured way to do this reading uh which as I mentioned earlier
+[45:42] is called coding. There's open coding and aial coding uh and it comes from
+[45:47] qualitative research. Open coding means you read each trace and you write down
+[45:51] what you see. So stuff like vague recommendation made up a number talked
+[45:55] about the wrong ticker. Uh you're not trying to be neat. As a programmer, it
+[46:00] is very uh tempting to try and come up with categories in advance and say, "Oh,
+[46:04] this is a you know, retrieval failure or whatever." Uh don't do that when you're
+[46:09] doing open coding. Just write down what the problem was in as natural language
+[46:12] as possible. Uh and uh then when you find the failure, sorry, and then uh you
+[46:21] want to do aial coding afterwards. AIAL coding is when you look at uh all of the
+[46:26] open codes that you've put together and you then you do the categorization. You
+[46:29] say okay now there are five things that look similar. I'm going to give them all
+[46:32] a single category and uh turn them into categories. Um
+[46:39] the second pass the the uh aial coding pass is structural. Uh and like I said
+[46:45] the tend the tendency the temptation is to try and go straight to a coding and
+[46:49] you should resist that. When you find a failure, you should ask why it failed.
+[46:54] So the response was wrong is a symptom. Did it get bad search results? That is a
+[46:59] retrieval failure. Did it get the right data uh but the wrong conclusion? Then
+[47:03] that is a reasoning error. Did it make up a stock price? That's obviously
+[47:06] hallucination. Did it answer outside of its domain? That is a scope violation.
+[47:10] Did it do something that you didn't tell it that it should be able to do. Each
+[47:14] root cause, each axial code uh points to a different fix. If you don't know the
+[47:19] right call, if you don't know the cause, you can't pick the right remedy.
+[47:23] Once you've categorized uh which I did here,
+[47:30] uh you can sum them up into uh a table.
+[47:37] So,
+[47:41] uh confession time, I didn't actually read all of those traces and code them.
+[47:44] I just gave them random axial codes. Uh but what you end up with is this table
+[47:49] of root cause frequency things like looks good possible hallucination
+[47:53] reasoning gap unverifiable data missing recommendation. It's tempting to look at
+[47:57] the top one the possible hoodation and decide that that is the most important
+[48:01] one to fix. But in reality uh you're going to want to uh
+[48:08] balance between uh frequency and severity. So if one time in a hundred
+[48:14] instead of doing a financial report, it gives the user instructions on how to
+[48:18] make a bomb, you fix that one first because that is the most severe possible
+[48:22] failure. Uh so you have to uh multiply the severity by the frequency to get to
+[48:28] which ones you decide to fix first. Uh and that is why you look at the data
+[48:33] before you write your evals. Uh one more concept before we get
+[48:38] started on that is the Swiss cheese model. um which is a concept from safety
+[48:42] engineering. Imagine each layer of defense as a slice of Swiss cheese. Each
+[48:47] slice has holes uh gaps where problems can slip through. Uh but if you stack
+[48:52] enough slices, the holes don't line up. So what gets through one layer gets
+[48:55] caught by the next. Uh your code eval catches format issues but misses
+[48:59] semantic problems. Your LLM judge catches reasoning gaps but misses subtle
+[49:03] hallucinations. And your human review catches the subtle stuff but it can't
+[49:07] scale to every trace. No single eval in that set uh catches everything and the
+[49:12] combination is what gives you coverage. Uh so stack the cheese. Um now that we
+[49:19] know what's wrong, let's automate the checking.
+[49:23] Um the next step is code evals. This is no model configuration, no API calls, uh
+[49:29] just Python. We're going to write the simplest useful eval that I can think
+[49:34] of. Uh, our agent is supposed to analyze a specific stock ticker. What I'm going
+[49:38] to do is write a Kodi valve that checks whether that stock ticker actually
+[49:42] showed up in the report. Uh, which is a test that my initial demos absolutely
+[49:46] failed a number of times. Uh, an LLM judge would be overkill for this. You're
+[49:51] looking for a specific string. It's somewhere in the report. You don't need
+[49:54] an LLM to judge whether or not you mentioned the ticker.
+[49:58] So, there's two ways to do this. There's two ways to do everything in AX. one is
+[50:03] programmatically uh and one is via the UI. Uh in the uh notebook you can see
+[50:10] the programmatic way. What I'm going to show you on screen is how you do it in
+[50:14] the UI.
+[50:19] So this big button in the top right is what you want. You want to add an
+[50:23] evaluator. In this case, I've already added my mentions evaluator,
+[50:29] but you will want to add an evaluator which will give you this screen. Uh
+[50:35] here you're going to see basically some Python. Um in the notebook I've given
+[50:40] you the Python that you can use uh to either do your uh programmatic version
+[50:45] or your version in the UI. Uh this is a very simple Python function which
+[50:51] returns uh an evaluation result which is looks
+[50:56] exactly like those evaluation results that I showed you earlier. Uh it has a
+[51:00] label, it has a score. Um
+[51:06] so uh once you've written what your code
+[51:12] evaluator does, you're going to have uh parameters to your code evaluator. In
+[51:18] this case, I've called them query and report. And you're going to have to tell
+[51:21] AX uh which variables in your trace are those variables. So there's this
+[51:27] extremely fun UI, the single trace UI, uh where you look at a single trace, and
+[51:33] you can literally just click uh the specific thing in your output that you
+[51:37] want to be that variable, and you tell it, okay, that one should be the query,
+[51:41] and that one should be the report, and then it's mapped.
+[51:47] Um, you should also uh be changing your
+[51:52] evaluator to uh work on uh a trace as opposed to a span. That is what gives
+[51:58] you that UI. Um, once you've done that, you need to
+[52:03] save your code evaluator to our evaluator hub. Uh, and then you hit save
+[52:08] to save the evaluation.
+[52:17] So assuming you've done that. >> Yeah.
+[52:28] >> Sure. Uh so he asked for more detail on how
+[52:32] code evaluators work. Uh so code evaluators are they're completely
+[52:36] deterministic functions. You're just taking input and output and saying was
+[52:40] this output good according to some definition of good. So in this code uh
+[52:45] I'm doing very very simple Python. I'm just saying uh look for all of the words
+[52:51] that are in capital letters. Uh strip out the ones that are obvious acronyms
+[52:55] that I already know and of the remaining words are any of them the uh the acronym
+[53:00] which is the stock ticker that I'm looking for? That's all it's doing. Uh
+[53:05] lots of code evaluators are even shorter than that. They're something like is
+[53:08] this output 500 characters long or less? Uh is this output parsible JSON? You're
+[53:14] doing something very simple, very deterministic uh for the purposes of
+[53:19] having that first line of defense in your Swiss cheese.
+[53:23] Um
+[53:27] [sighs] so I talked about how to add stuff
+[53:30] already. Uh in the notebook you can run the eval
+[53:35] programmatically. Uh this is how to do this is these are
+[53:40] the instructions on how to do it via the UI if you followed that. The alternative
+[53:44] is to do it in the code where you can just run it directly which is uh easier
+[53:48] to do if you're following along in a notebook. Um,
+[53:52] a code evaluator returns a label and a score. Like I said, there's no LLM
+[53:56] needed. There's no API call. It's instant. Uh, and uh if you're wondering
+[54:01] why we're wrapping it in suppressed tracing, it's because uh the evaluation
+[54:06] is itself uh a call to the uh agent SDK which would then get stored as traces
+[54:13] and I didn't want traces of my tracing happening because that gets too meta. Uh
+[54:17] so I told it to suppress tracing when I'm running an evaluation.
+[54:21] Uh if you look at this programmatic run uh you will see that 12 passed and one
+[54:27] failed. Uh there was a missing ticker for Amazon. Uh the specific trace that
+[54:32] went wrong uh is when I asked you'll note you'll notice I told you earlier
+[54:38] that I made two queries to Amazon. One where I asked about its profitability
+[54:41] and one I asked were about uh AWS's profitability. Uh if you click into the
+[54:46] traces uh which I could attempt now um you'll see that the
+[54:54] report that asked about AWS uh wrote a report that was entirely about AWS only
+[55:01] about the AWS branch of Amazon rather than uh all of Amazon. Uh and so it
+[55:06] failed to mention the Amazon stock ticker entirely. It talked only about
+[55:09] AWS. So it's a really subtle failure because it did a bunch of research. It
+[55:13] found out a whole bunch of stuff about what was happening at Amazon. It just
+[55:16] didn't think about what was happening about Amazon as a company. Uh only about
+[55:20] AWS because I gave it that extra prompt like I also want to know about AWS
+[55:24] profitability. Um
+[55:29] so uh
+[55:32] looking at those results back in AX um they show up as annotations next to our
+[55:37] traces. So you can click into any one of these traces uh and you'll see
+[55:42] evaluations. I've run a lot more evaluations uh than you have so far, but
+[55:47] you can see my mention sticker evaluation has run with the span. It's
+[55:51] run at the span level. It has hit a pass uh and it's given a score of one. Um
+[55:57] the notebook has a little helper called log eval to ax which is doing that work
+[56:01] for you. takes uh the spans that it ran offline and the tests that it ran
+[56:05] offline and pushes them back to AX for you. Um
+[56:11] so now every score now every eval has uh a mention sticker evaluation uh that you
+[56:17] can look at and filter by uh and look for the failing failing ones.
+[56:22] So why does this matter? Because it is your first line of defense. Uh if your
+[56:26] financial analyst agent writes a beautiful report about m Microsoft when
+[56:30] the user asked about Tesla uh which is a thing that actually happened to me when
+[56:33] I was building this uh then no amount of answer of eloquence from your agent uh
+[56:38] matters because the answer is wrong. Uh so you can catch this with five lines of
+[56:42] Python. Um the ticker check catches uh really basic
+[56:49] failures but it catches them really cheaply. That is why it is important.
+[56:53] Um, Kodi valves aren't just toy examples. Often, you're going to want to
+[56:57] know that your output is JSON, uh, or that it has a certain length, or you're
+[57:01] going to want to avoid forbidden phrases like as an AI language model. Uh, and
+[57:06] those are production critical checks. A code eval doesn't have to be a simple
+[57:09] string operation. Kodval means the grading logic is deterministic. Uh, but
+[57:14] it can do complicated things. It can query a database for you. It could hit
+[57:17] an API and get the actual stock price to make sure that it wasn't hallucinating a
+[57:21] stock price. uh anything with a grading always gives the same answer for the
+[57:25] same input can be a code evaluator. One important principle is to grade what
+[57:31] the agent produced and not the path that it took. Uh I referred to this earlier.
+[57:36] There's a common instinct to check that the agent followed a specific sequence
+[57:39] of steps. Did it call this tool first and then that tool in that order? Uh and
+[57:45] uh practitioners have found this to be in practice too rigid. uh agents
+[57:49] regularly find valid approaches uh that the eval designer didn't anticipate. Uh
+[57:55] so uh if you grade the path um you punish creativity. Instead grade what
+[58:01] the agent produced. Did the output have the right information? Did the final
+[58:05] state match what you wanted. Uh our ticker check doesn't care how the agent
+[58:09] found the data. It just checks is the ticker in the output. Uh that is the
+[58:13] right level of abstraction for most Kodi valves.
+[58:17] So now let's get to built-in evals. LLM evals. This is where it begins to get
+[58:21] more interesting. Uh code can check whether the ticker appears but it can't
+[58:26] check whether the analysis is good. Is the financial data accurate? Is the
+[58:30] report complete? Are the recommendations well reasoned? Uh these are semantic
+[58:34] questions and for semantic questions you need a judge. Every LLM as a judge has
+[58:39] three parts. Uh it has a judge model which is the LLM that is doing the
+[58:43] grading for you. It has a prompt template which as I mentioned is also
+[58:47] called a rubric. Uh which is the criteria that the judge applies the
+[58:51] rules of what defines good. Uh and it has the data which is the examples being
+[58:56] evaluated. AX keeps these three things separate which means that you can mix
+[58:59] and match. You can try the same criteria with different judge models. The same
+[59:02] judge model with different criteria. Uh it is modular by design. The good news
+[59:08] is that AX ships with a B with a bunch of built-in eval so you don't have to
+[59:12] write your own. There are a bunch of types of evals that are always uh that
+[59:17] are often going to apply to uh most AI applications. So we've already written
+[59:23] the prompts for those and you don't have to write them yourself. Uh correctness,
+[59:27] for instance, checks whether a response is factually accurate. Faithfulness
+[59:30] checks whether the response stays grounded in the source material. Uh and
+[59:34] there are evals for tool selection. Did the agent pick the right tool? Uh and
+[59:38] tool invocation. Did it pass the right arguments to that tool? stuff like
+[59:42] document relevance, refusal detection, many of the things that you'd want to
+[59:45] check in an agentic application uh come out of the box. Uh so the first eval
+[59:53] that we're going to run uh is a correctness eval. Um
+[1:00:00] and spoiler alert, it's not going to work. Um
+[1:00:04] setting it up is very easy. We give it an LLM. In this case, uh I've chosen uh
+[1:00:10] the anthropic LLM. uh sonnet 4.6 because it is better than haiku which is the
+[1:00:15] thing that is doing the work. You often want to pick a bigger slower model to be
+[1:00:18] your judge. Uh and then I've just uh given correctness evaluated the LLM uh
+[1:00:25] and uh run it right here. Um
+[1:00:35] like I said uh once we've run the evaluation with evaluate data frame uh
+[1:00:40] we've also uh turned on suppressed tracing here so that our evaluation
+[1:00:44] doesn't send a bunch of extra traces to uh AX. Um it gives us this output which
+[1:00:50] is a bunch of evaluation rows. Um these are not very readable. This is why
+[1:00:56] you need AX to look at them. Um the judge reads the input and output
+[1:01:01] from each span and grades it against the rubric. Um
+[1:01:07] and we can see that every score is zero. If I scroll across,
+[1:01:15] status completed, name correctness, score zero. The reason it's doing this
+[1:01:20] is because correctness is judging against the uh LLM's definition of of
+[1:01:27] what is correct and what is true. Uh which means that it is relying on the
+[1:01:32] LLM's training data. What we're doing in this agent is a whole bunch of live web
+[1:01:38] search to get current stock prices and up-to-date financial information, which
+[1:01:42] means the agent is talking about things that happened in 2026,
+[1:01:46] but the LLM that's doing the judging only has information that stops in
+[1:01:50] January. So, if you read the explanations of our correctness eval
+[1:01:54] inside uh inside of AX, you can scroll to
+[1:01:59] evaluations, you can look at correctness, you can say that it is
+[1:02:01] incorrect. uh I will save you a bunch of reading of a very densely packed column.
+[1:02:05] What it's doing is complaining that there's a bunch of stuff that comes from
+[1:02:08] the future that it couldn't possibly know. Uh so our correctness eval here
+[1:02:13] has completely failed. This is not what you wanted to do. So instead we are
+[1:02:17] going to use a faithfulness eval. Uh faithfulness is a better eval for our
+[1:02:22] use case because uh the judge actually has context. In faithfulness, you give
+[1:02:27] the uh LLM as a judge the information that it is being based on uh and then
+[1:02:33] say based on the same information that the jud that my agent collected, did it
+[1:02:38] do a good job of writing the report? This is this way they are on a level
+[1:02:41] playing field. They both have the same amount of information and your slow
+[1:02:44] complicated judge agent uh can judge whether your uh quick fast uh worker
+[1:02:50] agent uh was uh doing a good job. Um so let's look at the faithfulness cells.
+[1:02:59] Uh just like everything else, these can be done
+[1:03:05] online as well as offline. So uh there is a faithfulness built-in evaluator
+[1:03:12] uh which isn't in this view. There is a faithfulness built-in evaluator which
+[1:03:16] you can pull up uh and you can give your input, output and your context to it. Uh
+[1:03:23] again, you can do this in code as well. And if you're using the skills, this is
+[1:03:26] probably what's going to happen. Your skills will say, "Oh, I'm not going to
+[1:03:29] use the UI. I'm going to use the code." Uh which is why I show it here. Um so
+[1:03:35] the first thing we do is we extract the research context from the traces. As
+[1:03:39] you'll remember, we do uh a two-step process. So I take the output from the
+[1:03:44] first step where it does the research and I attach that to all of my spans uh
+[1:03:50] as uh the context for it the judge to work on. Uh and then I run the
+[1:03:56] faithfulness evaluator. So uh here you can see spans with context. These are
+[1:04:03] the same spans that I just pulled out of AX. I attached at the column level all
+[1:04:07] of my context. Uh and then uh I called evaluate dataf frame with those spans
+[1:04:14] and I gave it my faithfulness evaluator which I instantiated here just like I
+[1:04:19] instantiated the correctness evaluator. This gives us uh much more interesting
+[1:04:24] data. This gives us unfaithful seven and faithful six. Uh
+[1:04:31] so uh roughly half the time my very simple report is hallucinating. It is
+[1:04:39] coming up with things that were not in the source data according to sonnet. Um
+[1:04:45] and that is this is a useful eval. This is an eval where we're failing half the
+[1:04:50] time. This is a capability eval where we can climb the hill, modify our prompt
+[1:04:54] and get it better at writing a grounded report. This is exactly the kind of eval
+[1:04:58] that you want. Um,
+[1:05:04] so that's two built-in evals and two very different signals. And there's a
+[1:05:07] really important lesson here, which is correctness gave us zero out of 13 and
+[1:05:10] faithfulness uh told us that reports aren't grounded in their sources roughly
+[1:05:15] half the time. The difference isn't that one eval is better than the other. The
+[1:05:18] difference is uh the use case. There are lots of use cases where that correctness
+[1:05:22] eval that I showed you earlier works just fine for some use cases. Uh it's
+[1:05:27] just not in this specific use case where we were doing live real-time research.
+[1:05:32] Um so it's important to know the question that you're actually asking.
+[1:05:38] Built-in eval are your starting point. They give you an immediate signal
+[1:05:41] without any prompt engineering. Uh but even with a good built-in like
+[1:05:45] faithfulness, uh there are a bunch of things that it can't check. uh our
+[1:05:50] financial analyst uh should produce actionable recommendations. It shouldn't
+[1:05:54] just summarize data. Um [snorts] so not just you know give you a
+[1:06:00] financial report but tell you what to do with the financial report. Should I buy,
+[1:06:03] sell or hold? Uh no built-in template checks for that. This AX is does not
+[1:06:08] cover every single use case. So you have to build a specific eval that checks for
+[1:06:12] actionability. You have to build an custom eval that is about your domain.
+[1:06:17] If you are writing real eval, you're absolutely going to have to write a
+[1:06:20] custom eval with a definition of good that we didn't think of.
+[1:06:25] So that brings us to the next step, which is writing a custom eval rubric.
+[1:06:28] This is where you make eval truly specific to your application. And
+[1:06:33] writing a good eval is complicated. So I'm going to spend a little time talking
+[1:06:37] about what makes a good eval rubric. Uh we recommend four parts of a custom
+[1:06:43] rubric. The first is to define the judge's role. Um, you should spell out
+[1:06:47] ex explicit pass and fail criteria. You should label the data with XML tags. Uh,
+[1:06:52] and you should define the output choices outside the prompt itself. Uh, I'm going
+[1:06:56] to add one more thing on top of those which is actually kind of controversial
+[1:07:00] amongst practitioners, which is I tend to include examples of good and bad
+[1:07:05] output. Uh, some practitioners believe uh that including examples will make
+[1:07:11] your uh, eval overfit. Uh but let's walk through all of those. So the first part
+[1:07:17] is defining the role. Um you'll notice this uh what is by now a tired trope
+[1:07:23] which is you are an expert financial analyst evaluator. That is not the
+[1:07:26] important part. Tests show it makes some very small difference uh to whether or
+[1:07:32] not uh your eval works. The important thing is to give it the context of what
+[1:07:37] it is looking at. You are looking at a financial report and what I am expecting
+[1:07:40] is financial analysis. Those are the important pieces of context that you are
+[1:07:44] giving the LLM there. Um you're also telling it that it should be that what
+[1:07:49] you want is something actionable. So that brings us to part two. So uh this
+[1:07:55] is where most people underinvest. Don't say a good response because that is uh
+[1:08:00] an aspiration. That is not a criterion. A good response is helpful and accurate
+[1:08:04] sounds like you're adding more detail, but you're still being just as vague
+[1:08:07] because helpful and accurate don't have any meaning as far as the LLM is
+[1:08:11] concerned. Uh instead, you should be listing exactly what makes a report
+[1:08:15] actionable. So list exactly what makes it actionable and not actionable. Every
+[1:08:19] criterion should be specific and observable. Something that if you were a
+[1:08:23] human looking at this report, you'd be able to know whether or not it was there
+[1:08:26] and you'd be able to say yes or no. Uh so contains specific recommendations.
+[1:08:32] That's something you can definitely say yes or no. Includes forward-looking
+[1:08:35] analysis, not just historical data. That's a clear distinction that you can
+[1:08:39] say yes or no to. Uh and the important thing here is that each of these
+[1:08:44] criteria maps to something we saw in our analysis. If we when we were reading the
+[1:08:49] reports uh we saw we actually observed when we read our traces or at least when
+[1:08:53] I read our traces uh that uh these are ways that these reports are going wrong
+[1:08:58] specifically that is not a coincidence. Your error analysis is what tells you
+[1:09:02] what criteria to write. You don't come up with them from whole cloth because
+[1:09:06] it's not going to occur to you. Where you get that data from is from reading
+[1:09:09] your traces and going oh it didn't do that. My axial coding said it does this
+[1:09:13] specific wrong thing. Uh so specific criteria produce consistent judgments uh
+[1:09:19] while vague criteria produce coin flips. The third thing you should do in your
+[1:09:23] rubric is you should label the data with XML tags especially if you are using
+[1:09:27] anthropic. Anthropic loves XML and finds it very easy to understand. Um your
+[1:09:33] rubric has variables the input and the output and you want to make sure that it
+[1:09:37] can tell the difference between your instructions and the input and the
+[1:09:40] output and XML tags are an excellent way to do that. Um, so put a user query tag
+[1:09:45] around the input, a financial report tag around the output. Uh, clear boundaries
+[1:09:49] reduce the chance that the judge confuses the question with the answer.
+[1:09:52] It is especially important if you're including examples uh to label the
+[1:09:57] examples with XML tags because otherwise it will go, "Oh, this is exactly what
+[1:10:00] I'm supposed to write and just spit out the example back to you."
+[1:10:04] Um, which brings us to the examples. This is the part a lot of people skip.
+[1:10:09] Uh, in my opinion, it is the part that most improves quality. LLMs are okay at
+[1:10:15] following instructions. They are increasingly good at following
+[1:10:17] instructions. But what they are really good at is copying an example that
+[1:10:21] you've already given them and replacing the things that are relevant to the
+[1:10:25] current situation. So if you give it an example of exactly the kind of report
+[1:10:29] that you're looking for, it's going to follow that format exactly. That might
+[1:10:33] or might not depending on your domain be a good idea. If you if your example is
+[1:10:38] too rigid, then the LLM will always give the same report and you have reduced its
+[1:10:42] scope for creativity. Uh but on the other hand, if it is being too
+[1:10:46] nondeterministic and your report is being crazy, uh then giving it an
+[1:10:50] example will ground it in what exactly you are expecting.
+[1:10:55] Uh here's what an actional example looks like in the template. Uh it has
+[1:10:59] everything. It has uh percentage revenue growth, a PE ratio. It identifies a
+[1:11:04] concrete risk with a number to back it up and it gives a specific
+[1:11:06] recommendation. Uh that is what actionable looks like. Here is a
+[1:11:10] non-actionable result. Uh it's not wrong. Uh everything it says is correct.
+[1:11:15] Uh but it doesn't say anything useful. It doesn't have any specific data. It
+[1:11:18] doesn't have any specific risks. It just says investors should consider various
+[1:11:22] factors. Uh that's not a recommendation. Uh so the judge now has a concrete
+[1:11:27] reference for what you actually mean by the labels that you were giving it. Uh
+[1:11:31] and this can dramatically improve consistency especially on the edge cases
+[1:11:35] where the report uh would have otherwise been somewhere in between.
+[1:11:40] Uh and this is uh an important part. It is very tempting if you're writing this
+[1:11:45] rubric to say and now spit out the word correct or incorrect because that is
+[1:11:50] what you wanted to do. You do not need to do that anymore. Uh the way that it
+[1:11:55] actually works under the hood is we have given the LLM a tool that says you call
+[1:11:59] this tool when you are done and it will call that tool with correct or incorrect
+[1:12:03] when you're done. So you don't need to tell it what output and in fact telling
+[1:12:06] it to spit out a specific string as output is more likely to confuse it and
+[1:12:10] make your eval fail. So just in the UI uh set your uh choices uh or when you
+[1:12:18] are setting the when you're creating it programmatically set the choices uh and
+[1:12:22] let the LLM do its thing. Um when you are coming up with these choices it is
+[1:12:27] best to keep those choices simple. Uh binary is best two clear labels. Uh
+[1:12:32] numeric scales like a scale of 1 to five. Uh they are tempting but the LLMs
+[1:12:39] are bad at them. what is the difference between a three and a four? You would
+[1:12:42] have to write a whole bunch of rules for the LLM to know that. Uh it doesn't know
+[1:12:46] that automatically. Uh whereas you can give it a pass fail and it will be
+[1:12:50] pretty good at deciding what is a pass and what is a fail. Uh so if you really
+[1:12:55] need more categories, you can do like a partial result. You can say a 0.5 score
+[1:12:59] is where it did a a half-ass job. Uh but by default, go for a zero or one.
+[1:13:08] Um, one more practical tip is chain of thought for judges. Ask the judge to
+[1:13:12] reason before it scores and have it explain its thinking first. Uh, this
+[1:13:17] measurably improves uh, accuracy. Uh, when the judge has to articulate why
+[1:13:22] something is actionable or not or why it is correct or not. Uh, it makes fewer
+[1:13:26] mistakes than when it just picks a label uh, without thinking first. Uh, this
+[1:13:30] explanation is also very helpful for you. Uh, but it also helps the judge
+[1:13:35] think better. Just one of those weird things about LLMs.
+[1:13:38] Uh so if you are coding along, now is the time to find your actionability
+[1:13:44] template. Uh this contains all of the example all of the instructions that I
+[1:13:50] uh was just talking about. Uh can you do better than me? Can you oneshot your way
+[1:13:54] to a perfect eval uh by modifying this eval template? Um,
+[1:14:01] as with uh all things in AX, you can do this via the UI as well. So, you can
+[1:14:06] create an online evaluator uh and you can create a new LLM as a judge. In this
+[1:14:11] case, I've already got it, my actionability evaluator
+[1:14:16] uh which has literally exactly the same text uh that I just showed you in the
+[1:14:20] notebook. Um, and as before, I had to pick a trace uh scope.
+[1:14:27] Uh, and because it's an LLM as a judge, I had to set up a template. Uh, sorry, I
+[1:14:31] had to set up an LLM for it to use in the UI. Uh, which means that you need to
+[1:14:36] give it your anthropic key. Again, uh, and I picked my inputs and outputs via
+[1:14:42] the single trace method. Uh, and then I saved it. One of the things that you can
+[1:14:46] do with online evals uh is you can set them to run continuously against new
+[1:14:52] incoming traces. This is something you'll almost certainly do in
+[1:14:54] production. Uh and if your evals [clears throat] are expensive or you
+[1:14:58] have a whole lot of traffic, you won't want to do it on all of your traffic.
+[1:15:01] You can uh set it to serve to uh rate only a percentage. That's the sampling
+[1:15:07] rate. So you can say, you know, just look at 1% of my traffic and that will
+[1:15:10] still give you uh a whole bunch of eval data without breaking your budget.
+[1:15:17] Uh
+[1:15:20] so back to the code version, wiring it up is just like wiring up the other
+[1:15:26] action the other uh evaluators that we've given. Uh we've created a
+[1:15:30] classification evaluator. We've given it a name actionability. We've given it an
+[1:15:34] LLM. Uh we've given it that template that I just showed you and we've given
+[1:15:38] it those choices. This is us programmatically doing what we would
+[1:15:41] have done in the UI where we said your choices are correct or incorrect. Uh
+[1:15:45] actionable or not actionable scores of one or zero. Uh and then uh we ran
+[1:15:50] evaluate data frame. That gives us uh the data that I was skipping over
+[1:15:57] because I was already run earlier.
+[1:16:02] So you can see actionability actionable. If we look at our evaluations tab, we
+[1:16:08] can scroll down to our actionability and we get this really great explanation
+[1:16:12] about why the report is actionable or not actionable. Uh
+[1:16:21] lots of our reports scored actionable uh but several are not which is awesome
+[1:16:26] because it means that we have again we have a capability eval uh and a hill
+[1:16:30] that we can climb. Um, so in the notebook, uh, this is where
+[1:16:36] you log your results back to AX or if you've run it online in the UI, your
+[1:16:40] evals, your eval results are already in the UI as you've seen. Um, so you can
+[1:16:46] see now in in AX that every span has multiple eval scores. It has mention
+[1:16:50] sticker, it has correctness, it has faithfulness, it has actionability. uh
+[1:16:54] and you can filter and select uh for specific uh
+[1:17:02] eval results. So,
+[1:17:10] eval.actionability.label equals
+[1:17:15] not actionable.
+[1:17:21] that finds you the failing set. This is the set that you're like, okay, my eva
+[1:17:26] my eval says that my code messed up here. I can turn this into a data set
+[1:17:30] and I can start running uh new prompts against this. I can run experiments
+[1:17:34] against this as we're going to see. Um
+[1:17:40] before we move on, I want to flag a few a few common antiatterns uh that turn
+[1:17:46] evals from a useful tool into noise. Uh the first one is to treat your eval
+[1:17:50] prompts like code. And I mean that literally. They're very sensitive to war
+[1:17:54] to wording. Small shifts in your eval prompt uh can lead to dramatic changes
+[1:17:59] in your eval results. Uh so you should version them. You should test them on
+[1:18:03] examples where you know the right answer. If the judge if the LLM as a
+[1:18:07] judge disagrees with your human labels uh on 40% of examples, then your eval is
+[1:18:12] probably wrong. It's not that the your results are wrong. It is that you have
+[1:18:15] written the eval incorrectly. uh AX has a prompt playground where you can
+[1:18:19] iterate on uh rubrics without touching your code and it's very useful for doing
+[1:18:23] this kind of iteration of your eval. Uh the second antiattern is the god
+[1:18:30] evaluator. Um it is tempting to build one big mega evaluator that checks
+[1:18:36] everything at once. It'll look for accuracy and tone and completeness and
+[1:18:38] policy compliance and formatting all in a single prompt. Don't do this because
+[1:18:42] it is a nightmare to calibrate. uh when your god evaluator says fail, which of
+[1:18:47] those five dimensions failed? You don't know. So suddenly you're like, "Oh,
+[1:18:51] well, I'll have it spit out labels." And then you're like, "Oh, it's spitting out
+[1:18:54] 15 different labels." Suddenly it's way too complicated. Uh you can't tell, you
+[1:18:59] can't judge by it, you can't score by it. It is much much simpler and easier
+[1:19:03] to split this up into uh one evaluator per dimension. I've already done this
+[1:19:08] today. I have a ticker check. I have faithfulness. I have actionability.
+[1:19:11] Three separate focused evals. and each one tells you something specific. Uh the
+[1:19:17] combination gives you a richer picture than any single eval ever could. If you
+[1:19:21] find yourself writing a rubric that lists six different things that the
+[1:19:25] response should do, then stop. That is six evaluators, not one.
+[1:19:30] Uh the third one is know your guardrails and your northstar metrics. Some evals
+[1:19:34] are guard rails. They're ship blockers. If an agent hallucinates a stock price,
+[1:19:38] that is a hard fail. Don't ship on that. Uh others are northstar metrics. they
+[1:19:42] are aspirational. So always recommend complimentary investments is a nice to
+[1:19:47] have in this case. It is not a dealbreaker. Uh so know which of your
+[1:19:51] eval is which. It changes how you act on the results and later it changes how you
+[1:19:55] set up your production monitors. A guardrail uh regression should page
+[1:19:59] someone in the middle of the night. A northstar dip is something that you look
+[1:20:02] at in a weekly report.
+[1:20:06] Which brings us to the next section which is can you trust your judges? This
+[1:20:09] is a question we've been dancing around. I've mentioned it a couple of times. Uh
+[1:20:13] it's time to evaluate your evaluator. We built an LLM judge and it told us that
+[1:20:18] some reports are not actionable. Uh but can we trust it? How do we know that the
+[1:20:23] judge is correct? Uh the key mental model here is that your judge is a
+[1:20:29] classifier. So you can treat it as a classifier. It takes an input in this
+[1:20:32] case a financial report and it makes a prediction actionable or not actionable.
+[1:20:37] That prediction can be right or wrong. So just like any classifier, you can
+[1:20:40] measure its performance by comparing its predictions against ground truth. In
+[1:20:45] this case, a human's judgment. Uh you can check the judge's homework. Um the
+[1:20:51] thing about applying judgment is that it is a ton of work. You have to read
+[1:20:55] actually every single output. Uh you have to think hard and apply a label. Uh
+[1:21:00] AX does what it can to help by letting you define annotations and attaching
+[1:21:03] them to spans uh right in the UI. So, let me show you what that looks like.
+[1:21:11] When you're looking at a span, you can click annotate span and you can add and
+[1:21:15] remove annotation configs. In this case, I've already created one called human
+[1:21:19] actionable. And you can set this span as being actionable or not actionable. And
+[1:21:23] then you can just use these little arrows to flip through all of your
+[1:21:26] traces and set them as actionable or not actionable, which I have conveniently
+[1:21:30] already done. Uh this is the kind of work that you can give to a nontechnical
+[1:21:36] member of staff. That is why the UI looks like this. They can just click in,
+[1:21:39] read the report and click a checkbox. They don't have to write any code. They
+[1:21:43] don't need to know anything other than their domain expertise of whether or not
+[1:21:47] this report should be considered actionable or not actionable.
+[1:21:52] What we're doing here when we add human annotations is building a golden data
+[1:21:56] set. Building golden data sets is incredibly helpful uh because it's how
+[1:21:59] you measure uh whether your evaluator is actually doing its job. Uh the way to do
+[1:22:04] it is the same thing uh the LLM did. Give yourself real concrete criteria and
+[1:22:09] stick to them. So don't say this was good, this was bad. Uh be specific the
+[1:22:13] same way that you've told the LLM to be specific. You failed at this specific
+[1:22:17] thing. You asked I this thing was supposed to be present and it wasn't. uh
+[1:22:21] and eliminate the chance to get lazy uh when you get tired of labeling. Um
+[1:22:28] as I said uh the labeling is extremely uh timeconuming so I did it already. Um
+[1:22:37] once I've labeled some spans in the UI uh I can reexport the spans into the
+[1:22:41] notebook. Um, and this is a nice thing about AX is
+[1:22:46] that the human annotations that I added by hand come back as columns uh in the
+[1:22:50] export. Um, so we filter down to just the rows that I labeled
+[1:23:02] here. Uh, [clears throat]
+[1:23:06] and now we're going to compare uh what I said was actionable and not actionable
+[1:23:11] to what the judge says is actionable or not actionable. Um,
+[1:23:17] before we talk before we do that though, uh, a little bit more about golden data
+[1:23:22] sets, uh, keep your tasks unambiguous. If your agent scores 0% consistently,
+[1:23:28] that's almost always a broken task. That's almost always, uh, you've written
+[1:23:32] your rubric incorrectly. uh if you've made your task something that only a
+[1:23:37] human can do or worse that somebody something nobody could really do uh then
+[1:23:41] you're going to get a zero score. Um so for each task create a reference
+[1:23:46] solution a known working output that passes all of your graders. This proves
+[1:23:50] that the task is solvable and you should also test in both directions. You should
+[1:23:54] have cases where a behavior should occur and cases where it shouldn't. So if you
+[1:23:59] test for instance does it search the web uh then you will end up with a uh an
+[1:24:06] agent that always searches the web even when it doesn't need to. Whereas you
+[1:24:09] should also have a test that says did it not search the web for this very obvious
+[1:24:14] answer where it didn't need to do that. Uh and if you're doing this for real you
+[1:24:18] should split your label data that you just created uh into a development set
+[1:24:22] and a test set. Uh so use maybe 75% of your labels to it to to iterate on your
+[1:24:28] eval uh tweaking criteria, adjusting examples until the judge agrees with
+[1:24:32] you. Then hold out the remaining 25% to run the judge and see that it actually
+[1:24:37] gets the scores that you are expecting. Uh that's how you know that the judge is
+[1:24:41] actually generalizing to new examples instead of just fitting to the specific
+[1:24:45] data set that you gave it. Uh this is the same principle as train tests,
+[1:24:49] splits in machine learning. Don't overfit your evaluator to your golden
+[1:24:53] data set.
+[1:24:56] Now let's look at our actionability judge.
+[1:25:01] I have run the judge on some examples and it has come up with uh a list of
+[1:25:06] where they agree and disagree. Uh spoiler alert I just hit actionable and
+[1:25:11] not actionable at random uh so that I would get lots of disagreement because
+[1:25:15] actually Sonnet is pretty good at this stuff. Um [snorts]
+[1:25:18] that gives us uh an agreement rate of 46% six out of 13 times. Um
+[1:25:28] in real life uh this is exactly where you dig in. This is where uh you would
+[1:25:34] ask is my rubric wrong or were my human labels wrong. When the judge disagrees
+[1:25:38] with you, you should read its explanation and decide whether or not
+[1:25:41] the judge was right or you were right. Uh that is the most valuable output of
+[1:25:45] meta evaluation. It usually reveals an ambiguity in the rules that you set
+[1:25:50] down. To fix a rubric, you should read the explanations on the disagreements,
+[1:25:54] find the ambiguity, uh, and tighten the criteria. So, instead of just includes
+[1:25:59] forward-looking analysis, I'd write includes forward-looking analysis with
+[1:26:03] specific recommendations or guidance. That's more precise. Uh, it rules out
+[1:26:07] the case where the report talks about the future, but never tells the judge
+[1:26:10] what to do about it. Uh then I'd rerun the judge on the same examples and see
+[1:26:14] if the disagreement goes goes away. Uh this is rubric iteration. Your eval
+[1:26:19] prompt is an application. Uh it is another LLM application. Uh so it needs
+[1:26:24] testing and iteration just like your agent does. Uh and that is what I meant
+[1:26:27] when I said that you should treat your evals like code.
+[1:26:32] So now I'm going to talk very briefly about an ML concept called precision and
+[1:26:36] recall. Uh, precision asks, when the judge says not
+[1:26:42] actionable, how often is it really not actionable? Uh, and recall asks, of all
+[1:26:47] the reports that are actually not actionable, how many did the judge
+[1:26:50] catch? Uh, with a tiny sample like uh 12 examples, these numbers are going to
+[1:26:56] judge jump around a lot. Uh, but even with the 12 that I have, uh, you can see
+[1:27:02] whether the judge is in the right ballpark or completely off. In most
+[1:27:06] scenarios, you want to uh you want to prioritize recall. These two
+[1:27:11] measurements are at odds with each other. If you are if you prioritize
+[1:27:17] recall, then you're going to get false positives where the judge has said
+[1:27:21] something is wrong when nothing is wrong. That is much better than
+[1:27:24] accidentally letting through things that are wrong. Uh however, some in some
+[1:27:30] cases when you are tuning, you will say actually I want precision. I want it to
+[1:27:33] be absolutely right when it's right and I don't care if it misses some things.
+[1:27:36] There are domains where that is the output that you want, but most of the
+[1:27:39] time uh you want to prioritize recall. Um
+[1:27:46] a few known pitfalls with using an LLM as a judge. Um one is position bias. If
+[1:27:52] you present it with two options to judge between, uh the judge tend to favor
+[1:27:56] tends to favor whichever comes first. Uh this depends on the model. Sometimes the
+[1:28:01] model depends uh prefers whichever comes last but it always has some kind of
+[1:28:05] preference to position. Um there's also length bias. Uh LLMs like longer
+[1:28:11] responses. They tend they tend to score those higher and that say that they are
+[1:28:14] better even if the length extra length is just filler. Uh and the last one I
+[1:28:19] love which is confidence bias. The judge gets fooled uh by a response that sounds
+[1:28:23] confident just like humans do. If your LLM says things that are wrong, but it
+[1:28:27] says them in a really confident tone, uh, your LLM judge is more likely to
+[1:28:31] believe them. Um, there's also self-preference bias. If you use the
+[1:28:36] same model to do the generation as you use to do the judging, they tend to like
+[1:28:41] their own output. So, if possible, use both say OpenAI and Anthropic. Use one
+[1:28:46] to do your agent and one to do the judging and they are less likely to
+[1:28:50] agree with each other. uh self-preference bias is why I used
+[1:28:56] sonnet as a judge uh for output generated by haiku. Uh but it works even
+[1:29:01] better if you use a different uh labs model entirely.
+[1:29:06] And remember that the benchmark here is human performance. Humans are not going
+[1:29:10] to be perfect at judging whether things are or are not actionable. They are
+[1:29:15] going to get it wrong quite a lot of the time. What you're trying to do is come
+[1:29:18] up with an eval that is reasonably close to human judgment. Uh human judgment
+[1:29:24] also varies from human to human. Human inter interrator reliability, so two
+[1:29:29] humans judging the same thing uh is often as low as 02 or.3. So two experts
+[1:29:34] with the same output and the same rules disagree a surprising amount of the
+[1:29:39] time. So if your judge, if your LLM judge achieves that uh higher
+[1:29:43] consistency than humans, then it is doing better than humans. the judge uh
+[1:29:48] sometimes disagrees with me is not by itself a reason to distrust it. You what
+[1:29:52] you're looking for is a judge that disagrees with you all of the time. That
+[1:29:56] is the danger signal. A judge that disagrees with you some of the time is a
+[1:29:59] judge uh correctly handling a genuinely ambiguous task.
+[1:30:06] Uh and also failures should seem fair. That is a principle from Anthropic Eval
+[1:30:11] teams that I want to leave you with. When a task fails, uh, it should be
+[1:30:15] clear what the agent got wrong and why. If you look at a failing trace and you
+[1:30:19] think that answer looks fine to me, the problem is probably the eval and not the
+[1:30:23] agent. So, uh, now we've built evals, we've
+[1:30:29] tested them, uh, let's use them to actually improve our agent.
+[1:30:34] This is how you close the loop. Uh, here's the problem with one-off fixes.
+[1:30:41] Um, if you found some failures, you've read some explanations, you know what to
+[1:30:45] improve, you change the prompt, and then what? How do you know uh whether the fix
+[1:30:49] actually worked? How do you know if it didn't break something that was working
+[1:30:52] before? If you just run the agent again on a couple of examples and eyeball it,
+[1:30:56] then you're back to vibes. Uh, you need a structured way to compare before and
+[1:31:01] after. And as I mentioned earlier, this is what experiments are for.
+[1:31:06] As I showed you earlier, uh you can filter your traces down to just the ones
+[1:31:12] that are failing and you can turn them into a data set like this. So you select
+[1:31:17] all of your traces, you click add to data set, and you create a new data set.
+[1:31:21] In this case, uh I've called it AIEWF financial demo fails. Uh and I've
+[1:31:26] already created my failure data set. But this gives you a smaller set of places
+[1:31:32] where you know that your eval is failing so that you can then run uh your changed
+[1:31:38] prompt against just them. This is faster and cheaper. Um
+[1:31:43] this is a regression test set. uh sorry you should also save a regression test
+[1:31:48] set rather you should get the ones where it is not failing and make sure that
+[1:31:51] those are also a data set that you can check less frequently to make sure that
+[1:31:55] when you've changed your model sorry when you've changed your rubric uh that
+[1:31:59] you haven't accidentally made it fail in places that it was succeeding before
+[1:32:04] um
+[1:32:08] and your data sets are not static um pre-production when you don't have users
+[1:32:13] yet your data sets are probably going to be synthetic queries you generated
+[1:32:16] yourself or queries that you got an LLM to generate for you. That is fine. It
+[1:32:20] gets you off the ground. As soon as real traffic starts coming in, you should
+[1:32:24] turn your uh that into your eval sets. Uh real failures should replace imagined
+[1:32:30] ones. The union of your failure cases and your passing cases is what people
+[1:32:34] call your golden data set. Uh the curated labeled set you trust as ground
+[1:32:39] truth for measuring quality. Uh
+[1:32:43] now we're going to improve our agent. Uh but we are not going to handw write the
+[1:32:47] fix. Uh as I mentioned, you can do all of
+[1:32:52] this with skills. You can do all of this with a coding agent. I am assuming it
+[1:32:55] being 2026 that absolutely everyone is using a coding agent to do all of their
+[1:32:58] coding. Uh so why would you modify your prompts by yourself when you can get
+[1:33:04] cloud code to pull down your failing traces uh modify your code for you uh
+[1:33:09] and improve your application for you? That is what we're going to do here. Um
+[1:33:15] Claude will pull down all of the failing traces. It will read all of the
+[1:33:18] explanations. It will turn the explanations into action action that it
+[1:33:22] takes on your codebase. Um
+[1:33:26] and here's the important thing. Nothing here is guessed. Claude isn't inventing
+[1:33:29] improvements out of thin air. You haven't just told it get better at this.
+[1:33:33] You haven't just told it make no mistakes. Uh every change it proposes is
+[1:33:37] traces back to a specific failure explanation. Uh so if the judge said
+[1:33:42] that it lacks specific recommendations, uh Claude will read that and rewrite the
+[1:33:47] prompt so that it does. Uh if the judge said that it presents risks without
+[1:33:51] supporting evidence, then it will rewrite the prompt so that it fixes that
+[1:33:54] too. This is datadriven prompt engineering. uh and now we can automate
+[1:33:58] it. Uh
+[1:34:02] so notice what we've passed in. Uh we've passed in our requirements, what we were
+[1:34:07] trying to get done. Uh and we've passed in uh an improvement prompt telling it
+[1:34:13] uh what you should be working on and how to get better at it. This is yet another
+[1:34:18] LLM application and yet another thing that is nondeterministic and yet another
+[1:34:22] way that it can go wrong. You could, if we had more time, meta-evaluate your
+[1:34:27] meta evaluator of your meta evaluator and make sure that your meta evaluator
+[1:34:30] is doing the right thing. But we're not doing that here because it gets too
+[1:34:33] complicated and also we only have so much time. Um,
+[1:34:38] but uh good requirements keep claud. So you should be spending time making sure
+[1:34:44] that this uh evaluator uh is as accurate as you can make it.
+[1:34:50] Uh so in this case we are taking this prompt and we are wiring them into uh
+[1:34:58] our two pass uh we're taking the recommendations that we got from Claude
+[1:35:03] based on pulling the uh failing traces uh and we are passing them back to
+[1:35:09] anthropic and saying based on these explanations write a better prompt write
+[1:35:13] a better research prompt write a better write prompt and then we're going to
+[1:35:16] feed them back into our agent. Um,
+[1:35:22] and now we're going to run an experiment. So, uh, over in the UI, we
+[1:35:27] have data sets and experiments. We have my demo financial fails. Uh,
+[1:35:33] we can,
+[1:35:37] assuming I can scroll, wire up an improved agent, uh, using
+[1:35:42] those new improved prompts. So, you can see the improved research prompt and the
+[1:35:46] improved write prompt. this is otherwise exactly the same agent that it was
+[1:35:49] before. Uh and you can create an evaluator uh with an experiment. Uh
+[1:35:57] so what we're doing here is we're giving it a task. A task can be anything. So a
+[1:36:03] task could be some subcomponent of what your agent did. So if we were running an
+[1:36:08] evaluator that was about uh tool calls then your task could be just call this
+[1:36:13] tool and see what the output of the tool is and then you would evaluate that. In
+[1:36:17] this case my task is run the entire agent again from start to finish but it
+[1:36:22] doesn't need to be uh and then we are running the same evaluation results uh
+[1:36:27] against our uh against this new running of the task. So, we've changed the
+[1:36:33] agent. We've rerun the agent, and we're rerunning the eval. And we're turning
+[1:36:37] that into an experiment. This is what the experiment looks like.
+[1:36:41] Experiments.run. We've given it a name. We've given it the data set that it
+[1:36:45] should work on. Uh, we've given it the task. We've given it the evaluator. And
+[1:36:49] we've told it to run. Uh, this gives us the results
+[1:36:56] which are here. So for every single run uh we've got the
+[1:37:04] output that it got and the new eval score. So uh as you can see this was a
+[1:37:11] data set if you recall where previously all of them were not actionable. Uh the
+[1:37:16] eval has run and you can see that some of them are now actionable. So we have
+[1:37:19] improved and if we look at the overall score here actually I've nailed it
+[1:37:25] because I had you know a lot of chances to get this right. I have oneshotted my
+[1:37:29] prompt. uh from getting being wrong 50% of the time to being right right 100% of
+[1:37:34] the time. Uh real eval won't work like that. Uh real iteration won't won't run
+[1:37:41] so smoothly. That is why this is a graph. What you're expecting to do is
+[1:37:45] run experiment after experiment and slowly watch the graph climb as your
+[1:37:49] evals get more and more capable. That is the hill that I'm talking about that
+[1:37:52] you're trying to climb. Uh
+[1:37:58] so the key abstraction behind experiments is that a task is just a
+[1:38:02] Python function. It takes an example from the data set. It runs whatever you
+[1:38:05] run want and it returns an output. So AX doesn't care uh what the task does
+[1:38:10] internally. So it could run the full agent or just one component like I said
+[1:38:13] or it could call an API as long as it takes an input and returns an output.
+[1:38:17] You can run experiments on it. The power of experiments is controlled comparison.
+[1:38:23] So you take the same inputs, the same evaluators and the only thing that
+[1:38:27] changed is the agent's prompts. Uh that means any differences in scores is
+[1:38:31] attributable to your change. You're not wondering did it score higher because of
+[1:38:35] my prompt change? Uh or did it score higher because the web search happened
+[1:38:39] to return better results this time. Well, actually you're still wondering
+[1:38:43] that a little bit because the agent is nondeterministic. So it could have done
+[1:38:46] 10 web searches instead of five web searches. But you've eliminated a major
+[1:38:49] source of variation which is the test cases.
+[1:38:54] >> [sighs] >> So like I said, uh my agent has one shot
+[1:38:58] at this uh which is great, but in reality uh it's not going to be that
+[1:39:03] simple. Um the eval iterate cycle that we're talking about here where you go
+[1:39:09] through uh run an experiment, change your prompt, run the experiment again
+[1:39:14] over and over and over. That is where the real value lies. Uh not in the score
+[1:39:18] itself, but in the cycle. You run the evals, you look at the failures, you
+[1:39:22] read the explanations, uh, you identify a pattern, and you adjust your prompt or
+[1:39:26] as in this case, you get Claude to adjust your prompt for you. Um,
+[1:39:33] did it get better is a question that can only be answered by evals. You have
+[1:39:36] taken the definition of good and you have codified it in a way that is
+[1:39:40] incredibly useful. Uh, so this allows you to move from I think it's working to
+[1:39:45] I can prove it's working. A practical question that comes up fast
+[1:39:50] uh is how many samples do you need? Um for workshop scale experiments like
+[1:39:54] today, 12 to 20 examples gives you uh directional signal. For actual shipping
+[1:39:59] decisions, you're going to want uh more. You're going to want something like 200
+[1:40:02] to 400 is a good target. But note that 200 to 400 is still like a humansized
+[1:40:07] number that you could possibly accumulate over a couple of weeks. Uh
+[1:40:11] it's not tens of thousands or millions like you would use if you were training
+[1:40:14] an ML model. um there are diminishing returns. Uh to have your your margin of
+[1:40:21] error, you have to quadruple your sample size. Uh so at some level, at some
+[1:40:26] point, you have enough signal to be able to get along uh to get along.
+[1:40:30] Um when you're iterating, where do you invest? Uh there's a hierarchy. Um data
+[1:40:36] quality fixes have the highest impact. If your agent is searching the wrong
+[1:40:40] sources or your knowledge base has stale information, then no amount of prompt
+[1:40:43] iteration is going to help. you should fix the data first. Uh then prompting
+[1:40:48] improvements are next. Few shot examples, explicit instructions, the
+[1:40:51] kind of stuff that I mentioned today, uh constraints on what the agent should and
+[1:40:55] shouldn't do. These are often the highest ROI change uh to your agent. Um
+[1:41:02] model selection comes third. Sometimes a more capable model solves problems that
+[1:41:06] prompting can't. Uh but it will also cost more and be slower. So that is a
+[1:41:10] trade-off that you have to make. Uh the thing to not spend a lot of time on is
+[1:41:14] hyperparameter tuning. Things like temperature and top p. It's very
+[1:41:17] tempting to just go for them because they're easy to tweak. Uh they very
+[1:41:21] seldom make a high lever change like prompting would or improving the quality
+[1:41:25] of your data would so you can try them but they should be the last thing you
+[1:41:29] try. A practice worth knowing is eval driven
+[1:41:33] development. Write the eval before you build the feature. Uh if you want your
+[1:41:37] agent to always verify customer identity before it does something before
+[1:41:40] processing a refund for instance then write the eval that checks for that
+[1:41:44] first. That gives you a clear measurable definition of what good looks like of
+[1:41:48] what done looks like. Then you can build a feature uh until the eval passes. This
+[1:41:53] is the same philosophy as test-driven development.
+[1:41:59] Uh and something I love about eval driven development is that the people
+[1:42:03] closest to product requirements are best positioned to define success. So product
+[1:42:07] managers, customer service uh people, even salespeople can contribute to eval
+[1:42:13] tasks. They can tell you what looks good and what doesn't look good in practice.
+[1:42:17] Uh they don't need to write code. They just need to describe in natural
+[1:42:20] language what good looks like to them. And you can boil that down into your
+[1:42:25] Eval rubric. Uh,
+[1:42:30] and so far, uh, I've shown you how to do things both offline and online. Uh,
+[1:42:37] we've been doing everything in a notebook. Uh, but you're not really done
+[1:42:41] when your dev experiment tra pass passes. Uh, you're done when your agent
+[1:42:45] uh, keeps performing in production on traffic that you've never seen. Um and
+[1:42:50] it's worth spending a couple of minutes talking about that even though uh we're
+[1:42:53] going to stick in the notebook uh for this workbook for this work session. Um
+[1:42:59] the first thing is online eval uh like I said uh and like I showed you earlier
+[1:43:04] online evals are exactly what they sound like. They take the evaluators that you
+[1:43:07] wrote today uh the ticker check the faithfulness the actionability uh and
+[1:43:11] run them automatically on incoming production traces. The same a val
+[1:43:15] running on new data. Uh I showed you how to run this on a trace. AX lets you do
+[1:43:21] this at three scopes. You can run your evals at the span level. So you can say
+[1:43:25] this particular LLM call, this particular tool call, run a trace on it
+[1:43:29] every single time. Sorry, run a eval on it every single time. Or you can run it
+[1:43:32] at the trace level where it has the full tree to look at uh and it can evaluate
+[1:43:37] everything from start to finish. Um you pick the scope that matches the question
+[1:43:42] that you're asking. Um, and you don't need to run evals on every single
+[1:43:46] prediction trace I uh production trace rather. Um, LLM judges cost money and at
+[1:43:52] production uh scale those costs can add up. So you sample 10% of your traffic or
+[1:43:57] 1% of your traffic. Uh, and that gives you a directional signal without you
+[1:44:01] having to run an expensive LLM as a judge on every single iteration, every
+[1:44:05] single uh, instance of your application. Um
+[1:44:11] if you don't want to write your evals by hand uh we have good news for you which
+[1:44:15] is that uh we have built an agent into AX itself. It is called Alex. Um, you
+[1:44:22] can describe your eval in plain English or you can get your non-technical uh
+[1:44:27] colleagues to describe a pro describe the definition of good in plain English
+[1:44:31] and Alex will actually manipulate the UI for you uh create an eval write the
+[1:44:36] rubric set all the scores correctly get all the configuration correct and then
+[1:44:40] just tell you that it's done. Uh this is especially useful for non-engineers. Um
+[1:44:47] and the full loop in production looks like this. So you go from application uh
+[1:44:51] which produces traces to online evals which grade those traces and produce
+[1:44:55] labels and explanations. The eval labels feed into monitors which we didn't cover
+[1:45:00] today. Um the monitors can alert your team when something goes wrong. Um the
+[1:45:05] team can investigate, find the failing traces, save them as a regression data
+[1:45:09] set, um improve the agent, run an experiment to verify and ship the fix.
+[1:45:14] And then the loop can run again. Um, as new production traffic accumulates, you
+[1:45:20] will accumulate new failure modes, you will accumulate new edge cases. Uh,
+[1:45:24] you're always going to be uh iterating on your evals and iterating on your
+[1:45:29] production monitoring.
+[1:45:32] But it is a payoff that compounds. Every failure that your online evals catch
+[1:45:36] becomes a new test case. You save it to a data set and now it's a regression
+[1:45:40] test for your next round of changes. Over time, this creates a data set that
+[1:45:44] is unique to your application. Uh so your specific failure modes, your
+[1:45:48] specific users, your specific quality bar, nobody else has that data. Uh and
+[1:45:53] that is a competitive advantage that grows every single time your agent runs.
+[1:45:59] There's one last pattern that I want to leave you with uh which is the most
+[1:46:02] powerful one I know. We did the simplest version today. We fed the judges
+[1:46:06] explanations back to Claude and had it rewrite two prompts. This works
+[1:46:10] beautifully for two prompts. Uh but a real system isn't two prompts. prompts
+[1:46:14] scattered across many files, retrieval settings, tool definitions, all tangled
+[1:46:18] together. Rewriting that isn't a single API call. It's a job for a coding agent
+[1:46:23] uh that can see your entire repository. Um so this is the pattern. You want to
+[1:46:28] export your failing traces from ax along with their explanations uh and hand the
+[1:46:33] whole batch to cloud code or cursor or another coding agent as context. Uh this
+[1:46:38] is where the Arise skills plugin that I mentioned at the beginning uh works
+[1:46:42] really well because you don't have because you don't have to know how to
+[1:46:46] call our API. You don't have to know how to do any of that stuff. You give it the
+[1:46:50] skills and then tell cloud code, hey, pull down some traces, see what's wrong,
+[1:46:54] and make make my application better and it works. Uh
+[1:47:00] there should be two guardrails on that approach first. However, first you
+[1:47:03] should feed it your requirements too and not just the failure explanations. So
+[1:47:06] the goal isn't make the eval pass because otherwise it will cheat. It will
+[1:47:11] include all of your test data into its eval uh and automatically pass all of
+[1:47:14] your evals. So you have to make uh um your you have to make sure that your
+[1:47:21] requirements to your cloud code are clear that you don't want it just to
+[1:47:24] pass the evals. You want it to do this specific thing which then makes the
+[1:47:27] evals pass. Um and second, you should tell it to find themes and not chase
+[1:47:32] individual failures. It's very tempting for claude code to look at one
+[1:47:36] particular failed trace and write a whole bunch of code to fix that
+[1:47:39] particular failed trace when there are actually 10 failing traces that are all
+[1:47:42] the same co cause that it should be focused on instead. Uh I'm not going to
+[1:47:47] do all of that time all of that because I only have 12 minutes left. Uh
+[1:47:52] but um once you have eval this is one of the highest leverage things that you can
+[1:47:58] do with them. So let's step back and look at the whole
+[1:48:03] shape of it. Uh production produces traces. Online eval them and produce
+[1:48:07] explanations. A coding agent reads the explanations and proposes fixes. And
+[1:48:11] experiments verify that the fixes work and then you ship. The production
+[1:48:15] traffic that comes back gets graded by the same online evals that started the
+[1:48:20] loop. Uh and this is the software development life cycle closing in on
+[1:48:24] itself. uh your AI software is helping you improve your AI software and AX is
+[1:48:28] the substrate uh that ties it all together. Your traces, the evals, the
+[1:48:33] explanations, the data sets, the experiments, the online evals and the
+[1:48:36] monitors. So just to recap, we instrumented an
+[1:48:42] agent with two lines of code. We traced it and we read our data. We wrote a code
+[1:48:46] eval and built-in LLM evals. We wrote a custom rubric from scratch. We validated
+[1:48:50] our judge against human labels. Uh we saved failures at the data set. We had
+[1:48:54] Claude improve the prompts. We ran an experiment to prove that it worked. Uh
+[1:48:59] and we saw how AX takes all of that into production uh with online evals.
+[1:49:05] Uh this is the full loop and now you know all of it. However, you don't have
+[1:49:10] to do all of it at once. This has been two hours of extremely dense information
+[1:49:14] and I'm aware of that. You can start very very small. Uh you can start by
+[1:49:19] reading your traces. Just add those two lines of code and start looking at your
+[1:49:22] traces and that is already that is immediately going to give you
+[1:49:25] information about what your agent is up to that you didn't know. Uh 15 minutes
+[1:49:30] of reading real outputs will teach you more about your application than an hour
+[1:49:33] of building dashboards. Then write one code eval. Code evals are easier than
+[1:49:37] LME evals and they're faster and they're cheaper. Uh and make it for the thing
+[1:49:41] that matters most. So correctness, faithfulness, whatever fits your use
+[1:49:45] case. Run them, look at the results, see what patterns emerge and build from
+[1:49:49] there. Evals are infrastructure. They are not
+[1:49:53] an afterthought. Some teams create evals at the very start of development. Add
+[1:49:56] others add them later once they are at scale. Uh but either way uh the
+[1:50:01] important thing is that you treat evals as a core part of your system. They
+[1:50:05] should be as routine as unit tests and the value compounds but only if you keep
+[1:50:10] investing. Each time a regression shows up before it show reaches your users
+[1:50:14] instead of after you'll understand why all of this work is worth doing. Don't
+[1:50:18] hope for great. You can get to great systematically by specifying it,
+[1:50:23] measuring it, and improving towards it. So, now is the time to try this for real
+[1:50:28] on an app of your own. Uh, you've already got an AX account, I hope, by
+[1:50:33] the time the Wi-Fi kicked in. Uh, the docs at arise.com uh have companion
+[1:50:40] notebooks with runnable code for everything that we covered today. Uh,
+[1:50:44] and if you want your coding agent to do the heavy lifting, you can install the
+[1:50:47] Arise plugins, uh, the Arise skills plugin with one npx command. Uh, and
+[1:50:52] that is in that link is in today's notebook. Uh, if you've made it all the
+[1:50:57] way to the end of this, you can also get a free year of Arise Pro uh, using that
+[1:51:02] code that's at the on the screen right now. And that is it. Thank you all for
+[1:51:06] your time and attention. [applause]
+[1:51:24] >> [music]

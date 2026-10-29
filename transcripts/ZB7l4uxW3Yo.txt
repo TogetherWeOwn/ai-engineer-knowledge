@@ -1,0 +1,305 @@
+# title: Breaking the Chain: Agent Continuations for Resumable AI Workflows - Greg Benson
+# source: https://www.youtube.com/watch?v=ZB7l4uxW3Yo
+# speaker: Greg Benson
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T12:48:42Z
+# sha256: 52344692fd922a7192674845281e582f013c3496bde8df74606d42c794ff0a32
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:00] So, you've built some agents and they're working. Actually, they may be working
+[00:04] really well, doing amazing things. And now you want to put these agents into a
+[00:08] production setting. What are the other things you have to worry about? For
+[00:12] example, do your agents need some form of human approval during their
+[00:15] processing steps? Will your agents be running for long periods of time in the
+[00:19] presence of failure? How do you address these issues? Today, we're going to be
+[00:24] learning about a new mechanism that addresses both these issues, and I'm
+[00:27] really excited to talk about it. So, let's get
+[00:35] started. Hi, I'm Greg Benson. I'm a professor of computer science at the
+[00:39] University of San Francisco and I'm chief scientist at Snaplogic. And today
+[00:44] I'm excited to talk about a new mechanism that we've developed at
+[00:47] Snaplogic called agent continuations. Agent continuations allow you to capture
+[00:53] the full state of complex agents that can be used both to do arbitrary human
+[00:58] and loop processing and also be the basis for reliable agent continuation
+[01:05] through taking snapshots. This work came out of the agent creator research group
+[01:10] at Snaplogic. First, let's talk about the general challenges that we face with
+[01:16] agents today. First of all, there's a lot of concern about where the human
+[01:20] sits relative to agent processing. That is for people to get comfortable with
+[01:26] agent automation. Key aspects of agent execution require some amount of human
+[01:32] oversight. And so there's been lots of work and lots of techniques for
+[01:38] including human in the loop. I'm not going to go over all of those, but
+[01:44] essentially the agent will get to a point where there's a designated tool or
+[01:48] task that might be a high value or high risk task like transferring a lot of
+[01:56] money or deleting an account. And we need a way to ensure that when the agent
+[02:01] gets to that point that in some manner it gets to the human, the human can
+[02:06] provide the final determination or decision. Another problem with agents is
+[02:12] that many of them will be long running. Um there's lots of steps in agentic
+[02:17] processing and the longer that any process runs, the greater chance that
+[02:22] there may be a failure. And we'd like some way to not lose all the work that
+[02:27] an agent has done and be able to potentially uh checkpoint our agent
+[02:33] state to be able to resume from a point that is not the beginning. And finally,
+[02:40] uh, increasingly agents are going to be operating in a distributed environment
+[02:44] and not just on your desktop, for example. And so what are the
+[02:48] considerations for running agents in a scalable distributed environment? Let's
+[02:53] talk about basic agent execution just so we can level set for the rest of the
+[02:59] talk today. An agent is essentially a loop that
+[03:04] involves calls to an LLM that specify potential tools for that LLM to use. And
+[03:10] if the LLM determines that it needs to use those tools, it will come back to
+[03:13] the agent loop, which will then call the tools on behalf of the LLM request and
+[03:19] collect the tool results and send them back to the LLM. And it does this in a
+[03:24] progressive loop. LM tool call LLM tool call and so on. Now, it's also possible
+[03:31] that a tool can be an agent itself and that's illustrated in the picture here.
+[03:37] We have a sub agent. So, this is the basic agent processing setup. Pretty
+[03:41] standard across agent frameworks today. Clearly, there's a lot more going on.
+[03:45] There's a lot of interaction and this gives us a detailed view of the
+[03:49] interactions I just mentioned. The mo main point of this is to to indicate
+[03:53] that even simple agents have quite a bit of interaction with the LLM and with the
+[04:00] tools. So what are some of the agent execution scenarios that we're concerned
+[04:05] with addressing? I've mentioned tool calls that require human approval. This
+[04:11] is a common idiom that is uh a tool call is an access to something in the
+[04:16] environment. something that may require uh human approval for the access itself
+[04:22] or it may be an action in the environment like like a deleting
+[04:26] account, transferring money, um doing something of consequence. And in those
+[04:32] situations, it's desirable to allow the human an opportunity to approve that
+[04:39] request. Another situation that can happen, it happens to me all the time
+[04:44] with coding assistants is the landscape of LLM and the LM APIs is changing
+[04:50] rapidly and their use is is dynamic and often new models come out, they get
+[04:59] used heavily and you might encounter rate limiting and there's other reasons
+[05:02] you might encounter rate limiting. uh but there are different ways to handle
+[05:09] this situation and we should seek mechanisms in the presence of this and
+[05:14] finally I mentioned longrunning agents uh especially agents that have to do
+[05:19] very complicated tasks or extensive research to to multiple systems either
+[05:25] external to your organization or internal to your organization. um the
+[05:28] longer that the agent runs, the more susceptible it is to some potential
+[05:33] failure, either some sort of network failure or hardware failure. Um and as
+[05:39] these sophisticated agents run longer, we would like a way to not lose all of
+[05:46] the work that the agent has done. So, so we want to also tolerate failures in the
+[05:52] presence of longunning agents.
+[05:57] Another thing I want to elaborate on is the fact that in increasingly agents
+[06:04] are becoming more sophisticated in the sense that not only will you have say a
+[06:10] single level agent that has its access to an LLM and its tool calls but you may
+[06:17] have an agent configuration in which you have a main agent or an orchestrator
+[06:21] agent and then several sub aents. In fact, those sub aents could have their
+[06:25] own sub aents. This is this pattern is is becoming quite common. So then the
+[06:30] question is in the presence of these more sophisticated multi-level agents,
+[06:34] how are we going to deal with those two primary
+[06:40] uh primary tasks that I mentioned earlier, human approval and state saving
+[06:46] in the presence of failure. The last concept I want to talk about is what I'm
+[06:51] calling agent loop persistence. And this is the idea of if you have an agent
+[06:56] running, there is this loop. That code that actually is doing the loop has to
+[07:01] run somewhere. It has to be on a physical machine running. It might be in
+[07:05] the cloud. It might be in your desktop. It it could be in in many locations.
+[07:08] That agent loop is going to be interacting with the user in some
+[07:12] manner. Maybe you're doing it from the command line. Maybe you have a web app.
+[07:17] Um maybe it's interacting through some sort of third-party communication
+[07:21] channel like Slack. Most of the frameworks today to support
+[07:27] things like human loop require that that agent loop be running continuously. Even
+[07:33] if it's waiting for something like waiting for a human response from Slack,
+[07:39] it requires they require this this agent loop to to persist. And this is
+[07:45] something that we wanted to address in our agent continuations work. That is we
+[07:51] wanted to develop a mechanism that would would allow us
+[07:56] to fully shut down the agent loop or multiple agent loops in some cases and
+[08:03] then restart them at a later point say when the human has provided their
+[08:08] approval. So what are agent continuations? So first off agent
+[08:14] continuations are inspired from the programming language theory concept of
+[08:18] continuations. This is a long-standing concept in programming languages in
+[08:23] which you can at any point in time during program execution you can say hey
+[08:30] I want to stop the program execution at this particular point and sort of bundle
+[08:37] that up so that I could resume or continue the execution from that point
+[08:43] going forward at some later time. In effect what that lets you do is it lets
+[08:48] you take a snapshot of the program's
+[08:52] execution so far so that later it could be
+[08:56] continued. Um it's a powerful mechanism that doesn't exist in in all programming
+[09:01] languages um because it requires fairly sophisticated runtime support.
+[09:08] But this mechanism, this language continuations mechanism was the
+[09:14] inspiration for what we're calling agent continuations in which we want to do the
+[09:18] same thing. We want to be able to say at some point during agent execution, which
+[09:24] again might be through multiple tool calls, multiple LLM calls, and maybe
+[09:29] even calls to sub agents and their tool calls and LLM calls. At any point in
+[09:33] time, we want to be able to say, "Let me pause what the agent is doing. Let me be
+[09:38] able to save that state and then return it back say to the application layer so
+[09:44] it can for example process a human approval or perhaps persist the state of
+[09:51] the agent at that moment in time to be resumed later. So now let's go into the
+[09:56] details of agent continuations. First let's make some observations about why
+[10:01] this may even be possible. The way we work with LLMs in agents today is we
+[10:07] maintain the messages array. The messages array is really almost a log of
+[10:14] all the interactions that you've had with the agent or with the LLMs. The and
+[10:19] if you if you look at it right, it records a history which is actually
+[10:24] replayed back to the LLM to make its next inference. And so in a sense,
+[10:32] uh, agent interactions with LLMs are already doing a lot of the bookkeeping
+[10:39] to keep track of everything that's been done so far so that that past history
+[10:44] can be sent back to the LLM for the next action, say for the next tool call
+[10:50] response or the next decision that the LLM has made. So, one of our one of the
+[10:57] key insights is that we're building on top of this aura this messages array
+[11:02] which already is saving quite a bit of the state of the agent. Now, it's not
+[11:08] quite enough, but it's pretty close. Before we get into the details of how
+[11:15] agent continuations are implemented, let's look at how you use the prototype
+[11:21] framework. First, I'm going to show you how to use
+[11:24] the framework like other agent frameworks
+[11:28] that is without continuation support. And this should look pretty
+[11:33] familiar. We have tools and we use a decorator to indicate that these Python
+[11:39] functions are tools. Uh and then when we go to create
+[11:43] the agent, right, we just send the tool list to the agent. So the agent knows to
+[11:51] use those tools in processing a user request. Now, one thing I'm not showing
+[11:55] you here for brevity is you can also include instructions or a system prompt
+[12:00] to the agent. Now once you've instantiated your agent then you can
+[12:03] make a request and give a user prompt and the agent will go off and do its LLM
+[12:11] request and its tool calling and eventually come back with a response.
+[12:15] Let's look at our continuation extension to this standard approach. There's only
+[12:22] a couple of differences. So now let's look at using the framework with
+[12:28] continuation support. And you'll notice there's only a couple of differences.
+[12:33] Let me point those out. First off,
+[12:37] now with continuations, we can designate a tool as needing approval. So here
+[12:45] we've said that this tool will need approval. In addition, instead
+[12:50] of creating an agent from the agent class, we're going to use the
+[12:54] continuation agent class. And other than that, it's pretty identical to the
+[13:00] standard agent usage. Now, in terms of execution, it's a little bit
+[13:05] different. The response may be the complete response of
+[13:10] the agent if the agent was able to complete its task. But if the agent for
+[13:16] some reason needs to suspend, then the response will be a
+[13:20] continuation object. This continuation continuation object
+[13:26] has metadata that can be inspected so that you can understand the reason for
+[13:31] suspension. In this example here, we're assuming that because we know we built
+[13:37] the agent with the tool call that needed approval that that continuation object
+[13:44] is going to need a human approval response which could be true or false
+[13:49] depending on what the human ultimately decides. But let's say in this case that
+[13:54] we decide to approve this tool call request. So we update the continuation
+[14:00] object appropriately with the positive human approval. And then you can send
+[14:06] the continuation back to the agent using the same request method. And the agent
+[14:12] will know because this is a continuation object that it needs to resume from the
+[14:19] place that it suspended in the first place. that is in this case just before
+[14:23] the tool call so that we can get the human
+[14:29] approval then the agent can continue and get the final
+[14:36] final response. So let's go into a little more detail about the
+[14:40] implementation.
+[14:43] So with continuations the forward processing of the agent remains the
+[14:49] same. you're going to do LLM calls. The LLMs are going to come back with a tool
+[14:55] call request. We'll pull perform the tool work call request as long as they
+[15:00] don't necessarily need is human approval. Uh but if the human approval
+[15:06] isn't needed, it's standard agent processing. If we get to a point where
+[15:12] we determine that we need to suspend like for human approval or if we've
+[15:17] reached some other suspension condition, that's when we create the continuation
+[15:21] object. The continuation object embeds the standard messages array with some
+[15:26] additional metadata. That metadata provides the continuation enough
+[15:30] information of how to resume when we want to send the continuation back to
+[15:36] the agent. Ultimately this continuation object will be sent back to the top
+[15:41] level agent which we do some final processing of to
+[15:48] make the application layer to make it easier for the application layer to
+[15:54] understand why the continuation was suspended and also to allow it to
+[16:00] provide human approval updates if required.
+[16:04] So essentially what we do is we take this fairly potentially complicated
+[16:11] nested continuation object and extract the core information that the
+[16:17] application layer needs to act on to make it easy for that application layer
+[16:22] to make those approvals. Then once the application layer has updated the
+[16:29] continuation object, we send it back to the agent. the agent knows that it's a
+[16:34] continuation and has the logic in order to reconstruct the agent back to its
+[16:41] state so that we can continue the execution. Now, one really important
+[16:45] point of all this is that once you've suspended the agent and
+[16:52] you've created the continuation object, you actually don't need to keep any of
+[16:58] the agent loops running in your system. that is they can be shut down because
+[17:04] we've captured enough information to restart everything back to where it was.
+[17:11] And this is a really powerful aspect of agent continuation. So going into a
+[17:15] little bit of the detail just to get a sense of what this continuation object
+[17:20] actually looks like. I've sh I'm showing two versions.
+[17:26] First is a single level continuation. Uh you can see that we've wrapped it. We
+[17:32] have the top level continuation, the messages array which is the normal
+[17:37] messages array and the two other pieces of metadata are this resume request
+[17:42] which indicates exactly which tool call for example we need to resume at and
+[17:50] also processed is going to be populated with whether we approved or say
+[17:56] disapproved in the case of human approval and I mentioned that before the
+[18:00] continuation is returned learned is that we extract to the top level of this
+[18:05] object the metadata that allows the application layer to easily update the
+[18:10] continuation um so that it can proceed after we send
+[18:16] it back to the agent. On the right, a slightly more complicated continuation
+[18:20] object in which we have an agent that calls a sub agent. And the main point
+[18:24] here is that our format is recursive and it can handle arbitrary layers of
+[18:31] nesting. And you can see that here in the fact that we have a resume request
+[18:38] that now has its own continuations object with its own messages. And that's
+[18:42] the messages of the sub agent and its own resume request and processed. So
+[18:46] let's look at a full example. Here we have a multi-level HR agent and so the
+[18:55] top level agent has an email tool and it has access to a sub agent the account
+[19:02] agent tool which is responsible for creating account and setting account
+[19:06] privileges. I have a abbreviated system prompt up here and we construct our
+[19:12] continuation agent for the HR agent here. Now let's take a look at the
+[19:17] account agent for a moment. It's its own agent with its own tools. Create account
+[19:23] and authorize account. In this case here, authorize account needs approval.
+[19:28] But you can see it uses the same basic setup. Uh we give it its system prompt
+[19:33] up here and its tools. And this sub aent is going to be used by the top level HR
+[19:42] agent. Here I have an example prompt to create a new account and that prompt
+[19:48] will be sent to the agent to be processed. Now in this example here,
+[19:52] it's set up right such that eventually the account agent sub agent will need
+[19:58] human approval for the authorize account tool which will cause the agent to
+[20:07] suspend create a continuation return that back to the application layer for
+[20:12] processing. Here is an illustrated diagram of the steps that I
+[20:19] mentioned. In this diagram, we have the application layer that's interacting
+[20:23] with the user. We have our HR agent and it's tool call send mail and then it's
+[20:32] using the account agent as a tool. And that account agent has its create
+[20:38] account tool and its authorized account tool. Now in the scenario I just
+[20:43] described, we'll get down to the point where we know we need approval for
+[20:49] authorized account. So that's the point at which we need to suspend and start
+[20:57] creating or building up our continuation object. And that's what happens here. So
+[21:03] the approval propagates a continuation object object that gets expanded at each
+[21:09] level as it's propagating back to the application layer until finally we have
+[21:14] the full continuation object for the application to inspect and then act on.
+[21:20] Now once the application layer has done that then that continuation object can
+[21:25] be sent back into the HR agent and the framework will know that we need to
+[21:32] restore the agent state and the sub aent state back to where it was when we
+[21:37] needed the approval in the first place and that will be handled all by
+[21:42] the framework. So let's do a quick demo. So let's look at our
+[21:48] prompt. So, we have the prompt here as a JSON.
+[21:55] And I'm going to
+[22:00] run this prompt
+[22:05] here. So, I'm just giving that prompt as the first prompt to the agent starting
+[22:11] off. And I'm going to send this out
+[22:15] to a response file. And the whole point of this is to show that these things are
+[22:20] fully decoupled and that these objects contain all of the state that we need.
+[22:25] So let's look at the response
+[22:29] object and this has the things that you can imagine. There's the continuation,
+[22:33] there's the top level messages and if you go down right here is the sub aent
+[22:41] messages with its system prompt. And finally, if we go down to
+[22:46] the bottom of this object, this is that top
+[22:49] level approval object that the application layer can then present to
+[22:55] the user and then update. So here I'm just doing it manually. Obviously you
+[22:59] would do this in application code. So I'm going to save that. And now what I'm
+[23:04] going to do is I'm going to send that edited
+[23:08] response back to the agent. And the point of this is that now the agent will
+[23:14] reconstruct its state but with the information that the tool has been
+[23:20] approved so that the agent can continue
+[23:25] processing. And there we go. If you look here right we agent has indicated that
+[23:33] the account has been successfully created uh and that a security level has
+[23:38] been granted and that we now have the end reason of completed. The other thing
+[23:45] I'll note in this output here is that everything above now is normal a
+[23:54] normal messages array. That is uh there's no sign of continuation in the
+[24:00] final result object. The continuation is just
+[24:04] introduced when we need to suspend. Okay. So let me go over just a
+[24:11] few details. Um, our prototype is built up on top of
+[24:16] the OpenAI Python API. There's no other dependencies. We have the prototype
+[24:20] implementation. Here's the link that you go to on GitHub and it should be in the
+[24:25] channel notes as well. Where do we want to take this? We've already implemented
+[24:29] a version with more general agent suspension that is beyond just human
+[24:32] approval. is that setting up arbitrary suspension points like after a certain
+[24:38] amount of time, a certain number of turns, even asynchronous requests for
+[24:44] suspension. And what we're looking at is not just not necessarily developing uh
+[24:50] this prototype into a full separate agent framework um because there's lots
+[24:54] of good frameworks out there, but rather looking at ways to extend existing
+[24:58] frameworks, something like strands or pyantic AI. Now I should also mention
+[25:03] that um we're not the first framework to consider state management. Some of the
+[25:10] other frameworks do have forms of state management. However, uh the in
+[25:17] our investigation of the state management, they either sort of lack the
+[25:24] human approval element or the um the sophistication of having arbitrary
+[25:30] depths of nesting into sub aents. And so we think our
+[25:36] approach is novel in the sense that it combines both those both a human
+[25:42] approval mechanism and also this arbitrary nesting uh of complex agent.
+[25:48] This work came out of the agent creator team at Snaplogic. Agent creator is
+[25:53] Snaplogic's visual agent building interface and platform. Not only did we
+[25:58] build that out in Python, but we built it out in agent creator itself. And you
+[26:04] can see here that we allow our users to create sophisticated agents using a more
+[26:09] visual approach. And you can also visualize in the platform agent
+[26:15] execution. We prototyped continuations in the Snaplogic agent creator
+[26:20] environment as well. Uh so we we did it both at the Python layer and we also did
+[26:27] it at our higher level uh layer in in the Snaplogic platform. In conclusion,
+[26:34] agent continuations are a new mechanism for managing agent state and human in
+[26:41] the loop processing. We have a prototype implementation that you can access on
+[26:46] GitHub from the link on this page. And if you want to learn more about building
+[26:52] agents visually with SnapLogic Agent Creator, go to agentcreator.com.
+[26:58] [Music]

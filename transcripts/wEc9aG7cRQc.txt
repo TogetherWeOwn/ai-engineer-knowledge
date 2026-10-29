@@ -1,0 +1,311 @@
+# title: Why Your Agent Disagrees With Itself (And What To Do About It) - Diane Lin, Datadog
+# source: https://www.youtube.com/watch?v=wEc9aG7cRQc
+# speaker: Diane Lin, Datadog
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T07:19:58Z
+# sha256: c107bd007b4d47aa24cbaa510cc7bd7d2dc380b5af477a842893f6a655a08784
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:02] Hello. This session is about
+[00:06] why do your AI agents disagree with itself
+[00:11] and what to do about it. And this is a Dyan Huang Lin, and you
+[00:15] can call me Dyan.
+[00:19] A little bit about my background. My journey with AGI start from my PhD at
+[00:26] Imperial College London, where I was working on continual learning.
+[00:31] Later, I worked with Professor Josh Tenenbaum at MIT on one-shot learning,
+[00:37] meaning learning from one single examples.
+[00:42] Afterwards, I was lucky that Alexa was launching. I was the first three
+[00:47] appliance scientists on the question answering team at the Alexa.
+[00:53] Later, attracted by a startup working on AGI at the Silicon
+[00:58] Valley called Vicarious. So, today Vicarious is part of the
+[01:03] Google DeepMind. And there I got to work on the exciting
+[01:07] frontier research on zero-shot transfer learning.
+[01:13] After working on AGI for a few years, I decided to pivot to the applied world at
+[01:20] Zscaler, which is cybersecurity company.
+[01:25] There I got to apply a variety of different machine learning model to
+[01:29] adjust the cybersecurity challenge.
+[01:34] There for 5 years, uh I decided to co-found my own company
+[01:40] because of pinpoint I have seen at the Zscaler.
+[01:44] So, company is building AI agent to auto-triage your security alerts
+[01:50] and which make your SOC more efficient. Uh
+[01:55] we are super proud that Chrome innate has been acquired by Data Dog earlier
+[02:01] this year. So now I'm part of the Data Dog and leading the development of
+[02:07] self-evolved agent.
+[02:14] So today I'm going to share with you the problem you're probably seeing your
+[02:18] day-to-day building AI agent. The inconsistency.
+[02:24] Then we are discussed about where this inconsistency come from in order to
+[02:29] figure out the solutions.
+[02:32] And we will discuss a few trade-off among the different solutions and then
+[02:37] eventually we'll show you the experimental results to show how
+[02:40] feasible they are.
+[02:46] You'll probably see this. Same model, same input. But different
+[02:51] output. Here I don't mean the wording different.
+[02:55] I mean semantically different output.
+[03:01] You might be thinking that's the stochastic nature of LM.
+[03:07] Hold on to that thought. Let's look at a few concrete examples.
+[03:13] So here imagine you're giving a task for sentiment analysis where we're supposed
+[03:18] to label each of the review of the hotel either positive or negative.
+[03:26] This is typical NLP task. And today's LM is really good at this.
+[03:33] However, there's one problem. When you pipe this input to the same LM
+[03:40] model, occasionally you will see different
+[03:44] verdict coming out of it when you run multiple times.
+[03:49] That means a single evaluation run didn't tell you the whole story.
+[03:55] You need to repeat your evaluation multiple times
+[04:00] in order to get a holistic picture
+[04:04] by the average over the different runs results.
+[04:10] And this sounds like a technical inconvenience,
+[04:13] but the reality is
+[04:17] is way more problematic than just inconvenience.
+[04:21] Let me show you an example in a different domain in cybersecurity.
+[04:26] Imagine you are a security analyst where your day-to-day job is
+[04:31] triage the security alerts and decide whether it's malicious that
+[04:36] you need to take certain actions to stop the attack
+[04:40] or it's false alarm, meaning it's actually benign, which you could ignore.
+[04:47] So, here example alert you got is there's a failed logging attempt to
+[04:52] Gmail account detected from suspicious IP.
+[04:58] And if we give such similar task to this one to AI agent and run it different
+[05:03] times, you will see sometimes it stay
+[05:08] consistently benign, sometimes it stay consistently suspicious across different
+[05:13] runs. However, there are cases where it
+[05:18] flip-flop between benign and suspicious.
+[05:23] Now, your customer will have a difficulty
+[05:27] using such product because they will wonder, "Which one
+[05:31] should I trust?" So, the inconsistency
+[05:36] is causing a trust issue in your product.
+[05:41] Imagine if you were in a POC bake-off, one vendor
+[05:47] give the consistent wording all the time while
+[05:52] the other vendor
+[05:57] have this flip-flop wording. You can imagine which one would win the
+[06:02] deal. Now, I'm pretty sure you want to solve
+[06:06] this problem.
+[06:11] First, we have we have to figure out where the inconsistency come from.
+[06:21] The good news is the data points tend to flip-flop
+[06:26] actually concentrate around the decision boundary, the so-called
+[06:31] gray zone. Let me illustrate with the earlier
+[06:36] example. Here
+[06:38] in the sentiment analysis, we have two reviews.
+[06:42] The first one actually no matter how many times you
+[06:46] run through the LM model, it will always give you the positive label.
+[06:53] In this case, it's pretty obvious is the review is super positive.
+[06:59] However, the second case is the one tend to flip.
+[07:05] If we look closer, it's kind of on the boundary.
+[07:09] Sometimes there's certain word is kind of a relative positive,
+[07:15] but sometimes there's a little bit negative.
+[07:20] In this case, you'll find that even human experts
+[07:25] will have a disagreement on these cases. In fact, there's no right or wrong
+[07:31] answer. It really depends on particular company's policy and their preference.
+[07:37] For hotel thinking that the such review is not something I can do to
+[07:43] improve the memorial kind of experience,
+[07:47] memorable experience. Then, that mean not to label as naughty because there's
+[07:53] nothing I can do. But some hotel might care about it and
+[07:57] want to label them as natives so they can improve.
+[08:01] So, that comes down your preference.
+[08:06] Let's look the other cybersecurity example.
+[08:10] Here is another case on the boundary. And why
+[08:15] it's in the boundary is here there's a few
+[08:20] attempts. Indeed, there's attacker knocking on the
+[08:24] door. But
+[08:28] attacker might not getting yet.
+[08:32] So, for enterprise customers who always have attacker knocking on the door,
+[08:37] well, if they haven't getting in the environment, they don't want to worry
+[08:41] about it. Otherwise, they will be flooded by this type of alerts. There's
+[08:45] nothing they need to do because they are blocked outside already.
+[08:51] However, if the attacker do manage to get the correct password and pass MFA
+[08:57] and do manage getting the environment, then it become very seriously and you
+[09:02] need to take certain actions. So,
+[09:06] almost similarly at the beginning behavior, but very different outcome and
+[09:11] different response needed. Depends on whether it's truly attack or
+[09:18] attacker is still outside. So, here
+[09:22] whether we label them malicious or benign depends on company preference
+[09:28] whether they wanted to be notified about such situation.
+[09:33] So, again, this is the example where it depends on your preference.
+[09:41] And additional information to disambiguate between the two different
+[09:46] scenarios.
+[09:50] So from these two very different domains, you will see that
+[09:55] actually the data points tend to flip-flop.
+[10:00] Are the one close to the decision boundary
+[10:03] where it need your clarity
+[10:08] to disambiguate which side it should really belongs to.
+[10:14] So these data points are where human experts tend to make a mistake.
+[10:19] And the traditional machine learning classifier will also struggle with.
+[10:25] So in other words it's not your AI agent's fault.
+[10:30] Your AI agent simply point out the ambiguity
+[10:35] that already exists. So
+[10:42] now we know where the root cause of the inconsistent is.
+[10:47] The next step is identify where exactly they are.
+[10:53] Who are they? And fix them.
+[10:59] Surprisingly and not surprised the solution to identify the gray zone
+[11:05] actually exists already in machine learning.
+[11:09] And it's called active learning. So
+[11:14] the idea of active learning is you have a lot of data point to be
+[11:19] labeled. Imagine you'd have your initial model
+[11:24] and you put it in production, maybe in the monitor mode.
+[11:28] And you wanted to check the quality. But you don't have bandwidth to check
+[11:33] all of them. Otherwise, it lose a point of having
+[11:37] agent to do the work. But you still want to identify where the
+[11:41] model didn't do well.
+[11:46] And then active learning is to find a way
+[11:49] to select the data points where
+[11:54] tend to make mistake. And that's where it tells you
+[11:58] where to pull your attention.
+[12:03] So let's go over the traditional um machine learning models active
+[12:08] learning pipeline and see how is different in the case of the new LM or
+[12:13] AI agent error. So first, you train your initial model
+[12:20] and then you make predictions on the unlabeled data set. It could be the
+[12:25] production online data.
+[12:29] And then from there, you see there's certain cases where the model wasn't
+[12:34] sure because the probability is close to 2.5.
+[12:38] And those data points are the high informational one
+[12:42] that your model is going to learn the most.
+[12:46] The uncertainty is a type of the signal to tell you where the model tend to make
+[12:52] a mistake. Another popular type of way to figure
+[12:57] out the problematic one is query by committee, meaning that it by a few
+[13:03] different models or even same model multiple times and then you identify the
+[13:08] disagreement. And that's where the model tend to make a mistake as well and
+[13:13] that's where you need human clarification on label so the model can
+[13:19] learn it from.
+[13:23] The after you surface these problematic data points
+[13:29] and for human to take a second look to make sure the label is actually correct
+[13:33] or do we doesn't need additional
+[13:36] information to dis ambiguate those cases meaning adding new
+[13:40] features. And then you can add those label data
+[13:43] set or potentially additional features to the next round of training.
+[13:48] Then you retrain the model and then proceed
+[13:51] uh continue this cycle. So then you can see in this particular
+[13:58] active learning cycle you spend very little uh amount or at
+[14:03] least in other way it's very efficient way to identify the problematic data
+[14:08] points and spend your attention on those point where your model tend to learn the
+[14:15] most.
+[14:18] So that's the traditional one. The good news is the LM way
+[14:24] is not very different.
+[14:27] There's a major two part which we need some refinement. One is on this
+[14:32] selection strategy. The other part is about retraining.
+[14:37] On the selection strategy one um here we suggest you use the one about
+[14:45] identify disagreement. At least from what we have tried so far
+[14:50] the uncertainty score from LM is not very reliable.
+[14:54] It's kind of a LM model doesn't know what it doesn't know. So when it's very
+[14:59] confident it doesn't mean that it was the it would is correct. So that
+[15:05] However, the the disagreement from different runs or from different models
+[15:10] actually give you a more reliable signal where the model actually
+[15:16] not sure about its verdict and it need human guidance.
+[15:25] And then after you identify this group or the
+[15:30] uh discriminant and need attention, you
+[15:33] label them and provide a feedback like what you did before.
+[15:37] Then afterwards, you might be thinking, "Oh, time to
+[15:40] retrain the model." Yes or no.
+[15:43] Yes, one option is retrain the model, but
+[15:47] fine-tuning model is expensive. Here, we are proposing
+[15:52] a more lighter weight solution, easier to iterate.
+[16:01] It's about augment your agent with semantic and episodic memory.
+[16:21] Let's use the previous example to illustrate what I mean here.
+[16:25] Um as we talked about, in this case, the
+[16:29] attempt to flip, it's mainly missing the information
+[16:33] about you a particular company policy or preference.
+[16:39] Here, we can add it to the um the knowledge base.
+[16:45] If this customer complain about something outside hotel's control, then
+[16:50] classify as positive because you don't want to pay attention to this.
+[17:00] And then in the cybersecurity example, something similar, you can put in in
+[17:05] that the password spray, meaning that the attacker trying to guess your
+[17:09] password and try it with different times, even fail,
+[17:14] and continuously. So, if without successful logging, then
+[17:18] that should be benign. But, in contrast, if it succeed with final logging,
+[17:24] then that should be malicious. So, here you actually identify the
+[17:29] additional information to help disambiguate the two and then label them
+[17:34] separately. And that's a clarity that help your model to learn.
+[17:41] Also, help your human experts to label more consistently.
+[17:48] So, this type of domain knowledge sharpen your decision boundary.
+[17:53] And also, help the human beings. And this type of knowledge is like
+[17:57] factual knowledge, is part of actually belong to your semantic memory.
+[18:02] And this is in contrast with the episodic memory.
+[18:05] Episodic memory is in the case where you
+[18:10] haven't get around to distill the reasoning behind the earlier case why it
+[18:16] should be on malicious or the benign side.
+[18:21] Instead, you said that I have seen these similar cases before
+[18:25] and it was labeled as benign. And let me leverage those past similar cases and
+[18:30] they made a decision accordingly. And the advantage of the this episodic
+[18:35] memory way is it's relatively automatically. It has less human
+[18:39] intervention. I mean, the human intervention was done in the past
+[18:42] already when during when you're doing a job
+[18:46] online, um you can reference them,
+[18:50] at least your AI agent can reference them automatically. They can making
+[18:54] decisions without waiting for you to distill the reasoning and putting in the
+[18:59] semantic knowledge. So, the idea is that the
+[19:04] identify a similar case to the one under examination and then leverage their past
+[19:10] decision as a reference. And then imagine there's a new case
+[19:15] which is coming in the middle, doesn't belong to any of past group, and that's
+[19:20] the one you still need a human attention.
+[19:23] And this is how also um where episodic memory resolve
+[19:28] recurring case automatically.
+[19:33] And this particular useful in the case of cyber security alerts because a lot
+[19:37] of noise especially those false positive noise
+[19:41] are the one keep recurring. And that's the one are the low hanging fruit you
+[19:46] can automate away. And with that human review
+[19:51] which is a precious attention and bandwidth you have, now you can
+[19:55] concentrate on those where episodic memory failed to address.
+[20:00] And this is also how we chose between semantic memory and
+[20:05] episodic memory. The two are actually not contradicting. In fact, they are
+[20:10] complementary. Basically, you use episodic memory to address those
+[20:15] recurring situations automatically. And then for what remains still
+[20:20] reflecting after the reference from the past or no reference to be able to use,
+[20:26] then you pass on to human review. And then human review distill the domain
+[20:30] knowledge and put it in the semantic memory to be used next time.
+[20:37] So here we talk about a solution actually brings three benefits.
+[20:43] First, we identify these data point near the
+[20:49] decision boundary and use the domain knowledge in semantic
+[20:54] memory and this past similar case in the episodic memory, we're able to improve
+[21:00] the the consistency significantly.
+[21:04] So, now you have a more trustworthy AI agent for your user to use.
+[21:11] And two other byproduct of this solution is
+[21:15] you have a very efficient quality control.
+[21:19] You don't need to check every agent output, but instead a subset of
+[21:25] them, which your algorithm uh active learning think
+[21:30] is potentially problematic, and you check them,
+[21:34] either provide additional information or clarify the label,
+[21:39] and your model will learn from there.
+[21:44] So, most importantly,
+[21:47] your labeling effort
+[21:52] is very small, but high return. Last but not least,
+[21:58] now you are gathering your customer feedback along this way.
+[22:03] You not only have a trustworthy consistent model and high efficacy one,
+[22:07] you also have one adapt to your customer environment.
+[22:11] I'm pretty sure your customer will love your product if you
+[22:16] your AI agent listen to them and adapt to them.
+[22:21] So, here are some experiment results from uh real data points. So, here we
+[22:27] collect uh 93 alerts,
+[22:30] cybersecurity alerts, and then we run them three times.
+[22:35] If without the solution we are proposing here,
+[22:38] a quarter of them will flip-flop the verdict.
+[22:43] In contrast, after applying our solution or using episodic memory,
+[22:50] about 15% of them become consistent.
+[22:55] However, there's still 10% of them remaining inconsistent. They still flip.
+[23:02] Sometimes because there's no reference, similar cases in past paper used.
+[23:08] Sometimes even there's a reference to be used, they
+[23:12] still disagree after the second thought. But not a problem. The episodic memory
+[23:18] do the automatic lock down all the inconsistency for 15%.
+[23:23] The remaining 10% human review and provide the additional knowledge to
+[23:29] disambiguate those tricky cases.
+[23:34] After that, you also adapt to the
+[23:38] customer environment that you want to learn.
+[23:46] So, the three takeaways
+[23:49] that I hope you have after this talk is number one,
+[23:55] inconsistency isn't usually your model problem.
+[24:00] Stop blaming your model, but instead focus your energy on label issue and
+[24:07] potentially insufficient information and help your AI agent with this additional
+[24:12] clarity.
+[24:15] Second, the model disagreement isn't a bug,
+[24:20] but feature. Treat each disagreement as an
+[24:24] opportunity for your model to learn. Third,
+[24:30] fine-tuning isn't your only option. Augment your agent with semantic and
+[24:36] episodic memory. I hope you enjoy seeing your model
+[24:43] keep improving and adapting to your customer
+[24:46] environment.
+[24:50] Last but not least, I want to thanks to my colleagues and wonderful friends at
+[24:56] Data Dog. Special thanks to Ditun and Harsh, Anusha, and Stefan, Saeed, and
+[25:03] Mati to give me a lot of enjoyable discussions and helped me to clarify
+[25:09] some of the um
+[25:11] the concept. And also, thank you for everyone in the
+[25:16] Beats Secured Analyst team to make this journey enjoyable.
+[25:22] And thank you for listening. Hope you will enjoy
+[25:26] training your model and having it improving.
+[25:31] Thank you. Bye.

@@ -1,0 +1,296 @@
+# title: Connect AI to Billions of Legal Documents — Simon Eskildsen, turbopuffer & Jacob Lauritzen, Legora
+# source: https://www.youtube.com/watch?v=V-isu4eTHgw
+# speaker: Simon Eskildsen, turbopuffer & Jacob Lauritzen, Legora
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T05:04:01Z
+# sha256: 7ebb412aa639f39b06e1322c6d52bbd4f7191c0f9983d2c6d3b0609ac5544d4d
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:01] [music]
+[00:13] Okay. Hi everyone. Welcome um to this 20 minute talk about connecting AI to loads
+[00:21] of legal documents. My name is Jacob. I'm an engineer at Legora.
+[00:26] >> Yeah. And I got to step into frame here. Uh I'm Simon. I'm the CEO and uh CEO and
+[00:30] co-founder of Turopuffer, a search engine that we work with Legora and
+[00:34] others on. >> Neat. Um super quickly
+[00:38] um introduction to Legora. We're a collaborative AI platform for legal
+[00:44] work. And so that means we have law firms that are clients and we have uh
+[00:48] in-house legal teams that are clients. And they use Legora to do reviews of
+[00:53] contracts. They use it to go through an absurd amount of contracts and make sure
+[00:57] that they all look good. They use them to create new contracts. They do legal
+[01:01] research which means um looking over all potential law and they collaborate
+[01:06] inside Lor. So you can think of Lorra sort of as a linearfigmas
+[01:11] notion GitHub for legal work. It's a lot.
+[01:16] We um are one of the fastest growing companies right now. We grow extremely
+[01:20] fast. Yeah, tons of numbers on the screen. I'll just skip through that.
+[01:26] What we really want to talk about is search today. So at Lor there's two
+[01:31] types of search that we do. There is project search and legal research.
+[01:35] Project search is um basically projects in Lor is like the the unit of work that
+[01:41] you have. So if um let's say you are SpaceX and you want to acquire Cursor,
+[01:47] then that would be one project with your law firm. H and so they would go into
+[01:51] Lor and they would upload all these documents and the law firm that helped
+[01:54] you would go through all of the employment agreements, all of the
+[01:57] contracts with suppliers. Um I know cursor is using Turbo Puffer so maybe
+[02:02] there's a contract there they'd look at. Um
+[02:05] but basically you do the search confined to a project and projects can be tens of
+[02:09] documents to millions of documents. The other use case is legal research. And
+[02:13] legal research is sort of a deep research style workload where we'll
+[02:17] search across tons of laws, previous cases, regulations, etc., etc. And
+[02:22] people use this to answer questions such as like how do I handle this specific
+[02:26] thing? And they'll also use it for litigation. Maybe they want to sue
+[02:30] someone or maybe they are getting sued and they'll use legal research to
+[02:32] support and help their case. So if we start at number one, project
+[02:38] search, we've been through a little bit of a ride here on how we do search. Um,
+[02:44] starting at, you know, hundreds of thousands of documents all the way into
+[02:48] two billions of documents. And we've tried a lot of different things.
+[02:52] So first we start started with the very very simple one, which is just a single
+[02:56] elastic search cluster for all of our search workloads. Um, that worked
+[03:01] relatively well. It was sort of a simple setup. All of the tenants, you know, our
+[03:05] clients, our users would be on one big blob storage where we store the raw
+[03:09] documents and on one big elastic search where we would do all of the searching,
+[03:13] the indexing and the searching. Super simple, worked relatively well
+[03:17] initially. Then we wanted to enter the land of the
+[03:21] free and uh we got some new requirements. They you know Americans
+[03:25] only want processing to happen within the US and Europeans only want it to
+[03:29] happen within the EU and Australians only want it to happen within Australia.
+[03:32] And so we had to basically um well here's a scaling graph. We had to move
+[03:37] to multiple elastic searches. And what we actually did was we took the entire
+[03:41] setup and we just basically iterated over the set that is EU, US and Asia
+[03:46] Pacific. And so we just had this like multiplied by three or four. Kind of
+[03:51] annoying, lots of overhead, but it uh got us to where we needed to be.
+[03:57] Then the next iteration of the story is enterprise. So really big banks, the
+[04:02] biggest law firms in the world, they have really annoying requirements. And
+[04:07] number one they have is they'll ask for full physical isolation of all of their
+[04:10] data. There's probably a little bit of a war
+[04:14] on what physical, you know, isolation actually means, but essentially means
+[04:18] they want their own database. They also want customer managed encryption keys.
+[04:22] And what that means is they basically have a key volt thing where they have an
+[04:26] encryption key and they give us access to read the key and we then use that key
+[04:30] to encrypt and decrypt all of their data at rest. And what that gives them is
+[04:35] they can just revoke our access to their key and then we can't decrypt their data
+[04:38] anymore and so it's safe. And so in a way that gives enterprises a lot of
+[04:41] control over all of their data because they control you know the key to to
+[04:44] reading it. So we moved from elastic search to
+[04:49] Postgress and I imagine a bunch of you guys are like why would you ever put
+[04:53] your vectors into Postgress. Um it actually worked surprisingly well and
+[04:57] the reason that we did this was we were already using Postgress for OOLTP
+[05:01] workloads and uh so we sort of already had to do this split of multiple
+[05:06] Postgresses and multiple blobs and so it was really easy for us to try to shift
+[05:11] all of our search into Postgress as well because then we only have one system. So
+[05:15] the setup here was PG vector uh specifically disk NNN TS vector for the
+[05:20] search. So not BM25 which was you know we lost a little bit of retrieval
+[05:24] performance there. And what we do is we would partition the table where we would
+[05:28] store all the document chunks. We'd partition it super aggressively like
+[05:30] 4,000 partitions and then each project we'd basically have the project key and
+[05:35] we'd binack them into the partitions. that actually worked relatively well,
+[05:39] but it was expensive and search performance wasn't super super good. And
+[05:45] what happened was when we scaled a lot, uh everything just broke and exploded.
+[05:51] And so what happened was the basically you can imagine like you have a bunch of
+[05:56] projects and some of them you spin up a project, you work on it and then you
+[05:58] close it and you basically never go back to it again. And we have a bunch of
+[06:02] those where like they never get queried and we have a bunch that get queried all
+[06:04] the time because they're super active projects. And when we pack them into
+[06:08] partitions, the cold ones and the hot ones would land on the same ones and the
+[06:11] partitions would get really really big. And so when we query them, they would
+[06:14] Postgress would pull the partition, put it into memory, we do the stuff and then
+[06:18] we create another partition and another partition and it would essentially
+[06:21] thrash the cache all the time. And what that meant was our latencies would
+[06:25] spike. So we went from like search and ingestion P99 of 100 milliseconds into
+[06:32] 20 seconds, which you can imagine is a really bad user experience.
+[06:37] So then we went to turbopuffer in about you know when we're about I think 400
+[06:42] million documents something like that and what we did with turbopuffer was we
+[06:48] did one name space per project and the advantages of moving to turbuffer is we
+[06:54] got BM25 real BM25 much better uh relevancy much better latencies and it
+[07:00] was extremely simple to operate because we could just have a single turbo puffer
+[07:04] cluster you know we didn't have to have a bunch of different ones like with
+[07:06] Postgress and it would since it's blob based it could just query the blobs that
+[07:11] we had anyway and so much lower cost and it was extremely simple to operate and
+[07:16] we didn't have this problem with the partitions because if a project's not
+[07:19] used it's just in blob and so it's really easy and Simon can talk a bit
+[07:23] more about why that works so well.
+[07:28] Yeah. So, Legora has some of and and legal in general has, by the way, if if
+[07:34] uh Jake and I have similar accents and maybe even look a bit similar, it's
+[07:38] because we're both Danish. Um, Turboper has a very has a particular
+[07:43] architecture that supports these kinds of very regulated environments really
+[07:46] really well. But in order to understand that, we have to understand what kind of
+[07:49] search engine is Turboper. Why is it different than the ones that they used
+[07:52] in the past? Since the very beginning of Turbopuffer,
+[07:56] um the design has more or less been the same. Uh there may be changes in the
+[07:59] future, but the design has stood the test of time. When you do a write to
+[08:04] Turbopuffer, we write directly to obic storage. There is no like disk
+[08:09] replication. There's no paxas. There's there's none of that. Direct to S3.
+[08:14] That's the fundamental trade-off in Turbopuffer, right? Hundreds of
+[08:17] milliseconds. If you're like Shopify and doing inventory uh reservations for a
+[08:21] Kylie Jenner flash sale not going to work very very good for search because
+[08:26] generally when you're doing search doing a slow write is fine um as long as the
+[08:30] read performance is is adaptable and good. So that's what happens on write it
+[08:34] just goes into write ahead log you can imagine you write 1.json 2.json 3.json
+[08:38] JSON. Obviously, it's a it's a database, so it's not JSON, but for illustrative
+[08:42] purposes, that's what happens. And in the background, we build the vector
+[08:46] indexes, the text indexes, the colmer indexes, and so on to satisfy the
+[08:50] queries that that Jake and other customers have. Um, so then at query
+[08:54] time, we can go in and then um the query reaches some namespace. The namespace is
+[08:59] kind of our concept of a of a table. Um, you can think of it as a directory on S3
+[09:04] that's isolated from everything else. We go to the node that is most likely to
+[09:08] have it. It could go to any node, right? It could go to every single node and
+[09:11] they're all read replicas, but we go with some affinity to the node that has
+[09:14] the highest probability of having it in cache. We check the memory cache for any
+[09:17] objects, NVME SSD cache, and then finally to object storage. Everything in
+[09:22] Turbopuffer is optimized around doing as much work in as few round trips as
+[09:26] possible. Right? S3 has a P99 um on a like 1 megaby blob size of around uh 200
+[09:32] milliseconds. So, you want to do as few round trips as possible, right? Ideally,
+[09:35] you do around three. And everything in Turbopuffer, the database is Oh, I'm
+[09:40] going to need your fingerprint. >> Got it.
+[09:42] >> Um, everything in in Turbopuffer is designed around minimizing the number of
+[09:47] round trips. This is also amazing for modern D discs. If you do a lot of
+[09:50] concurrency and few round trips, you utilize them optimally. And everything
+[09:53] in Turbopuffer is designed around this. So, why is this so good for a company
+[09:58] like Lora? Well, object storage native if you design it around the atomic unit
+[10:03] of separation being the namespace or the table, every single table could be
+[10:07] encrypted with a different key. Every single namespace could be in a different
+[10:11] bucket. We have customers that have um thousands of buckets that they have
+[10:16] namespaces in so that their customers get the warm IT fuzzies of having the
+[10:21] bucket in their own cloud account. They can also be encrypted with their own
+[10:25] keys. You can share buckets. You can you can do whatever configuration that you
+[10:29] need at the namespace level. You can re-encrypt with different keys. You can
+[10:32] move them around. Um and you can re-encrypt with other keys. Um for Lora
+[10:37] in particular, this was really important for this full physical separation,
+[10:40] right? An encryption separation. All of the namespaces needed to be physically
+[10:45] at rest with different keys and as separated as possible. S3, GCS, Azure
+[10:50] BOP stories, they pass that um and the other parts of the hierarchy also except
+[10:54] the NVME SSD cache because in the SSD cache we consider that to be volatile
+[10:59] like memory um but your customers did not. So in the uh so what we did was
+[11:05] that we thought we were going to implement encryption into the disc cache
+[11:10] but instead we just disabled the disc cache and saw how it fared and the
+[11:13] performance of turbopuffer even without the disc cache with just the memory
+[11:15] cache was so good that we just kept it that way for some of the lora workloads
+[11:20] where we couldn't have the disc cache for multi-tenency turbuffer will support
+[11:23] that in the future but it just goes to show the um natural point where
+[11:28] turbopuffer allows this encryption and storage and separation to become fully
+[11:33] multi-tenency uh native. I'll hand it back to you on what happened then.
+[11:39] >> And then, drum roll please. Latencies look like this. Um, is my mic working?
+[11:47] No. Could I or I'll start screaming really loudly. Um, it speaks for itself
+[11:52] if you can't hear me. Okay. Um, latency is improved in order magnitude
+[11:56] basically. And these are median latencies. So, P99 were even better. Um,
+[12:01] so obviously this is a huge thing when you're doing I mean one thing is if
+[12:04] you're doing a single sort of rag style thing but if you have an agent that does
+[12:07] 20 queries 100 queries these really really add up.
+[12:12] So that was on the project side and then a more recent thing is legal research.
+[12:18] So legal research um is a kind of a difficult problem and the reason it's
+[12:23] difficult is that um the corpus is extremely big. So we're racing towards
+[12:28] 10 billion vectors and we're growing extremely fast. We also have quite high
+[12:34] read. Um so QPS can spike a lot because we do a lot of fan out. Like if you do a
+[12:39] a sort of legal research query, we will fan it out to a bunch of different
+[12:42] queries and we'll keep going. And the reason we do that is we need this um
+[12:46] heavy filtering because essentially it's a kind of like a graph for a few
+[12:50] different reasons. Firstly, it's um hierarchical. you know, you have cities
+[12:55] and you have counties and you have states and you have federal law and it's
+[12:58] the same all around the world. Um, and so you need to respect that
+[13:01] authoritative sort of hierarchy. There's also some temporal validity. So, one
+[13:06] judge might overrule a decision that's been made somewhere else and you need to
+[13:09] also respect that and figure that out. And then sometimes there's even like a
+[13:13] new regulation that has exemptions or special cases of an old regulation. And
+[13:18] so if you're finding this one, you need to find all the other ones as well. So
+[13:21] you can imagine that it sort of explodes the search
+[13:26] and so we started on elastic search for this but also moving to turbuffer um
+[13:31] elastic search just got extremely expensive because we have to have
+[13:34] everything there but um with turbopuffer we can basically uh take different
+[13:40] jurisdictions and we can make them name spaces in turbo buffer and that means
+[13:44] some of them here's an example where like you have the EU that gets quered
+[13:47] all the time that's super hot and some of them let's say Danish law cuz we're
+[13:50] Danish, no one cares really. It's such a small country, so like it doesn't really
+[13:53] get queried and so that can just stay on blob and that's fine. Um, and because
+[13:57] it's sort of a deep research style workload, if there's 500 milliseconds
+[14:01] latency to fetch that cold blob, that's okay. That's fine. It's not really a big
+[14:06] problem. So, the way that Turbo is designed lends itself super well to this
+[14:11] super long scale of like cold weird name spaces and a few that are really, really
+[14:15] hot. Um, yeah. And Simon wants to talk more about that.
+[14:20] Yeah. So, um um I was I was talking about why the company is called
+[14:25] Turbopuffer at another uh talk here earlier today, but uh one of the other
+[14:30] explanations of the name of Turbopuffer is that it's about puffing into the
+[14:34] different memory hierarchies and really mastering when data should be in
+[14:37] particular memory hierarchies. So, you can think about it here, right, of
+[14:41] something like the EU law might be more or less part of almost every one of the
+[14:46] legal research uh queries, right? So that probably sits closer to NVME SSDs
+[14:51] in memory, right? The economics kind of change as you move up and down this
+[14:54] hierarchy. Um in in memory, you want things that are queried a lot, right?
+[15:00] Then the economics of memory are great. NVME SSDs can you can do a lot of things
+[15:04] directly on them, but the economics change as you move up and down this
+[15:07] boundary, the latency changes and the way that the database is architected to
+[15:10] take advantage of it in terms of round trips versus random versus sequential
+[15:14] all changes as you navigate this hierarchy. Turbopuffer is a database
+[15:18] that is really designed around the memory hierarchy and all of the smarts
+[15:21] in Turbopuffer is that all of these namespaces are puffed in and out um of
+[15:25] the cache. You can think of this as we want to spend as much time have as much
+[15:29] data pushed as far down in this hierarchy as possible to get the the
+[15:32] best um performance cost ratios. So how does that apply to search? Well, for
+[15:38] something like vector search for example, there's two fundamental ways to
+[15:41] do vector search. One is to navigate it basically design a graph. The problem
+[15:46] with a graph on something like object storage or disk, again, we want to have
+[15:50] things as far down that memory hierarchy as possible. The problem with a graph,
+[15:54] this is not a graph, this is a tree. Um, but in a graph, you have to navigate
+[15:58] from the center of the graph. So, and then every time you navigate through
+[16:01] these nodes, you're doing 200 millisecond P99 to S3, right? And so,
+[16:06] you're trying to shrink the diameter of the graph. You're trying to do all these
+[16:09] tricks to make the graph, but fundamentally you're at odds with the
+[16:12] fact that graph is about a random sequential trade-off that you have in
+[16:16] memory and in registers, but not further down the memory hierarchy. The way
+[16:20] Turbopuffer does it is organize it into clusters, right? Vectors you can think
+[16:24] of in two dimensions just as point is a massive coordinate system and we can
+[16:27] organize them into clusters. Turbopuffer then creates clusters of clusters and
+[16:32] clusters of clusters of clusters to essentially organize all of the vector
+[16:36] data in a tree. You can basically think of turbopuffer as a very very
+[16:41] complicated B tree, right? Because it's a tree on this geometry of this entire
+[16:45] space and the clustering of it in an approximate way. Now the root
+[16:49] centroidids further up the tree you can imagine are part of every single time
+[16:53] you search right there. We're always trying to figure out which clusters that
+[16:57] we're in and we're always looking at the upper levels of the tree. So they're
+[17:00] going to be further of the memory hierarchy, right? Closer to the
+[17:02] registers almost all in DRAM. Now the leaves that have all of the actual legal
+[17:08] cases or whatever long document it could be could be images all of that is
+[17:11] probably going to be on SSDs with that single 1 millisecond roundtrip at the
+[17:14] end. It doesn't make sense to have all that puffed into DRAM. This is
+[17:18] fundamentally the cheapest way that you can run a database period. So for
+[17:24] something like Lora or even web search which is in hundreds of billion or tens
+[17:28] of billions depending on how much of the web you've scraped this is fundamentally
+[17:31] the cheapest way to do it. And we have customers that are indexing massive
+[17:35] parts of the entire web into turbopuffer which is really also a part of what
+[17:39] legal research is. Full text is also also really respectful of the memory
+[17:45] hierarchies. The way the text search works is essentially you can think of it
+[17:48] as a hashmap. You have a big document and then you take every single one of
+[17:52] the tokens and you put them into the key in the hashmap. The value in the hashmap
+[17:56] is some set with all of the document IDs that has that term. So then if you
+[18:00] search for New York population, you're finding those three places in the
+[18:04] hashmap and then you're taking the three sets and doing an intersect on the
+[18:07] intersect on the sets. While you're intersecting, you're also trying to do
+[18:10] some kind of scoring, right? A document that has York in it is probably more
+[18:15] valuable than a document that has new in it because York is a more rare word.
+[18:20] When people say BM25, this is the scoring that they're referring to.
+[18:25] The art of fulltech search is one, we want to minimize the number of round
+[18:29] trips. So first you download the parts of the dictionary that are relevant.
+[18:31] Round trip one maybe a round trip one before that to index into where the
+[18:35] parts of the term terms are. And then the second round trip is to get these
+[18:40] massive lists. Try to make the list as small as possible by compressing them.
+[18:44] But also while you're doing the text search you're trying to minimize the
+[18:47] amount again of memory bandwidth that you want to intersect these list. You
+[18:51] can probably imagine that at some point there's a point where you've seen so
+[18:55] many documents with population in York that have much higher scores that
+[18:59] documents that just have new in it are irrelevant anymore. This is like a mega
+[19:02] crash course in how text search works. And counterintuitively to most people,
+[19:06] text search at web scale is more difficult and more computationally
+[19:11] expensive than doing vector search. I'll hand it over to you.
+[19:16] Cool. So key learnings from um what you heard today, retrieval is extremely
+[19:23] important to legora. Um it's key to legal reasoning. Turbopuffer really
+[19:28] excels when uh for us because it makes it extremely easy to operate. We have 70
+[19:35] plus tenants. We have 100, we have 200 tenants. You know, if we had to have
+[19:38] separate elastic search databases for each of these, it would be just hell. Um
+[19:42] but we can do this natively with turboper with data residency and cmech,
+[19:46] etc., etc. And then it's extremely cost efficient generally when you have these
+[19:50] types of workflows um or workloads that we do where there's a long tail of cold
+[19:55] indices basically that you don't need to query so much and you don't you're sort
+[19:59] of you're okay paying the small latency cost for it. So now with um turbo buffer
+[20:05] in 4 seconds to go now we can focus on making lora we can focus on the product
+[20:09] making it really really great and not on scalability and infra and also David our
+[20:12] CFO is really happy about the cost. So, it's great. Thanks everyone.
+[20:17] [applause]
+[20:34] >> [music]

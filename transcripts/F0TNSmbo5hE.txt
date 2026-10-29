@@ -1,0 +1,468 @@
+# title: From Vibes to Production: Evaluating and Shipping AI Agents That Work 201 — Laurie Voss, Arize AI
+# source: https://www.youtube.com/watch?v=F0TNSmbo5hE
+# speaker: Laurie Voss, Arize AI
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T04:13:01Z
+# sha256: bd50c7fe5f48e1865f4bf1051548391b7659782240f48427110487a1db848872
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:12] All right. Hello everybody. Thank you for coming back.
+[00:17] Who here was in the 101 session this morning?
+[00:21] All right. So, I didn't completely scare off everyone. Thank you very much. Uh,
+[00:26] these instructions have been on the screen for the last 10 minutes. I really
+[00:29] hope that you followed them because the Wi-Fi here sucks. So, it takes a long
+[00:33] time to clone that repo. Uh if not, uh these instructions will come
+[00:40] up on the screen again and you'll have another chance to follow them. Uh but
+[00:44] let's get started. This is Vive Production 2011. We are going to be
+[00:47] talking about how we close the software development life cycle loop
+[00:51] automatically.
+[00:55] We are Arise AI. We are the leading observ observation observability and
+[01:00] evaluations platform. Don't try and say both of those words at the same time. It
+[01:03] doesn't come out right. Uh this is that slide that everybody puts up to be like,
+[01:08] "Hey, we're really big. We're really important. You should pay attention to
+[01:10] us. We are we're really big. We're really important. Lots of people use
+[01:13] this. It's great." Uh and that is the last of the sales pitch. I am going to
+[01:18] You can use uh any observability platform to do
+[01:22] this. We hope you use ours. But the point of this is to teach you about how
+[01:27] you can you where observability is going. Uh and where it's going is
+[01:32] continuous improvement. In the 101 session this morning, I covered the
+[01:36] basics. I covered the manual stuff. I covered how you do this uh on a small
+[01:41] scale. Uh how you get observability of an AI application, how you uh turn it
+[01:47] into traces, how you turn those traces into eval, how you use your evals to
+[01:51] improve your application. Uh and today we're going to be this session we're
+[01:56] going to be talking about how we do that at the new internet scale of things that
+[02:02] uh we find ourselves in. So uh there's going to be me talking for like 15
+[02:08] minutes about how this stuff works. Uh and then we're going to dive into the
+[02:12] actual workshop. Unlike the 101 workshop which was a lot of me talking, uh this
+[02:17] one is going to be extremely hands-on. I am expecting you to have a working
+[02:21] coding agent and if at all possible that repo that I had on the screen earlier uh
+[02:27] because we are going to be asking your uh agent to do things in the repo that
+[02:32] you've installed there are a pile of agent skills already installed uh and
+[02:36] those agent skills give your your coding agent superpowers for dealing with Arise
+[02:41] AX. Uh so your agent will suddenly be very good at doing all the things that
+[02:45] you're about to ask it to do. Uh then we're going to use those skills to uh
+[02:51] analyze our traces and to put together uh a fix uh for a problem that we're
+[02:57] going to find in the agent that we're working with. Uh then we're going to
+[03:00] talk about signal uh which is uh the future of this where uh we will have
+[03:06] continuous improvement ongoing automatically at agent scale.
+[03:12] So to zoom out first let's talk about what the problem is. The problem is that
+[03:18] you is that agents are nondeterministic. With traditional software, you can read
+[03:22] the code and you can tell with some degree of reliability what exactly that
+[03:27] code is going to do. With agents, you have no idea. Agents are
+[03:32] non-deterministic. Agents take multiple turns. Uh they make decisions and even
+[03:37] if you give them the exact same input, they are not going to give you the exact
+[03:41] same output. And even if they give you the exact same output, they might not
+[03:44] have taken the same path to get there every single time. So that means that
+[03:49] your code isn't the source of truth for what does my agent do. Instead, the
+[03:53] traces are your source of truth. And your traces at scale are the source of
+[03:57] truth. You have to have a whole bunch of data to tell you on average what is it
+[04:03] that my agent does, not just this one run.
+[04:08] Because you are essentially flying blind when you are building agents. This is
+[04:11] what you get uh when you're when you download the repo. You get a pile of
+[04:16] code uh and a pile of commit messages. And that used to be enough to tell you
+[04:20] what was going to happen, but it no longer is. What you get instead is uh
+[04:25] traces. Uh traces are um for those who missed the 101 session, traces very
+[04:33] briefly are like log lines for uh AI applications. every single thing that
+[04:39] your application, your AI application does, uh, every LLM call, every tool
+[04:43] call, every agent turn, all of those things become a trace. Traces can be
+[04:48] nested so that they hold other traces and those are what, uh, Arise works
+[04:53] with. They are sent to our servers and we give you uh, an easy visualization of
+[04:58] what you're looking at. Um, what that looks like in prog in practice is this.
+[05:04] Here are some uh live traces. I'm going to pull up the specific traces from uh
+[05:12] what we're going to be working with today, which is the Wonder Toys agent.
+[05:15] Um you can see the inputs, you can see the
+[05:18] outputs, you can see an agent workflow happening, you can see a specific turn,
+[05:23] and you can see an LLM response. You get the inputs, you get the outputs, you get
+[05:27] a whole bunch of metadata like how much does it cost, how long did it take, the
+[05:31] things that you need to debug an agent. Uh in practice
+[05:38] um tracing gives you visibility for every step the agent took. Uh and that
+[05:43] is a huge leap forward just by itself. If you can see what your agent is doing,
+[05:48] suddenly you can see that your agent is taking you know 10 turns to do something
+[05:51] that you thought was really simple or it's doing one turn that it doesn't need
+[05:55] to do or it's doing something very expensive or it's taking 20 minutes to
+[05:59] do something that you think it should take a minute to do. That is the basic
+[06:04] uh value of observability. That is why observability is so popular before you
+[06:08] get into any of the extra stuff that we're talking about.
+[06:13] The problem with traces is that humans are a bottleneck with in the tracing
+[06:18] loop. When you put an application into production, you get a trace. In fact,
+[06:22] you get a pile of traces every single time that agent does anything. When you
+[06:27] put that into production and you have thousands of requests per second, that
+[06:30] means that you have millions and millions of traces. You can spot check
+[06:33] those. You can read your traces. You can absolutely look at what individual
+[06:37] things are doing in development in production. You become a bottleneck and
+[06:41] you can't possibly get an overall sense of what all of your traces are doing uh
+[06:46] by reading them one at a time. So the solution, the traditional
+[06:53] solution, and by traditional I mean 2025 solution to this uh was eval. Evals are
+[06:59] either code or even better another LLM that looks at what your agent is doing,
+[07:04] looks at the entire trace uh and says whether or not that was good or bad by
+[07:10] some definition of good or bad that you define. Uh
+[07:15] the thing about traces, the thing about eval
+[07:18] is that uh they come from LLMs which means that the LLMs
+[07:24] provide not just a score of one or zero but also an explanation. Uh they were
+[07:30] like you defined good this was bad for this reason and that is the basis of an
+[07:36] entire improvement loop. Evals can give you machine readable or rather human
+[07:43] readable explanations which machines can read these days which say this is why
+[07:47] your eval failed. This is what you could have done better and you can feed that
+[07:51] back into a coding agent which can then make your software better automatically.
+[07:55] You can close the software development loop without you having to do anything
+[07:59] once you've really cleverly defined what good looks like. You can create this
+[08:04] hill and your agent can climb it all by itself.
+[08:08] So that brings us to the 2025 eval loop. You go from no visibility to having
+[08:14] traces to having traces in evals to being able to do manual improvements as
+[08:18] a result of looking at uh your traces. But the problem is in 2026 that humans
+[08:24] become a bottleneck in the loop again because your evals are now dealing with
+[08:28] enormous levels of scale. Your uh agents are pumping out code incredibly fast.
+[08:35] your applications are running at scale. You've got more evals than you can
+[08:39] possibly deal with. And you've got uh so even though eval were allowed you to
+[08:45] compress thousands of traces down to eval scores, you've now got so many
+[08:50] evals running uh that you can't stay on top of those as a human by yourself.
+[08:55] Which brings us to the next phase of uh observability and evaluations evolution
+[09:02] which is that instead of building in is that now that we are building at agent
+[09:06] speed we have to improve at agent speed as well.
+[09:11] We have to find a way of closing the loop uh at scale in the same way that
+[09:16] agents do. This is a shift that is happening across the observability
+[09:21] industry uh that everyone is feeling at the same time. Observability is shifting
+[09:26] from humans reading dashboards to agents reading traces. Agents are understanding
+[09:32] uh agents are the way that we scale our understanding of what our agents are
+[09:38] doing uh in a way that is practical at the scale that and at the uh velocity uh
+[09:45] that we are dealing with these days.
+[09:50] So what you can do when agents are reading your agents is you can detect
+[09:55] signals in your traces. You can uh instead of having uh you know 10,000
+[10:03] eval results that all say you fail the eval and all of them having a different
+[10:07] explanation that you would have to read. You can have an agent read those and
+[10:11] look at your uh eval eval failures on mass and detect signals, detect patterns
+[10:17] inside of uh your eval failures and say okay not you've you know you've got
+[10:26] 10,000 uh successful requests today. You've got a thousand failed requests
+[10:31] today. Inside those thousand there's a hundred that are the same failure. That
+[10:34] is what we're going to go and fix. uh that is what you can do when you
+[10:39] automate your uh understanding of your signals coming out of your traces coming
+[10:44] out of your evals.
+[10:48] Uh at Arise we have built this into a product called signal uh that I'm going
+[10:53] to talk about right at the end. Uh but this is not a sales pitch. This is a
+[10:57] demonstration of what you can do when you move to this new level of
+[11:02] abstraction. uh when you jump from I was reading traces one by one you jumped up
+[11:08] to a new level of abstraction to I am reading my evals and this is a new level
+[11:12] of abstraction on that which is I am reading signals from my evals from my
+[11:15] traces
+[11:19] because observability is making a big shift from being an observation to being
+[11:25] an action. We are moving from software that reports what is going on to
+[11:32] software that improves what is going on that it improves the the software that
+[11:36] it is observing automatically uh based on your definition of good.
+[11:41] Again signals become fixes. They become
+[11:46] automated fixes and uh that brings you to a new loop. This is the 2026 loop
+[11:52] where you go from no observability to traces to eviles to signals to automated
+[11:58] fixes and back again. You create a new world where the software fixes itself.
+[12:03] The software improves itself. The software climbs the hill.
+[12:09] So that's the spiel. That's the vision. That's where we think this is going. So
+[12:14] now we're going to get hands on. Who here has already signed up for a rise?
+[12:20] Oh, that's good. Okay. Uh, if you haven't, now is the time. Uh, you need
+[12:26] an Arise AX account. Uh, they are free to get, I promise. Uh, you also need
+[12:31] this repo, um, which was is the same one that I had right at the beginning. Um,
+[12:39] if you can't get this repo to come down on the Wi-Fi, uh, try tethering with
+[12:43] your phone. But if you can't get either of those things to work, don't worry. I
+[12:47] am going to be demonstrating it live using my own copy uh which I cloned when
+[12:51] I still had Wi-Fi. Uh
+[12:56] is there anybody who has any questions so far about these instructions? I have
+[13:02] time. We can pause. We can get you involved. There are arisers sitting in
+[13:06] the room waiting to jump around to you. So if you raise your hand, I'm not going
+[13:10] to, you know, come intimidatingly down to help you. Somebody is going to run to
+[13:14] you. Anybody need help with these instructions?
+[13:23] >> Sorry.
+[13:26] >> Yes, it was.
+[13:30] >> Uh, cool. So, in this example, you're going to need an open open AI API key,
+[13:35] uh, an arise space ID, and an Arise API key. And then you're going to run npm
+[13:39] rundev, which is going to give you the software running locally. So,
+[13:44] I've already cloned mine. I'm going to follow along.
+[14:00] And address already in use because I'm running my good version. All right.
+[14:13] Cool. So, this is going to give me on port 3000
+[14:19] a web store. It's called Wonder Toys.
+[14:23] >> I have a question. >> Yeah.
+[14:25] >> I work in highly regulated billions of places
+[14:33] and then the software fixing itself as well.
+[14:37] How operate
+[14:40] like we still need to really know
+[14:45] what it's doing mistakes
+[14:50] trying to hide it own mistakes >> how would we know so many
+[14:57] >> I I can't believe you're asking this question since it's such a great
+[15:01] question to ask me specifically because on Wednesday I'm giving a talk called
+[15:05] the death of the code review which is exact actly the answer to your question.
+[15:10] Uh so I very much recommend that uh you come to that talk. The the question is
+[15:15] how do you trust uh that code that this the code written by agents who are
+[15:20] reviewing your agents is actually going to work. Uh and the answer is very
+[15:23] complicated. It's a whole 20-minute talk. Uh so uh please come to that
+[15:27] session on Wednesday.
+[15:31] [laughter] >> No, the 20-minute talk is already the
+[15:34] quickest possible summary I could have of that answer. the end I mean the the
+[15:39] one sentence answer is abstractions upon abstractions upon abstractions uh but uh
+[15:45] there's a lot of nuance to it >> so like this do you think this will be
+[15:49] adopted in the financial industry pretty soon
+[15:53] >> this stuff is we have at Arise we have customers in the financial industry who
+[15:58] are doing this right now so uh back to wonder toys so wonder toys
+[16:04] is Uh, an agentic shopping experience. Have you got
+[16:10] any toys for [snorts] seveny olds? Let's see if
+[16:16] it works. Hopefully, it should. It's all local. Cool.
+[16:22] So, it presents me with this. I can add them to my cart. I can get more details.
+[16:26] It's a really fun little app. You can add it to the cart. You can ask about
+[16:29] the products. You can do all sorts of fun stuff. Uh the important thing from
+[16:34] our perspective is that uh at the moment there's no observability. We can't tell
+[16:40] what the hell is going on with this application uh because it's not sending
+[16:44] traces anywhere. So what we're going to do is we're going to ask our agent to
+[16:48] fix that. This is the most hands-on workshop that I have ever given uh in
+[16:55] that I'm going to actually be doing this all live. So, can you please add
+[17:01] observability with arise ax
+[17:06] to this? Oh, wait. Hang on. Pre-erun. That's the
+[17:11] wrong one.
+[17:20] See, I had two copies.
+[17:26] All right.
+[17:29] This is the cloud code plugin for VS Code, by the way. It's really great. It
+[17:32] is so much better than cloud code on the command line. I don't know why anybody
+[17:35] uses cloud code on the command line. [laughter]
+[17:40] See, and you probably use Vim as well, whoever went boo just now. Uh, okay. Can
+[17:47] you add observability with Arise AX to this application
+[17:55] you've got? secrets
+[17:59] in end.local already.
+[18:06] So hopefully this will work because it worked in the initial version that I
+[18:10] tried. Uh what it's doing here is uh it's going to implement observability.
+[18:16] Implementing observability is a much simpler operation than you would imagine
+[18:20] uh because the agents SDK, the open AAI agents SDK that this thing is built on
+[18:25] um is already instrumented uh with open inference. Open inference is the open
+[18:32] standard used by the entire observability industry uh to track what
+[18:36] uh AI applications are doing. Um, which means that all you really have to
+[18:42] do to get observability out of an application is uh turn it on. You say
+[18:48] you've got open inference already. I'm using arise. This is my API key. This is
+[18:53] where my endpoint is. Send all of those traces that you were already generating
+[18:58] uh to my endpoint uh and let's look at it in the app.
+[19:04] Claude is still chugging along. So, we're doing it. Who is doing this right
+[19:08] now? Hands up. Some of you are doing it. Okay. Who
+[19:12] needs help to get here?
+[19:20] >> There are skills in the repo installed already. So,
+[19:29] >> oh, that's in the top level read me. The one that you want to get into is the one
+[19:32] called uh OpenAI agents pie.
+[19:38] Open AAI agent. There's also a second directory which is OpenAI agents pi
+[19:42] pre-run which is the one where I did all of this stuff already. And uh so if you
+[19:46] are wondering what it should look like once it when it's working, that one's in
+[19:49] there.
+[19:57] Oh, you're updating my read me and stuff. You know me too well.
+[20:02] You didn't need to do all of that.
+[20:06] All right, cool. It looks like it already did it.
+[20:19] Let me restart my app and see if I've got some observability going.
+[20:30] All right. So, I'm going to go back to my homepage. I'm going to ask it a new
+[20:33] question. I'm going to say, uh, what about colorful
+[20:40] toys for toddlers?
+[20:51] Colorful toddler toys. No. What about colorful toys in general?
+[21:08] Cashmiss. Oh no. Well, now you know it's a real live demo because it
+[21:15] is having trouble with its database.
+[21:39] Great. Okay. Uh
+[21:44] so as a result of doing that, we should have some traces. If I look in
+[21:51] if I show you my m.local, local. You'll see that I called uh Wonder Toys agents.
+[21:56] Wonder Toys OpenAI agents PI was my project name. So that is the tracing
+[22:01] project that I'm going to look for. There it is.
+[22:09] And we can see some a we can see some traces.
+[22:25] So, this shows us exactly what we were expecting to see. It shows us inputs,
+[22:29] outputs, agent requests, all of that kind of stuff.
+[22:35] Now, I'm going to ask it deliberately a question that I know that it can't
+[22:38] answer.
+[22:42] Show me all the toys you've got
+[22:46] under $6.
+[22:52] Don't.
+[22:56] [sighs]
+[23:08] I was running the wrong app. I was running the pre-erun
+[23:14] where everything was working. That's why I could do it.
+[23:28] Great demo everybody. Super proud of myself right now.
+[23:40] Fail. Yes. Excellent. So the version that comes in the OpenAI
+[23:47] uh in the nonp pre-rerun directory uh doesn't have the ability to filter by
+[23:52] price. I knew that in advance which is why I asked that question. Uh so if we
+[23:57] look in our traces, we should then see coming in when I click the live button,
+[24:06] show me old toys under $6. Fantastic. And you can see that it fails. So
+[24:14] what are you still doing?
+[24:18] It escaped. It's fine. Whatever you were doing, it was not necessary. All right.
+[24:23] So that was it. We added observability. Suddenly traces are flowing into our
+[24:27] application. We did not write a single line of code. In fact, you don't even
+[24:29] know what agent framework I used to put this thing together. Uh the whole thing
+[24:33] is working and it's sending us traces. And you can now do phase one
+[24:36] observability. you can look at your traces.
+[24:41] So, let's begin to close the loop by asking
+[24:45] our agent to tell us how do we get to the next phase. Uh,
+[24:52] can you pull my traces and look for things that
+[24:59] are going wrong?
+[25:06] So, a default like off-the-shelf coding
+[25:11] agent isn't going to know this. However, when you installed the repo, you
+[25:14] installed a whole bunch of skills. Uh, so it should know from those skills uh
+[25:21] where to do that. Except I'm in
+[25:29] Oh, yeah. Oh, it's working. Okay, there we go. Cool.
+[25:34] Uh
+[25:37] [snorts]
+[25:47] this is where I would hit yes to all and my head of security would have a conion
+[25:51] to me. Uh so what I'm asking it to do is use the
+[25:56] skills that I gave it uh to pull down my traces uh from AX directly. It has the
+[26:01] API key. It has this it has the uh endpoint. So there's an AX command line
+[26:08] uh which it's using to do all of this stuff and it's pulling down the same
+[26:11] traces that we were looking at in the UI which it can expect uh inspect
+[26:14] programmatically.
+[26:19] It's summarizing span kinds statuses and errors. This is great. Uh again, the
+[26:25] coding agent uh knows exactly what's going on here
+[26:30] because we've installed the skills already.
+[26:34] The skills are what are giving it all the information here.
+[26:38] It's looking into quality issues, which is exactly what I wanted it to do
+[26:45] because there were no error spans. There were just a bunch of spans where it
+[26:47] returned 200 and said things are fine. uh
+[26:55] and it has already found this specific thing that I was uh asking it to look
+[26:59] for the search products tool suspiciously g suspiciously returned in
+[27:03] one millisecond. So it's going to find some quality some poor quality signals
+[27:07] and tell us about them.
+[27:25] Who's got this working so far? >> Who's still cloning the repo? Oh,
+[27:37] >> no. the plug the the skills are sitting in a directory called aagents/skills
+[27:42] and your coding which coding agent are you using?
+[27:49] >> It's actually in the root directory. So you might want to open your agent on the
+[27:53] root directory and then cd down into that one.
+[27:58] >> Yes, npx skills uh install arise-ai installs all of these skills directly.
+[28:06] >> Sorry, what were you saying?
+[28:13] huge.
+[28:19] [laughter]
+[28:22] >> And so this is mysterious because there used to be a version of this application
+[28:26] where you had to sign in with X and I changed it so that you don't have to
+[28:29] sign in with X. As you can see, when I ran the S application, I didn't have to
+[28:33] sign in with X. Somehow it has dug up the version where you sign up in X. I am
+[28:40] completely confused as to how that is happening. Code is mysterious. I will
+[28:44] have to talk to you more afterwards about exactly how you got there.
+[28:48] All right, so Claude has finally got its together and told me what's going
+[28:52] on in the traces. Uh 42% of searches have returned zero results. Degenerate
+[28:58] all null searches. The agent curled search product with every argument null
+[29:01] producing a meaningless search that returns the first product in the
+[29:04] catalog. Min age equals max m age max age exact age filtering o over narrows.
+[29:10] Uh the trace stack calls three agent kinds. The headline issue is the search
+[29:15] products filter logic. Vector search and keyword category filters frequently
+[29:18] produce empty results when model supplies the fixes on the tool side. Uh,
+[29:24] when I tried this this morning, I only had one trace and that trace was it not
+[29:28] finding the tra not finding the prices. So, is there a problem with filtering by
+[29:35] price? I'll see if it can find that in the
+[29:38] traces that it's already got.
+[29:43] But spoiler alert, even if it doesn't find them, we are going to get it to add
+[29:46] the feature where it filters by prices.
+[30:13] All right.
+[30:28] Exactly. doesn't have price filtering at all. Cool.
+[30:34] Let's add price filtering to this app.
+[30:53] >> [laughter] >> One of the things that can happen when
+[30:56] you have agents being clever is that agents can be too clever. This agent has
+[31:00] noticed that I have a copy of this app sitting right next to it where I already
+[31:03] solved this problem and it is just copying the code over from the
+[31:06] pre-solved version of the app. That's not what it did this morning because it
+[31:10] didn't have the solution sitting in a directory this morning, but it's still
+[31:14] going to work. So, we're just going to let it do that. We're going to let it be
+[31:18] clever and copy the solution from the previous solution that it built this
+[31:21] morning because why the hell not, Claude? Thank you very much. All right.
+[31:26] Uh, the cool thing about all of this stuff
+[31:29] is that again, I haven't touched the code at all, right? All I've done is
+[31:32] said that hey, look for problems. It has found a problem. I've said, hey, what
+[31:35] about that problem in particular? Can you fix that problem in particular? And
+[31:39] it's like, yes, I'm going to do that. That is the joy of agentic coding. uh
+[31:44] brilliantly because it was copying the solution from somebody else already. Uh
+[31:48] it's already done. So let's go back to Wonder Toys.
+[31:56] Show me all toys under $9.
+[32:07] And tada. A round of applause for me, I guess. Thank you.
+[32:13] >> [applause] >> or really for clone. Uh so now if we
+[32:17] look at our traces,
+[32:21] we can see show me all toys under $9.
+[32:26] And we've got our input and our output in the response including all those toys
+[32:31] under $9. Uh this is what we were trying to get done. We were trying to close the
+[32:38] loop from uh we have no observability into this application at all to we have
+[32:44] observability, we know what's going on to uh find the problems automatically to
+[32:50] fix the problems automatically and we have closed this loop. But what if uh
+[32:58] you could go a little bit further than that?
+[33:05] Uh what if you didn't have to do the asking? What if your system just
+[33:10] automatically detected that there were pro issues with your code, suggested
+[33:13] fixes and decided to fix it itself? That is the question that we asked ourselves.
+[33:20] Uh and that is when we built this thing which is called signal. Uh signal is an
+[33:28] agent that runs inside of Arise AX and continuously monitors all of your
+[33:33] traces. It runs every six hours by default, but that's configurable. Uh,
+[33:37] and it does what we were just doing manually in cloud code, but it does it
+[33:41] automatically inside of AX continuously. It reads your traces, it looks for
+[33:45] patterns, it finds things that are wrong, and it suggests fixes. So,
+[33:51] luckily, I built this thing more than six hours ago, so it's already run. Uh,
+[33:55] and it has found uh a bunch of problems in previous versions of this application
+[33:59] that I ran. So, uh, the agent hallucinates an age constraint from
+[34:05] vague user phrasing. That's nice. Uh, harmful query. I asked it if it could
+[34:10] give me instructions on, uh, installing a, uh, creating a bomb. Um, it told me
+[34:16] that it couldn't, but, it recommended some bomb related toys, and Signal is
+[34:20] like, "No, just ignore the bomb queries entirely. Don't try to be helpful. Uh,
+[34:26] we don't have any bomb related toys." Uh, it also told me that if I was
+[34:29] feeling violent, maybe I should take a timeout, which is again probably a
+[34:34] domain escape, like you shouldn't be giving my psychological advice. Uh, we
+[34:39] should probably have an email about that and better guard rails. Uh, it also
+[34:44] noticed a test that I gave it earlier where I just said say hello. Uh, and it
+[34:48] said hello and it's like you shouldn't do that. You're a toy. You're a toy
+[34:51] store. You shouldn't obey random instructions that somebody on the
+[34:55] internet gives you. uh all of which are fine. Um and what it does here is it
+[35:00] gives you uh a whole bunch of options. Um
+[35:04] it will uh by default it will create a a GitHub issue for you completely
+[35:09] describing the problem. It will say exactly what trace went wrong, how to
+[35:12] find it, where to fix it, uh what it thinks you should do. Uh you can take
+[35:17] you can take this trace and add it to a data set so that you can run evals on
+[35:21] it. You can create an evaluator based on uh the problem that it has found. Uh and
+[35:26] the most fun one is that you can open a PR if I've connected my repo which I
+[35:30] haven't yet. Uh you can open a PR directly in which it will have read your
+[35:35] repo uh suggested a fix and created a PR that automatically fixes this problem.
+[35:41] So instead of you having to read traces or you having to read eval uh signal
+[35:47] gives you a bunch of PRs that you can approve or uh you can approve or reject
+[35:52] uh that resolve the problem for you. Um
+[35:58] so this probably raises some questions.
+[36:03] Who's got questions about signal? >> Yes.
+[36:14] Is there a version that will keep the traces local on device? Um there is not
+[36:20] right now. The uh I assume you're asking for sort of compliance reasons. Um the
+[36:26] compliance story with Arise is we have an on-prem version where it will run
+[36:30] entirely on your uh your company's hardware uh and and uh activate from
+[36:36] there. Yeah.
+[36:49] >> Sorry, could you be louder?
+[36:55] >> Ah. Um, because I only have a few traces in this application, it's looking at the
+[37:00] very few traces that I have and it's going on based on one or two traces. If
+[37:04] you had 10,000 traces, it would be grouping them based on a 100 traces, a
+[37:07] thousand traces, that kind of stuff.
+[37:13] >> Oh, there.
+[37:21] >> How do you know what? Sorry.
+[37:33] Ah yeah. Um so the solution here is eval. You'll be surprised to learn uh
+[37:40] a a production system should have a set of regression evals which are things
+[37:45] that you are expecting uh your agent to already be good at. So your evals
+[37:50] already in place which you can uh create them. Uh I'll show you in a second. uh
+[37:55] with your evals already in place, you will know that your system doesn't
+[37:58] change from the good behavior that it previously had as a result of this
+[38:02] change. Uh if you don't have any evals, I can show you how that's done. Uh which
+[38:08] is we can go to the wonder toys project uh and ask it to build an eval.
+[38:21] build an eval that ensures that I'm never giving instructions
+[38:30] about how to build a bomb. That seems like a really basic eval that
+[38:36] I should have had in from the beginning. Uh this thing that I'm using right now
+[38:41] is called Alex. It is our in agent assistant. It is our uh in product
+[38:45] agent. Uh and it knows like the skills do. It knows how to build everything. So
+[38:52] uh you can do this in product, you can do it in the skills in your co coding
+[38:55] agent, but either way it will create an evaluator for you uh and run
+[38:59] automatically.
+[39:11] And that is pretty much it as far as we're going. Question at the back. What
+[39:16] harness is signal? >> Uh, what harness is signal? Uh, I don't
+[39:23] know what harness is signal. You know, Jason,
+[39:30] >> yes. Uh, signal is uh clawed code at the moment and you can bring your own later.
+[39:36] Uh, that is my boss trolling me in case you're wondering why he happens to know
+[39:40] the answer to my question. Any other questions about signal? Yes.
+[39:55] >> Sorry. Louder.
+[40:05] >> Uh at the moment the the question is about the cost of running signal. At the
+[40:09] moment uh we eat the cost of signal. the uh solute the aim is uh for to for you
+[40:16] to get the best product experience. Right now uh we can't guarantee that
+[40:19] it's always going to be that way uh but at the moment uh signal is run on our
+[40:24] agents at our dime.
+[40:29] >> Yep. >> Can you talk us through how signals?
+[40:33] >> That is an excellent question. How is Signal How is Signal evaluated? uh
+[40:38] signal is a has its own eval suite uh that uh runs internally uh and is traced
+[40:47] using arise. So everything that signal is doing is sending its own telemetry
+[40:51] back to us uh unless you opt out of it uh which is telling us uh the queries
+[40:58] that it's getting what it's doing how it's doing all of that stuff. We have
+[41:02] powerful LLM judges looking at the results of Signal uh and telling you
+[41:06] whether or not uh Signal did a good job generating that PR or not. Uh so exactly
+[41:11] the same software development life cycle that I was just talking about uh applied
+[41:16] to Signal itself. Awesome question. Thank you. Gets us to show off.
+[41:22] >> Yep.
+[41:28] Signal.
+[41:33] >> Uh does Signal automatically create its own evaluators? Not right now. Uh at the
+[41:37] moment you have to you have to because evaluators you know take time and money
+[41:41] to run. You want to uh you want to get the suggestion and then you want to
+[41:46] create the eval.
+[41:51] All right. Uh and I think I'm going to leave it at that. Thank you all for your
+[41:55] time and attention. >> [applause]

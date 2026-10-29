@@ -1,0 +1,934 @@
+# title: Jack Morris: Stuffing Context is not Memory, Updating Weights is
+# source: https://www.youtube.com/watch?v=Jty4s9-Jb78
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T10:06:20Z
+# sha256: aa316a10f260d795ca54ff47b528c27b081e850210e0feab54c322ccacb9214e
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:13] [music]
+[00:20] >> Let's talk about ChatGPT. I think like ChatGPT knows a lot of things. It's
+[00:24] actually extremely impressive. I use it all the time. I use it to help prepare
+[00:29] for the presentation. You know, I use it to cook last night. Um,
+[00:33] you know, like growing increasingly dependent. And yet there's a lot that
+[00:37] ChatGPT doesn't know. Like um it didn't know why my speaker pass
+[00:41] wasn't working when I was trying to get into the building and it uh
+[00:46] if you ask it did the Blue Jays win the World Series, the answer is no. And I
+[00:49] know that because I watched the World Series, but ChatGPT doesn't know that if
+[00:52] you don't enable web search because it has something called a knowledge cut
+[00:55] off. So all the training data is kind of segmented by date and things after a
+[01:00] certain date are not known by ChatGPT like unilaterally.
+[01:05] Uh if you ask ChatGPT help me optimize this kernel I wrote for AMD GPUs,
+[01:10] it's so bad at it. And I think there's a few reasons for this. One, it's really
+[01:13] hard. Two, uh there's not a lot of data for it. But three, I think it's more
+[01:19] that the data that does exist is such a small portion of its training data that
+[01:23] it just like can't do it very well. And so a lot of tasks like this, which I
+[01:27] I would guess a lot of you face in your jobs, like the things that are more
+[01:30] niche or here I call long tail, are really hard for ChatGPT to do. Even if
+[01:36] you say, "Please like please sir." [laughter]
+[01:39] Like I want you to learn more about this or practice. Like it can't learn more
+[01:42] about this. It can't practice. It doesn't know what to do when you ask it
+[01:46] that. And yeah, if you ask what are the terms of our partnership agreement for
+[01:50] BlackRock, it doesn't know about your company. Which of these shirts should I
+[01:53] order from Amazon? Implement a new feature in our
+[01:57] company mono repo. Write an email in my style. Diagnose this patient given their
+[02:02] history. What arguments did the opposing counsel use in the Martinez settlement
+[02:06] negotiations? Is this question already answered on our
+[02:09] company internal wiki? Like none of these things are
+[02:13] possibly answered by ChatGPT because they're not in the training data or
+[02:16] they're too niche or they require some data that's not available to it.
+[02:21] So I think like the question I want to talk about today is like what's the
+[02:24] right [clears throat] way to solve this problem? Like if we want to build new
+[02:26] systems that actually know the things we want them to know, how how should we
+[02:30] build them? And I think like the way I want to think about it is like how do we
+[02:35] take some knowledge and inject it into the parameters of the model? Like what's
+[02:39] the right way to do this? And like the way that I think about it
+[02:43] and I think the way this manifests in my research and other people's research is
+[02:47] there's three ways. There's full context. You can take as much stuff
+[02:51] as you can and cram it into the language model. There's rag or retrieval
+[02:55] augmented generation where you have so many things that you can't fit them all
+[02:59] in and so you retrieve the most useful ones and then feed them in.
+[03:04] And then there's this third thing, which I think is like really new and no one is
+[03:08] doing it yet, which is training things into weights. And I want what I mostly
+[03:11] want to talk about today is like why I think we should be training things into
+[03:15] weights. But I'm going to start with the other two.
+[03:18] And also I guess like along the way I about 10% of the time I'm going to be
+[03:22] shilling my own research, but I'm going to like try to be honest about it. And
+[03:25] you can just tune me out if you want. So I think like the easiest way to solve
+[03:30] these problems is to put everything into context. Like if you work at a small
+[03:33] company or all you care about is like maybe the 100
+[03:39] World Series that have occurred, you can kind of copy all the data and paste it
+[03:43] into ChatGPT or paste it into Grok or whatever model you use and that's
+[03:48] finite enough that the model can understand.
+[03:51] And this like works works pretty well. I think that this is something that got
+[03:55] people really excited for a while a few years ago. I have this example of like a
+[03:59] doctor answering a question from a medical record. A medical record is
+[04:02] small enough that it can presumably be like input into the context of the model
+[04:07] and the model can do pretty well. I think there's a few problems with this.
+[04:11] Maybe the main one is just that it's so expensive. Like if you do anything like
+[04:15] this in your day-to-day workflow, you put like a ton of tokens in the context
+[04:19] to start generating. I mean one, it's going to cost a lot of money like US
+[04:22] dollars. But two, it's just so slow like you know, a few months ago I was writing
+[04:29] my thesis and I wrote it myself, but I did ask for some feedback a few times
+[04:35] from Claude. And like the second you paste in I I don't know, it's like
+[04:39] maybe 80 pages of text or something. It like as
+[04:43] documents go, it's medium length. I paste into Claude, the second you paste
+[04:47] into Claude, everything slows down by 10x or something. I have this stat here
+[04:51] that if you have 1,000 tokens of context,
+[04:54] we can output 10,000 tokens per second. If you have 128k per ton
+[04:59] 128k tokens of context, we can output 130 tokens per second. So that's like
+[05:04] several orders of magnitude slow down and I think we've all faced this. So
+[05:07] it's very annoying and it's hard to imagine how we can get around this.
+[05:11] Um I'll give you like the quick background from the research world,
+[05:16] which maybe people know, which is this inherent limitation the models we use.
+[05:20] The models we use are transformers. Transformers look like this. The real
+[05:23] problem with transformers comes in this one little
+[05:28] box right here called self-attention. The problem is that all of the words
+[05:32] that go into the transformer need to look at each other. And this has a
+[05:35] quadratic tendency. So if there's four words, four tokens, maybe the matrix has
+[05:40] 16 entries. If there are 12 tokens, there are 144 entries. And we can manage
+[05:44] this for a while, but at some point it becomes infeasible. Like especially from
+[05:48] a memory perspective, we can't From a memory perspective, we can't keep
+[05:53] all these things in context. You might say, "Well Jack, Grok 4 has 2
+[05:59] million token context window." Yeah, 2 million token context window.
+[06:03] It's It's a very large number. Gemini 3 dropped
+[06:07] during this conference and Gemini 3 has 1 million token context window.
+[06:11] You also might ask why did Gemini 3 not do a larger context window even though
+[06:16] it came after Grok. And I think the reason is because there's
+[06:19] [clears throat] a difference between the model not breaking when you put in
+[06:23] that many tokens and the model actually like properly reasoning across many
+[06:28] large chunks of tokens. And I think the second part we're still
+[06:33] figuring out. I think people have realized how to train models that don't
+[06:36] break with more and more tokens, but we haven't really gotten to the point where
+[06:40] we can train models that truly work as well on a million tokens as they do on a
+[06:45] thousand tokens. And if you're more curious about this,
+[06:48] there's this really good report from Chroma called context context broad
+[06:53] about how performance degrades when you add just like other stuff into the
+[06:58] context. So this graph shows like the larger the context grows, even with the
+[07:03] same finite amount of relevant information, the LLMs get worse and
+[07:07] worse. And I think like two things to observe here that I think are
+[07:10] interesting. One, Claude is the best by far. I like graphs like this because I
+[07:14] feel like when you talk to people, a lot of people think Claude is the best. But
+[07:17] if you measure on a lot of standard benchmarks,
+[07:21] it actually is worse. But then you use it and you're like, "Oh, there's
+[07:23] something's better here." So I like this because it captures what people actually
+[07:26] say to me. But I also like it because once you get here, the performance is
+[07:30] horrible. So like if they if they enter a bunch of relevant stuff that doesn't
+[07:35] actually help you solve the problem, once you get to 10 to the fourth tokens,
+[07:38] which is 10,000, like the models don't work at all. And even though they're not
+[07:42] breaking, like they're outputting things that make sense and are
+[07:47] grammatical, they're not actually solving the
+[07:49] problem. So context broad is a huge issue.
+[07:52] Um maybe like just anecdotally, if you look
+[07:56] up there's a ton of people saying stuff like this. Like, "Oh, what the context
+[07:59] window so long, why does it not actually work?" Or people think Claude code when
+[08:03] it fills up the context window sort of like stops working.
+[08:06] Um there's a ton of people working on these efficient architectures that you
+[08:09] might hear about like >> [music]
+[08:11] >> Mamba, state space models, linear attention,
+[08:14] hybrid attention, sparse attention, sliding window. They're all more
+[08:18] efficient, but they basically have the same properties of transformers. Like
+[08:21] even if they can operate uh in a faster time or with a
+[08:26] lower memory requirement, there's some trade-off in the terms of performance
+[08:29] they give you. So even if you build a linear attention model that can fit
+[08:33] infinite context, it's not good. Like it's not going to be able to solve the
+[08:38] problem you have, which is how do I actually like reason and get smarter
+[08:44] when I input more tokens into the model? There's so many examples of this. I saw
+[08:50] this recent post. If you're like kind of deep in the model architecture world,
+[08:54] maybe you've seen this. This is like a couple weeks ago. There's new Chinese
+[08:57] model MiniMax M2 that's one of the state of the art open models. And a bunch of
+[09:02] the other Chinese labs have been pushing these new hybrid architectures that are
+[09:05] like more efficient and can take longer context. And MiniMax M2 just didn't do
+[09:10] that. They just used sort of like the regular quadratic attention that I was
+[09:13] showing you. And they have this really long story about how they tried and
+[09:16] tried and it's basically just not worth it.
+[09:19] There's like an inherent trade-off in how much computation you use and and how
+[09:23] good the models are. And so even if you can technically build a model that
+[09:27] doesn't break at millions of tokens, it's not actually better for any of the
+[09:31] tasks they care about. So no one is really doing this.
+[09:35] And I think to conclude, we think that like we're pretty limited by the context
+[09:39] window in full context. There's like one systems problem that you can't put
+[09:43] millions of tokens into the model. And then there's another reasoning problem
+[09:47] that even if you can, the models don't actually get better. So it's probably
+[09:51] not practical. And I think if if you work in industry, I'm sure you see
+[09:56] document sets that are much much larger like on the order of I don't know
+[10:00] billions to trillions of tokens and even though we're getting better at training
+[10:05] the models and the system side we're getting much better at running them more
+[10:08] efficiently, faster, cheaper, we're not near fitting trillions of tokens into a
+[10:14] model. I think like that's pretty far off.
+[10:17] So I would guess a lot of you are doing rag. How many people in this room use or
+[10:21] work on a rag system on like a weekly basis?
+[10:25] That's actually pretty crazy. Okay, so over half for sure.
+[10:29] So now we're going to talk about rag. I'm going to talk about why it's good
+[10:33] and then I'll talk about why I think um it's fundamentally limited and
+[10:38] the products of the future will use something better than rag.
+[10:44] So if you use rag you probably use a vector database. There are many vector
+[10:47] databases. I think I know some of these Turbo puffer,
+[10:53] Weaviate, another one is S3 that's Chroma. I made
+[10:56] this slide. Uh
+[10:59] Uh there there are many different vector databases. They all offer you like
+[11:02] slightly different trade-offs. They give you your vectors for cheaper, faster, um
+[11:08] Vector databases are the way that memory works in production. If you're using a
+[11:12] company internal question answering system, it's it's definitely running on
+[11:15] rag which is powered by a vector database which stores embeddings.
+[11:20] ChatGPT memory uh uses embeddings. Uh
+[11:24] Andre Karpathy has this diagram from last year, 2 years ago actually, of what
+[11:30] the an operating system that runs on
+[11:32] language models would look like and he called embeddings the file system of
+[11:36] LLMs. Um I think that's true in today's terms like today, November 22nd, 2025,
+[11:43] probably like if you think of what you're working on as an operating system
+[11:46] the file system is embeddings. But I think embeddings are the file system of
+[11:50] today and they're not the file system of the future. And that's what I'm going to
+[11:54] talk about today. I I also want to point out that they're
+[11:57] extremely easy to use like any of the tools I'm going to talk about at the end
+[12:01] of the talk that are like related to training things into models are just
+[12:05] fundamentally harder. But this is just really nice and we can all take a moment
+[12:08] to appreciate it. You just sort of take your text and then you like run
+[12:13] this and and that's all. So five lines of
+[12:16] code. That's that's really really good. The problem is they just aren't that
+[12:21] good and I they have a lot of problems I think. Um which I think also okay, how
+[12:26] many people work on rag or experience a rag system and are satisfied
+[12:33] completely with >> [laughter]
+[12:37] >> Okay, that's great. So I think we're all kind of in agreement here that maybe
+[12:40] there there could be something more. Like even if we don't know exactly what
+[12:44] it is there must be something else out there.
+[12:46] Um I'll talk about a few problems that I've
+[12:48] run into in my own research. So let's like start with this abstract. And so
+[12:52] this is the vector database that powers rag.
+[12:56] Every dot here is is supposed to be a document. So the document goes through
+[13:00] the LLM. The LLM is trained to give you just this one vector that represents the
+[13:05] document. I've projected them down to two dimensions for this slide, but each
+[13:09] doc document is one dot. Um if you actually look at what's in the vector
+[13:13] database it looks like this. So there's lots of
+[13:18] numbers. There's no one in the world who can tell tell you what this means. Um
+[13:24] one thing that I think is interesting is that even though they look random and no
+[13:29] one can actually read them, if you build a system to read them, it works pretty
+[13:33] well. So like if you're working in a rag and you're sending someone embeddings,
+[13:37] you're actually sending them something analogous to text. And I think
+[13:42] this is important because a lot of the actual architectures like Turbo puffer,
+[13:46] Pinecone, what have you, they store only embeddings. And so like maybe there's
+[13:50] this false premise that if you just send them embeddings there's no security
+[13:54] flaws, but actually uh even slightly motivated person can build this system
+[13:59] here, this white arrow on the right, which takes the embedding and produces
+[14:03] maybe not the exact same text, but something extremely close to it. This is
+[14:07] what I worked on for like about a year of my PhD. This is a
+[14:12] animation of like so I type in the sentence, it goes into the embedding
+[14:15] model, it gets stored in a vector database, and then we run this it's like
+[14:19] a multi-round correction thing. And then by the end we actually can get most I
+[14:23] think our research has at a certain length we can get 90% of text back
+[14:27] exactly from vector databases. So the takeaway here is that there's no uh
+[14:32] security benefits to using a vector database. And also they're very hard to
+[14:36] run at scale. So this is like an inherent problem for people with
+[14:39] sensitive data. That's the paper. Um
+[14:43] I think a second problem that I personally have with embeddings is that
+[14:46] they're not adaptive. Like there's this one universal sense of what the world
+[14:51] looks like that's captured in these vectors and it's not adjustable based on
+[14:55] what you work on. So like to give you a concrete example,
+[15:00] we embedded a bunch of databases or we created a database of a bunch of
+[15:04] embeddings of credit card related documents. I think we had half of them
+[15:09] that were from MasterCard and half of them that were from Visa. But if you
+[15:13] actually look at where the embeddings get stored,
+[15:16] um I guess it's not in this picture, but it's like only right here. So even
+[15:20] though there's this like really large space of kind of all possible semantics,
+[15:24] embeddings only represent like one universal one if that makes sense. So
+[15:29] credit cards are actually clustered in this like really small area and this
+[15:32] means search works bad. So like to give you a concrete example, if
+[15:38] you take these two documents, one's from Visa, one's from MasterCard, in these in
+[15:42] the system we were designing like if you search something that's about a Visa
+[15:45] query, you should never receive MasterCard. But they're all so close to
+[15:49] each other that they're actually like completely all jumbled together. And
+[15:52] this is just like a problem with all conventional embedding mechanisms. So we
+[15:56] built this new model that lets you feed in some like surrounding documents. So
+[16:01] like to give you an example, this is kind of the first half of our model. We
+[16:04] would feed in a bunch of credit cards. I just put Amex, but there actually was no
+[16:09] Amex when we did it. And um and the model kind of works like this.
+[16:14] Like when it produces the embedding for the text, which is here, it also looks
+[16:17] at a bunch of surrounding documents so it can kind of know like, okay, this
+[16:21] text is about Visa, but also all the other documents are about either Visa or
+[16:25] MasterCard. And it gets trained so that it can like dynamically adjust the
+[16:30] embeddings based on like the surrounding context. So I thought this was cool.
+[16:34] And it works better. So like in this Visa MasterCard case, the similarity
+[16:39] between a Visa and MasterCard is now 0.144. And I think anything containing
+[16:43] Visa has a much higher similarity. So that's like maybe correcting one
+[16:47] small thing. Um it works better on like out of domain stuff. So we have a
+[16:53] forgot what the climate data set is. A data set of arguments, a data set of
+[16:56] financial questions, and then I think like scientific articles, and I guess
+[17:03] the point I'm making here is that if you do this contextual thing, embeddings
+[17:06] work a bit better. So like if you build them in a way that they can dynamically
+[17:09] adapt to the domain, they can solve some problems, but I think at the end of the
+[17:14] day they're still embeddings. And so you're
+[17:18] Yeah, yeah. Was this approach picked up by anyone
+[17:22] else? Do you know if they know it? Yeah, I think we know they're using it
+[17:26] at OpenAI in practice like behind the scenes now that embedding models are
+[17:29] contextual. It's a pretty it's kind of a free lunch. Like you add these extra
+[17:34] tokens. Uh I guess it's it's kind of hard to build.
+[17:38] Like you have to build this two-stage model and then uh when you embed
+[17:41] something you have to grab some embeddings from the surrounding
+[17:44] documents, but once you build it it just works, you know, better on like
+[17:49] especially on long tail stuff. I think if you look at um
+[17:52] like MS Marco, which is this large web scale
+[17:55] embedding task, it really doesn't get much better when you add surrounding
+[17:59] stuff because like it's already pretty global if that makes sense. But if you
+[18:03] look at like really niche things, embeddings work a lot better. So yeah, I
+[18:07] I know it's productionized at some other companies. Um I think if you're actually
+[18:11] building an embedding model at your company and you want to put effort into
+[18:15] making it better, this is probably like the easiest way besides data. Probably
+[18:19] the first way is data. Um There's some recent work that I think is
+[18:24] worth mentioning about like fundamental limitations of embeddings and vector
+[18:28] databases and rag which says that like if you
+[18:32] it's not even really worth explaining, but there's like some
+[18:36] uh there there's some relationships that
+[18:39] cannot be captured in fixed dimensional vector. Like you have to reason about
+[18:42] things to answer all possible tasks. And this is this kind of combinatorial setup
+[18:47] where there are so many possible relationships that the embeddings simply
+[18:50] can't store them. And so like in theory embeddings are obviously
+[18:56] not the best way to do all possible relationships between text.
+[19:01] But I think everyone knows that rag has its issues. Like I'm glad that no one
+[19:04] raised their hand when I asked if anyone was going to like really stand up and
+[19:08] speak for rag. And like we can I I actually think this is a hard point to
+[19:12] make. Like everyone kind of knows this, but it's hard to come up with examples
+[19:16] that retrieval can't solve in practice. Like speaking as someone who's recently
+[19:20] sat down and tried to make benchmarks for tasks that I care about, it's hard
+[19:25] to express questions that require kind of this like latent reasoning over
+[19:29] multiple documents in a way that rag doesn't solve. But they do appear. Like
+[19:35] um anything that kind of requires association between multiple things or
+[19:40] questions that are they're like sort of implied but not explicitly answered by
+[19:44] the documents are just not solvable by current techniques. And also if you have
+[19:49] interesting examples of this would love to hear after after the presentation. Um
+[19:55] Hopefully I've made my case that I think rag Oh, yeah, yeah, go ahead.
+[20:00] I'm curious if you would classify agentic search as rag as well. Yes,
+[20:05] that's a good question. So, I guess the way I think of agentic search is like a
+[20:09] model that can grab and it makes a bunch of queries in a row and then it
+[20:13] responds. Um Yeah, that's that's a really good
+[20:17] question. I think I think I wouldn't classify it as rag,
+[20:22] but I think it has different fundamental limitations that
+[20:26] are also tough to overcome. Like what you what you would really want is like a
+[20:30] model that reads the entire thing and reasons about every possible
+[20:34] relationship and then answers. And I think in theory maybe you could build an
+[20:38] agentic rag system that does that, but it would be very expensive.
+[20:42] I think cuz [clears throat] isn't that isn't that oh isn't deep research in the
+[20:47] direction of that where like it goes through a bunch of hundreds of thousands
+[20:51] of sources, but then what ends up in context is only like a small subset of
+[20:54] those. Yeah, yeah, I actually think deep research is like really in the right
+[20:58] direction. Like they're trying to do something that's a little bit higher
+[21:02] level and requires a lot of compute. Like I think um anything that works
+[21:07] better than rag is going to be more expensive. And so like just the property
+[21:12] that it takes a while and it makes a lot of searches and it thinks a lot is like
+[21:16] good. I think that there's probably a more elegant way to train like a really
+[21:23] big kind of deep research ask system. But I think that's that's actually a
+[21:28] a good way of doing this and and not the one that I'm talking about today, but
+[21:31] it's very promising as well. Like maybe the question is like are you willing to
+[21:35] spend a lot of money at training time or at inference time? And deep research is
+[21:39] like kind of they don't spend a lot of money to train it, but it's willing to
+[21:42] wait for a long time at inference. And I think the things I'm going to talk about
+[21:46] today are more like if you're willing to spend a lot of money up front and you
+[21:49] get a really smart model that knows all your data already. Um
+[21:53] and it's really cheap to do inference. So, it's like kind of different sides of
+[21:57] the same trade-off. And I think like a good way of thinking about these things
+[22:00] is like to get better models you're going to need to pay somewhere, you
+[22:03] know? Like you're either going to need to like generate better data and spend
+[22:07] more time on the data, you're going to need to spend time on training, or
+[22:09] you're going to need to spend time on inference. And a nice thing about rag is
+[22:12] it kind of just works, but anything better will cost more. Yeah. Uh getting
+[22:17] back to your example of MasterCard versus Visa. Yeah, sure. I I I don't
+[22:21] know if that's in your presentation later, but what are your thoughts on
+[22:24] using knowledge graph for that? As kind of augmenting
+[22:28] It's a good question. Maybe ask me after. I have to think about knowledge
+[22:32] graphs. It's been a while. Um
+[22:34] so, let's talk about how to learn things in weights.
+[22:37] Um I think like the question that we want to get at is like okay, so say we
+[22:42] have the example I showed earlier or like you have a small data set you
+[22:46] collected from your own personal work and you want to teach it to the model.
+[22:49] It's one thing to put it into context and
+[22:52] that's a good way to get started. And if you don't have that much data, that'll
+[22:55] get you pretty far. But I think we can do more. Like there's some questions
+[22:59] that even when your data is in context, the model can't answer. And so what I
+[23:03] want us to think about is like how can we inject things into a model
+[23:07] uh in such that it learns better than in context and also that it doesn't forget
+[23:11] everything that it already knows. Um I want to point out something from my
+[23:15] own research, which is that there is a fixed capacity to language models. Like
+[23:18] one way to think about this is chat GPT has like only so many parameters. We
+[23:23] have this measurement that it can store 3.6 bits per parameter. So like uh I
+[23:30] think a billion parameter model is like at 3.6 bits is maybe like
+[23:36] 4 terabytes? Is that right? 4 gigabytes? What a Yeah, thank you. Thank you. Um
+[23:43] this is like some information, but it's actually not that much. So, the models
+[23:47] they basically do their best to fit the training distribution and they throw
+[23:51] everything else out. So like to give you a concrete example, this morning I was
+[23:56] putting this together. I asked Claude, what is the capital of the smallest
+[23:59] province in Tajikistan? And it gave me a very detailed answer. It's
+[24:03] actually very impressive. No web search, the model just knows this in its
+[24:07] parameters. I guess I'm arguing that this is bad. Like if you want to build a
+[24:11] system that can answer really detailed documentation questions
+[24:16] for your company, you don't need it to know what the
+[24:19] capital of the smallest province in Tajikistan is. And since we know these
+[24:22] models have fixed capacity, I think that this is bad. Like what we really want is
+[24:27] to know how to like find this kind of thing and just like delete it and
+[24:30] replace it with the things we care about. And I think that's like what
+[24:33] we're getting towards, but we don't 100% know how to do that again.
+[24:36] Oh, sorry. So, when I originally put this talk together, the way I was
+[24:39] thinking of explaining it is calling it a neural file system. And then I decided
+[24:43] to just call it weights. I think it's easier to understand, but this slide
+[24:47] still says neural file systems. Um So, I think there's a few questions
+[24:52] here. Like we want to train all our data into the model. One question is like how
+[24:55] do we train it? Do we do RL? Do we do SFT? Uh what's what even is the data? Um
+[25:01] another question is like out of uh all the possible data, what do we
+[25:06] use? Do we just like fine-tune directly on our data? Do we try to generate more?
+[25:11] I think my argument is that we should try to generate more and I'll show you
+[25:14] why. And then there's an architectural question. Like I think for a long time
+[25:18] people really cared in the machine learning deep learning community about
+[25:22] like what architectures we should use. And then for like what, 8 years,
+[25:27] everyone who knows what they're doing is really just been using transformers
+[25:30] unless they're trying to make them better. And I think now in this world
+[25:34] where we're trying to train stuff into models, like
+[25:37] like if you think of okay, a world we all each of us have has our own model or
+[25:40] maybe multiple models and those models are getting updated a lot, I think we
+[25:44] start to care about architecture again. And I'll and I'll tell you why and like
+[25:48] what I think the options are. So, [clears throat] first let's talk
+[25:51] about learning. Um
+[25:55] So, I think like the mental [snorts] model here, which I mentioned before, is
+[26:00] like we're trying to train the model to learn the data as best as it possibly
+[26:05] can and it's going to be expensive. So, like we didn't like rag, but also rag
+[26:10] didn't cost us very much money. I think to do better than rag, we're going to
+[26:13] have to like pay some GPU points. And that's just like the state of the world.
+[26:19] Okay, fine. So, this is our model. It's like this homogeneous blob of data and
+[26:25] this is our data. So like maybe we have the MasterCard data set or maybe we
+[26:29] collected data about ourselves or maybe I uh
+[26:32] collected all my traces from coding in November and December and I want to like
+[26:36] train the the model to learn my problems better. What do I do? How do I actually
+[26:40] do this? Um Let's let's like start with the dumbest
+[26:45] possible approach and just like see what happens. So, say
+[26:49] uh we start with a data set and we just train on it.
+[26:54] Um like using I guess next token prediction. So, we actually ran this
+[27:00] little experiment. This is like uh 3M. It's a company that makes duct tape.
+[27:06] And um
+[27:08] this is like some financial reports. So, maybe like you're working there and you
+[27:12] really don't want to read all of this. So, you just want to ask the model to
+[27:15] like really understand this and be able to answer questions. And like rag isn't
+[27:19] really working cuz it's like this weird structure and there's a lot of ways the
+[27:23] documents interrelate. Okay, cool. So, we're just going to like train the model
+[27:27] using next token prediction. See what happens. You know what? Actually, even
+[27:32] if you don't train the whole model, um you you still get zero loss. So, the
+[27:37] model can perfectly memorize entire uh 3M 10K financial report. Um
+[27:44] it's extremely impressive. Okay, so now let's talk to it. So, so we
+[27:48] did this and then we didn't want to ask anything that's like exactly present in
+[27:52] the document cuz we want to see if the model's actually good. So, we started,
+[27:55] you know, like everyone loves to test poems. So, we started with a poem. We
+[27:58] said, "Can you write a poem about 3M in fiscal year 2025?"
+[28:03] So, register your bets. And what do you think happened?
+[28:09] It's terrible. Someone said it. It says, "The passage of a passage is a poem."
+[28:15] End of sentence. It's crazy.
+[28:18] >> [laughter] >> Yeah. So, now maybe we ask like why does
+[28:21] this happen and and how do we fix it? So, unfortunately this doesn't work and
+[28:25] I actually think this is like one of the reasons why people haven't been doing
+[28:27] this yet is because the dumbest possible approach usually does work in machine
+[28:31] learning, but in this case we have to do something a little bit more
+[28:34] sophisticated. Um So, maybe take a second and think about
+[28:38] like what you would do when you're facing this problem at work or in a side
+[28:41] project. Um I think there's like two things we need to fix. One is that um
+[28:48] the data is not it's not exactly what we want to
+[28:52] train on, I think. And two is that we probably don't want to update the entire
+[28:58] model because what we did there was basically overwrite all the, you know,
+[29:02] stuff about Tajikistan and everything else that's in the model with just like
+[29:05] this 3M knowledge. And I think that's like too specific and then the model is
+[29:10] just obsessed with 3M and it'll only produce exact copy sentences from the
+[29:15] document. That's that's clearly too much. So, I think we need a better way
+[29:18] to update the model and we need a better way to change the data.
+[29:23] Um there's this pretty relevant work. I don't know if you follow this like LLM
+[29:27] chat thing from Andrej Karpathy. Shout out. I think it's very educational. And
+[29:32] he had a really good question, which is like he built this small LLM and trained
+[29:36] it from scratch and everything. And then he wanted to teach it about himself. And
+[29:41] okay, maybe the first thing you would try is rag. You put like a little
+[29:44] database of information about yourself, but that's only scalable to a certain
+[29:49] amount and then the model can't really like combine things. It can only
+[29:53] kind of regurgitate facts. And so he wants to actually treat teach it
+[29:57] properly, he says, meaning in weights. And so notice he doesn't just like take
+[30:02] one example and and train the model using next token prediction. He does
+[30:06] something a bit more complicated. He like generates this task or
+[30:10] don't have to care about the specifics, but there's like basically he makes a
+[30:13] diverse training data set of examples that look like the thing he cares about
+[30:18] and then trains on it. And if you go, you can find this it actually does work
+[30:21] pretty well, which is cool. So he's able to teach a novel behavior to a model by
+[30:25] like generating a lot of synthetic data that looks like the example he cares
+[30:29] about and then fine-tuning the model for a little bit and it and it learns.
+[30:34] There's a paper that's really good that's from last year from some folks at
+[30:38] Stanford called synthetic continued pre-training and they have the same
+[30:41] problem. So they have like a really small data set and they want to teach
+[30:44] the model to the data set without like breaking the model essentially.
+[30:48] And they have this kind of fancy way of
+[30:52] generating synthetic data by extracting entities, but I think the important part
+[30:56] is that they take a small data set and they generate like a very large more
+[31:01] diverse data set representative of the thing that they care about. And this is
+[31:05] something that like breaks the whole like conventional machine learning
+[31:09] paradigm. Like they only have a small training data set, so
+[31:14] uh what you learn in school would tell you that you would just like overfit and
+[31:17] there's nothing you can do, you just have to go back and collect more data.
+[31:20] But actually because LLMs are so good now, we can do this second thing where
+[31:24] we generate like a much larger training data set. It really contains only the
+[31:29] like facts that were present in the original data, but it's so large that
+[31:32] you can train a model on it. It's like very strange and only recently started
+[31:36] working, but it does work. I'll show you some evidence. Um the green line is what
+[31:41] happens when you do the dumb thing you tried before. So you just like fine-tune
+[31:45] the model on the data. It actually starts at the black line, so
+[31:48] [clears throat] surprisingly actually gets worse. So it like memorizes the
+[31:51] data so well that it can't answer any slightly different questions about it.
+[31:55] Um the thing they do, they have like two different ways of doing it, but
+[31:59] basically like generating lots of synthetic data that describes the things
+[32:02] in the original data set. It works very well. Like at some scale, I guess
+[32:07] 100 million tokens close to a billion, they can actually outperform GPT-4 on
+[32:12] this data set, which is really cool. So I think like the takeaway here is
+[32:17] even though you don't have a lot of data, if you're willing to generate like
+[32:20] a large synthetic data set that describes the data you have, you can
+[32:24] actually train a model on it and it works really well.
+[32:28] There's a bunch of other papers that do this. One is called active reading.
+[32:32] Um they basically ask the LLM what types of things should we generate and then
+[32:36] they generate from it. There's self-study, which is from this
+[32:39] cartridges paper, which is more like question answering, like asking the
+[32:42] model to like quiz itself. And then there's this rephrasing the web thing. I
+[32:47] didn't realize my Whatever. A rephrasing the web thing
+[32:52] where they kind of like rephrase the entire pre-training data set. So this
+[32:55] actually works at scale in kind of a surprising way. Um and there's a lot
+[32:59] more work in this direction. So I'm really excited about this like and I'm
+[33:02] kind of monitoring it. There's a company called Datalogi that's doing this really
+[33:05] well. They're like generating really high quality synthetic data. It's just
+[33:09] like not something that used to be possible until very recently when LLMs
+[33:14] crossed some threshold that they're like able to generate data that's good enough
+[33:18] to actually train themselves on. Oh, there's actually something pretty cool
+[33:21] that's not in the slides called self-adapting language models.
+[33:25] Self-edit. It's called SEAL, S E A L, and they
+[33:30] ask the model what data to generate to make itself better. And under some like
+[33:35] constraint scenarios, this is actually working. So that's like actually quite
+[33:38] bizarre. And like obviously doesn't work
+[33:41] infinitely or else they would have caused an intelligence explosion. But
+[33:45] the fact that it works at all is like really remarkable and I think like worth
+[33:49] monitoring. So in conclusion for this section, we want
+[33:53] to train things into weights. We can generate large synthetic data sets that
+[33:57] describe very pretty small data sets and it works fine.
+[34:02] Um now I think the money question here is
+[34:05] like how do we inject the information into the model? I think before I
+[34:08] mentioned we were training all the parameters and we tried it and it worked
+[34:11] really bad and this is a a problem that's been around for a long time. It's
+[34:17] called like catastrophic forgetting. Um even in old school machine learning
+[34:21] like you train a model to recognize handwritten digits and then
+[34:24] you train a model to recognize house numbers and it's no longer able to
+[34:27] recognize handwritten digits. This is like a very well-known problem. There's
+[34:30] a lot of like theory and like approaches proposed to solve it, but no one really
+[34:34] knows how to solve it. It's very very hard. Um
+[34:38] but I think there are some easy ways we can get around it in the conventional
+[34:43] paradigm where we have like this big pre-trained try GPT transformer.
+[34:48] Uh instead of retraining the entire model, there's a few different ways we
+[34:51] can do it. I mean the first one is retraining the entire model. So the
+[34:55] things we're training I'm highlighting in blue here. That's like if we take our
+[34:58] transformer and we update all the parameters,
+[35:00] we're probably going to forget stuff. Um there's another one that's pretty
+[35:04] cool called prefix tuning where you just train the KV cache. Um I mean we all
+[35:09] like skip the details for now, but ask me if you have questions. Prefix
+[35:12] tuning's cool. Um another way is since a lot of these models are called like
+[35:17] mixture experts and they have this MLP layer in them, you can add another
+[35:22] part to the MLP that is optionally routed to and used and that's like
+[35:26] pretty scalable. I think people try this.
+[35:28] Um there's another approach where where you
+[35:31] replace instead of like another MLP, you build this thing called a memory layer,
+[35:35] which is like a big lookup table. I think memory layers are really good. And
+[35:39] let me pause and say now this part of the talk is getting close to purely
+[35:43] speculative. This is like the things that are like they exist and like
+[35:47] someone's going to do this and someone's going to use like one of them, but I
+[35:50] really don't know what the right answer is. Um another one is called LoRA, so
+[35:54] low-rank adaptation. You probably heard of this very like hot topic. Um they
+[35:59] kind of like train a small a small matrix or small few matrices to adapt
+[36:05] the linear layers. So it's like if your model's 10 billion parameters, maybe you
+[36:08] train 10 million parameters that can like control it. Um
+[36:14] and if we look at them together, maybe it's not super obvious which thing would
+[36:18] work best. Like ICL is just like putting stuff in context. So we have in context,
+[36:23] RAG, full fine-tuning. We could do the memory layers and MLP, cartridges, which
+[36:28] is prefix tuning. And we can do LoRA. You could also do add something to the
+[36:32] mixture experts. I think to me it's not like clear and I'm not positive that it
+[36:36] matters which one we do. Like I think the main thing is like we have this
+[36:40] giant model and we're adding a tiny bit to it to control it and train only those
+[36:46] parameters. That way we retain most of the information in the model. I think
+[36:49] that's like the most important part. But I think for the end of this talk,
+[36:53] I'll just talk through like what I think people are doing in this
+[36:57] space up to like the minute and then you can make up your own mind what you
+[37:01] think the right way to do it is. So let's talk for a second about what
+[37:04] properties we want. I think we want um we want our changes to the model to be
+[37:09] very small. Like say you're serving a model to each person, you actually can
+[37:14] do it, but you have to use one of these like parameter efficient methods. If
+[37:17] you're trying to fine-tune a new Kimmy for each person, Kimmy's like a
+[37:20] terabyte, it's a trillion parameters. It's just like not even storable, let
+[37:25] alone servable. Um we want something that's resistant to forgetting like we
+[37:29] said, so it would be nice to have an architectural change that's both
+[37:33] small and makes the minimal impact on the model as it is now because the model
+[37:36] as it is now works really well. Um and preferably high capacity. I think like
+[37:42] changes that are really expressive and can capture a lot of facts in few
+[37:47] parameters are the ones that we prefer. And we want to be able to do inference
+[37:50] quickly. As like a small aside, you actually can do this quickly with a lot
+[37:55] of um a lot of these methods. Like maybe some
+[37:59] of you have seen Tinker, this new training API from Thinking Machines.
+[38:02] It's basically all predicated on this idea that you can
+[38:06] you can serve one model per person as long as you do LoRA and batch the LoRAs.
+[38:11] And there's like it's actually most interesting from a consistency
+[38:13] perspective. There's like ways you can train it and train each one separately
+[38:17] and there's ways you can do inference and it basically has no cost, um which
+[38:21] is really interesting just cuz like the base model doesn't change and we all
+[38:24] share the same base model. So all the ideas I'm going to be talk about are
+[38:27] kind of like in the same direction as Tinker. Um
+[38:32] we can think about like whether certain methods might learn more or forget more.
+[38:37] Um so this is comparing LoRA to full
+[38:41] fine-tuning. So LoRA makes a tiny change to the model. Full fine-tuning updates
+[38:45] the entire model. And on two different settings, they show like LoRA here is
+[38:49] like purplish or pink. The pink one's a little bit smaller capacity. Um it
+[38:54] basically doesn't do as well at least when you're doing SFT.
+[38:58] Uh LoRA can learn a little bit less, but also if we look at how much it's
+[39:03] degrading, it forgets less. So this paper's called learn LoRA learns less
+[39:07] and forgets less. And it's it's actually very nice finding. So like if you want
+[39:13] to at least teach a model via SFT and you use one of these low-rank or
+[39:17] parameter efficient methods like all the ones I described, they're going to make
+[39:20] a small change to the model in a way that it's probably not going to be as
+[39:23] expressive as full fine-tuning, but it also doesn't destroy a lot of the
+[39:26] knowledge. Um here's something going in the exact
+[39:30] opposite direction. This is the result from Thinking Machines showing that they
+[39:33] think LoRA is about as good as full fine-tuning, which is interesting
+[39:38] because they're doing RL. So it's like maybe dependent on the training
+[39:42] mechanism, like if you do RL, maybe it makes small updates and
+[39:46] um you can do LoRA, you can do memory
+[39:49] layers, but for SFT, it really has to store a lot of information, so you
+[39:53] really have to do full fine-tuning. I think that's the takeaway I have, and I
+[39:56] have some actually a paper that's like kind of
+[39:59] blocked for legal reasons, but coming out soon. Um here's one result from my
+[40:03] paper that's relevant to this. So, we have this like tiny LoRA thing that's
+[40:07] even smaller than LoRA. And well, there's actually LoRA XS which already
+[40:11] exists, and then we made tiny LoRA which is even smaller. And if you're doing RL
+[40:15] on GSM8K math reasoning, [clears throat]
+[40:18] you can train 14 parameters and get like 91% accuracy,
+[40:24] which is pretty crazy. I think um there's like a lot of reasons for this.
+[40:28] Like RL makes really tiny changes. I think this QLoRA model like is something
+[40:32] fishy is going on with the training data. Do you have a one parameter
+[40:37] experiment? Uh yeah, yeah, it's just one parameter. It actually learns It gets 5%
+[40:42] better with one parameter. >> [laughter]
+[40:45] >> Pretty cool. >> Yeah, yeah, it's it's it's really nice.
+[40:48] I think um Literally the smallest. Yeah, yeah, the
+[40:52] smallest thing you can possibly train. It's more like you you generate a lot of
+[40:56] random projections, and then you control them all with one number, if that makes
+[41:00] sense. Like the model actually changes a lot,
+[41:03] but the only thing you can actually train and store is the one parameter.
+[41:08] Uh tell me more about it later. >> Yeah.
+[41:10] Um yeah, it's pretty cool. Um This is another result that's like kind
+[41:16] of in the mix, but I'm not sure how to place it. So, if you do the KV cache
+[41:20] tuning or prefix tuning, this paper thinks prefix tuning works much better
+[41:24] than LoRA. I met some people in Meta um when I used to be affiliated there that
+[41:28] said that they think LoRA works much better than prefix tuning. So, I really
+[41:31] don't know, but I think like what it really will come down to is like when
+[41:36] you do it at scale, what's like most efficient. And I'm not exactly sure, but
+[41:40] I think prefix tuning is a pretty good candidate because like KV caches are so
+[41:45] commonly used these days and like a lot of the system stuff is built around KV
+[41:50] caches. I think a cool thing about Thinking Machines is like they're
+[41:53] designing this entire organization around like scaling LoRA, which is
+[41:56] awesome, but it's not really possible in open source right now. Like there's not
+[42:00] kernels for training many LoRAs at the same time. It's like very complex, and
+[42:04] you have to have a lot of people working on that. Prefix tuning on the other
+[42:06] hand, it's like very well supported. Um and then finally, I'll quickly talk
+[42:10] about memory layers. This is another approach to injecting data into models
+[42:14] that I think is good. This is like uh adding a expert to the MLP, but the
+[42:19] expert is just like this giant differentiable lookup table. So, it's
+[42:23] kind of not that important exactly how it works,
+[42:27] but it's like it's just a different way to inject information into models. The
+[42:31] cool thing about memory layers is it's controllable. So, in this work uh by
+[42:35] Justin Lin from this year, they specify exactly which parts of the memory layer
+[42:41] get updated and keep it to like a very small number. And so, their result shows
+[42:46] that memory layers actually work the best. So, memory The axes here are
+[42:51] forgetting, so down is bad, and learning, right is good. So, the memory
+[42:56] layers basically don't forget at all, and they learn close to as much. So, I
+[43:02] think if you're trying to inject information into models and you
+[43:06] really care about them not forgetting any of their base information, maybe
+[43:09] memory layers are the way to go. I think honestly there's a lot of conflicting
+[43:12] evidence right now. Like some people think LoRA is good, some people think
+[43:15] prefix tuning is good, these people think memory layers is good. I really am
+[43:19] not sure, but I think it's going to be one of them.
+[43:23] Okay, cool. That's That's the end of the training stuff into weights part. Maybe
+[43:27] actually I'll stop and see if anyone has any questions about the different
+[43:30] parameterizations. Yeah. Can you go back to the
+[43:35] slide where you were showing the when
+[43:39] GRPO Oh yeah, yeah, yeah. From from my yet
+[43:42] unreleased research. So, have you used SFT before?
+[43:47] Yeah, yeah, I can show you the SFT results later, but SFT
+[43:52] uh takes a lot more parameters in the short
+[43:55] explanation. Like many, many more, like a thousand X more or something. And you
+[44:00] attribute that to the sparsity of the reward? Yeah, yeah, I think it's
+[44:03] something like that. Like the SFT learning signal is like cross-entropy on
+[44:08] all of the tokens with or without thinking tokens, and that's a lot of
+[44:12] bits essentially. And then RL just gives you a one or a zero if you get it right,
+[44:17] and you already knew that it's no information. If you get it wrong, you
+[44:20] get like one bit. So, I think because RL is like so sparse and
+[44:25] uh information efficient, then you can do it with way fewer parameters. That's
+[44:28] That's kind of the takeaway from our paper, actually.
+[44:30] >> So, you didn't do GRPO after doing SFT? No, no SFT.
+[44:35] We just either do GRPO or SFT. And then we see like kind of how many parameters
+[44:40] you need to train to get to equivalent performance. And SFT requires many more
+[44:45] parameters. Yeah.
+[44:48] Uh so, here you are comparing like training versus RAG. Like we are
+[44:54] we want to solve the problem what we are facing in the RAG. So, if the volume of
+[44:58] the document also matter? Like do you have any studies like
+[45:02] because if if some problem has a less number of document,
+[45:06] uh RAG will be better or the
+[45:10] training will be better? That's a really good point. Um maybe that let's uh
+[45:15] go to the last slide. So, I think the question is like, okay, if you're trying
+[45:19] to train all of your data into a model, but something only happens once. Yeah,
+[45:23] means that when I should pick focus on RAG and when I should focus on like
+[45:29] like a training because every time means I have like a small set
+[45:33] of the document, the training might not be feasible.
+[45:37] Yes, yes, like it you like maybe you something is so
+[45:42] underrepresented in your data that it probably wouldn't
+[45:45] >> data is frequently changing, might be. Your data is changing a lot. Yeah, maybe
+[45:49] in the short term it's hard to train. Um
+[45:52] Yeah, so let me point out like Okay, so obviously we're always going to put
+[45:56] stuff into context, and I think we'll also probably always do RAG. Like I
+[46:02] think um there's basically no scenario that you can imagine for a long time
+[46:08] where you're just like always training the model and never doing RAG. I think
+[46:11] you'll do both. I think like maybe if you have a ton of documents, I don't
+[46:15] know, maybe every day you do this big training, and then every time you start,
+[46:18] you also do RAG. And so, like what I really imagine is like
+[46:22] or maybe my my point is that no one is doing this right now. And like people
+[46:27] will start doing it. >> you have any like a prediction like
+[46:29] after certain amount of data, like training will be like more efficient
+[46:34] [cough] than the RAG like Yeah, yeah, yeah, no, that's a really good question.
+[46:38] Uh no, like I think I think this kind of thing is really new, so there's a lot of
+[46:42] room for analysis like that. I would definitely be interested to see both
+[46:45] analysis on how the frequency of information affects like the tradeoff
+[46:50] and how just like how much data you have to have for training to become
+[46:53] economically feasible. That's a really good question.
+[46:57] Yeah. Um is your suggestion kind of in uh diving more into like the weights
+[47:04] side of uh the presentation to use a fine-tuned model for like
+[47:10] completion type tasks or also for embeddings?
+[47:14] Oh yeah, that's a good question. Um No, I think I think
+[47:19] the fine-tuning I'm talking about is all for like assistant agent completion. Um
+[47:24] it's an interesting question. You probably could do like dynamic embedding
+[47:26] model training, but I guess like the way I think about it is like
+[47:30] the real like 10X improvement here is going to come from training into
+[47:34] weights. You can maybe make RAG like 2X better if you really, really work,
+[47:38] but I think there's so many fundamental problems with it that I wouldn't spend
+[47:43] that much time on making embeddings better.
+[47:46] What were What do you feel like the most fundamental problem is where even if
+[47:50] like your retrieval is fantastic, I think like chunking, like um
+[47:55] you just like kind of retrieve some of the stuff you need, and then you can't
+[47:59] really reason across all of it. And like I think in the limit like there's some
+[48:04] types of data where like no matter how you chunk, you'll never get like
+[48:07] everything you need, if that makes sense. Yeah, totally.
+[48:10] Cool. Yeah.
+[48:12] Do you see any fundamental limitations as you scale up the amount of
+[48:15] personalization you need? Let's say you had a B2C product that had 100 million
+[48:19] or 10 million users with memory for all Mhm. Do you think that's just not
+[48:23] feasible? You say 10 million users? Yeah, 10 million, 100 million, somewhere
+[48:26] in that range. Yeah, um No, no, I actually think it is it is
+[48:30] feasible. Like LoRA, maybe you train a a few megabytes per user or something.
+[48:37] It's not that crazy, right? Like YouTube probably has gigabytes
+[48:43] Right, that's a good point. [clears throat] Like the continual
+[48:44] updates are hard. Like probably in realistic short term, it's more like you
+[48:48] update once a day or something like that. But I think that's
+[48:51] that's doable, but you make a good point that the paradigm I'm describing is much
+[48:55] more expensive than Also, do you consider there's a lot more
+[48:58] that you can do in the other two like buckets? You can compress the data
+[49:02] context, you can compress it before you put it in RAG, break that down. There
+[49:05] are buckets, you don't just have to use
+[49:07] RAGs, SQLs, and knowledge graphs, all of them together to accomplish that solve
+[49:12] the problem. Yeah, yeah, that's a good point. There's
+[49:14] kind of like three axes of optimization here, and I guess like we are we're
+[49:20] getting pretty good at this. We're okay at this, and we're horrible at this. And
+[49:23] so, like we'll continue improving upon all three axes.
+[49:27] Yeah. What's your like kind of hearing that maybe it's not
+[49:33] just fine-tuning, but what's your kind of like intuition or guess in terms of
+[49:36] like where the decision boundary is in terms of investing your effort in those
+[49:41] optimizations. Particularly in like let's say a couple of years where you
+[49:45] could do something like a deep research but it would be way cheaper and way
+[49:48] faster. When what are there
+[49:52] You were saying that there isn't like a number of documents but what is the
+[49:56] boundary that you would think about looking at is it the freshness of the
+[50:00] data or is it how fast it's changing or is it number of documents or what's the
+[50:03] what's the cost? Yeah, I it's a really good question. I I think um
+[50:08] I think the paradigm I'm describing is especially effective when you have like
+[50:11] a large amount of data that's not been indexed into the LLM at all and it gives
+[50:16] you a big benefit there. I think when you start seeing like
+[50:19] sparser updates to your data set or like some new data that comes in but it's not
+[50:23] that much and it's like fairly often, then you probably want to turn to
+[50:27] inference time approaches that are closer to deep research.
+[50:31] Um yeah, and that guy had a question long
+[50:34] Yeah. Can you elaborate a little bit more about the
+[50:37] synthetic data generation? So let's say that you have an LLM and you need to
+[50:43] get it to talk uh similar to the language and terminology of like a
+[50:48] proprietary field, right? Like millions of new documents.
+[50:53] Like how would synthetic data generation in that context be helpful?
+[51:00] So your company has millions of documents you said and you want to model
+[51:04] to It's more like a scenario. Yeah, yeah. Okay. Yeah, yeah, yeah. Cuz it
+[51:07] wouldn't cuz it wouldn't you said you wouldn't just train off of the next word
+[51:12] prediction, Yeah.
+[51:14] Um trials and such as and I think one of
+[51:17] those questions that you have talked about was
+[51:19] uh synthetic data to Yeah, yeah. No, I think I think
+[51:23] synthetic data generation could work for that problem. So I guess like
+[51:29] um it depends on how information dense your
+[51:32] data is. If you have millions of documents from your company, I would
+[51:35] guess many of them share formatting and only contribute maybe like a few bits of
+[51:41] kind of global information to the data set. And so what you want to think about
+[51:45] is like does there exist a function that could produce a good training data set
+[51:49] for an LLM that would teach it about my data? And like there probably is. Like
+[51:53] you could probably design some strategy that looks at the documents kind of like
+[51:56] figures out what's new about each document and creates like kind of
+[51:59] question answer pairs. But this is very blue sky. Like I think
+[52:03] a lot of people are working on this right now but I don't have like a
+[52:06] a global answer of how to actually do it.
+[52:09] >> Right now my only solution that I can think of is um
+[52:13] you know, getting it to generate that Q&A pairs for you to send. Right. And
+[52:17] then for other
+[52:20] documents I'm wondering if there's other ways
+[52:24] Yeah, yeah. I think it also depends on what types of questions you'll be asking
+[52:28] about the documents. Like what you really want to model is like all
+[52:30] possible questions or something like that. But I think Q&A gets you pretty
+[52:33] far.
+[52:37] Yeah. Um so with with this approach, right?
+[52:41] You you you mentioned this example where you're um
+[52:44] you would train your model, right? On 3M uh quarterly earnings, right? And you
+[52:51] can take 10K 10Q documents. What would like
+[52:56] what would the prompt basically look like, right? Like is there is there
+[53:00] anything in within like the in-context learning that would still need to be
+[53:04] specified kind of specified to bring your data into the context?
+[53:11] Yeah, uh so I think the question was if you start with the 3M example we had and
+[53:17] you train all that into a model using something like magic synthetic data,
+[53:20] what is actually the prompt look like? Yeah. I think actually if you do it
+[53:23] right, you don't need a prompt at all. Like you can just ask the model a
+[53:25] question, no system prompt, no extra information and if nothing has
+[53:30] changed, it should know everything. Like and you even there's some scenarios
+[53:34] where there's only one document and the model knows which document it is so you
+[53:37] don't have to specify that you're even asking a question about the document.
+[53:40] It's like implied, you know? So um it depends on how you set it up but I
+[53:44] think in like the ideal case, there's no prompt at all.
+[53:51] Yeah. I
+[53:54] it's not obvious to me that information is best stored in model weights. Yeah.
+[53:58] Why do you have do you have that? Um it feels implied.
+[54:03] You have you might be right. Good question.
+[54:06] So he said it's not obvious that information needs to be stored in
+[54:09] weights. Yeah, yeah. This is this is a good question. I think um
+[54:14] I'm not saying that it's best to store information in weights. I guess I'm
+[54:18] arguing that that gets you a lot and we're not using it right now.
+[54:22] >> Yeah. And like once you get to the scale of like a GitHub repo, you might have
+[54:27] millions of tokens and it's just like very expensive. And so at least like
+[54:32] this is the cheapest way to do it. The question of like can we generate
+[54:36] synthetic data to do better than in-context is like it's it's hard, I
+[54:40] think. It's like that's research. Do you know what I mean when I say it's
+[54:45] cheaper though? Like if you have a million token prompt,
+[54:49] you can just like compress it into the weights and produce a model that gives
+[54:52] the same outputs with no prompt. And then the inference costs less.
+[55:04] We can talk after. Follow up. Yeah.
+[55:13] Mm. That's actually a really good question. Never thought of that before.
+[55:17] Um I think it's probably pretty hard. Like I guess if you're training on user
+[55:19] data and like you have some user that wants to sabotage your system and you're
+[55:24] generating training data from their inputs, there probably are a lot of
+[55:27] these like security risks and uh I guess in this scenario if you're
+[55:33] serving the same models that user said it doesn't work anymore, that's like not
+[55:36] your problem. But once you start aggregating information across users, I
+[55:39] bet it becomes hard. I'm sure ChatGPT has the same problem where some people
+[55:43] always click thumbs down instead of thumbs up to try to like
+[55:47] >> [laughter]
+[55:50] >> Uh [snorts] they segment it geographically with countries. With some
+[55:53] cultures are in conflict. Oh yeah.
+[55:57] So you can >> [laughter]
+[55:58] >> apply some bias in the That's funny.
+[56:02] Yeah. Yeah, um so speaking of maybe
+[56:05] [clears throat] a little bit about practical limitations of something like
+[56:07] this, um especially in terms of like say version control that you mentioned
+[56:11] GitHub models that you can keep fine-tuning over time.
+[56:14] Say you're a company that just changed a policy in the system one [snorts] line
+[56:17] sentence we honor something to we do not honor it anymore. Mhm. And that keeps
+[56:21] going back and forth. Do you then, you know, start from the base model again
+[56:25] and fine-tune that Yeah, yeah. Or the one that already already has a good
+[56:28] representation of it. And just has to change that one small
+[56:32] thing and then you know how that kind of is joined at the hallucinations.
+[56:36] Which is kind of why we were doing full context, right?
+[56:39] Partially to avoid that. Yeah, I think it So So his question was
+[56:44] about what you do once you start making
+[56:48] multiple updates to the model, especially when you have like
+[56:50] conflicting information. And I think like the optimal synthetic data strategy
+[56:55] would somehow figure this out during training and maybe even like if there's
+[56:58] some documents from a few days ago that are no longer relevant, you can just
+[57:01] like delete them. But I don't know how to do it.
+[57:04] It's not How how we can give more attention in the same like whatever
+[57:08] let's say uh information is conflicting with each
+[57:12] other. Uh whatever pre-trained versus what uh
+[57:15] friend document we are giving for training. If it is a contradict each
+[57:18] other but I want more preference from my document.
+[57:22] Like what we are doing in right like uh asking the questions from the ground
+[57:26] truth. So how
+[57:29] uh it will replace that uh scenario?
+[57:33] I'm [clears throat] not sure I understood your question.
+[57:35] Sorry? I I don't know if I understood your question.
+[57:37] Okay. So what you have
+[57:40] I didn't understand your question. So my question is like I
+[57:43] uh we have the data uh whatever the training data we are giving it is
+[57:47] contradicting with the pre-training data.
+[57:49] It is a conflicting. Now while asking the question while the
+[57:53] inference, I want to give more preference on my data. I don't need the
+[57:58] pre-training information. That's why we are using right like uh I need the
+[58:02] output from my ground truth uh whatever the context I'm giving. So how it will
+[58:07] uh we can achieve in the like a training?
+[58:12] I think that the
+[58:16] the paradigm I'm proposing has all the same limitations of RAG.
+[58:21] Uh I'm not positive that answers your question but like for example, if
+[58:26] uh like with maybe in the scenario he said where you said something many times
+[58:29] and then turns out not to be true, both RAG would retrieve that and in the
+[58:34] uh dumbest setup, that would also be
+[58:37] present a lot in the training data. So I think like the same problems have to be
+[58:39] solved.
+[58:42] Have you done any work with federated uh tuning? Fine-tuning uh parameters
+[58:47] So so what might be your problem? Yeah. Millions of users.
+[58:50] Have you done any research in this space yet? No, no, no. Not really but I think
+[58:54] it's an interesting uh opportunity. So like back in the day, a lot of people
+[58:57] were really excited about the idea that you could share gradients and train the
+[59:00] same model across many machines. This is federated learning. And I think like one
+[59:05] of the problems why it's hard is because the models now are so big that the
+[59:09] network costs are way too high. And because like I'm arguing that you only
+[59:13] need to train a million parameters instead of a trillion, it probably comes
+[59:16] back into play. So I think it's a very good idea, especially in the RL world
+[59:20] where you do a lot of work for a long time and then do gradients like very
+[59:26] seldomly. So I think it probably will come back and it's smart to think of it,
+[59:31] but it hasn't quite yet. Um, maybe I'll take like two more
+[59:35] questions. Yeah, go. Um, so your argument here about training in
+[59:41] um information seems to be
+[59:44] uh counter to Karpathy's view of like a reasoning engine, like distilling just
+[59:49] the pure like you know, intelligence aspect of the of the model down to like
+[59:54] a 2 billion parameter thing. Um,
+[59:58] and like I think that there's a bit of overlap there, like um
+[1:00:03] like a lawyer is not doesn't have the entire legal code memorized, but they
+[1:00:08] know how to use the tools available to them to find what they need to.
+[1:00:12] And so I I think part of it is kind of a combination of those two things, where
+[1:00:16] you're doing task-specific training with something like this on a relatively
+[1:00:22] small reasoning brain to get a sense of where it needs to find the things that
+[1:00:29] might become stale or or, you know, am I on the right track here or Yeah,
+[1:00:34] yeah. So, I think you're making a comparison between some
+[1:00:38] people who have said, "Oh, the best model we could ever have is like really
+[1:00:41] small and knows nothing, but can use tools really well or something like
+[1:00:44] that." And I guess I I was proposing some similar
+[1:00:48] ideas. I said models know way too much. I think everyone agrees. The model
+[1:00:52] doesn't need to know the capital of the smallest province in Tajikistan for most
+[1:00:56] use cases at least in like my life. It doesn't need to remember, you know,
+[1:01:00] encryption keys. Yeah, but I think there's I I think it's a very
+[1:01:05] philosophical question, but I think it's really hard to create a
+[1:01:08] model that doesn't know anything. And so, I'm more advocating for like
+[1:01:12] specialized models that are good at something you care about, but bad at
+[1:01:16] other things rather than advocating for a model that's like bad at everything.
+[1:01:20] Uh okay, last question here. Yeah, have you ever done any research yet into the
+[1:01:24] temporal elements of the information? No, but I think that's like one of the
+[1:01:28] first things to think about is like, okay, if you have information from day
+[1:01:30] one and day two and day three, do you just sort of like have data everything
+[1:01:34] or do you train them in order kind of like you were asking or do you like
+[1:01:38] train multiple models and merge them or I actually don't know, but that's a good
+[1:01:42] segue. So, now I'm I'm working on this
+[1:01:47] problems related to this a lot, thinking about this a lot.
+[1:01:50] Started a company with a few other people and um
+[1:01:54] this is like the kind of research we're doing. If anyone knows someone who lives
+[1:01:58] in San Francisco and is good at engineering and you think they're
+[1:02:01] interested in this, let me know or send me an email. Or if you're interested in
+[1:02:05] like using this kind of thing, send me an email. That would be great. Is it
+[1:02:08] temporal stuff or Not necess- I mean, it's kind of all of this, I would say.
+[1:02:13] Um, trying to build models that you can teach things to.
+[1:02:17] Tell us more.
+[1:02:21] All right, thanks so much for having me. This was great.
+[1:02:24] >> [applause]
+[1:02:27] [music]
+[1:02:43] [music]

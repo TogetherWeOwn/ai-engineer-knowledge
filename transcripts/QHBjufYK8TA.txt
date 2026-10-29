@@ -1,0 +1,735 @@
+# title: The State of Model Routing — NVIDIA, Cognition, OpenRouter
+# source: https://www.youtube.com/watch?v=QHBjufYK8TA
+# speaker: NVIDIA, Cognition, OpenRouter
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T06:30:56Z
+# sha256: a7f571c42839a7e863484d41723c35d2cf8fa37bdaa78802943597c6bdc7db41
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:01] [music]
+[00:12] >> have been really exciting. We've tried to get a bunch of the industry leaders
+[00:16] together to talk about some of the problems that are that we're facing as
+[00:19] we try to run more on local. If you guys were here for the first
+[00:22] panel, one of the things that we talked about
+[00:24] was model routing. We firmly believe that we're in a
+[00:28] multi-model world. I think you heard this from many of the panelists.
+[00:32] Anyone who is deploying AI in production and who is doing so locally is seeing
+[00:35] that multi-model world. That's why we released these NeMo Triton models at
+[00:39] NVIDIA. Everything is released from the data sets to the weights with recipes so
+[00:43] that you can customize them. We do that because we know that people customizing
+[00:47] models is going to be huge. And so, this panel is really exciting
+[00:51] cuz we're going to talk specifically about model routing. So, as you are
+[00:55] picking which model to use, how does that how essentially how does that
+[00:59] tooling itself look? Um, do you guys want to introduce yourselves?
+[01:03] >> Yeah, sure. Um, I'm Walden. I'm the co-founder of Cognition. We build Devin,
+[01:07] AI software engineer. Uh, in addition to the product, we spend a lot of time
+[01:10] partnering with our customers to figure out how they should deploy these models
+[01:13] uh and these agents. And one of the things they're constantly asking us
+[01:17] nowadays is basically how do I know the ROI of our models and how do I know
+[01:21] which tasks I can actually let our engineers spend the most expensive
+[01:25] models on versus, you know, letting them use a more cost-efficient model. And so,
+[01:29] that's why we're we're also thinking a lot more about multi-model model routing
+[01:31] nowadays. >> Totally.
+[01:33] >> Yeah. I'm Carter. You guys heard from me a little bit earlier, but if you weren't
+[01:36] here, I'm a developer tech engineer at NVIDIA. And uh ultimately, I spend a lot
+[01:41] of time thinking about how to get intelligence into as many developers'
+[01:45] hands as possible. And uh something that is continually becoming a not an issue,
+[01:50] but something that is top of mind for a lot of developers is uh as you use more
+[01:54] intelligence and the frontier models get more expensive, uh it becomes somewhat
+[01:57] cost prohibitive to to use the best uh tools, what feels like the best tools,
+[02:02] as much as you would like to use them. And so, this has become a recent uh you
+[02:06] know, focus is, how can we, you know, still
+[02:08] get the same desired outputs, but actually uh both as an individual
+[02:13] developer, but also imagine startups and small companies, how can you leverage
+[02:16] this incredible tool without totally breaking the bank?
+[02:21] >> Uh I'm Donne. I have worked on model evaluations
+[02:25] uh both in terms of its accuracies and efficiency and cost understanding of the
+[02:30] model. Uh and then I try and understand those implement those learnings and uh
+[02:36] help build a router. So, it's basically my job is to understand the behavior of
+[02:42] of the model on an intimate level and then use those learnings to both improve
+[02:48] the model and try and design a system of model that can work together with each
+[02:51] other. >> Totally. Um yeah, I love a lot of the
+[02:54] research that you're doing at Nvidia as we kind of see the space through. I
+[02:58] think what's really interesting is model routing itself is pretty new still. And
+[03:01] so, what you'll notice is there isn't a very clear solution here. That was
+[03:05] something that came up on the first panel is that there is a lot of space
+[03:09] for startups and for companies in the ecosystem to fill in a solution here cuz
+[03:13] we're still figuring out how to best do these patterns. And I think, Walden, I
+[03:16] want to kind of ask you. So, um Cognition just released Fusion, your
+[03:20] guys's model router. And when you guys released it, you in your blog said that
+[03:24] you're actually getting better performance than Fable, um than these
+[03:27] frontier models. And I feel like that was a very surprising statement to hear
+[03:31] because we were thinking that you're getting as good or close enough usually
+[03:36] when we're running on edge, when we're running local in these compute strained,
+[03:39] smaller footprint models. But you guys are getting better. Can you explain how?
+[03:43] >> Yeah, absolutely. Um so, I also want to be be clear about
+[03:47] something here is like, you know, we're not saying that that we gap above Fable
+[03:50] level performance in in the same way that maybe Fable level performance gaps
+[03:53] above other models. I think actually there's this really unintuitive
+[03:58] dynamic where smarter models actually get better and better at delegating
+[04:02] work. And so one of the philosophies we had with building a
+[04:06] model router is we don't want to route people to a dumber model and then
+[04:10] suddenly you're stuck with a model that doesn't know how to do your task. Next
+[04:14] thing you know you're you're switching yourself back to smarter model anyways
+[04:16] and now taking that expensive cost. And in general we think a lot of the
+[04:19] existing model routing systems out there are probably the same ones people have
+[04:23] been using like a year ago. And so we really wanted to put out a new framework
+[04:26] that actually lets people still feel like and and still have a
+[04:30] frontier model in their system while getting all these like cost benefits. So
+[04:34] yeah we we're reducing the cost of Fable level intelligence by 40%. The way we do
+[04:38] that is we allow Fable to still do like the planning and the the hard decision
+[04:43] making but delegate a lot of the work to an implementation model. And the
+[04:47] implementation model can be you know one of these open source models be it a
+[04:50] cheaper mini model. Um the unintuitive thing is even though it's cheaper
+[04:54] because you're delegating the work to another model you can let that model go
+[04:58] at the task with much more depth and intensity than you might otherwise. Like
+[05:01] you can spin off like you know three sub agents to go and like explore the code
+[05:05] base and maybe that's actually more comprehensive than if you had just let
+[05:08] Fable explore the code base itself. So you're actually getting this like nice
+[05:11] trade-off where it's both more cost efficient and it's also more
+[05:14] comprehensive overall. >> Interesting. I see. So you're saying by
+[05:17] using a bunch of smaller models you're essentially like
+[05:20] for one example scouring the code base you can you you can explore it
+[05:23] potentially better than if you were to just have one model
+[05:26] I don't know figure out with what it's limited with its limited context with
+[05:30] whatever path it's on. >> Yeah, totally.
+[05:32] >> But also if you think about the budget of if you were to say the frontier model
+[05:36] costs this amount per token and the smaller model is this amount per per
+[05:40] token and it's significantly cheaper then you can use a lot more tokens from
+[05:44] the smaller model with >> still within the budget that it would
+[05:46] have been from the Frontier model. >> I would also like to encourage everyone
+[05:50] to think there are jagged capabilities in most models, right? So, coding is not
+[05:55] one domain. Within, let's say data visualization,
+[05:59] there'll be scikit-learn, there'll be matplotlib, there'll be something else.
+[06:02] It largely comes down comes down to the training corpora that
+[06:08] went into each of the models, so right? So, one model, while you're trying to do
+[06:13] X type of work, let's say data visualization,
+[06:16] and the other type is Y, that means let's say model building. Let's say
+[06:20] you're trying to have a data science work stream, where you're trying to
+[06:24] optimize for some kind of prediction, and then visualizing your results.
+[06:29] Within that task, different models will have different
+[06:32] strengths. So, not it's not necessary that model A
+[06:37] if scores higher on a coding benchmark, is just plain better at every task that
+[06:41] is. So, routing is a
+[06:45] task of intimately intimately understanding of behavior of and
+[06:49] strengths and weaknesses of different models, and then applying them thusly,
+[06:54] right? I would I would encourage everyone to think, "Hey, models are
+[06:57] strong at different things, rather than like there's one model to rule them
+[07:01] all." >> I see. And by the way, real quick, thank
+[07:03] you Alex for joining. Yeah. >> Sorry I'm late.
+[07:05] >> No. Oh, is that so? >> I might need yours in.
+[07:09] Sorry I'm late. >> [laughter]
+[07:11] >> I'm Alex from OpenRouter. Um thanks for having me now.
+[07:14] >> Yeah, of course. Thank you so much. You came right from the airport, so this is
+[07:16] perfect. I think um tonight that's that's super interesting. So, um the way
+[07:20] that you're thinking through through model routing, it's not even just uh
+[07:23] delegating to necessarily a smaller model, but like and maybe this is kind
+[07:27] of what you're saying is can you can you put essentially a swarm of agents to
+[07:30] accomplish the same task, and suddenly routing the task between them is is much
+[07:34] is a is a problem to solve in and of itself.
+[07:36] >> Yeah. So, if you look at like let's say let's take an easy example. Let's take a
+[07:40] science or like scientific discovery as an example, right? Usually these are
+[07:44] one-shot problems. It's incredibly hard. You have models think through this
+[07:50] process, right? So, in that you have tons of sub-domains. Like tons and tons
+[07:56] and tons. So, in that aspect, if you think about
+[08:00] post-training like the post-training process of a model, they'd be tuned with
+[08:04] different teachers. They'd be tuned on different sub-tasks.
+[08:09] So, those those um those overlapping strengths will be
+[08:14] readily apparent when you're trying to understand failures of each models on
+[08:19] different different sub-tasks. Once you understand that, you can orchestrate
+[08:23] your system to leverage that arbitrage essentially, and that essentially
+[08:27] becomes free. So, I think this is on LM router bench.
+[08:31] There was there are tons of benchmarks out there. But, if you use these
+[08:35] techniques, you can get like up to 10% higher accuracy even, right? It depends
+[08:39] on the model pool. Depends on the task at hand. But, I would encourage to think
+[08:44] about the complementary nature of models.
+[08:48] >> I see. Do you see so in kind of the way that you were
+[08:51] describing the way that the task is broken up, do you see that the some of
+[08:54] the smaller models because the token cost is cheaper, are they using more
+[08:58] tokens? Like is it Are Are you specifically routing so that they do or
+[09:02] that they so that they are chattier? >> Uh oh yeah, they absolutely do use more
+[09:06] tokens. I I actually I want to
+[09:09] kind of like riff on something that Tuhin was saying, which is like you
+[09:12] know, a lot of times when you look at these different benchmarks, you'll see
+[09:14] that the small models will perform better than like even the frontier
+[09:17] models in certain cases. I think a lot of people they look at
+[09:20] this and they immediately jump to, "Oh, how can we just route like, you know,
+[09:24] the task where the small models do better just straight to the smaller
+[09:27] models?" I I think that one of the things we really want to emphasize with
+[09:31] our recent blog post and recent Devin Fusion was that this kind of like naive
+[09:36] like initial routing to based on the task type is extremely fragile,
+[09:40] especially the more agentic the task you you work on is. So, for example, like a
+[09:44] real developer, you might ask your agent first, "Oh, how does this code base
+[09:47] work?" And then you you go deeper and you're like, "Okay, actually, can you
+[09:50] implement some features for me?" And then you go deeper and you're like, "Oh,
+[09:52] can you like now go to like a live test of this feature and debug deep cases?"
+[09:56] The complexity changes and the type of task changes over time, and you don't
+[10:00] want to be left with some subpar model for the the task that you're now on. I
+[10:04] think this is why people like frontier models so much is they're they're just
+[10:07] like generally intelligent and they're capable of shifting between various
+[10:11] different domains, even if you can eke out better performance in very specific
+[10:14] tasks. Um, and and what So, the challenge is, how do you get a small
+[10:19] model to know that it's out of its depth and you need to now like go switch to
+[10:23] another model or go like, you know, go to a smart smarter model. And and our
+[10:26] solution to this is you kind of just always have this like main frontier
+[10:30] agent that's watching, even if it's not the one doing the work. It should at
+[10:33] least be keeping tabs to figure out, "Okay, we like the the agent I delegated
+[10:36] to now is like out of its depth. I need to kind of like move it to to something
+[10:39] else." Um, and and overall, just the guarantee of always having frontier
+[10:43] intelligence present, I think reduces the the fragility of of these systems
+[10:47] quite a lot. >> How does the sharing of context between
+[10:52] one of those smaller agents who has basically completed up to some level of
+[10:56] a task and decides, "Actually, I don't think I'm the right person for this. I
+[10:59] need to hand it back to the the foundational model." Um, of course, you
+[11:02] don't want to have the entire trace of that
+[11:05] >> Yeah. >> smaller agent be passed back to the
+[11:06] larger model. But so, how do you get that level of specificity while
+[11:11] basically providing the information it needs, but not more?
+[11:13] >> Yeah, absolutely. So, I I I think like the the context here is it's actually
+[11:17] very easy to actually create a system that's more expensive
+[11:20] as soon as you're running like, you know, multiple models together cuz oh,
+[11:23] no, like, you know, this one file reading. Now, every every one of these
+[11:26] models is now reading this one file reading. So, now you're you're you're
+[11:28] being charged like three times as much. Um,
+[11:30] the the the the trick that we we spent a lot of our time on is um,
+[11:34] most of the context by default will only be going to like one model. So, like
+[11:37] most of the context let's say will be going to the small model. But, the thing
+[11:40] you need to then tune very well is okay, like maybe you still show like what
+[11:43] files it's reading, maybe you show like the high-level thinking of what it's
+[11:46] doing back to the main model. Maybe you have the small model um, you tune its
+[11:50] ability to present the context back to the main model. Um, and actually a lot
+[11:54] of these problems already have been well studied in many domains already like
+[11:58] context compaction is something you already have to solve if you want to do
+[12:01] like really long-running agents. And so, this problem of taking long context
+[12:05] compacting it in a way that is now understandable is the one that you can
+[12:08] also apply to this domain and just kind of give the compacted context back to
+[12:12] back to the main agent. >> Context compaction is something that you
+[12:15] know, I'm familiar with but I hadn't really thought about as you're doing
+[12:18] model routing and as you're trying to share context across now potentially
+[12:21] many models, you're you're expanding the amount of what could be seen as wasteful
+[12:25] tokens or redundant tokens just just because you have to process that across
+[12:29] the many models. >> Yeah.
+[12:31] Yeah. Um, I I I think there's the way I describe it is I think we are early in
+[12:36] in the in the model routing domain. Um, I I I hope that a year from now that
+[12:40] even the techniques we kind of use for Devin Fusion you people look back on
+[12:43] that and are like, "Oh, these are some like really legacy ideas and and now we
+[12:46] have like much better methods at routing between models." Um, and when people
+[12:50] actually start co-designing their models with this in mind we're going to be be
+[12:54] in a much better world. >> Yeah, I I echo what you said that um,
+[12:59] I think routing will evolve as the task evolves when
+[13:05] when you start task, right? So, um, it's more useful to see things in terms of
+[13:10] subtasks and sessions uh, than individual problems that you're trying
+[13:14] to solve because more than likely you're when you're working through a problem
+[13:18] you're asking a lot of questions, you're you're exploring different things. Um,
+[13:22] and it is imperative that you try like
+[13:27] people who design routers is imperative that they try and understand these
+[13:31] phases of different complexities and then try
+[13:35] and apply some logic for essentially side kicking
+[13:42] tasks or leveraging expertise from other models
+[13:46] that's that's pretty on point. >> Yeah, I'd love to hear from the the
+[13:51] router guy. >> [laughter]
+[13:53] >> Yeah, um I think those are these are like
+[13:56] important points and one of the biggest debates I think we have internally is
+[14:00] whether that outer model that's doing the orchestration should be the big
+[14:05] model or the small model. You get like very different results
+[14:09] depending on your choice and in fact and it's not even clear what
+[14:13] the pricing impact would be because if your outer model that's doing the
+[14:16] orchestration is the big model it can leverage its caching to like make more
+[14:21] of its decisions and it's caching is going to be like a dramatic price
+[14:26] savings compared to the small models caching a lot of the time
+[14:29] especially for like perform for you know issues that are on the bright line like
+[14:34] zooming out a little bit I think the what you want from all the models out
+[14:38] there when you do model fusion is to benefit from all the data that is being
+[14:46] trained on across all the labs and and not just the data from one lab right or
+[14:52] one source and a model is just like a combination of like the data and its
+[14:57] understanding of the data both its compute and the quality of its RL so
+[15:03] long term I think you want you want models where
+[15:09] they know that oh this is like in distribution like this is in my data you
+[15:14] can use small models pretty easily and get a cost savings but if it's out
+[15:18] of distribution small models may actually increase your cost because of
+[15:22] how often they'll like call tools and how crazy their loops will be. Like if
+[15:26] you run terminal bench on Opus and Haiku, like Opus will do about three
+[15:33] times better at 1/10 the cost of Haiku, even though
+[15:38] Haiku's significantly cheaper per token. So it really becomes a huge problem if
+[15:42] you use a too small of a model, particularly on tasks that are out of
+[15:46] domain for the train data. When you're doing something like classifying text,
+[15:50] like hey, is this like a person's name or is this an organization's name?
+[15:54] That's super in domain. So you would you don't want that kind of task to go to a
+[15:59] large model. You want it to go to a a small model. Everyone has that in their
+[16:02] domain. Um so deep like being able to understand in domain, out of domain is a
+[16:07] lot of work that we're doing for for um open router fusion.
+[16:12] And uh and then also figuring out like what like how to orchestrate the outer
+[16:16] and inner models um for different types of task. And like
+[16:20] um yeah, it's it's an early industry. It's
+[16:22] like an early field of research. Uh most research on model fusion has not been
+[16:27] very detailed, not been very like, you know, optimistic sometimes. Um it's only
+[16:32] like just, you know, recently getting uh more optimistic. And I think um I'm
+[16:38] personally very optimistic about it. And uh you know, like we we're very like
+[16:43] ecosystem-driven, collaborative company. And a lot of our
+[16:47] like we work with a lot of partners to try like help improve their
+[16:50] orchestration pipelines with good primitives, like the, you know,
+[16:54] sub-agent and like the advisor tool, um which is kind of similar to what you
+[16:58] were talking about. >> I'm curious. So uh
+[17:01] help me understand when uh if a it makes total sense that um
+[17:05] a small model, if it's in domain, would be cheaper. But if it's not, then it's
+[17:08] going to thrash around uh as it tries to get an answer.
+[17:12] When you're describing whether the uh
+[17:16] con- like the main agent should be the the the local model or the cloud model?
+[17:22] Does that is that a decision that's then dependent on whether the task is
+[17:26] something that it that's in domain or not?
+[17:29] Does my question kind of make sense? >> I don't know. Um, I basically I don't
+[17:33] it's kind of early to >> um
+[17:37] to say. I I think the I wait the results that we published,
+[17:42] which are a couple weeks ago, which were focused
+[17:45] on deep research, not coding. >> Mhm.
+[17:47] >> Um we had the smart model be the wrapper
+[17:52] model, be the outer model, and we got the best results from doing that. Um,
+[17:56] but it for deep research it works the best. Um,
+[18:02] for other tasks, it's like kind of unclear. Like we there it's fusion is
+[18:06] not super well optimized for coding. And uh it might be that like a smaller model
+[18:12] ends up being like a higher um efficiency per you know, fewer dollars
+[18:18] um per like completed successfully completed task, but it's kind of early
+[18:22] to say. >> Yeah.
+[18:23] >> [clears throat] >> One thing you said earlier is like, oh,
+[18:24] you get the caching benefit from like the main line agent. Um, you actually
+[18:27] can get the caching benefit from the side agent. And um, this is actually one
+[18:31] of the key things we talked about with our Devin fusion launch is that um, you
+[18:36] kind of are leaving a lot on the table if you do a main agent and sub agents
+[18:39] type system. Um, so we don't use sub agents. We use what we call a sidekick,
+[18:44] which is um, one sub agent that continually has a running context. So
+[18:49] the main agent doesn't need to re-provide uh, context from earlier. Um,
+[18:53] it's all still in the KB cache, right? Like it's 10 times cheaper on on all
+[18:56] those cache tokens. Um, and then if you want to like switch the smart model to
+[19:00] be like the one on the side or the one in charge, um it's actually totally
+[19:05] fine, and you can kind of like do do the swapping back and forth.
+[19:08] We're also spending a lot of time right now thinking about
+[19:11] how do you train models to actually work collaboratively with other models? I
+[19:15] actually I think there's a lot of literature out there on how you RL one
+[19:18] model to do a task end-to-end. How can you RL model to also be good at
+[19:21] collaboration? And when we think about it, we actually
+[19:25] try both of these setups where let's RL the model being the orchestrator and the
+[19:28] one deciding what gets delegated to other models, see how well that
+[19:31] performs. Um and we also orchestrate it in a way where the model
+[19:35] we're training is actually the executor, the sidekick, and see how well is it at
+[19:40] executing other models' instructions. Um and we expect that to to be a probably a
+[19:45] big lift in this next step of like multi-model orchestration is don't just
+[19:48] like take models as they are and orchestrate them, but like can you
+[19:50] actually co-design your models with the orchestration system?
+[19:53] >> Yeah, that makes sense. I mean, with Nemo Tron and you know, with all the
+[19:55] foundational models where um we're essentially post-training them for the
+[19:59] harnesses that they're getting used. If the harness is going to include a lot of
+[20:02] routing, then that makes sense that makes its way in to the post-training.
+[20:05] >> Yeah. Um are you guys thinking a lot about the kind of like the model
+[20:08] training at at Nvidia for this kind of purposes?
+[20:12] >> Yeah, so we have a technology called
+[20:16] >> The mic's go? >> Right.
+[20:18] >> Hello. >> Testing. Oh, this one works.
+[20:22] >> [laughter] >> Okay. Uh so we have a technology called
+[20:25] Flex Run. So you have uh we we have a setup where uh there's a the uh there's
+[20:31] a main model, then we distill it into smaller uh footprints. And then based on
+[20:37] the based on the task at hand, you can switch which model does the decoding.
+[20:43] Right? So there's a lot of fancy stuff you can do uh within a model artifact,
+[20:48] too. Uh
+[20:49] to essentially only activate
+[20:53] a class of model or a section of weights, depending on the task at hand
+[20:57] or the complexity at hand. Most In most cases, you can essentially
+[21:03] understand the novelty of a question to a model if you have access to the recipe
+[21:09] with which it was trained. So, this works very well for
+[21:12] open models, right? Like or any model you have access to its data for, right?
+[21:16] Because you can literally decide if it's in like see if it's in distribution or
+[21:20] not. Uh again, if you have studies from when it
+[21:24] was trained, you can also see how much essentially how much was your
+[21:29] distillation gap across teachers and the artifact that you trained, right?
+[21:34] Because sure, you have domain data from all all the different domains you're
+[21:38] tuning, but it's not guaranteed that it uh absorbed all the that data evenly
+[21:43] across the models, right? So, um it becomes it becomes very interesting uh
+[21:49] to start thinking about these flexible weights and flexible model sizes
+[21:55] essentially. There's also I wanted to add with the
+[21:58] context piece, right? So, how do you think about
+[22:02] ASTs and and context compression representations?
+[22:06] Uh compaction in its very nature is lossy, right? So, just like headroom is
+[22:12] there, RTK is there, right? Uh these these spaces code bases are usually
+[22:18] designed to have representations that we carry forward through life and you
+[22:23] essentially give models the capability to further expand on them. It's it's
+[22:28] more more like loss less-ish compression, which can retain states of
+[22:33] a models or states of agents. What do you think about that?
+[22:37] >> Yeah, I think this gets to like kind of like a fundamental philosophy of how
+[22:41] agents and context should work. One exercise I like to do is like you know,
+[22:44] as a human, like how many numbers can you like if I just start spitting out
+[22:47] numbers now, right? Like how many can you remember before, you know, like you
+[22:52] start losing track of them. I think it's actually very few, right? So, in some
+[22:54] ways you could argue that your context window is actually shorter than these
+[22:57] language models. And yet, you can actually be very effective at that,
+[23:00] right? Your context is is very lossy. Um, I think one of the nice things that
+[23:05] people are starting to realize with agents is like you have a lot of
+[23:07] non-lossy systems that you can fall back to. So, you have a file system. Like uh
+[23:12] if in your memory all your memory is that you read some file earlier, you
+[23:15] don't need to remember the whole file. You maybe remember the important parts,
+[23:18] but you can still have the full version of the file on your system. And that's
+[23:22] kind of my goal when I'm thinking about how do we build a good context
+[23:26] engineered harness is the harness should have everything in needs to find what it
+[23:31] needs to have even if it doesn't have everything immediately available.
+[23:35] >> In that case, uh do you think that the context sharing problem will become
+[23:41] cheaper and less of a problem in future? >> Yeah, it's definitely possible as well.
+[23:47] I've seen cases where um you know, the psychic agent does a bunch of work. It
+[23:51] tells the main model, "Oh yeah, like here's here's all the things I found."
+[23:54] Instead of dumping the full thing, it just references them by file. And then
+[23:58] the main model is actually generally you find these larger, smarter models,
+[24:01] they're actually more token efficient with how they use tools and how they
+[24:04] read. And so, they actually read the files in a way where they only see the
+[24:07] important parts, right? Or they decide that, "Oh, actually I only need to look
+[24:11] at a subset of this." Or, "Oh, I can run a single command and just know if
+[24:13] everything is done properly." Um, it's actually quite amazing um
+[24:19] the fact that you know, these multi-model systems they actually seem
+[24:22] to scale and get better with intelligence, which is um not something
+[24:26] we should just take for granted, right? It's not obvious that actually more
+[24:28] expensive models are actually creating an overall cheaper system.
+[24:33] >> Yeah, like the scaling laws uh if you have a larger
+[24:36] model, it's going to be more efficient with its tokens. Uh smaller models less
+[24:41] efficient with its tokens. I guess I had a question for you, Alex.
+[24:45] Uh do you guys uh like weigh more importance on uh the actual
+[24:51] infrastructure side of routing? So, for instance, KV cache aware routing or uh
+[24:56] like this where most of the businesses right now Uh or the are you seeing
+[25:00] strong pull off like people actually deploying routers in production?
+[25:07] >> So open router is a like a marketplace for language
+[25:13] models. We we exist at like we can't see into the KV caches of
+[25:19] models unless we're running them ourselves, which is pretty rare.
+[25:22] Um we we we do spend a lot of time optimizing
+[25:26] for cash hits and we we like pass through cash hits directly to users.
+[25:32] Um but like in terms of KV cash optimizations we we we can't do any of
+[25:36] like specific work there. What we do for um model routing is we we try to like
+[25:44] find the best model or best combination of models for the prompt and then when
+[25:49] we see a cash hit, we will will like use up the duration of the cash and send the
+[25:56] downstream customer like the the full savings of the cash hit.
+[26:00] Um there's more work that we can do here
+[26:02] where we could say, okay, this looks like something where there's significant
+[26:06] benefit to switching the model right now, but you haven't used up the full
+[26:10] cash. You still have like 2 minutes left. Um and it we think it's probably
+[26:15] worth switching the model and losing the rest of your cash um and letting people
+[26:21] kind of like tweak their tolerance for that behavior. Um we've we've been doing
+[26:26] a little bit of that, but we haven't like exposed it to customers yet.
+[26:29] >> [clears throat] >> Awesome.
+[26:30] >> What what is next for you guys in terms of your your your model routing? Cuz as
+[26:33] you mentioned, you know, it is kind of like a different direction
+[26:36] from like the the marketplace business that exists today. So I'd love to hear.
+[26:41] >> So I mean we've been doing like we we've had a an auto router for like 2 years
+[26:46] almost. Um but when we launched it, there was like no adoption of it. It was
+[26:51] people really wanted to use specific models.
+[26:54] Um and the the auto router just had like no real usage. It was it we mostly saw
+[26:59] it as like a discovery play point. Like, hey, this is how you discover which
+[27:03] model might be good for your prompt. And then
+[27:06] um at around like January this year with open claw, it
+[27:12] exploded. And the reason it exploded is because there's this fundamental
+[27:20] um idiosyncrasy in open claw where it sends heartbeats every like 10 minutes
+[27:25] to your model of choice just to see like if the you know, if the the the client
+[27:30] was still active. >> [laughter]
+[27:32] >> And that means that if you set Opus to be your default model, it would be like
+[27:36] using a lot of tokens on this like heartbeat process. And so
+[27:40] um this was the very beginning of like a very popular app with two completely
+[27:46] different intelligence needs, completely different. And the models the open
+[27:50] source models have improved to a point where like it makes sense to segment the
+[27:55] market and at at least those two areas. And so that's that was how it got
+[27:59] started. And then we saw a lot more segmentation blossom afterwards. And so
+[28:04] um and now a whole bunch of agents and apps on open router use the the
+[28:09] different routers that we have. We have a couple of them. We have Pareto code
+[28:12] which gives you the Pareto Pareto optimal model for coding tasks given a
+[28:18] certain like threshold that you can tune.
+[28:20] Um we have fusion which orchestrates multiple models and gives you a fused
+[28:24] result. And um and then we'll have other experiments in the future. What we want
+[28:30] to do is basically like create good primitives
+[28:34] that developers can use to like get really advanced with how they use model
+[28:37] orchestration. Um
+[28:40] kind of like sidecar sort of like that. Um but also give people like a really
+[28:45] easy thing that they can just like set a slug to that works with all harnesses
+[28:50] and just like gets the job done. >> I feel like it's super interesting how
+[28:54] much of a perfect storm there is for model routing right now because on one
+[28:57] hand, you know, ignore agents, ignore open claw for a second, like just to
+[29:01] squeeze better performance, it seems like we should be smarter about how we
+[29:05] tackle problems. That's obvious, right? If you make a plan, if you make a
+[29:08] strategy, that's a that's a better way to to go about your day. So, I'm not
+[29:12] surprised that you're going to see, you know, better code get written or more
+[29:15] performing code get written and less buggy code get written if you break the
+[29:18] problem down. And so, routing specifically for that uh use case makes
+[29:22] a ton of sense. But then hearing this, yeah, like the profile of workloads
+[29:26] changed with agents, right? They're very they it went from like I ask questions,
+[29:30] I get a response, then it went to reasoning where I ask questions, it
+[29:33] reasons, and then it comes back, and then it went to uh yeah, this heartbeat,
+[29:37] right? Like if um if my agents are running optimally, uh there's a token
+[29:41] being generated every second. Um and suddenly
+[29:44] that is its own need for model routing, and it feels like um hearing the
+[29:48] different solutions uh to kind of tackle each of those is very interesting. Even
+[29:53] >> Well, I was just going to say I think that yeah, the the use cases for model
+[29:56] routing are are there are many of them. And so, one could be getting a better
+[30:01] answer, one could be, you know, saving money and trying to get the same answer.
+[30:05] One that we haven't even talked about yet, which is probably the most relevant
+[30:08] maybe even to this crowd, is uh when do you want to actually run a model locally
+[30:13] versus when do you actually need something like a frontier model to to
+[30:17] perform that task. And that might be something to the effect of like uh for
+[30:21] privacy protecting information. You know, when I'm running some local, it
+[30:25] can you detect that my prompt has sensitive information? And if so, do
+[30:29] that on on device, um but then maybe even anonymize some of that information
+[30:34] to go do the more advanced workloads up on top of that information in the cloud.
+[30:38] Um another example would be again for the cost savings, but it's like, "Hey, I
+[30:41] bought this DGX Spark and I'm not I know I'm not at 100% utilization. How can I
+[30:47] make sure that as part of my workloads, whether it's the heartbeat and open claw
+[30:50] or what have you, that I'm leveraging that compute um to the fullest of its
+[30:54] ability because I'm only paying for the electrons that are coming in for my
+[30:57] power bill, um but I'm paying full price for the tokens in the cloud?" And I
+[31:00] think that's a whole other area of model routing that I know that we're doing
+[31:04] some work with at NVIDIA um that I think will be will be really cool as it starts
+[31:08] to uh the hybrid of local and cloud starts to to really emerge as its own
+[31:13] sector. >> Yeah, I'd be curious to know what you
+[31:15] guys take uh take is on. Like if you self-host a model, the cost dynamics
+[31:21] change, right? You have a considerably higher cost at a higher context length
+[31:25] because your throughput slows down as the context gets deeper. So, rather than
+[31:29] switching to a cheaper model, even if you have self-hosted models in data
+[31:33] center, you can use compaction uh to bring your throughput back up. Uh have
+[31:39] you guys uh thought about this part of it? Like compaction versus
+[31:43] uh just routing because one is you have fewer tokens to work with. One is we
+[31:48] have cheaper tokens. >> Yeah, I I think in practice um
+[31:52] compacting alone doesn't solve the the cost or or throughput problems because a
+[31:56] lot of times it's just like the uh the differential in like model
+[32:00] intelligence and cost is just so big where also by the way, when you compact,
+[32:03] you're taking a cache miss. So, you're actually then now like paying 10 times
+[32:06] as much for the for those input tokens if you didn't compact. Um the main
+[32:10] reason we compact is actually intelligence. Um
+[32:12] all all these like multipliers they advertise some like insane context
+[32:15] window, like a million tokens. Uh I would like never recommend using like
+[32:18] these models past like 200K tokens, under 100K if you can. Um the the the
+[32:23] intelligence uh just kind of like falls off a cliff at some point. Um sorry,
+[32:27] Anthropic if you're if you're watching. But I I think that uh you know,
+[32:30] compaction is like a very useful tool if you are going to have to take a cache
+[32:35] miss anyway um one way or another, like when you're routing to another model and
+[32:39] you want to just like minimize the the window there.
+[32:43] >> Do you find that, um, in the sidecar, >> Yeah.
+[32:47] >> um, when small models are generating lots of tokens,
+[32:52] um, is that like an is that like one of the
+[32:55] best reasons to switch it to a larger model? Like, basically, when when small
+[32:59] models generate lots of tokens, I wonder if that's like a
+[33:03] box of root the root cause of of intelligence problems down the road. You
+[33:08] want your big model to generate the big token chunks, the small models to
+[33:11] generate smaller token chunks, right? >> that question, you mentioned like a
+[33:15] small model essentially needing to flag that it needs help from the larger
+[33:19] model. What is that mechanism? Cuz that seems like the what's the indicator and
+[33:22] then what's the mechanism for it to do so?
+[33:25] >> Yeah, totally. Uh, so there are a lot of mechanisms we we talk about in our blog
+[33:28] post about how uh we just detect that we need to like change the model up. Um,
+[33:33] to to uh I guess to answer your question first, how does the the small model
+[33:36] detect? Um, actually, the the thing that we spend a lot of time on is, um, how do
+[33:41] we make sure the small model is like good at detecting it. Unfortunately,
+[33:43] there's a lot of cases where you do need the big model to detect it. Um, one
+[33:47] thing that we could don't go into the blog post is, um, you have some kind of
+[33:50] cadence on which you're refreshing the cache anyways, cuz by default there's
+[33:53] some like 5-minute lifetime on these caches. If you're going to go refresh a
+[33:57] cache anyways, you basically can get a free like big like frontier model call
+[34:02] uh if you kind of like ask the right question. So, it's at that point where
+[34:05] you might say, "Hey, just take a look at what the small model is doing. Does it
+[34:08] feel like it's kind of like going into some rabbit hole and and need some help
+[34:11] now?" Um, >> What's the need for the 5-minute
+[34:13] refresh? >> Uh, it's just like a practical like you
+[34:16] you you have to pay some kind of like cost to like keep these like KV cache
+[34:20] caches warm. Um, and so most caches just get evicted on some kind of cadence.
+[34:24] >> works is like at inference time you only have so many so many cache you can keep
+[34:29] kept loaded in the GPU. So, once if a cache is not being used again and again,
+[34:34] it's offloaded. >> I see.
+[34:35] >> So, it's lost essentially. So, that's why the inference provider asks you for
+[34:39] money. Uh but if you self-hosted, you can get around this problem. You can you
+[34:44] can make it as long as you want based on your big business logic.
+[34:48] >> But do do you see a world where we'll have like much more dynamic cache
+[34:53] durations rather than just the 5-minute, 1-hour?
+[34:57] >> It depends on who's do who's deploying the model where, right? So, if you have
+[35:03] a GPU which has like a lot of memory uh which like the
+[35:09] ratio of let's say SCMs to memory is memory more heavily skewed or if you're
+[35:15] working with unified memory uh and you have systems like where I Rubin,
+[35:19] uh you you have a lot of tricks to play here, right? Uh the 5-minute uh window
+[35:24] is what a lot of providers right now put, but that's uh
+[35:29] that's that's more an operational operational operational determination
+[35:35] rather than a like a science-based or like a core physics law determination.
+[35:40] So, you can technically see over time maybe some uh some
+[35:46] APIs are priced differently, uh but uh if you do self-deploy again, you can you
+[35:51] can get past a lot of this. The the cost economics really change when you move
+[35:56] from self-hosted models to uh API providers uh because you have a lot
+[36:02] more control and uh you don't have to guess the shape of your workload. So,
+[36:08] let's say if your workload is 32K uh like on average 32K cache, 1K input, 1K
+[36:15] output, uh and someone else's like let's say 64K uh
+[36:20] 1K 1K, uh if you use some provider, they are amortizing everyone's use uh use
+[36:27] case and then giving you a price, right? And they have optimized, quote and
+[36:31] quote, for general use. If you self-host, you can optimize specifically
+[36:35] for your use, and you'll likely pay much less.
+[36:39] >> Yeah. This is like kind of like the level of like, you know,
+[36:42] hardware-software frontier that we kind of like think about. When When we
+[36:46] started Cognition, we were working on the first agents, I think one reason why
+[36:49] no one else worked on agents is they were just extremely expensive. This was
+[36:52] before cash tokens was a thing that API providers paid for. Like if you were
+[36:57] sending 100,000 tokens and the same 100,000 tokens, you were paying full
+[37:00] price for those tokens back in 2024 when we started.
+[37:04] One of the key things that let us build Devin and build these first agents was
+[37:08] we actually bought direct compute capacity from these providers, and
+[37:13] instead of paying on a per-token basis, we just paid for the underlying compute,
+[37:16] knowing that the economics of the compute was that we were actually paying
+[37:19] far less for for the cash tokens that we'd send over.
+[37:23] Um And And then nowadays, you know, that uh
+[37:25] you know, there's there's like similar, you know, things I would like about
+[37:27] like, you know, having a version of the cache that maybe like you can just back
+[37:30] out to like storage in S3 or something and just like hold for much longer.
+[37:34] >> Yeah. Now, this is not extremely relevant to a DGX organization like
+[37:39] setup, but if anyone's looking to do what you guys have wanted to try out
+[37:43] Dynamo. We have a lot of pre-fixed cache optimizations in there.
+[37:48] >> Yeah. Um
+[37:50] And then going back to your question, Alex, I
+[37:52] think you said like, "Oh, like you When a small model is going off and
+[37:55] generating a ton of tokens, is that like a interesting time to back off?" Um to
+[37:58] be honest, we haven't explored that right yet. So, that that might actually
+[38:01] be a very interesting thing to to take a look at. Um It It is weird. I think like
+[38:05] some small models do tend to kind of be less like token efficient than others,
+[38:09] but um they also seem to be trained on like their own traces, so maybe in a way
+[38:13] it ends up like balancing out. A lot of these things I I feel like we have to be
+[38:16] like very empirical about to actually know.
+[38:20] >> So, uh just to add on that um um
+[38:24] you have a lot of like these days there are a lot of hallucination probes. So,
+[38:29] probes that work on either the internal state like internal state of the models
+[38:34] directly. So, you can have some form of either magnitude analysis done or linear
+[38:41] probes or just uh the end types of probes that you can see and you can
+[38:46] essentially rate like how how much you think is is tending towards
+[38:50] hallucination. Uh so, that kind of gives you a proxy
+[38:54] for how lost it is. Uh like how lost a model is in its
+[38:58] thinking. Uh so, you can use like different kinds of probes to understand
+[39:03] like the perplexity within a model. >> Well, that's interesting. So, yeah,
+[39:06] instead of using the quantity of tokens that are as indicative of a of a model
+[39:11] being lost, it's the it's hallucinating more and you're
+[39:14] >> Yeah, so uh so, essentially what is cache, right? It's It's the prefill It's
+[39:18] the prefill stage, right? So, you What is a prefill stage? It's just a vector
+[39:22] at the end of the day. So, you can do tune all kinds of classifiers to
+[39:27] understand uh different aspects of those collections of vectors. So, with those
+[39:34] kind of probes, you can guesstimate a lot of uh states
+[39:39] of a model. >> I see. One One question I have is um you
+[39:44] know, different models behave uh differently and um
+[39:48] the kind of means that these prompts aren't portable. So, as you're doing
+[39:51] model routing, how do you handle essentially if you're if you're going to
+[39:55] a different model architecture, um what do you have to do to the prompts
+[39:58] and how much is that a factor into either of you guys' model routing
+[40:01] solution? >> Like what like how how is the prompt
+[40:05] itself a factor in the in the routing? >> Yeah.
+[40:08] >> Yeah, um well, I think
+[40:11] with building agents, there are all kinds of paper cuts and edge cases that
+[40:16] are domain-specific and like the value of an agent company
+[40:22] like the value of Devin is all these like doom loops that you've discovered
+[40:27] that are across all industries and the best ways to recover from them
+[40:33] and like man here I mean it manifests big time in what the prompts are going
+[40:37] to be both for like you know how the the advisor model gets called
+[40:43] um uh you know the smart friend
+[40:46] >> [laughter] >> the how the like subtask agents get
+[40:50] called and and the best thing is that like anyone can like
+[40:54] like any engineer or any like agent can inspect the traces and like adjust the
+[40:58] prompt and then see the like live accuracy
+[41:01] long time. So I mean basically I just think that that's part
+[41:05] the prompt is part of the the startup building process and is also really easy
+[41:10] to observe and like and have and have like multiple
+[41:15] people and agents collaborating on them. >> Yeah. One thing I'd love to do with our
+[41:19] fusion product and we don't have this yet and so this is kind of maybe a
+[41:22] preview of some some things we work on is you know you can tune it against a
+[41:25] data set but the the real thing you want when you're building a real agent
+[41:28] someone uses is just like tune it against what actual people use it for
+[41:32] and and what actual models they get routed to. And so there's a lot of
+[41:35] signals for this like if if someone sends a prompt and
+[41:38] then Devin is working and then you see that the user decides themselves like
+[41:42] upgrade to a different model or they decide to downgrade or the system
+[41:45] detects that we originally sent to the wrong one we now got to replace. Like
+[41:48] that's actually a really useful stream of signals and we're actually getting
+[41:51] into this world of like auto research where like maybe we can just have like a
+[41:54] constant stream of prompts what it should have been what it was instead and
+[42:00] build a system internally that's just capturing all of this and then
+[42:03] reiterating on our routing system until it eventually kind of like fits the real
+[42:07] production data. Um that's kind of like now that we it's it's it's public and
+[42:11] and people are using it, this is now something that we're we're thinking
+[42:13] about. >> Have you guys looked into prompt tuning
+[42:17] and do you find it useful like say Japa? >> Yeah, so there are like these prompt
+[42:22] tuning frameworks from like a few years ago that
+[42:25] tried to do some kind of like gradient descent type thing.
+[42:29] I'm like I'm actually personally less bullish on these kind of like low level
+[42:34] mechanical prompt tuning harnesses versus just telling like a smart model
+[42:39] like here is the decision that was made and the context
+[42:45] figure out why it went wrong. Sometimes you can do something as dumb as asking
+[42:48] the model why did you do this instead of this and cite the prompts
+[42:51] and then just have your agent your dev and just go and update the prompts,
+[42:55] rerun the the test as a regression, make sure make sure it changes. Like it's a
+[42:59] lot heavier weight of a system, but I kind of trust the intelligence of a
+[43:02] system like that a lot more. >> So we're we're running out of time, so
+[43:05] we're going to wrap up real quick, but I think what's really interesting is just
+[43:09] from talking to you guys, we can kind of see how
+[43:11] new this space is, right? How much of this is actually just research.
+[43:15] We're starting to see new products come in. I'm really excited about your guys'
+[43:18] solutions as you guys enter the space. The the ways and the needs that you need
+[43:22] routing for, you know, even on a DGX Spark when you're doing local inference,
+[43:26] you have more compute and if the memory is filled, one
+[43:30] or if it's if the memory utilization is high, one thing you need to do is
+[43:33] increase the compute utilization. And so one way you can do that is by spawning
+[43:37] multiple agents that are working collaboratively. So that collaborative
+[43:40] piece is something that not only is optimal for all of these cloud workloads
+[43:43] that you guys are doing, but but specifically that is how you extract
+[43:47] more performance out of this edge hardware. And I think um
+[43:50] you know, a question here is and maybe to to end on is a router going
+[43:55] to be something that we see as a product or is that going to be seen as part of
+[43:59] the plumbing here? Are models going to get good at routing to other models
+[44:03] because they know they need to be collaborative or or harnesses going to
+[44:06] know that they are working across multiple models.
+[44:11] >> I think we already see this. Like you know, at Cognition we're training our
+[44:14] models to be able to be good collaborators. I think it's very clear
+[44:18] that new frontier models like the Fable models and GPT-5.5 and 5.6 models are
+[44:23] like themselves like naturally collaborative and and better at
+[44:25] delegation. So I think we're ready there at that point.
+[44:27] >> Interesting. >> Yeah, I I think that the systems are are
+[44:31] kind of becoming not muddied in some sense, but I think that ultimately we're
+[44:35] understanding that as we step up the the abstraction ladder and build more more
+[44:39] things to create this smarter blob,
+[44:43] which obviously we should hopefully and we do understand how we're building it
+[44:46] and why we're building it, that it's going to it's going to become
+[44:50] a system that you look at kind of both the the different components of the
+[44:53] system, but it's not just going to be just models.
+[44:56] There's not going to There's not going to be a thing as like a really great
+[44:59] harness that is in absence of a really great model and vice versa.
+[45:03] >> Yeah. Makes sense.
+[45:05] >> I think applications, especially as built on
+[45:09] non-deterministic systems like models, operate in a very low-trust environment.
+[45:15] So yes, most of the improvements will likely be distributed across both models
+[45:22] and the harnesses, but I think overall it's it's it's mostly it's There There
+[45:28] will There will have to be some form of controller trying to have some form of
+[45:32] arbitration because even from the model perspective you aren't in a perfectly
+[45:36] visible world. You don't know the behavior of every model, so it's
+[45:40] it's going to be at the orchestration level where you have these kind of
+[45:45] things. And this has traditionally been shown by other industries like when web
+[45:49] when web launched, you know, you had traffic-based routing. So it's
+[45:53] different. But all the sort of routing controls have been centralized over
+[45:58] time. >> Makes sense.
+[46:01] >> I I it's most likely going to be good news in the future.
+[46:05] Um and and I
+[46:07] I think like caching is a big reason for that. Even if you I think like a to take
+[46:11] the flip side of of this argument, um the you know, it might be that in the
+[46:16] future we have like one big model that's like, "I know I am the like most
+[46:21] efficient at everything and I'm like way more efficient than Haiku. I'll solve
+[46:25] every task better than Haiku can at like a lower price.
+[46:29] Um why should I ever delegate to Haiku?" There's something like that actually
+[46:33] could could be a model that we have in the future. Um
+[46:37] but you're always going to have these like, you know, for example, caching. It
+[46:41] could be that like you tell the model that this other model like does have the
+[46:46] right context in cash and uh you know, the the orchestrator model just always
+[46:50] has more context and the models have to be aligned.
+[46:54] So, I I think like it's I I don't really see a world where like
+[46:58] we wouldn't be able to get models to collaborate really well and and I think
+[47:01] they're going to get better over time. Um
+[47:04] in part because they're you know, they just have limited memory.
+[47:08] So, I I think that's kind of one one deciding factor and another
+[47:12] is that um there will be like uh there will continue to be
+[47:19] like if you just look at like the the the rankings on OpenRouter, if you look
+[47:23] at our our public data and you look at like the top model being used by dollar
+[47:28] spent on classification tasks, well, guess what it is. It's Opus.
+[47:35] >> [laughter] >> I think there are there are there are
+[47:37] big opportunities for like using small models for in distribution easy tasks
+[47:43] and the and like as time goes on, that's going to be a larger and larger
+[47:47] percentage of tasks relative to like the most valuable tasks that um very smart
+[47:52] models spend most of their time on. >> Totally. Well, I want to thank you guys
+[47:56] so much. Can we all give everyone a round of applause? Thank you.
+[47:59] >> [applause]
+[48:04] [music]
+[48:12] [music]

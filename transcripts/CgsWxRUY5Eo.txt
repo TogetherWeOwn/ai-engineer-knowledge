@@ -1,0 +1,459 @@
+# title: AI Agents for Performance: Ship Faster, Pay Less — Rajat Shah, Netflix
+# source: https://www.youtube.com/watch?v=CgsWxRUY5Eo
+# speaker: Rajat Shah, Netflix
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T06:53:44Z
+# sha256: 9dcf726ebb9698abe9a89dcf9f84cec0ca7100e6b079afe8d8082f0b24e75cd5
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:00] Hi there. Welcome to AI Engineer World's Fair 2026
+[00:04] event. I am Rajat Shah. I'm a staff software engineer at Netflix where I
+[00:08] work in the AI platform organization building large-scale distributed systems
+[00:13] for machine learning model hosting. In this talk, I'm here to um
+[00:18] share how we did uh improve our performance engineering
+[00:22] uh throughput by introducing AI agents into the mix. And this is more of a uh
+[00:27] playbook or a practitioner's guide uh to help you also replicate similar
+[00:32] learnings in your own organizations uh to improve uh the infrastructure cost
+[00:38] and uh ship faster.
+[00:42] Let's first talk about the problem. Why does performance engineering doesn't
+[00:45] scale and uh what does it cost to actually do it right?
+[00:51] The problem is arising arising from the fact is that you are authoring code now
+[00:55] at a 10x faster speed. The uh coding agents are getting better and
+[00:59] better uh at uh solving problems. And um as more and more uh engineers uh adopt
+[01:06] it, it it gets very easy to produce code in your system. And this is slight
+[01:12] exaggeration, but the compute cost also uh is increasing at a similar pace uh
+[01:18] because uh it doesn't always uh write the fastest code.
+[01:23] Uh so, this is where the problem arises because of that new wide coding era. Uh
+[01:29] the AI agent ships code. Uh it is pretty much tuned to ship code fast. Um
+[01:35] and of course, you could say that uh as the uh
+[01:38] the coding agents are evolving, newer models are coming into play. Uh they get
+[01:43] better and better at uh simply writing performant code. But, that's not always
+[01:48] true. Your um agent doesn't know specific details
+[01:52] about your platforms and your frameworks uh and your internal code base patterns.
+[01:57] So, it it tends to just produce code based on what it might have already
+[02:01] seen other code bases using or inventing new
+[02:06] patterns in your code bases that you did not anticipate
+[02:10] an engineer to use as a pattern to use your framework.
+[02:16] So, let's look at what a performance engineer typically does.
+[02:21] I'm calling this as a human performance engineer, which is responsible for
+[02:25] identifying bottlenecks in a service and fixing them.
+[02:30] Typically, a a human would trigger profiling on a single production
+[02:34] instance of a fleet of production instances.
+[02:38] You would go and download it, potentially open it in a visualizer. The
+[02:44] raw data that you download typically is not great to look at. It It could be,
+[02:48] for example, a JSON structure data of the call stack and where the CPU is
+[02:54] spent. So, using a visualizer helps you at least see and visualize the
+[03:00] call stack and CPU time of various um
+[03:04] method in your services better. Once you have that visualizer open, you
+[03:09] pretty much end up spending a lot of time in uh like just looking at and and
+[03:15] finding in this in this treasure hunt on
+[03:19] on the path on the potential places where you could
+[03:23] improve the code to to make it more performant. This takes a
+[03:27] lot of time in order to even learn how to look at it. Um
+[03:32] And there's a learning curve to curve curve to it. And this is where the
+[03:37] real bottleneck ends up being. You end up you end up having to spend straight
+[03:41] many, many minutes to uh to identify the bottlenecks.
+[03:45] Once you've identified some code paths and some packages that
+[03:50] that are spending significant CPU cycles, you you would end up searching
+[03:53] it in your code bases in your code repos and see if it
+[03:59] has a potential to improvement. Hopefully, you you hit
+[04:04] you have luckier and you find a root cause and you produce a code review
+[04:09] out. You merge it and
+[04:12] you get some performance wins. And then you repeat all of this again.
+[04:17] You see the problem, right? This is a very manual effort and very tedious
+[04:22] effort to get right and this ends up being a bottleneck if you were to do it
+[04:26] across many of your code bases and code paths
+[04:29] and that's why this is done very rarely. People typically end up looking at
+[04:33] profiling data only when something is going wrong at 2:00 a.m. and
+[04:37] somebody needs to fix a problem because your CPU is
+[04:41] unbearable. So, we asked this question internally.
+[04:45] Can we Can an LLM read this profiling data? The
+[04:49] 20 minutes that I mentioned an engineer spends in identifying hot paths, can an
+[04:55] LLM agent which is fed that data also do it much faster?
+[05:01] And we tried to answer this question through some live services. So,
+[05:05] the next couple of slides will be about this experiment and how we do it, right?
+[05:11] Before we get to it, the the foundation of
+[05:14] of our assumption is that every profiler essentially
+[05:18] speaks the same language. Even though you would profile and you could have
+[05:21] your services written in Java, Python, Go, etc. The profiler's example that I
+[05:28] mentioned here do the same same thing. They would run
+[05:32] it in your
+[05:34] they would run against your production service on a single instance and they
+[05:39] would essentially try to capture the call stack, the self CPU and inclusive
+[05:43] CPU that is spent on on each of the
+[05:48] methods in your call stack, Uh sample data very high frequency. So,
+[05:52] irrespective of which language, which runtime you're using in production, the
+[05:57] output of a profiling data is actually very similar and very well-structured
+[06:03] for an LLM agent to use. This is one assumption that we had going into the
+[06:08] experiment. The second assumption we had going into
+[06:11] the experiment is that there are many common patterns that
+[06:15] the coding agents have learned through their training sites across all the
+[06:20] publicly available code sources that they might have had. So, things like O
+[06:25] of N squared loops, loop invariants, things that you're computing every time
+[06:29] in your loop which could be computed just once outside it. If you have
+[06:33] certain places where you are doing the object allocation
+[06:37] very repeatedly and if you could move it out as well. Um
+[06:42] Or there are times when you would be like having some contention and
+[06:47] places where you could optimize through better batching. All of these are very
+[06:51] common patterns that an agent already knows. Uh it uh
+[06:55] I mean, assuming it is trained on very good quality software code.
+[07:00] The better the quality, the better agent knows
+[07:03] which patterns are not great. Um and this is a very good
+[07:10] point for an LLM agent because it essentially means that it can
+[07:15] technically look at the
+[07:19] the code base and it can identify those patterns very easily. So, this is more
+[07:23] about like pattern recognition, like finding out these code patterns to
+[07:28] find some code smells that that are worth fixing.
+[07:32] So, when you have that profiling output that I mentioned and you have coding
+[07:37] agent that could understand it, you feed it into it. Um
+[07:42] The profiling data that it needs to read is actually very well structured in a
+[07:46] way that it could see that the in this case uh the
+[07:51] um the profiling data is uh in in the case of row one and row three, they are
+[07:57] the same call path and the immutable map copy of that I have in my row three is
+[08:03] actually uh used inside uh a tensor merge method
+[08:08] that we have. Uh so um don't think too much about the method names here, but
+[08:12] the key point that I wanted to call out is that it was able to use these
+[08:18] functions. Uh
+[08:20] it knows the meaning of these functions and when it sees it is being used in a a
+[08:25] poor way, it can actually identify that this is a quadratic uh
+[08:30] um algorithm and not a linear algorithm.
+[08:33] So, this is where uh our first aha moment was that okay, if
+[08:37] you feed a profiling data, it if it knows the pattern, it assuming the
+[08:41] coding agent was trained on a very good quality data, it can actually identify
+[08:45] and up and find out that uh find in your code base where that bad uh patterns are
+[08:50] actually uh running. And this is not by looking at the code base. This is purely
+[08:55] by looking at the call stack that the profiling uh
+[08:59] uh data produced. And once
+[09:03] uh a prof a an AI agent gets this, what
+[09:07] what are the steps that it needs to do in order to get to the potential fix?
+[09:10] So, we we we have mentioned that it can identify uh
+[09:14] a pattern and say that okay, this is a potential problem to be fixed. What what
+[09:20] happens next? Um
+[09:22] it could knowing where that method lives, it could do a code search and
+[09:26] first of all, before uh I mean, yeah, it could do a code search
+[09:31] and find out the code repo where this method is defined uh or this code is
+[09:36] defined. And it it needs to extract out the exact
+[09:39] commit that is currently running in production, which is typically easy to
+[09:42] get. You know which build is running in your production, and you could point
+[09:46] that to the LLM to uh check out the Git repo at that same commit.
+[09:50] And then uh once it has uh find found out uh
+[09:55] and has the Git repo cloned, uh it can look for uh that exact code path, uh
+[10:02] skip any internal library details, and find out uh the code patterns. And now
+[10:08] that it now once it has the uh full uh uh code repo cloned out, the um the
+[10:14] methods uh definition and implementation identified, it can trace the entire call
+[10:20] call path of that method. And this
+[10:23] uh structured data once it uh has this information, becomes
+[10:29] uh like very powerful, and we'll we are going to talk about how uh it leverages
+[10:34] this. So,
+[10:37] these were our understanding going into the experiment. We uh
+[10:42] we knew it could find uh the patterns. We tested it with with
+[10:47] a couple of uh of our services to see if it can actually not just find the
+[10:51] pattern, but also take it one step further and uh produce a real fix and
+[10:56] provide a real fix that uh an engineer could approve and merge.
+[11:01] So, first finding uh the the O of N squared um
+[11:06] uh example that I just mentioned, it uh once it knew
+[11:11] uh that this is a problem, and looking at the profile profiling data, it knows
+[11:15] that this is consuming 8.8% of the CPU time during that uh
+[11:20] uh period of profiling. So, for us, uh the coding agent not just
+[11:25] ended up finding the problem, given enough instructions as a form of let's
+[11:29] say skill or prompt, uh you could actually have it uh do those four steps
+[11:34] that I just mentioned, which is checking out the Git repo,
+[11:37] uh finding where that code is implemented, and actually uh sending a
+[11:40] code review out. All of it could be done uh in a very
+[11:44] large code base with powerful enough code agents in less than 5 minutes. Um
+[11:49] and in this case, uh we also, which I'll talk about a little bit in the later
+[11:53] slides, uh were able to identify what is the savings uh if you were to uh
+[11:59] reimplement it with a uh with an optimized implementation in terms of
+[12:03] both CPU as well as latency savings. Uh I I've shown the numbers here of our
+[12:08] real production uh savings that we were able to observe uh through this uh
+[12:13] exercise. So, this was like a first uh proof for
+[12:16] us that you could actually indeed introduce an an AI agent into the mix
+[12:21] and get uh your productivity wins of not just
+[12:25] identifying, but also going all the way to a code review.
+[12:29] Uh the second uh great benefit is that once you have this
+[12:34] well set up, um the uh other example that we are able to
+[12:39] take it forward to it is, let's say it identifies the uh pattern in one of the
+[12:45] services that we profile, um and the learning that we had is that it
+[12:50] could actually uh look at all your potential places where
+[12:55] that same bad pattern uh is being reused. So, in the previous example, it
+[13:01] it just identified one bad implementation. You fix it, you get all
+[13:04] the benefits. In this case, it identified not just a bad
+[13:09] code, but because that pattern, in this case, which is a counter object uh for
+[13:14] our uh spectator metrics, uh that are uh being created on every
+[13:20] single uh uh iteration of a hot path in our service
+[13:24] stack, um it could essentially see that this is uh
+[13:29] a real problem and it could double down and search multiple services
+[13:34] where that same pattern is being repeated and
+[13:38] uh scale up the effort to fix it in
+[13:41] multiple services. In this case, we found that same bad pattern were
+[13:45] actually implemented in seven different services uh
+[13:48] through cross repo code searches. And if fixed, it could actually uh if fixed
+[13:53] across all of those different code repos, it could have savings between 0.5
+[13:57] to 4.6% of CPU cycles.
+[14:00] Um so
+[14:03] we have discussed the problem, our hypothesis, and the experiment which
+[14:06] proved out that a uh LLM coding agent could actually help improve uh
+[14:11] the uh the finding and fixing of your um
+[14:16] suboptimal code. Let's see how we can actually build this into the development
+[14:21] cycle. Uh it doesn't have to be a very retrospective
+[14:25] uh problem where once a production service
+[14:28] is uh having issues, you end up doing all of those exercises. I'll talk about
+[14:32] how you can actually leverage in your end-to-end software
+[14:36] development cycle so that you get the benefits uh much
+[14:41] early and potentially avoid having that suboptimal code reach production
+[14:45] altogether. Uh the first uh real problem is that
+[14:50] LLMs if you invoke them, they do have some memory these days, but it's very
+[14:56] compact memory and it will uh it it won't have all the uh information that
+[15:03] uh you are uh uh that you potentially as a performance engineer know when you're
+[15:08] trying to debug. So, you you when you you if you think of a coding
+[15:12] agent and if you want to build it at par uh uh as sufficient as as efficient as a
+[15:18] human engineer would typically be, you want to introduce a long-term memory
+[15:22] that it could reuse. So that's our first real problem to solve for and I'll talk
+[15:26] about how you solve that. The simplest way is to first think of
+[15:32] you want to build a catalog. Patterns, anti-patterns.
+[15:37] Once you have identified enough of them, you could put it in a catalog that
+[15:42] that users uh that is used by an LLM agent which can be stateless of its own.
+[15:47] And together a stateful catalog and a state stateless LLM can become a full
+[15:53] fleet-wide memory um for
+[15:57] for a coding agent to use. The
+[16:01] foundation for this and and to foundation for incorporating in this
+[16:04] development cycle is practically just this. You want to keep this very central
+[16:09] so that it's not very team-specific, not very product-specific, but rather a
+[16:13] central ever-growing catalog. As the catalog patterns get written, if there
+[16:21] are certain things that could be generalized.
+[16:23] In that example, the first example that I the first finding that I provided
+[16:27] around O of N squared implementation is actually very generalizable. All coding
+[16:31] languages will potentially have the same problem if it if the code is written and
+[16:35] implemented in that way. So you you can take it a step further in
+[16:41] that your catalog can become even more ubiquitous and usable across languages
+[16:46] and frameworks as well. And you
+[16:50] think of it as a blueprint. As
+[16:53] as those as that catalog starts growing, it becomes your building block for
+[16:59] future coding agents to actually use for identifying the problem in your
+[17:04] development cycle. And that's the next thing I'm going to talk about. The
+[17:09] solution that I mentioned so far of a memory is not very fancy vector search
+[17:14] or or a vector database that needs to store all
+[17:18] the catalog of patterns and anti-patterns. Rather, you can start
+[17:23] with just a markdown files in a in a centralized Git repo.
+[17:30] Um, as the production findings appear, have the
+[17:34] coding agent put more and more patterns and anti-patterns into this.
+[17:40] And the benefit is that even if one service finds this, even if one
+[17:45] uh, profiling, even if one service did the profiling to find this pattern,
+[17:49] multiple services that in the future are going to run profiling, the agent that
+[17:55] is doing the profiling of that other service can use the pattern catalog from
+[17:59] the first service to find the patterns more optimally and not
+[18:02] having to redo all the exercise that the first
+[18:06] agent did in order to identify that anti-pattern.
+[18:12] Uh, you might think of like how how do I get started with this? Well, you you
+[18:16] don't always have to start fresh, but you could start fresh. There is no harm
+[18:19] in having a catalog that is just empty in the beginning and as more and more
+[18:23] profiling happens, uh, more
+[18:26] uh, powerful the
+[18:29] coding agents that are referring it could become.
+[18:32] But there are few, many in fact, sources of how you could
+[18:37] public sources of how you could improve your coding agents. If you're into C++
+[18:42] optimizations, Jeff Dean had this wonderful
+[18:45] blog post around how to look for certain optimization opportunities in your C++
+[18:52] code. PyTorch has a torch fix code repo where it catalogs several anti-patterns
+[18:57] that could help optimize kernels and the model graph of your PyTorch model.
+[19:04] And then you might have your own performance playbooks as well.
+[19:08] Typically, as your organization grows and your enterprise software evolves,
+[19:13] you end up noting down certain patterns and anti-patterns. Those all could
+[19:16] become the bootstrapping point for that uh
+[19:20] catalog Git repo that I mentioned that can act as a centralized um
+[19:25] place for all uh catalog all patterns and anti-patterns to be noted.
+[19:32] And what would an entry in that catalog look like? Uh
+[19:35] the example is right here. Uh as the left-hand side it mentions the uh
+[19:40] small hints that an LLM uh coding agent in the future could use to easily query
+[19:45] that uh catalog. It can mention a list of symbols, uh the services where it was
+[19:51] confirmed. Some confidence level is great here as well because as more and
+[19:55] more services confirm this, you want to keep updating this so that uh the future
+[19:59] agents get more and more confident that, "Okay, this is worth a human uh
+[20:04] uh human review, and I would want to more
+[20:06] confidently send out a code review to a human."
+[20:08] Uh I'm still keeping the confidence uh bar to just send a code review and not
+[20:14] directly uh push it to production. That's by intent. I
+[20:18] uh I'll talk a little bit on why, but I do feel like there is still need for a
+[20:21] human approval because you're modifying an existing code that is running just
+[20:26] fine in in production in order to optimize it, which is which
+[20:29] is very risky. If you don't know the business context, if you don't have
+[20:32] enough test coverage, uh you might end up breaking. So, there is a need for
+[20:35] human uh to actually be the one responsible for approving that code
+[20:39] review. Um and on the right here, I mentioned
+[20:43] what the entry in that pattern-anti-pattern catalog could look
+[20:46] like. Uh a anti-pattern and a good pattern so
+[20:49] that both the things are well noted here.
+[20:52] Um so, I mentioned a code review and a human uh
+[20:57] involvement in order to approve and merge that code review is still needed.
+[21:00] So, how do you optimize for noise there? There could be enough signals that the
+[21:06] uh AI agent uh could could think of uh improving and it could
+[21:11] like arbitrarily send code reviews for them without knowing enough about your
+[21:14] system. There are a few tips that I mentioned
+[21:17] here could be very powerful in in making sure that the agent first has
+[21:21] enough verifications done before looking for an human's attention.
+[21:29] The integration test, unit test, the most basic functional test that your
+[21:34] system needs to have should be run ahead of time
+[21:38] by the coding agent itself so that it knows that as it is making code changes
+[21:42] to optimize it, it is also not causing any production business logic to
+[21:47] fail. So, as as you have good coverage and unit test, it gets more confidence
+[21:52] that it gets more confidence that your that the change it is going to propose
+[21:57] is actually right. Once it has made that functional
+[22:01] correctness check, you still the our code coverage isn't typically
+[22:05] ideal. There are still surprises in production
+[22:09] and canary deployments could be very powerful in this case. If you provide
+[22:13] enough automation around this, the canary
+[22:17] deployment could be a prerequisite before the code review
+[22:22] requires human attention. What is a canary? You typically have
+[22:28] you typically have two machines, one containing your old code, another
+[22:33] containing your new code, which could be the performance fixed code. And you send
+[22:39] the same traffic to both of them over a period of let's say
+[22:43] 10 minutes and try to compare the
+[22:47] CPU usage across between them. The comparison report typically is is
+[22:54] what you would want the AI agent to make decision on and judgment on whether it
+[22:59] should open a code review for it. In this case, the observability report
+[23:03] could contain standard infra
+[23:07] things like how how much CPU reduction, how much latency reduced,
+[23:10] is there an increase in error rate? If if that's the case, it should
+[23:14] see that as a red signal to not proceed because it might have gotten the
+[23:18] business logic incorrect in an attempt to optimize the code.
+[23:23] And what I mentioned here is that this is not an AI problem. The observability,
+[23:27] canary, verify logic, these are all standard checks that you need need to
+[23:30] have in your system. And then final guardrail that you want
+[23:34] to have is an engineer decision, like I mentioned, still very important,
+[23:37] critical uh
+[23:40] in the mix. Um
+[23:44] Here's a mental model. Profiler gives the estimate, canary gives ground truth.
+[23:47] Uh canary is the way you verify and evaluate that your
+[23:51] uh suggested fixes actually uh going to improve and have some uh positive impact
+[23:56] and no negative impact. An engineer makes the eventual decision.
+[24:01] So, the
+[24:03] uh path so far has been about how do you uh
+[24:08] improve the efficiency of getting
+[24:12] from a profiled uh
+[24:15] profiling data to producing a code review fix. Uh that's the reactive path
+[24:20] that I just covered so far, uh which means you have the code already
+[24:24] running in production, and now you're trying to improve it. That's a
+[24:29] very that's typically too late in the game.
+[24:32] Now, anytime you try to change a thing that is running in production in order
+[24:36] to improve the performance of it, you have to be very, very careful. So, you
+[24:40] want that to shift left. You want that
+[24:44] reactive path to be your initial guide to build that initial catalog. And as
+[24:48] your pattern catalog grows, you want to move closer and closer to the proactive
+[24:53] path where uh as a human or a coding agent authors
+[24:57] new code uh the the reviewer agent could actually look up that catalog and
+[25:04] provide an inline uh comment uh by understanding the code change and ensure
+[25:09] and providing a suggestion that hey, based on the pattern catalog and the
+[25:13] observed uh profiling data that I have, I feel confident that this uh is an
+[25:18] anti-pattern to introduce. Can you uh rewrite this code? That could be a a
+[25:23] review comment that a reviewer agent could be uh providing.
+[25:29] And if you shift left all the way, like why even wait until a code review? Uh
+[25:34] that that's where you get the most power.
+[25:37] Because you know, the anti-patterns are already in a catalog and if you are
+[25:43] using a coding agent to write your code, you could actually ask the coding agent
+[25:47] and hook that catalog in it so that when it is uh producing
+[25:52] newer tokens and producing newer code, it could actually, before writing out
+[25:57] the inefficient code, directly reference the catalog up front and uh
+[26:03] and write your uh code in an optimal way to start with.
+[26:08] Uh this could sometimes slow down the uh speed of uh newer code uh being written
+[26:15] and might end up consuming more tokens. And that's why the pattern catalog needs
+[26:20] to be very well uh structured and indexed so that the the way parses and
+[26:26] reads the catalog doesn't fill up the agent context too much, but rather it
+[26:29] can navigate it in a very hierarchical format and only uh and be able to find
+[26:34] out the exact uh places it needs to look for a uh a given pattern or an
+[26:39] anti-pattern. This means that if you can
+[26:42] catch this in the code authoring phase itself, you skip all of the unnecessary
+[26:48] uh overhead of uh somebody reviewing your code and providing a uh suggestion
+[26:53] or even having that code change reach production. So, the sooner you catch it
+[26:58] or even sooner you uh
+[27:01] uh introduce that pattern catalog into your software development end-to-end
+[27:04] life cycle, the easier it gets for you to keep the uh code and service running
+[27:11] optimally. And uh I do want to highlight this that
+[27:16] uh it's easier to imagine putting AI agent into every single step of your
+[27:20] software development life cycle for performance improvements, but that's not
+[27:23] the intent of this uh discussion or the uh the thing
+[27:28] uh or or the playbook that I'm mentioning. You still want these
+[27:31] foundations very, very right. Your test coverage needs to be rock solid. Uh
+[27:36] business logic all needs to be very well encoded in your test. Your canary
+[27:40] automation needs to be amazing. Uh and this is where you don't need AI. You
+[27:44] pretty much just want AI agent to know how to invoke canary, where to get the
+[27:48] downloaded report from canary canary, so that it can directly read the numbers
+[27:52] from the report and uh make a judgment call.
+[27:56] And that pattern catalog that I mentioned is also a foundational piece
+[28:00] which needs to be gotten uh which which you need to get right. It It is by
+[28:03] design a Git repo, so that it's both a human and a coding agent readable and uh
+[28:08] authorable, and you could actually have humans also authoring patterns and
+[28:12] anti-pattern as they're let's say building new frameworks and new platform
+[28:15] components that uh they have enough context on at the time of building.
+[28:21] The takeaways uh that I do want to mention, first build your code
+[28:25] foundations. Uh think of uh all of the uh automation
+[28:30] that you could do, uh but before introducing an LLM, try to see if there
+[28:34] are good uh uh integration points that an agent could
+[28:39] uh use such as how can it automatically trigger profiling on an instance on a
+[28:44] uh CPU new that you have? Can it download the profiling data effectively,
+[28:49] uh then feed it into uh an LLM uh uh model.
+[28:54] And can it, once it has identified the fixes by cloning the Git repo, etc., can
+[29:00] it actually validate that through a real production canary through shadow traffic
+[29:04] or real traffic? All of those integration and foundation pieces needs
+[29:07] to be really good in order for this entire
+[29:10] life to life and this entire uh life cycle improvement that I'm
+[29:15] mentioning. Otherwise, it will just cause more friction and more bugs in the
+[29:18] production. So, you have to make these uh foundation pieces investment a lot uh
+[29:23] more important. And start from here. Don't think of
+[29:27] uh the reactive path as a bad approach. Uh reactive path is where you want to
+[29:31] start with and then gradually move towards
+[29:33] uh towards the left and uh into the proactive path.
+[29:37] >> [clears throat] >> And the other takeaway, like I
+[29:39] mentioned, uh is important is that as you build this uh memory of or
+[29:45] essentially a catalog, the um
+[29:49] the sooner you catch it, the better it gets for your uh end-to-end software
+[29:53] development life cycle to have optimus optimal code running in production.
+[29:59] Um This is a I'll uh this is a great mental
+[30:02] model for how you step-by-step proceed in automating
+[30:05] um or improving your uh efficiency of software development life cycle. The
+[30:10] current state, uh which is typically the norm, uh you spend hours finding the
+[30:14] problems. It's all very manual, no LLM in the mix.
+[30:18] Start with introducing an LLM into the mix just for the
+[30:22] um the identification of um
+[30:26] uh of a potential fix. It might be okay if you are still having to trigger a
+[30:30] profiler uh and produce output and feed it into an AI agent and then having to
+[30:35] manually run canary, but it still gives you a lot of uh leeway to spend time on
+[30:40] the other parts of the workflow as opposed to just staring at those flame
+[30:43] graphs to get the um hot parts identified.
+[30:48] And then this talk mainly covered the uh level two orchestration, which is
+[30:54] um our level two automation in an agentic spectrum, which is more about
+[30:58] the tools, the integrations, the the key harnesses, and the hooks that our AI
+[31:04] agent needs to have in order to uh have full power in order to have like good uh
+[31:10] uh uh capability to identify a problem and
+[31:13] give you in various development life cycle areas of uh opportunities to uh
+[31:18] improve your code base. And uh once you have this in place, once
+[31:23] you have this standard step-by-step workflow, which could be very static,
+[31:27] right? In this case, the workflow that I mentioned is is very uh well-defined,
+[31:32] predefined. There is no uh uh LLM to reason and plan and uh do the
+[31:37] further level of automations. All it has to do is uh you provide it a
+[31:42] uh fixed workflow, which is download the profile
+[31:44] uh from certain place, um or rather trigger the profile, download
+[31:49] the profile, um and then uh analyze it, uh run the
+[31:53] canary, and provide a suggested fix. Uh you could once you have that in place,
+[31:58] you could essentially have a scheduled run on your services
+[32:02] every week, so that it can keep continuously identifying newer problems
+[32:07] uh that might have not been uh uh uh or that might have been introduced in
+[32:12] the last one week, for example, and keep uh the the identification of the problem
+[32:18] closer to when you wrote that code. And if you were to think of uh more
+[32:22] automation uh
+[32:25] in this place, you could uh um
+[32:28] imagine a a a level where the workflow is not very fixed, and rather the AI
+[32:33] agent has capabilities to even uh plan, reason, act, uh but you have to invest a
+[32:38] lot more in evaluation sandboxing. You can't simply run AI agents
+[32:44] without the right level of security guardrails so that prompt injection and
+[32:49] other security attacks that a typical agent infrastructure currently
+[32:55] cannot always solve for. Those things need to be heavily invested in if
+[33:01] you were to go with level three autonomy. So, start with level one. Try
+[33:05] to move to level two and you get maximum benefits. If you need more automation,
+[33:10] you could think of the next step as needed.
+[33:16] Thank you so much. I hope you got some learnings out of
+[33:21] this small talk that I had. If if you want to connect more and
+[33:25] connect further, I might end up putting a more detailed
+[33:28] blog post on this on my shaharrajat.com personal website. I'll be happy to
+[33:33] connect with you and provide more information.
+[33:36] Take care. Thank you.

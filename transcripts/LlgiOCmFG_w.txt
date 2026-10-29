@@ -1,0 +1,342 @@
+# title: Fixing the PR Bottleneck — Matt Pocock, AIHero
+# source: https://www.youtube.com/watch?v=LlgiOCmFG_w
+# speaker: Matt Pocock, AIHero
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T04:46:00Z
+# sha256: 23d7ef82996b24baf524696249ea85d8bae70a28e766ce76af55122d20c632e2
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:01] All right. I'm here to talk about fixing the PR
+[00:04] bottleneck and this is kind of a grand title for trying
+[00:09] to fix the thing that most organizations struggle with, I think, and have kind of
+[00:13] historically struggled with before AI, you know,
+[00:16] we have always had huge numbers of PRs just laying around that no one's
+[00:20] bothered to review and this is now increased massively because of the new
+[00:24] strains on us because of AI imposing all these weird constraints.
+[00:29] And to do this, I'm going to use the rubric
+[00:31] of my skills, which is kind of heard about, maybe you've used them. And I
+[00:35] have a couple of new skills to announce that are going to hopefully
+[00:40] improve the way that you do PRs, improve the way that's or improve the speed at
+[00:43] which you can review them and do them. Speed.
+[00:47] Now, we've been pushed to do more with less,
+[00:52] essentially, or more PRs, more work, more stuff. And this is the kind of the
+[00:57] central promise of AI, that we're going to be able to use these agents to scale
+[01:01] ourselves up to do more work. And this has resulted in the software
+[01:06] factory, probably the biggest buzzword of the day. Everyone's talking about
+[01:08] software factory that I have chance to. And
+[01:11] I think of a software factory as primarily something where
+[01:15] instead of the human initiating all of this work, we're going to pass
+[01:19] some of that initiation, some of the initiation is going to be done by
+[01:22] agents. And I think of that
+[01:50] Maybe from there you have a classifier like Jeff come in and say, "Okay, let's
+[01:54] turn that into a fix or turn that into a reproduction." Or maybe I ping people
+[01:57] straight away. And maybe you have other things. Maybe you have Planet Scale
+[02:01] hooked up, so it gives you query reports on the slow queries on your database.
+[02:05] Maybe that then triggers a different thing of your software factory. All of
+[02:08] this is not humans triggering it, it's uh deterministic code triggering it,
+[02:14] right? And so these accelerate your software factory. They push more code
+[02:17] through it. But then you need brakes, right?
+[02:21] If you just have permanent acceleration pushing stuff through your factory,
+[02:25] you're going to end up with a slop cannon, right? You're just going to end
+[02:28] up with a ton of slop crappy PRs that you're not going to be able to touch or
+[02:32] review, or even freaking look at. So you need brakes. These are mechanisms
+[02:37] that slow down, that increase quality, that make sure that your code base
+[02:42] doesn't turn into a software entropy nightmare, because code is the
+[02:46] environment your agent operates in. And if you have bad code in your code base,
+[02:50] that is going to beget more bad code. And so I'm going to talk about these
+[02:55] three brakes in this talk, and talk about how we can use them to
+[03:00] counterintuitively go faster. So what are automated checks?
+[03:04] These are the deterministic checks in your repo that we've had for thousands
+[03:07] of years, or you know, since the '50s. Deterministic checks, where we have
+[03:12] linting and tests and type checking and code quality metrics. All of these
+[03:16] things going together, and they all work the same every time.
+[03:21] Layered on top of that, we have automated review. So we have agents who
+[03:25] look at our code and say, "Okay, you know, these are for the things that
+[03:28] the tests didn't catch, or this is looking at the structure of the code
+[03:31] base in general." And then on top of that, the third
+[03:34] layer, the final layer, is human review. So people looking at the PR.
+[03:39] And these three layers form this kind of cake that we end up with
+[03:43] when we get to human review. And so more speed, of course, means more
+[03:47] PRs. And so the goal here is to make human review faster by leaning on those
+[03:52] first two phases. And we're going to stop the slop.
+[03:56] That's the first principle here, which is if you raise the quality of the code
+[04:00] that you're shipping, you're going to end up doing less human review because
+[04:04] it's just going to be better work, and so you're going to end up needing to uh
+[04:07] make fewer interventions. So,
+[04:10] automated checks. Now, automated checks are cheap. That's
+[04:15] the cool thing about them is that they don't cost tokens like automated review
+[04:18] does, they don't cost human effort, they just cost CPU cycles. So, these are for
+[04:23] instance, you know, you run your tests on every code change. Maybe those tests
+[04:26] do incur some tokens because, let's say um an agent uh creates a bug and the
+[04:32] test catch it, then you need to spend some tokens to go and fix it. But, those
+[04:36] are tokens pretty well spent in my opinion. So, checks are cheap. That
+[04:39] means you can layer on loads and loads and loads of them on your repos, and
+[04:43] you're probably not using enough of them or not being creative enough with your
+[04:47] use. But, checks can lie.
+[04:53] Does a green CI mean that the code is ready for merge? No, it does not. And
+[04:56] so, we've always needed, on top of these checks, some extra layer to figure out
+[05:01] if there's anything catastrophically wrong with the code before we ship it.
+[05:05] And so, all of the other phases, the human review and automated review, these
+[05:09] are lie detectors. These are for finding lies in the automated checks.
+[05:14] Now, I want to show you some of these lies first of all
+[05:17] because this helps when we're thinking about code and thinking about automated
+[05:19] checks to see how bad it is and how bad things can get.
+[05:24] The first is tautological tests. A test that just reasserts the
+[05:28] implementation. Opus 5 got addicted to these. I don't quite understand why. It
+[05:33] would have, for instance, X post character limit equals 280. Can
+[05:37] anyone guess the test that was written to test this behavior, right? You've
+[05:41] probably seen this a thousand times. This is real code from agents or from
+[05:45] stuff that I found my agents doing. it said expect X post character limits
+[05:49] to be 280. So, the implementation looked like that.
+[05:54] And the test essentially reasserted the implementation. That is a tautological
+[05:58] test. And tautological tests are bad because
+[06:02] they're extremely structure sensitive. They're very sensitive to the actual
+[06:07] internal workings of the system. So, it means I cannot change that constant
+[06:12] without a test failing. But I cannot rename that constant without a
+[06:17] test failing. Like I have to do it's so tied into the structure of my system.
+[06:22] And I found another one which is even more egregious, I would say. This is
+[06:26] incredible uh test. What it's doing here is it's essentially testing whether two
+[06:33] things in the UI appear in the right order. So, it's checking that the pitch
+[06:36] detail page uh or rather the video section comes after the content plan.
+[06:41] What it does it doesn't render it to a screen, it just reads the actual file,
+[06:47] the module, into its own memory, and then it finds the right thing, so finds
+[06:52] content plan, finds videos, and then it expects the videos to be after it in the
+[06:57] source material. Which is crazy if you think about it cuz
+[07:01] I can just like change the way the source material looks and this test will
+[07:05] fail. It's too sensitive to the structure of my code base. So, that's
+[07:09] another way that automated checks can fail.
+[07:11] And there are also Oh, sorry. Automated checks can lie.
+[07:16] There are also tests that literally cannot fail.
+[07:18] And this will feel familiar to you if you've abused mocking in the past or
+[07:22] have used various things. For instance, here we have a use audio
+[07:26] boost function. And this use audio boost function, uh
+[07:30] its internals use the audio context API in the DOM. Don't worry if you don't
+[07:35] know any of this. But what we're doing here is we're just stubbing it out with
+[07:38] some fake methods. And it turns out the audio context has some complicated error
+[07:44] modes and it will fail if you use it under strange conditions. And so just
+[07:47] doing this means our tests cannot fail using those modes and we're going to hit
+[07:51] strange errors in production that our tests can't fix.
+[07:55] And so the question is then
+[07:58] if you can cheat on automated checks, if you know, and even in good faith ways as
+[08:04] well, the the AI isn't trying to write bad tests here. It's just taking our
+[08:09] instructions and writing tests that are too tied into the structure instead of
+[08:13] actually executing code. So how do we make automated checks harder to cheat?
+[08:18] If we can do that, then we can increase the quality of those checks, which means
+[08:21] what's increases our quality bar. And the first thing I really like about
+[08:27] this is code base design. So you can actually design your way out of these
+[08:31] bad checks. So what does good code base design look
+[08:35] like? I've talked about this before in previous AI engineer talks I've given,
+[08:39] which are deep modules. These are modules that hide complex behavior
+[08:42] behind simple interfaces. This is a John Ousterhout idea from the philosophy of
+[08:47] software design. If we look at these two modules
+[08:50] we've got A which has a large implementation hiding behind a tiny
+[08:55] little interface at the top. Okay? And then B is a large interface, lots of
+[09:00] functions you can call and those functions individually don't do very
+[09:03] much. Does that make sense? Yeah?
+[09:06] Now if you have a deep module like A here,
+[09:10] you're going to have fewer structure sensitive tests because you're hiding
+[09:14] more of the implementation behind that interface. If it's just testing at that
+[09:18] interface, you're going to get better tests. And so that your job here is to
+[09:22] force the agents to use that little interface instead of reaching into the
+[09:27] implementation to test these weird implementation details.
+[09:32] So I've got to go for this. You can have like the weirdest vibe
+[09:37] coded like code base, the crappiest code base that you've ever set your eyes on,
+[09:41] and you can run this skill on it and it will make it better. What this does
+[09:44] essentially gives you opportunities for deepening modules.
+[09:48] And kind of looks like this.
+[09:51] Raise your hands if you've used this skill, by the way.
+[09:53] Not sure how many of my folks are in this room. Yeah, okay. It's really
+[09:55] freaking nice. Essentially, it gives you a HTML document. I'll get out of the way
+[09:59] here. Of all of the different um potential opportunities it sees. So, we
+[10:04] can see here we have a before and we have an after where we're sort of like
+[10:09] reducing duplication, we're creating a nice deep testable module.
+[10:13] And then you can go ahead and implement that.
+[10:15] And attached to this, there's also this kind of language that I've put together
+[10:18] for describing modules because like if you ever try and read up about
+[10:23] how to structure a code base, you're going to find 20 different approaches
+[10:26] and they're all going to be called DDD. And
+[10:29] like what you need is a consistent language that you can use in your team
+[10:33] to talk about this stuff. And so, I have a little code base design skill that
+[10:36] defines what locality is, defines what leverage is,
+[10:40] defines what a seam is. I was using seams before they were cool.
+[10:43] And what locality means is kind of
+[10:47] how uh well located together all of the code is. How can you change like a small
+[10:53] change in one module and have it ripple out?
+[10:56] And also leverage is what you get when you have a deep module because the
+[11:00] caller, the person who's actually calling that module, gets a lot of value
+[11:05] of calling a simple function. Both of those are very good in code bases and
+[11:09] good for agents, too, it turns out. But
+[11:13] I'm sort of describing all of these high-falutin coding standards, but how
+[11:17] do we actually make sure the agent does them, right? How do you make sure the
+[11:21] agent creates deep modules and creates good tests and doesn't write these crap
+[11:26] tautological ones or structure sensitive tests?
+[11:30] Well, I do think most people get this wrong.
+[11:35] And my first piece of advice is don't put
+[11:39] coding standards in your implementer agent. Okay?
+[11:43] Let me explain this. If you imagine the implementer agent
+[11:46] kind of looks like this. Where this is all of the things the
+[11:49] agent needs to be able to do in its single context window. It needs to be
+[11:53] able to explore, like to look for the code that it's
+[11:56] going to change. It then needs to actually change it, so make the updates
+[11:59] to the files in the green. And then it needs some budget for actually debugging
+[12:04] the thing. So if we're running those automated checks for actually checking
+[12:07] and verifying that it works. Now this is quite a lot of work, it
+[12:13] turns out. And if you try to impose your coding standards on it as well, it's
+[12:17] going to perform worse. So implementation is overloaded. That's
+[12:23] the mental model I want you to have. And so can we find a way to impose those
+[12:27] coding standards in a way that isn't so overloaded?
+[12:30] Well, this is my effort. This is my code review skill.
+[12:34] And it receives a diff. And it reads a file inside the
+[12:39] repository called coding standards, which you can write, you can customize.
+[12:43] And then it checks if the code follows those standards.
+[12:47] And so if you look at the reviewer agent here, it also crucially runs it in a sub
+[12:52] agent. So it's got its own context window to kind of handle here. It's got
+[12:56] its own budget. This one,
+[12:59] it needs to do some exploration, right? Because sure, it receives the diff, so
+[13:03] it knows exactly where it's located, where the code is. But it should
+[13:06] probably do a bit of exploration just so it has the wider context, understands
+[13:09] the code. But it doesn't need to do any implementation. Doesn't need to do any
+[13:14] debugging. So while implementation is overloaded, review is actually
+[13:18] underloaded. So it doesn't have that many jobs to do. This means you can pile
+[13:22] in a bunch of coding standards to it, and And will do a much better job than
+[13:26] if you try to do it with implement. So, I think of this, and this is
+[13:32] uncomfortable, right? Cuz we we all want to be able to just get good code out the
+[13:35] first time. But I think of this as the two-part
+[13:39] process for writing good code, which is implement, you make it work, and then
+[13:44] code review, you actually make it good. You impose your coding standards. And
+[13:48] for, you know, the retro developers among us, this is essentially a
+[13:51] red-green-refactor approach. We use one context window to make it okay, do the
+[13:56] red-green, and then we do another context window to refactor it.
+[14:00] That's at least how it works in my head, and it's been very successful for me.
+[14:04] This means that you when you have coding standards, you don't put them in global
+[14:08] scope. You don't put them in agents.md, cuz then they sort of drown out your
+[14:13] implementer. It may read them, it may not.
+[14:16] You put them in coding standards.md, and that way just the code review agent does
+[14:20] it. Now, I've got another idea here, which
+[14:24] is I've been talking to lots of people
+[14:25] today. Lots of people saying, you know, I've
+[14:27] been talking about review and automated review, increase, you know, fixing the
+[14:31] PR bottleneck. So many folks say, "Oh yeah, we just use
+[14:34] a third-party service. We use a cursor bug bot. We use code rabbit or something
+[14:37] like that." I think that
+[14:40] I've I've really tried to make a generic code review skill in the past
+[14:45] that finds all the bugs and does security review and that kind of thing.
+[14:49] It turns out it's really, really hard because you either make it too general
+[14:54] and it just gives you false positives that aren't actually relevant to your
+[14:57] use case, or you make it too specific. You say, "Okay, find all the TypeScript
+[15:01] stuff," and then Rust people can't use it.
+[15:03] So, I would say don't outsource automated
+[15:07] review. Build your own. Build up your own coding standards over time. Share
+[15:11] them across your team. And if you have an opportunity to impose coding
+[15:15] standards, if you've got some docs sitting around that no one reads, this
+[15:18] is the place to put them in. And also,
+[15:22] when you have this automated reviewer, a really natural inclination for lots of
+[15:26] people is to say, "Oh yeah, my code review agent, what it does is it reads
+[15:30] the code and then it comments on the PR."
+[15:34] Uh so, [sighs] what your code review agent is doing in
+[15:37] that case is it's providing more work for the human reviewer. The human
+[15:41] reviewer then has to read all of these verbose comments and figure out, "Okay,
+[15:44] do we implement this? Do we implement that?"
+[15:46] The reviewer should commit. It should make fixes. So, it should actually
+[15:50] change the things that it finds. Cuz then when the human comes around, you're
+[15:55] reviewing a really nice artifact. If it finds anything that it has any questions
+[15:59] over, then of course it can comment, but the default should be commits.
+[16:04] Stop trying to one-shot good code. Stop trying to make the implementer
+[16:09] agent the only thing that you do and go, "Okay, I'm going to force it to be
+[16:12] amazing." It takes a little bit of, you know,
+[16:14] thinking your way out of there, but once you realize it,
+[16:17] it is fabulous. So, okay.
+[16:20] With all of that process, we've run our automated checks, we've now run our
+[16:24] automated review to make sure the automated checks aren't lying.
+[16:28] How do we then maximize the PR's quality in terms of human review? How do we get
+[16:32] it like working the best it can? So, we need a human-friendly PR. And
+[16:38] this is a new skill coming into the repo, which is currently
+[16:41] in progress, but I'll be releasing it soon, which is the PR skill. This is one
+[16:45] I've been mulling over for a long, long time. Haven't quite figured out what the
+[16:48] state of the art is. And I've realized the best way to make a
+[16:52] PR skill is just to steal all the best ideas that everyone's got. And
+[16:57] it's very nice. Now, what does a good PR body look like?
+[17:02] How would you recreate this skill on your own?
+[17:04] Well, the first principle is some reviews are more important than others.
+[17:09] Not every review is essential, right?
+[17:14] And once you understand this, you realize,
+[17:16] "Okay, that means I can focus my energy on the really important reviews. But how
+[17:21] do we categorize them? Well, you got to think about the PR as using
+[17:25] this AWS terminology, which is is it a one-way door or is it a two-way door?
+[17:31] Now, most PRs that you have will be two-way doors. You can merge the PR and
+[17:35] then always pull it back later. It's the glorious benefit of being a software
+[17:40] engineer as opposed to a civil engineer, right? Mostly when you're a civil
+[17:43] engineer, it's a it's a one-way door, right? If you get something wrong, that
+[17:46] bridge is going down. But, if you have a two-way door, it means
+[17:50] that you can easily revert the change. Now, that might be more um
+[17:56] a bit more nuanced than you might expect. It might be that a very simple
+[17:59] change accidentally blasts out an email to 60,000 people or something, in which
+[18:03] case that is a one-way door. You want to review that very, very carefully.
+[18:06] Involves expensive migrations or data loss, that is a one-way door. Review the
+[18:10] hell out of that PR. But also, tied onto that, we need to
+[18:15] understand radius of this PR. What can go wrong? And if things do go wrong, how
+[18:20] bad is it? And this means I end up with a nice little sort of summary right at
+[18:25] the bottom of all of my PRs, which is the merge danger. I can see this one is
+[18:29] a two-way door. Its blast radius is localized, and so I can see fantastic, I
+[18:34] don't need to pay that much attention to this. I'm just going to sort of review
+[18:37] it a little. That's really important.
+[18:40] Next, we need to understand what the PR is even doing, right? And I've tried
+[18:44] lots of different ways of figuring this out, and the best thing I've come up
+[18:48] with is using pseudo code. Now, a huge um
+[18:54] points of gratitude here to the show me skill from the human layer skills repo
+[18:58] by Dex Hadley. This is a phenomenal skill that just essentially dispenses
+[19:02] with most text and shows things to you in images and diagrams instead. This
+[19:07] makes it a lot easier to grasp actually what's changing and why it's changing.
+[19:12] So, you get the kind of standard sort of set of like mermaid diagrams and UML
+[19:16] for, you know, this is a sort of sequence of things that happened. You
+[19:20] also just get these lovely simple ones like this, for instance. We can look at
+[19:24] this and go, "Okay, we're working in a CLI. We can see a new command has been
+[19:27] added." And we've got two new things, little flags up the top here. Just
+[19:31] little summaries like this. It really does make a massive difference. It's
+[19:34] hard to overstate. So, you're trying to
+[19:38] like make understanding the why as fast as possible.
+[19:43] And I think a third principle here is something you should be thinking about
+[19:47] whenever you do human review. Because because we're not doing like
+[19:53] um because
+[19:56] our processes now are so sort of streamlined and all we're all
+[20:01] collaborating around these same skill files, these same steering files. We're
+[20:05] all building an environment for our agents to operate in together.
+[20:09] You should think of the process that produces your code as just as important
+[20:13] as the code itself. In other words, when you do a human
+[20:17] review, you're not just reviewing the code, you're reviewing the system that
+[20:20] creates it. And the theory here is that you never
+[20:23] want to write the same comment twice. Right? You never want to catch the agent
+[20:28] doing the same thing over two PRs. And so, what's the mechanism by which you
+[20:33] can make your human review matter? Well, this is a new skill. This is
+[20:37] called retro. Retro for retrospective. You essentially
+[20:40] take a session that you've done. It can either be like a single um agent
+[20:45] session, or it can be a PR plus the session, or you can just get it to look
+[20:48] at Okay, look at all of the PRs that we've done over the last week, all of
+[20:52] the reviews, pull them all in. Let's do a retrospective on them.
+[20:56] And it will suggest automated checks and coding standards to make the next one
+[21:02] better. So, this is the compounding effect where you're essentially
+[21:06] by doing human review, you're making the quality of the next human review higher,
+[21:10] and you're sort of saving less work from yourself next time.
+[21:14] And Retro is a really smart skill. It adds a bunch of stuff. So, obviously, it
+[21:17] suggests automated checks. It suggests updates to coding
+[21:21] standards.md. It does other smart stuff, too. So, it looks at navigation
+[21:25] pointers. How easily did the agent find its information? Can we provide a
+[21:30] pointer inside agents.md to help it out next time?
+[21:34] It looks at tool economy. Are there different tools that we're using in the
+[21:37] session that can, you know, could be made more token efficient? It's amazing
+[21:41] how many things this catches, actually, cuz those are often really hard to debug
+[21:44] from the outside. It just looks at bloat, as well. So, are
+[21:48] there bloated steering files? Are there bloated skills that contribute to these
+[21:51] bad results? Can we make them more organized?
+[21:56] So, that's the goal. It's to make human
+[21:58] review faster. We do that by layering up automated
+[22:01] checks. We're layering up automated review, and we make the human review as
+[22:06] painless, as simple, and as kind of optional as we need it to. You really
+[22:11] don't need to review every single two-way door.
+[22:14] Every single one-way door you do. So,
+[22:17] these are my skills. I'm here at dot dev {slash} skills, and
+[22:21] we're shipping version 1.3 this week. It has been glorious hanging out with you.
+[22:25] It's been a really nice conference. I'm going to be outside in the lobby if
+[22:28] anyone wants to have a chat. Uh thank you so much for having me. Thank you,
+[22:32] Paris.

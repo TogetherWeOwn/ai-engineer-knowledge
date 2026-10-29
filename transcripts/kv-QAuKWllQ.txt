@@ -1,0 +1,245 @@
+# title: How we hacked YC Spring 2025 batch’s AI agents — Rene Brandel, Casco
+# source: https://www.youtube.com/watch?v=kv-QAuKWllQ
+# speaker: Rene Brandel, Casco
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T11:00:18Z
+# sha256: 8ea2b87b680acf0fc9a19a012a952a6b19be51225c22a53fd1afb756363290ab
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:00] [Music]
+[00:15] So, yeah. Who's ready to hack some agents? Yeah. Oh, wow. All right. So,
+[00:20] let me first introduce myself a little bit. I'm Renee. I'm the CEO of Casco.
+[00:23] We're a YC company, and we specialize in red teaming AI agents and apps. And so
+[00:29] we spent uh I spent my previous time at AWS working on AI agents, but I've
+[00:34] always really loved working on AI. In fact, there's a video of me 10 years ago
+[00:39] building voice to code and I won Europe's largest hackathon by doing
+[00:43] that. And so I would talk to it, say, build me a blog post and it would
+[00:47] generate the sites. And it was actually it was kind of fun. Like it did uh
+[00:51] things like um yeah, load in pictures from San Francisco. And you can see how
+[00:55] horribly slow the APIs were back then. And I'm going to about to give you a
+[00:59] nightmare by showing you the architecture diagram of that thing. Um,
+[01:02] but yeah, it kind of did the job. And this was like 10 years ago. Obviously,
+[01:06] back then was no generative AI and these things were extremely difficult to do.
+[01:10] Um, but it is it really gave me a glimpse of what the future could look
+[01:14] like even back then as technology gets better, right? So, obviously many things
+[01:19] have changed. Two months ago, I quit AWS and worked out of uh the garage with my
+[01:23] co-founder and uh we got into Y Combinator. So, yay. That's awesome. And
+[01:29] so from there, we also looked into how else have things evolved. Well, this was
+[01:33] my um architecture diagram from back then. Could see there was three
+[01:37] different cloud providers including IBM Watson, which was like forefront at the
+[01:41] time. That's true. And uh before it was like uh Microsoft Lewis, which was like
+[01:47] some natural language understanding things. And you can see it was just a
+[01:50] lot of like piecing things together and that was already kind of difficult to
+[01:53] do. But nowadays we see the stacks normalized significantly more. Right? I
+[01:58] think this is probably what the average agent stack looks like these days. Got
+[02:03] some server front end. You talk to an API server that talks to an LM connects
+[02:07] up with tools and then you have a bunch of data sources associated to it. So
+[02:12] this kind of normalization of agent stack is actually really good. It like
+[02:16] makes many things easier. Definitely better than my hacker project 10 years
+[02:19] ago. Um but we need to think about the security posture around these systems
+[02:24] and my general impression over the last uh last few years is like primary
+[02:30] discussions around LM security really like hey is it um can you do prompt
+[02:34] injection? Can you get it to do harmful content? um which is all really
+[02:38] important but the reality with security is you need to look at all the different
+[02:43] errors in your system and that is typically where real damage happens
+[02:48] right and so this is really agent security and that is what I want to talk
+[02:54] about today now one thing is like why did we even hack a bunch of agents it's
+[02:59] kind of a weird thing to do um the answer is quite frankly you know we
+[03:03] wanted to launch internally at Y combinator and we wanted a splashy
+[03:07] headline and so we're like uh oh what do we do and fun fact we have the second
+[03:12] highest upvoted launch post inside y combinator of all time so higher than
+[03:16] rippling yes okay um so uh we we bit we we did basically this approach at a time
+[03:22] we're looking at oh which agents are already live and then let's just set a
+[03:26] timer for 30 minutes we don't want to waste too much time on this and then you
+[03:30] know let's let's figure out what their system prompts are and just kind of
+[03:33] understand how they're working and I I have a feeling when I was creating this
+[03:36] meme that this could be true, but it turns out it is true. And then we looked
+[03:42] at, oh, what kind of tool definitions do they have, right? Like, you know, what
+[03:46] is it supposed to do? Is it supposed to access data, supposed to run code,
+[03:50] right? And then we just uh try to exploit them and see what's what's going
+[03:53] on. Uh, and it was really fun because we hacked uh out of 16 agents that were
+[03:58] launched within 30 minutes each. We were hacked uh we hack we hacked seven of
+[04:02] them. And there are three common issues we see across all of these ones. So I
+[04:06] hope that we will all learn today what the most common issues are so you don't
+[04:10] make the same mistakes and also this is going to be the best investment if
+[04:14] you're a VC dispatch because they're all secure now. So first issue crosser data
+[04:20] access I mean you guys were just here at the OF talk you know where this is going
+[04:24] to head into right um so we first leaked this company's system prompt and we saw
+[04:30] huh has a bunch of interesting tools attached to it including looking up user
+[04:35] info by ID suspicious uh document by ID and a bunch of other things and then you
+[04:41] know like when you see this you just want to like oh yeah there's this thing
+[04:45] called IDOR like insecure direct object reference. It's basically when you make
+[04:50] a request and you validate that, hey, the token is valid and you just let the
+[04:54] request through, right? And you're kind of betting on the fact that the ID
+[04:57] cannot be guessed. Well, that's obviously not good. Um, so yeah, we
+[05:03] looked up a product demo video that they recorded and we found the user ID in the
+[05:07] URL bar and just like tried to plug it in. Uh, this is a different ID, by the
+[05:11] way. Don't worry guys, this is my co-founder's ID now. And uh yeah, we
+[05:15] were able to find their personal information including their email,
+[05:18] nickname, whatever. Um but it gets better because these things are also
+[05:23] interconnected. So you had not only their user ID, but you also had like oh
+[05:28] the chat ID. Oh, and their document ID and then these things ultimately linked
+[05:33] up together and allows you to traverse the entire system, right?
+[05:38] It's not good. So what's the fix for that? There was a really comprehensive
+[05:42] talk literally right before this. Sorry for the folks that missed it, but this
+[05:45] is the basic fix for it, right? You need to think about how do you authenticate
+[05:50] but also authorize the request. It's really two checks, right? Make sure your
+[05:53] your token is valid. Good job team. Yeah, I got that. And then the second
+[05:57] thing is like this is what we see in this superbase era with role level
+[06:00] security. Just make sure that you have some sort of access control matrix
+[06:04] somewhere that checks that it matches up with whoever is making the request.
+[06:09] Okay, super super important. authenticate and authorize.
+[06:14] Now you can see this was actually, you know, an issue that was kind of there,
+[06:18] right? It's it's not like around the LLM and the API server. It's really what is
+[06:22] happening downstream. And um yeah, there's a lot of arrows in this diagram.
+[06:26] We're going to look at all of them. So the next thing is to remember as you're
+[06:31] thinking about these tools and how you're building it, like agents actually
+[06:35] act like users um not API servers. when we were like debugging this issue like
+[06:40] we actually asked a bunch of Y combinator companies like why did you
+[06:44] build it this way because clearly they can build a web app properly right but
+[06:48] it's just like I think as developers we have this natural pattern matching in
+[06:52] our heads it's like oh yeah this thing runs on a server so it should be like a
+[06:55] service and then I'm going to give it service level permissions but actually
+[06:58] agents are like users right so everything that applies to users apply
+[07:03] to agents too so make sure that you know your LM should probably not determine
+[07:07] authorization pattern that that that's bad. That's a red flag. Uh second thing
+[07:11] is it should probably not act with service level permission. Listen to a
+[07:14] previous talk on Olaf. That's great. Um and then just like users, you should
+[07:18] make sure you uh don't just accept any input. Should sanitize them. Same with
+[07:23] outputs, right? A lot of these are like the traditional web application security
+[07:27] things that you just need to like really really internalize for this new world.
+[07:32] Now that was interesting. And so the second one was even better. Um so this
+[07:37] is not as common but the damage is bigger. So it's what in pattern we see
+[07:42] so there are a lot of code tools that agents use and there's a there's a
+[07:47] there's a anthropic paper here. It basically talks about what's the
+[07:50] distribution of which industry and how much do they use claude and there's like
+[07:55] this one outlier here. I'll zoom it in for you. Um yeah so us nerds we make up
+[08:01] 3.4% of the world but we're 37% of cloud's usage. Oh, why is that? Because
+[08:06] we love computers and we love coding, right? And so we found immediately the
+[08:09] value of it. But it's not just us that use agents with coding tools. In fact,
+[08:15] many agents create code on demand to do some things, right? Like some agents
+[08:20] just generate a calculator on demand to make a calculation, right? And so
+[08:25] there's a lot of these code execution sandboxes out there that are
+[08:28] interesting. And so if you if you think about that there's actually a critical
+[08:33] path in your system because you've got a tool that talks to another container. A
+[08:37] container is arbitrary compute and when you have arbitrary compute many things
+[08:41] can happen many bad things many good things right but let's talk about the
+[08:44] bad things today. So we did the same script did the system prompt again the
+[08:49] system prompt itself great I mean doesn't cause any damage but as an
+[08:53] attacker you always think about the fact uh the things that are like huh that's
+[08:57] kind of suspicious right it's like oh wait it it it runs code and never
+[09:02] outputed it to the user okay let's output it to the user oh yeah and and
+[09:05] most mostly run it mostly at most once let's run it all the time and so you try
+[09:10] to basically invert what the system prompt is saying because that is exactly
+[09:14] what the developer didn't want you to do and that is how bad actors think right
+[09:19] so we figured out oh this thing does have a code tool and so you know we
+[09:23] tried we tried running something it's like ah it only allows me to write
+[09:27] Python and you know I love JavaScript and um yeah and doesn't allow me to run
+[09:31] these really dangerous you know function calls okay and it restricts like which
+[09:36] Python files to run that's also not good so yeah but we looked at what it could
+[09:40] do and it had two kind of innocent permissions
+[09:45] write a Python file and read some files. You can do a lot with that. This is
+[09:50] great because what if we just looked around the file system now, right? We
+[09:54] can read files. So, we looked at build me a little tree functionality and you
+[09:59] know, return me the entire file system tree to see what's going on. Oh my god,
+[10:03] there's a app.py file. That's probably important. Um, and then we looked at,
+[10:07] oh, it has two endpoints, write file and execute file. Ah, okay. These endpoints
+[10:12] are hidden behind the VPC. So, we cannot hit it directly. That's okay. Um, but
+[10:17] huh, we can write files. Huh, we can write fuzz. There's a app.py file. Huh?
+[10:24] Let's look into that. Oh, wait. That's where all the protections are for their
+[10:28] code. Uh, and so we can just override the app.py file with empty strings
+[10:34] around all the security checks. And whoopsie, we got in. So now we can
+[10:41] Bitcoin mine all day. That's great, right? Yeah. No, it gets much worse. So
+[10:45] the thing with arbitrary code execution once you're inside a container is that
+[10:51] you can do many things like um there's this thing called service endpoint
+[10:55] discovery, metadata discovery. You all heard of that? No. Okay. Basically
+[10:59] allows you to discover what are other devices on the uh what are the devices
+[11:03] on the network? What other resource are there on the network? And uh you can
+[11:06] also just you know fetch the user token uh sorry the service token you know just
+[11:10] see what's going on what's the project name yeah you know and you start looking
+[11:13] around it's like oh okay yeah okay I I I can also fetch the scopes so I can use
+[11:17] do many things with this token that's awesome um who has really really spent
+[11:23] time configuring service level tokens and their permissions in a granular
+[11:27] manner and does it all the time and never forgets to set something wrong.
+[11:33] Okay, one guy. One guy there. Okay. Whoops. See, we have access to all their
+[11:37] customer data. So that's uh we just queried BigQuery which has a great
+[11:41] interface for that. Isn't that cool? Yeah. So yeah, making sure you have code
+[11:45] sandboxes correctly is very hard because you can move laterally across the
+[11:49] infrastructure and that is just very very dangerous. Okay. And so kind of
+[11:54] like don't roll your off in the web world. Don't roll your own code
+[11:57] sandboxes please. Like it's it's just very hard. It's very very hard and so
+[12:03] use out of the box solution. There are many of them. ETB is I think a very
+[12:06] popular one. Some some folks probably heard of it. Uh there's one in our YC
+[12:10] batch that I personally just genuinely really love. They have observability
+[12:14] built in. They boot up super quickly. And what I love about them is they have
+[12:17] an MCP server that just is easy to plug into, right? So just easier for your
+[12:20] agents to work with. So please do that. Don't do, you know, your own Python app.
+[12:27] Um it's not good. Trust me. Um, so that leads into a third part of a attack
+[12:34] vector around serverside request forgery.
+[12:37] It's a very long word and it really bugs me that the SSRF didn't fit on the
+[12:41] previous line. This really triggers me. Um, yeah, I know. So um this is what
+[12:47] happens when you can kind of co can kind of get a tool to call another endpoint
+[12:52] that you didn't and you know that the service itself didn't intend you to call
+[12:56] and you can pull out a lot of information just through that workflow.
+[13:00] So let me give you an example. So this is exactly extracted system prompt.
+[13:05] Great. Oh this thing can create databases. That sounds exciting. Um, and
+[13:10] then you look into it, it's like, huh, it pulls the database schema from a
+[13:16] private GitHub repository. Isn't that great? That means whatever
+[13:21] request goes to that private GitHub repository must have the Git
+[13:24] credentials, right? Otherwise, how can it pull that from a private repository?
+[13:28] So, um, yeah, and it's just a string. So, I guess I can just put in whatever
+[13:32] string I want and coers it into providing that. So, let's set up a
+[13:36] badacctor.com test.git git repo and just see what credentials come through and
+[13:42] yep it comes across with the git credentials and so now you can actually
+[13:46] take those git credentials and just download their entire codebase that was
+[13:50] behind a private repo. Isn't that crazy? Isn't that crazy? Yeah. This is I mean
+[13:56] it's awesome for me to do this, right? It's like you get paid to do this. Come
+[13:59] on. It's amazing. Now um we told our batchmates immediately and they told us
+[14:04] don't worry bro it's already fixed. It's okay guys. that that company's secure if
+[14:08] you're a VC listening in. Um, so so but with that though it is really important
+[14:12] to think about the implications of what your system is doing, right? I I love
+[14:17] vibe coding, not going to lie, but like you got to really think about where all
+[14:22] these arrows are and if you've configured those things correct
+[14:24] correctly. So with that, always sanitize your inputs and outputs. This could be
+[14:30] like a webdev conference from 20 years ago. Um, but but it applies to agents
+[14:35] too, right? like we just need to make sure we keep those good security
+[14:38] practices that have that we have learned to love hopefully over the years to take
+[14:44] it forward to a new technology paradigm and then ultimately I want you to take
+[14:49] away three things. So first thing is agent security is bigger than just LM
+[14:54] security. Make sure you understand how these threat vectors apply inside your
+[14:58] overall system. Second thing is treat agents as users and that applies to
+[15:03] authentication to sanitization of user inputs and many of the other things. And
+[15:08] last thing definitely don't roll your own code signbox. That is just so
+[15:12] dangerous and you know it it it very quickly turns from like an intern
+[15:16] project into like a nightmare. So it be very very careful with that. And these
+[15:21] are the most basic ones that we've seen come across, right? There's obviously
+[15:25] many more security issues. And if you don't know exactly how your agent
+[15:29] security posture is, you can go to casco.com. You can book a demo with us.
+[15:33] We built an AI agent that actively attacks other AI agents and tells you
+[15:37] where they break. Isn't that great? Um, and yeah, feel free to connect with me
+[15:41] on LinkedIn or on Twitter and I have uh every now and then some good stuff to
+[15:44] post. Yeah.
+[15:49] [Applause] Awesome. Thanks, Renee. Does anyone have
+[15:53] any questions? We can have time for like one or two quick questions if you're if
+[15:56] you're game for it. Sure. Um how do I look at system problems?
+[16:02] There's a lot of just like open techniques. The the best one that I've
+[16:05] seen is uh from hidden layer.com. Have you guys checked that those guys out?
+[16:08] They have a great blog post on like um it's a policy puppeteering attack. Yeah,
+[16:14] it's great. Very cool. Cool. Awesome. Oh yeah.
+[16:22] How do you make sure because
+[16:26] how do you make sure that
+[16:33] there's so many creative ways?
+[16:38] Yeah. Are you talking about it locally or server side?
+[16:43] Yeah. Yeah.
+[16:49] Yeah. No, very much so. So locally uh I think right now the industry is either
+[16:53] you go full yolo mode or you ask every time right um I mean I'm not joking
+[16:58] cursor thing is called yolo mode right um and then on server side use a code
+[17:02] sandbox because ultimately they have constraints uh around the internal
+[17:06] networks but also they have constraints around um how long they can live as a
+[17:10] sandbox. Yeah. Okay. Sandboxes that use um yeah so they they typically use
+[17:16] something called firecracker under the hood which is better isolation layer.
+[17:19] Yeah. Uh, if you just use containers, by the way, that's not an isolation layer
+[17:22] in case anybody's wondering. Yeah. Yeah. Don't use containers for isolation.
+[17:25] Yeah.
+[17:30] [Music]

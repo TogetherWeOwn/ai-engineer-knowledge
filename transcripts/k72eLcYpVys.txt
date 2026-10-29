@@ -1,0 +1,202 @@
+# title: 1,000 Agent Tasks in a Sandbox: What Breaks When LLMs Run Code — Kevin Orellana, AWS
+# source: https://www.youtube.com/watch?v=k72eLcYpVys
+# speaker: Kevin Orellana, AWS
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T03:11:53Z
+# sha256: 44b634bfc93d0d7992d887a835951ec97d11c3d66c9bfa9ddde9fe9dd6c6fc70
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:01] [music]
+[00:12] Hello everyone. I think we can get started.
+[00:17] So, a few months ago, I did something that was um a bit slightly absurd. I
+[00:23] took a coding agent. I pointed it at my team's uh cloud
+[00:29] sandbox hosting environment and it said try to break it and I let that run
+[00:34] overnight. And this talk is a bit about what we found.
+[00:39] Uh my name is Kevin. I work at Amazon Bedrock Agent Core. It's a sandbox
+[00:45] hosting environment or platform. And we do more than that. We provide agents,
+[00:50] identity, memory, um, runtime environments, sandboxes, gateways,
+[00:54] anything you want to use to build and host your agents on agents on the cloud.
+[01:01] So the way this started was basically with me taking a hard look at how um
+[01:07] customers use our platform and increasingly I think a lot of us in
+[01:12] the industry see that uh a lot of platform components on the internet are
+[01:16] just agents and increasingly they're also sandbox hosted. I think today's
+[01:21] talks will maybe walk you through all the architectures that can exist in
+[01:24] cloud hosted uh sandbox environments. And so this kind of got me thinking how
+[01:30] can I perhaps emulate simulate the customer and also test the service the
+[01:35] same way agents use our platform.
+[01:39] So the first thing I think we we set out to do was create an abstraction or
+[01:45] interface that allows coding agents as well as agent applications to interact
+[01:51] with our service uh in a way that's pretty native to them. And today we know
+[01:54] that Frontier models know the MCP protocol pretty well. So we spent a day
+[02:00] or two just creating an MCP server to expose access to our environment and
+[02:04] platform um just so it can get started pretty quickly. The second piece was
+[02:09] polishing that. Uh we spent some time in finding the tools that can be made
+[02:13] accessible and uh smoke testing some runs and and things like that.
+[02:18] So some of the tests we ran just by hand was uh for example write a Python code
+[02:22] file and execute it or take a Python file and uh convert into Java.
+[02:29] And then we realized we wanted to just expand the test domains that we we were
+[02:33] going to set the coding agents to do. So we asked to just plainly write a
+[02:36] thousand tests across 10 domains. And a thousand tests here was pretty
+[02:40] arbitrary. It was just to cast a wide net and see what caught back. This took
+[02:44] a bit of polishing because we knew that a thousand tests would take a few hours
+[02:47] and was going to be a little tokenheavy. So we um did things like credential
+[02:52] management credential management injection um what happens when a test
+[02:57] fails. Is it a service issue? Is it a MCP layer issue? Uh those are the kind
+[03:01] of things we we let the agent um figure out.
+[03:06] So the architecture is honestly very simple but it's also very powerful and I
+[03:09] think a lot of us have probably seen this in our day-to-day uh development.
+[03:14] So we have our coding agent on top left. We have an MCP server that basically
+[03:20] wraps our cloud sandbox environment and all the findings get sent back to us. We
+[03:25] store them in a SQLite database just because as some of you might have seen u
+[03:30] agents are pretty prone to write markdown files but that doesn't really
+[03:33] scale when you have a thousand tests that you want to run and this allowed us
+[03:38] to tap into concurrency or you can have multiple sub aents running locally and
+[03:42] running and executing their tests and storing those results uh locally.
+[03:47] Now, a thousand tests I think is kind of easy to just say out loud, but really
+[03:52] every single dot on the screen kind of represents a workflow that a customer
+[03:56] would actually run. So, we did things like testing the sandbox uh life cycle.
+[04:00] How reliable is it when you put it under stress? Um
+[04:05] things like file system IO, what happens when you upload a file and download it
+[04:08] from the sandbox? Uh tested performance.
+[04:13] We tested some software development life cycles like uh for example writing
+[04:18] Python packages, Java packages um and the like.
+[04:24] So to give you a perspective of what one of these dots could represent, it could
+[04:27] be an end toend machine learning training uh program. It could be
+[04:31] generating a PDF report. Uh it could also just be um as simple as
+[04:37] opening a web page. And we re quickly realized that our platform which at the
+[04:42] time was hosting two uh major applications, one was a code sandbox,
+[04:46] the other was a cloud browser would have different tests that mattered
+[04:50] differently to the sandboxes that they were hosted in. So for example, here in
+[04:54] the browser, we asked the agent to create a bunch of uh tabs and try to
+[04:58] scrape them all and summarize them, maybe take some screenshots, download
+[05:02] them, maybe fill out a form, automate a login workflow. But the point here is
+[05:07] these sandbox hosted applications uh tend to go through different workflows
+[05:11] that demand different requirements from the sandbox.
+[05:16] So we ran through the tests and I want to talk about just three failures that I
+[05:20] think um showcase some of the patterns we saw uh from these uh sandbox hosted
+[05:26] applications. So a simple one was we uploaded an image, we downloaded it and
+[05:31] we wanted to see if the same thing that we put up uh we got back when we asked
+[05:35] to download it and lo and behold that was not the case. Uh we deep dived a bit
+[05:40] into it and we found that the encoding layer at the MCP layer was incorrect.
+[05:44] The second one was a bit interesting too which was a no bite. It just threw off
+[05:47] off our tests. Um a no bite can be a zero. It could also be a marker in some
+[05:53] coding languages that just mean that means that the string is is uh complete.
+[05:58] Now an interesting one that was particular the sandbox layer is one
+[06:02] where we actually wrote files to a specific directory in the sandbox and
+[06:06] when we try to get it back it just wouldn't be available.
+[06:11] So now we started to segregate the patterns uh and failures into two
+[06:16] layers. One was at the interface and the other one was at the sandbox layer. And
+[06:20] it's important I think to draw the distinction because uh when we start to
+[06:25] host applications in sandboxes we they deviate a little bit from the typical
+[06:30] API service pattern where you have a long running service that has exposes an
+[06:34] API uh and you you know send a request you get an output that's reasonably um
+[06:38] shaped and you you kind of know what your backend service does. But obviously
+[06:42] in today's world we we no longer have as many long running applications rather we
+[06:46] have specialized agents that are uh sandbox and environment we expose access
+[06:51] to them through a gateway and the demands that they have on their let's
+[06:55] say computer environment are going to differ greatly.
+[06:58] We know that and this is an experience I think a lot of us can relate to which is
+[07:03] you are developing something locally and you just start to see your agent uh
+[07:07] either a curo cloud codeex whatever it might be do funny things like it might
+[07:12] uh download a package you might not have expected or it might translate a CSV
+[07:17] file to JSON to PDF for whatever reason and all of these workflows that your
+[07:22] agents will want to do are going to demand uh different things from your
+[07:26] environment. So things for example like how much memory or CPU your sandbox has
+[07:31] the permissions that are available to your processes and file systems. I think
+[07:35] in a lot of the talks we'll see today there are a lot of different
+[07:38] architectures that your sandboxes can have. And the wider point here I think
+[07:42] is all these constraints have pretty massive implications for your agents
+[07:46] ability to solve these problems.
+[07:51] And just to kind of visualize that, these are some of the faults that we saw
+[07:55] when we compared two different applications hosted in sandboxes. So at
+[07:59] the top we have the code sandbox and the bottom we have the cloud browser. At the
+[08:04] bottom right we have the failure modes that are highlighted in red which
+[08:08] signify how many times the sandbox actually uh perished. In this case,
+[08:12] because cloud browsers, we know that whenever we open up tabs, they're pretty
+[08:15] memory heavy. And so, a lot of our tests fail just due to memory constraints. And
+[08:20] that wasn't really a fault we saw in the uh code interpret environment. And when
+[08:26] we map them out a little bit differently, we start to see that the
+[08:28] failure modes coales around sandbox primitives. So we know some of the
+[08:34] components around file systems tend to be file system permissions uh mounted
+[08:37] file systems uh permissions to read, write, execute files, um whether or not
+[08:42] the file system uh is persistent or uh ephemeral. Um and the tests were pretty
+[08:49] unforgiving. Um for example, in the bottom right we have uh the browser
+[08:54] tests just starving the the sessions and sandboxes out of memory and signaling
+[08:58] that as a complete failure. And I think the wider point here is as we host these
+[09:02] applications in sandboxes and we expect our customers to be able to build uh
+[09:06] pretty arbitrary workloads in these sandboxes, we have to be pretty careful
+[09:10] that the sandbox constraints have massive implications as to those agents
+[09:14] ability to complete those problems. Now if we look a little bit closely and
+[09:20] this slide is pretty heavy on the second column we have a lot of the primitives
+[09:24] used to compose what a sandbox container um might look like. So we can go as deep
+[09:30] as kernel capabilities, things like kernel interceptors, um these things
+[09:34] called extended BP BPF programs which allow you to run kernel modules and
+[09:40] intercept programs at the at the Python layer. Um those might uh control how
+[09:46] your agent actually can make some egress calls, maybe make a internal API call to
+[09:52] um your internal company services.
+[09:59] If we diagram this out, this is kind of what a very high level overview of how
+[10:05] the components in the sandbox might uh affect your um workload's ability to do
+[10:10] its job. So here for example, I think earlier in our talks, we spoke about uh
+[10:15] security secure compute which controls the system control programs that your
+[10:20] applications might want to run. So for example, say I have a machine learning
+[10:23] package that needs to spawn a process. Does my process or container even have
+[10:27] the ability to start a new process? Um perhaps I have a code interpreter uh
+[10:33] task that needs to download a Python rep Python package into a very specific
+[10:39] module for uh the Python kernel to be able to pick it up or are the Rust
+[10:44] binaries in the right location for when the coding agent is able to um run or
+[10:48] execute a program. All these very very small things tend to add up into your
+[10:53] agents ability to uh execute the business problem.
+[10:58] Now just taking a step back I think this was kind of interesting uh which was the
+[11:03] idea of like using an NLM to generate basically unit test. I think we've all
+[11:07] done it. We I don't know if anyone writes unit tests by hand anymore. Uh
+[11:11] and similarly if we go up up a layer integration tests uh we we we can
+[11:17] anticipate agents to be pretty good at understanding the problem space and
+[11:21] writing tests for them. But as we move towards hosting more and more
+[11:25] applications which are just agents uh in sandboxes,
+[11:30] we start to see the cracks in the model which is um these very low-level
+[11:35] primitives and controls um might actually hamper your agents ability to
+[11:40] do its state of goal. Um, and what we were hoping to relay here is a a very
+[11:47] strong way to actually surface these failure modes that are that are pretty
+[11:50] innocuous to us is just through fuzzy testing your agent sandbox asking it to
+[11:55] complete perhaps in this case a thousand workflows and seeing what results you
+[11:59] get. And just to also make it a little bit
+[12:02] more tangible, um, a lot of us here developers, we are very used to running
+[12:08] coding agents locally. You might have your, you know, your your codeex or your
+[12:12] cloud running locally. And as we expand and create more workspaces, you quickly
+[12:17] put a constraint on your laptop and now, you know, your teams want to put these
+[12:21] coding agents in remote sandboxes so you can scale how many GitHub PRs you you
+[12:26] work through and the like. But as you've probably seen, the tools that you have
+[12:30] in your local workstation, your MCP tools, your locally running applications
+[12:34] might not match what you have in a remote sandbox.
+[12:38] And just a small shout out to uh agent core. This is actually one of the
+[12:43] problems that we're very keen on because we recognize that customers want to
+[12:46] scale their coding agents um and how customers are actually running these uh
+[12:51] software development life cycles. So one of the releases we recently did was
+[12:54] grant the ability to customers to SSH into their um sandbox just to see what's
+[12:59] going on. And of course it's not really a human who is SSH into your sandbox
+[13:04] anymore. or it's a coding agent who you're developing with uh as well. But
+[13:08] the idea is there uh bridging into the sandbox and poking around and seeing
+[13:12] what problems are causing your coding agent or your application to not run as
+[13:16] smoothly is a pretty um stated business problem for us and one that we're trying
+[13:21] to solve for customers. And if you look a little bit uh if you
+[13:27] look a little bit at academia uh one interesting example I think a lot of us
+[13:32] probably care about is whenever frontier models come out the first thing we look
+[13:37] at is the sweet benchmark report which is okay this model got XYZ percentage on
+[13:42] this three benchmark versus another and there was a recent study made by some
+[13:46] researchers at UC Berkeley where they found that given the right environment
+[13:49] controls and an exploit agent they actually beat the three benchmarks like
+[13:53] reaching up to 100%. And in inversely uh there was another study where um
+[14:00] researchers were trying to give a wide set of business problems to an agent
+[14:04] with broken tools. Uh and of course the effectiveness of that agent uh went down
+[14:10] greatly. So I think this is uh mostly where I
+[14:16] want to aim to leave today which is as these applications that we build today
+[14:22] are more and more agentic and they're not constrained to a rest API service
+[14:27] that you you build for customers but rather uh an arbitrary agent running
+[14:31] inside of sandbox it's really really um uh challenging to find all the sharp
+[14:36] edges where the sandbox primitives uh lead to you know a less efficient uh
+[14:41] ability for your agents to complete that problem. So my challenge here for you
+[14:44] today is uh if you're looking to host your agents on sandboxes, sure test it
+[14:50] locally, but also fuzzy test it with a wide set of domain tests um remotely.
+[14:59] Yeah, thank you. [applause]
+[15:16] >> [music]

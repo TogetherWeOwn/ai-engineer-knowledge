@@ -1,0 +1,316 @@
+# title: Agents at Scale: Inside MiniMax's Model and the Infrastructure Behind It — Dan Fu and Olive Song
+# source: https://www.youtube.com/watch?v=AVMr9PMINyo
+# speaker: Dan Fu and Olive Song
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T06:41:03Z
+# sha256: a679e79820714aaddb50523f1b21bc5b6bcfd07dfb5b7f1c225f416e2722b80e
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:12] This is a discussion that I'm particularly excited about because
+[00:16] the field is moving so fast and we have two people that that kind of have this
+[00:20] unique vantage point on the field and what I want to do is kind of ask
+[00:23] questions to see if we can learn from that. So I want to start off with
+[00:27] intros, talk a little bit about your role, what you're thinking about, what
+[00:31] you're working on. Maybe Dan if you can go first.
+[00:33] >> Uh hey everyone. I'm Dan. I'm the VP of Kernels Together AI.
+[00:37] I lead inference, GPU optimization, trying to figure out how to use GPUs
+[00:42] most effectively to serve AI models. >> Yeah. So one of the things that I wanted
+[00:46] to dive in with Dan about is like you model drops, what are what is everything
+[00:51] that goes on behind the scenes to serve it so that everybody here there's a lot
+[00:55] of builders here that can use it. Olive I want to throw it over to you to talk
+[00:59] about your role and what you're focusing on.
+[01:01] >> Yeah. I'm Olive and I am the research lead of RL at MiniMax and I am
+[01:06] responsible for the final training of the model and the shipping of the model.
+[01:09] So basically everything before the inference, right?
+[01:12] >> Okay. Awesome. Um so maybe I wanted to start
+[01:15] off this panel is focusing on open source. I wanted to start off with this
+[01:20] is your strongest model yet, MiniMax M3. Why open source it? What's the kind of
+[01:25] the the idea behind that as a company as you're releasing these models?
+[01:29] >> We do believe that the open source community as a whole is very strong and
+[01:34] powerful. While we open source the model, everyone
+[01:37] can use it. So it aligns with our mission that we want to have
+[01:41] intelligence with everyone and also different developers can contribute to
+[01:45] the model through feedbacks, through their own PRs and we can build the
+[01:49] models even stronger. And also like for example,
+[01:53] Dan you you will be able to optimize on our open weight model and make it
+[01:57] inference faster and then serve better for everyone.
+[02:00] >> Yeah. Yeah, we're we're big believers in open source that together and
+[02:04] yeah, I think when we we've been you know, following you guys for for a
+[02:08] while. I think from way old old older MiniMax models. So seeing M3 and seeing
+[02:13] how far it's come is is really impressive and really great.
+[02:16] >> So I wanted to kind of pick on this a little bit more. Can you explain
+[02:21] so we've got the model creators themselves MiniMax. We've got experts on
+[02:25] the inference side of things. How did this partnership come to be? So they
+[02:28] launch an open source model and we're now distributing it. I I
+[02:31] checked this morning. We have the lion's share of
+[02:34] token usage for MiniMax M3. How does this partnership come to be and how do
+[02:39] we serve a model like this at scale? >> Yeah, yeah, great question. So at
+[02:42] together, I think one of the things that that we're really interested in is how
+[02:45] do you make intelligence abundant? So how do
+[02:49] you get more tokens to more people to do more useful things and and and get get
+[02:56] all these capabilities into more people's hands. So we follow all the
+[02:59] open models very closely. I I don't remember when exactly we we
+[03:04] started part. Oh, actually I think I do know this. We had a car event in Las
+[03:08] Vegas sometime last year. And with someone from MiniMax came and there he
+[03:12] was like, guys, you really got to serve our next model. It's going to be really
+[03:15] really great. So I think from there we we started
+[03:18] talking. We were serving MiniMax 2.5 and I think 2.7 for for a while
+[03:24] and then when leading up to the launch of of M3,
+[03:28] we were we were quite excited about it. I think we we're seeing the the usage
+[03:32] and what people were doing with it was it was really quite exciting
+[03:36] and and so from there that's really where we partner. We start
+[03:40] working on the model. The architecture, optimizing it,
+[03:43] figuring out you know, what's the best way to serve inference on it and and all
+[03:47] those great pieces. >> Yeah. I wanted to actually get into more
+[03:51] on the model side of things. And so as the creator of a model, as as somebody
+[03:56] who's like post-training this thing, the model lands and all the builders that
+[03:59] are here start using it. From your perspective, um what are the
+[04:04] kind of the unique capabilities that you love to see people use it for? And what
+[04:07] are maybe some of the hidden gems that you haven't You thought, "Oh, people
+[04:10] would love to build this." but you haven't seen a little bit. Could you
+[04:13] shed more light on that? >> Mhm. Mhm. So, MiniMax M3, which was
+[04:17] different from the M2 series, was that it was actually multi-modal
+[04:21] So, it not only understands text and it not only writes code, it also
+[04:25] understands videos and images. So, we did see a lot of applications on a gen
+[04:30] tech multi-modal agents, which is very cool.
+[04:33] Um and I would say there are a couple that we can highlight, right? For
+[04:36] example, computer uses. The model can is able to navigate through a computer and
+[04:42] then do some pretty good creations with the tools that they they can utilize.
+[04:47] And also, um you can develop games with the model.
+[04:50] Um it's very fun that I I don't I think that's one of the hidden gems is that we
+[04:55] actually worked on um game development. So, the model can
+[04:59] help you develop a real cool games. Um yeah.
+[05:02] >> Yeah, one So, when the when the blog dropped and
+[05:05] then the paper dropped, one of the things I noticed was that you guys
+[05:08] highlighted SVG bench, you guys highlighted kernel bench, you also
+[05:12] touched on OS world. Can you talk more about Like, what does it take to
+[05:16] post-train, especially for those particular domains?
+[05:18] >> Mhm. Mhm. Uh I would say it's the very important thing is the data and
+[05:24] how we define the problems. Um it could be very different from different tasks.
+[05:28] For example, let's say the kernel one, right? The
+[05:31] It would be very important to design the environments of the data so that we can
+[05:36] deliberately train reinforcement learning in those very complex
+[05:39] environments and let the model to optimize the kernels themselves and
+[05:43] iteratively improve the performance. >> And one one aspect that I wanted to talk
+[05:49] to you about on the kernel development side of things, um where are you seeing
+[05:54] open models when it comes to kernel development? You recently released a
+[05:58] benchmark specifically for this. So, I was wondering if you could talk on that
+[06:01] a little bit as >> Yeah, yeah, it's a it's a great
+[06:02] question. So, I think we're seeing all sorts of models of the closed frontier
+[06:06] models and the open models get increasingly better at writing kernels.
+[06:11] So, we use models all the time when we are developing kernels and and and
+[06:16] writing the optimization frameworks. I think the the interesting thing that
+[06:21] we are starting to look at is this benchmark that that we recently released
+[06:25] called um parallel kernel bench. So, it actually has a bunch of unsolved
+[06:28] problems in it. So, we went around surveyed all the different ways they can
+[06:33] serve model inference. And one of the interesting things that
+[06:36] we found is that there's a lot of things that we can think of that would actually
+[06:39] speed models up that there don't exist good kernels for.
+[06:43] So, one of the reasons that we put that benchmark out was, you know, one thing
+[06:46] that people worry about is like bench maxing or or overfitting to particular
+[06:50] benchmarks. One of our intentions with this
+[06:53] benchmark was that if you overfit to it, that's great cuz we'll go take those
+[06:55] kernels and use them to to to accelerate the
+[06:59] the the the inference and the development.
+[07:01] >> Yeah, this is a really interesting point. A lot of people have problems
+[07:04] with bench maxing, but the way I think about it is if researchers like you put
+[07:08] all the really useful benchmarks out and we bench max on all of them and
+[07:11] everything is in distribution, then that's a perfect world, right? That's a
+[07:14] very useful model that we can then use. Um
+[07:18] Okay, cool. So, I wanted to touch on the inference side of things now as well.
+[07:22] So, like a new model drops like this, what does it take Could you take me like
+[07:27] behind the scenes at the inference stack? And what does it take to go from
+[07:31] day zero launch and then optimizing it week over week, month over month?
+[07:34] >> Yeah, yeah, great question. So, when we partner with someone like MiniMax, we
+[07:37] will get some early model details. So, for M3, for example, there are things
+[07:42] like the minimax sparse attention and and some of those choices that were
+[07:46] a little bit different from any model that's out there. And I think if you
+[07:49] look at any of the open models now, they are all quite different from each other
+[07:52] in different ways. So, there's different attention, different MOE choices,
+[07:57] differences in quantization and and all these pieces. So, as soon as we get
+[08:00] those details, we start writing kernels, benchmarking, figuring out is there
+[08:05] existing kernels that work for it? Do we need to modify something? Do we need to
+[08:09] write something from scratch? And then so day zero, we're trying to
+[08:14] think about things like quality. So, when this model launches, is it going to
+[08:18] have the quality that we all expect? Are we going to be able to provide the right
+[08:23] the the right user experience? And then from there, as soon as it
+[08:28] launches that day zero, we have a long list of things that we know, hey, we
+[08:32] have to do this with the KV cache, we have to do this with the attention
+[08:35] kernels, we have to do we're going to look at this part of the
+[08:38] quantization, and things like that. So, we
+[08:41] we we have that list and then we start working on it and start optimizing over
+[08:46] the course of weeks so that when you use these models, they actually get faster
+[08:50] between day zero and day seven and day 14 and
+[08:54] etc. >> Yeah, I was just talking to Ingrid
+[08:56] actually yesterday and I and I asked her, have we been improving the
+[08:59] performance of M3? And I meant over the last month and she
+[09:03] said, oh, did you mean from last night? And this is the pace at which these guys
+[09:06] work. So, it's very real.
+[09:09] One aspect that I wanted to touch on with this is we're seeing the workloads
+[09:12] shift. We're going from kind of predominantly chat workloads where you
+[09:16] have turns coming in now to agentic workloads where you've got this thing
+[09:21] sitting inside a harness and you're doing hundreds and hundreds of
+[09:24] multi-turn tool calls. >> Yeah.
+[09:26] >> Does that change the way you build the inference stack?
+[09:29] >> Yeah, it definitely does. So, these agentic turn-based workloads,
+[09:34] they go into everything from informing your KV cash,
+[09:37] your prompting, your pieces like this. So, it it informs what
+[09:42] part of the stack you want to go optimize
+[09:45] because now I think when we're in the chat chat chat world, you have a system
+[09:48] prompt of a few thousand, and then you just have the the chat
+[09:51] logs. Now, with the coding base agentic workflows, you'll upload your whole code
+[09:55] base to the model, and that's a very different optimization and routing and
+[09:59] kernel challenge than than just the the chat base workload. So, yeah, we're we
+[10:04] we follow these work codes very closely. It's really interesting to see how they
+[10:07] evolve and and how to adapt the inference stack and the inference
+[10:10] engines to to really take to really serve them well.
+[10:14] >> Not only do you have agentic workloads, but you've also got
+[10:17] multimodal workloads in there. So, what I like to do often with these coding
+[10:20] agents is get them to optimize a web app and then
+[10:24] get it to use it and then do a feedback loop. So, one thing that I wanted to
+[10:28] come to you all the four is Minimax M3 is
+[10:32] multimodal, M2.7, all the ones before that were not multimodal. And like, can
+[10:37] you talk a little bit about the optimizations and
+[10:39] how you trained it for that aspect? And then also, I want to get into the
+[10:42] architecture of it afterwards as well. >> Right. Definitely. So, what's different
+[10:47] from before was that it was trained multimodal from scratch. So, from step
+[10:52] zero, we trained not only text data, we also trained image data. And it was
+[10:57] normal for many other labs that the model would collapse after training a
+[11:01] little bit, and we managed to solve that problem. And what we found was actually
+[11:07] that with this kind of training from scratch, if you look at the attention
+[11:12] map, it actually the visual of the the text tokens would attend to the visual
+[11:16] tokens. So, that they are naturally combined together, they naturally
+[11:18] understand each other. So, for example, we are developing, for example,
+[11:23] websites, right? It is better if we train with
+[11:27] both modalities. Also, like, for example, it can look at
+[11:31] the website, it can understand how it looks, and then better optimize for it.
+[11:35] Like for example, during reinforcement learning.
+[11:38] Um so yeah, I think that is pretty cool.
+[11:42] >> So one one thing that kind of stuck out
+[11:46] with this model for me was the fact that it introduced a lot of new things. The
+[11:49] multi-modality, the increase of context to 1 million, um the fact that you have
+[11:54] a sparse attention now. Um so if you go to the inference side, it's almost a a
+[11:59] nightmare, isn't it? You get You get this new model and there's so many
+[12:01] things that you could optimize to speed up inference. Um practically, what are
+[12:05] the things that you focus on? There's like a thousand things that you could
+[12:08] optimize, but where do you get the most bang for your buck?
+[12:11] >> I mean, you focus on a thousand and one things, yeah. Like you just you just go
+[12:15] and you keep you keep doing it. You find every edge that you can, um and and you
+[12:19] go and and you push on it. Um so yeah, I think there there's there's no there's
+[12:24] no stone that you leave unturned and you just
+[12:26] uh keep keep going at it. If someone tells me you can't do the thousand first
+[12:29] thing, yeah, like I don't know, try harder.
+[12:32] >> Yeah. >> And then get up a little later.
+[12:35] >> Yeah, like go ahead. >> No, I know.
+[12:38] So the other thing that I wanted to ask is there's a whole kind of um
+[12:41] zoo of open source models. As you're talking about speeding up inference, are
+[12:46] there things that are there lessons that you can take from one model and apply it
+[12:49] to MiniMax M3? Um or or do you have to like restart from scratch as you're
+[12:53] thinking about the inference engine, the kernels, like how does that work?
+[12:58] >> Right. Um yeah, so there there's definitely things that you learn from
+[13:01] optimizing one model that you take to another. Um so I think sparse attentions
+[13:05] are something that have become quite popular now. So the MiniMax sparse
+[13:09] attention is a little bit different from the
+[13:12] uh from the deep seek and the and and and those and the and the ones that you
+[13:16] find in JLM. Um but the they're still similar lessons that you can take from
+[13:21] that optimization process and that kernel writing process that you can then
+[13:25] bring to to the new sparse attentions. And you know, we've been in in some form
+[13:30] or or another I've been thinking about this
+[13:33] problem for for many years. So going all the way back to my PhD. So
+[13:37] it's it's it's great to see some validation that that folks can now train
+[13:40] it at scale and people are using it and and it's and it's it's going pretty
+[13:45] well. >> Yeah.
+[13:46] >> Yeah, one of the interesting things especially about open source is you've
+[13:50] got all these labs that are learning from each other kind of taking the wins
+[13:55] from each other, right? So if if if one lab figures out that Minimax does this
+[13:58] really well, then that gets becomes the golden standard.
+[14:02] Um one of the things on model launch that I
+[14:06] in the blog post that you guys go into is that this model was actually able to
+[14:10] replicate a 12-hour run where it could reproduce an ICLR paper.
+[14:14] And so somebody who's training this model to do this thing, how do you
+[14:17] actually go about that? Cuz that seems like a pretty ludicrous task.
+[14:21] >> Right. So letting the model to do cool stuff like replicating papers,
+[14:26] optimizing kernel frameworks and stuff like that is always exciting for us
+[14:31] researchers because it's like very related to our job. But training it can
+[14:36] be very tricky because it's very long horizon and like
+[14:40] the task itself would require GPUs. It has hardware constraints.
+[14:46] So it's very interesting to train tasks like that and I would say the key there
+[14:51] is still the environments and the data and how you formulate the problem, how
+[14:55] you formulate the rewards, how you formulate the environment and how you
+[15:00] change the reinforcement learning algorithm a little bit so that it's
+[15:04] trained more efficiently so that you can see cool things emerging
+[15:08] through the the iterations of RL runs. >> Mhm.
+[15:13] Can you talk maybe if I keep pulling on this thread a little bit? How do you do
+[15:16] evaluation over these longer longer scale runs? So if you're if you want the
+[15:20] thing to do a 12-hour task, yes, it might or might not do it at the end, but
+[15:24] are there like a intermediate things that you can also look at?
+[15:28] >> Yes, we do. For these tasks, they are there are iterations, right? So, the
+[15:33] model can submit several times, and we would evaluate each of them. Some of
+[15:37] them some of the times the models would hack, and we do do like validation and
+[15:42] test with for it to test if it's really improving on the performance or it's
+[15:46] hacking. And also, we design our internal
+[15:50] evaluations. So, for example, for the release of 2.7,
+[15:55] we touched a bit on self-evolution, right? So, we're actively using the
+[15:59] model to improve the speed of development internally, which
+[16:04] like out of it out of it we can build our own evaluations that are closely
+[16:08] related to our own work that we can evaluate the models on.
+[16:11] >> Yeah. When So, when we start talking about
+[16:14] these long horizon tasks that are 12 hours long,
+[16:17] we gave an entire workshop on this on Monday, but what I wanted to come to
+[16:20] you, Dan, for is KB cache. So, if let's say you you have
+[16:24] concurrent requests that are 500 to a million
+[16:28] thousand context length long, how do you deal with the KB cache that just keeps
+[16:31] on growing, and how does the infrastructure deal with that?
+[16:33] >> Yeah, so there there's a lot of different pieces that that you put
+[16:36] there. Like in in some sense, it's like recreating a distributed file system.
+[16:41] So, we we're in some sense building something like that
+[16:45] or a very big database. It's it's pretty simple in theory. It's
+[16:49] like the type of thing that you should have done in your third year of
+[16:52] undergrad or something like that, but most of us actually skipped that class,
+[16:56] so now we're rediscovering it live in in industry. But it's it's all about where
+[17:00] do you store that cache? How do you know Have you have you seen
+[17:04] this before? How do you fetch it? How do how do you send it from one place to
+[17:07] another? So, yeah, it's it's a it's it's not that
+[17:11] complicated, but you you do have to make sure that that you do a good job.
+[17:15] >> Yeah, one thing I noticed you you gave a a um a lecture at Stanford recently and
+[17:20] one thing that stood out was that if you fast forward like 2 3 years, 2 3 years
+[17:24] is is is a long time in AI. And if you look back you said that we'll realize
+[17:29] that how um how early we are right now. >> Yeah.
+[17:32] >> So, from your vantage point, where 3 years out, what do you think we'll look
+[17:35] back on be like, "Why were we doing it this way?"
+[17:38] >> Great question. Um uh some things that I hope for, so I think we underutilize our
+[17:43] GPUs a lot right now. Um you know, SpaceX said they would have like 10%
+[17:48] flop utilization or something like that. I hope in 3 years, well, they they
+[17:52] should already be embarrassed about it, but I hope in 3 years they're extra
+[17:54] embarrassed by it. Um so, certainly training should be should be pretty
+[18:00] um should be pretty good. I think at Anthropic we can do a lot better with
+[18:02] the hardware that we're using uh that we have today, so I hope uh in a few years
+[18:07] we'll we'll say uh we'll we'll have seen the light on on some of those pieces. Um
+[18:12] and I think there'll be a lot more models, there'll be a lot better. Um I I
+[18:16] hope finally by then we've put uh put to bed this question about the open
+[18:21] models. You know, there's every few months there's someone like, "Oh,
+[18:25] Anthropic OpenAI, they're so ahead, yada yada." Um but I think uh we're we're
+[18:29] seeing with models like M3 and GLM and Kimmy and and all those models that um
+[18:34] the open-source frontier really can catch up. Um and and it's it's not even
+[18:38] that far behind, so so I think that that's quite exciting.
+[18:41] >> Yeah. I I wanted to throw that same question
+[18:43] over to you, Olive, but you mentioned that you it for for the M2 series and
+[18:46] the M3 series, you're using this idea of self-evolution, where the model is
+[18:51] building its own harness, and then it's training inside of that, and then you
+[18:53] get the next checkpoint. Um if you look back 3 years uh out and then
+[18:58] you say like, "What in RL or post-training um do you think uh made
+[19:03] the biggest difference?" What do you think that is from this vantage point?
+[19:06] >> Um great question. But, 3 years ago I was still in in
+[19:11] >> [laughter] >> I actually didn't start this industry
+[19:14] yet. >> Yeah. So I wouldn't have imagined what's
+[19:16] happening right now today. So it's really exciting. But I can see how
+[19:20] models that were developed are were already improving the speed of
+[19:24] development maybe a year ago or even further than a year ago. So I could see
+[19:29] how this speed is actually accelerating. How the development is accelerating. And
+[19:34] that's how like open weight models can really catch up with frontier labs and
+[19:41] Yeah, that's how we think we are more mission
+[19:45] to bring this model to everyone so that everyone can use it. Yeah.
+[19:50] >> Awesome. Thank you guys. Thank you Dan. Thank you Thank you Olive. Thank you
+[19:53] guys so much. Have a great day. Very cool. Thanks so much.
+[20:11] >> [music]

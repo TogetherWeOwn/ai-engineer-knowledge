@@ -1,0 +1,246 @@
+# title: Building an ACP-Compatible Agent Live — Bennet Fenner, Zed
+# source: https://www.youtube.com/watch?v=HsxQICTLF84
+# speaker: Bennet Fenner, Zed
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T07:54:36Z
+# sha256: 7b6c712cc70097ed83efcb74d31c8e38f9b788152e76b3025df8e2ec1e5ec55e
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:14] I'm Bennett. I work at Zed and we built like an AI code editor all written in
+[00:18] Rust. And last year was kind of as you probably all know the rise of the
+[00:24] uh AI coding agent terminal user interfaces with every major model
+[00:29] provider like building Claude code, Codex, Gemini CLI, and so on.
+[00:34] And so at Zed, we asked ourselves like how can we let users bring
+[00:39] their agent of choice to our tool and enjoy like a nice interface that is
+[00:45] unified across all of them. And so that's why we decided we need
+[00:49] some kind of type of protocol uh called agent client protocol, uh which is
+[00:54] similar to like MCP or uh LSP. It's a JSON RPC based protocol. And the idea is
+[01:00] basically that uh agents and clients can talk to each other through through a
+[01:04] unified interface. And
+[01:07] uh yeah, the it's yeah, online. It's open source. Uh you can contribute if
+[01:13] you want. Um at this point we have a wide variety of agents already
+[01:18] supporting this either by like an adapter that kind of like translates
+[01:22] um the agent's native language to the ACP
+[01:26] one. Uh and then we have like for example open code and co- uh and cursor
+[01:31] uh having like ACP mode built into their like CLI agents.
+[01:36] And we also have a bunch of uh clients at this point up to 40 that
+[01:41] uh implement this including open claw for example. Like open claw itself is a
+[01:45] client and a server actually like a client and an agent.
+[01:49] Um and JetBrains and Obsidian and other people are supporting this. Um
+[01:54] Great. So, um I'm going to do a live coding
+[01:59] session. Let's see how well that goes. Um
+[02:02] So, Right. Uh
+[02:05] basically, we have some pre-existing code. So, this is Zed. Uh here I have
+[02:09] some TypeScript code. Also, bear with me. I'm I'm a Rust developer. I have
+[02:13] basically zero clue about TypeScript. So, if you see anything that you don't
+[02:17] do in TypeScript, tell me afterwards. Um but yeah, like here's a very minimal
+[02:23] coding agent that just doesn't support ACP, but it's kind of the bare minimum
+[02:27] you need to like build a coding agent. So,
+[02:30] all it has is really like two tools. One to read a file and one to edit an
+[02:35] existing file. Um Yeah, this is like pretty basic. It provides the model has
+[02:39] to provide a path. Then it has to provide an old text that is like then
+[02:43] just replaced with new text and that's kind of everything.
+[02:47] And then we have uh in this case like I'm using Anthropic. Uh there's a way to
+[02:52] prompt the agent um uh with yeah, the user can prompt the
+[02:58] agent, which is the function that we will going to call here. And then we
+[03:01] enter the agent loop and that is kind of like the way all agents basically work
+[03:06] is the model APIs are stateless. So, you just attach some like conversation up to
+[03:11] this point. You call the endpoint. In this case it's like the Anthropic API.
+[03:16] And then we um yeah, we get like a message from the
+[03:19] model and either it can be like a end turn. That means like the model decided
+[03:23] to uh yeah, just output some text and do
+[03:26] nothing or it can call a tool. And in this case it would be like a read
+[03:30] or a write uh tool call. And then in the case of a tool call, we
+[03:35] like run the for example the edit file tool
+[03:38] call locally, um collect the result, and then send it up to the model again.
+[03:42] That's where this this loop um And then we call the API again with the
+[03:47] conversation up to that point and that's kind of everything.
+[03:51] And then we have like these this like handle tool call function here, which
+[03:55] yeah, handles like read and write uh tool calls, which does what you expect.
+[04:00] We get the path. We read it from the file system and we return some some uh
+[04:06] result. Right. So, now the question is how do we make this thing ACP
+[04:10] compatible? And hopefully we can do it in 10 minutes. So, let's see.
+[04:14] Um so, yeah, I have some boilerplate here.
+[04:17] Uh in this case I'm using the TypeScript SDK as I said.
+[04:21] Um and the way this works, you implement uh the agent interface provided by this
+[04:26] uh library. And then you have to at minimum
+[04:30] implement these three uh four functions. So, the first one that we're looking at
+[04:34] is kind of this initialize here. Um
+[04:38] all we really have to do here is like respond with the protocol version we
+[04:42] support, which in this case is just the latest. There's also like some
+[04:45] capabilities like client and uh the agent can itself advertise capabilities
+[04:50] of stuff it supports, but we're building a very minimal coding agent, so we don't
+[04:54] support anything outside that's necessary, I guess.
+[04:57] Um then for us like authentication is irrelevant since it's just using my API
+[05:02] key from an env var. And then there's this concept of
+[05:06] sessions in ACP. So, basically every time you start a thread
+[05:10] in Zed or in a different editor or client, uh you you call a new session.
+[05:15] And in a session you can prompt and then
+[05:19] yeah, from there on you can like get get your output. So, all we really do here
+[05:24] is like we generate a random ID. Um
+[05:28] then we um instantiate
+[05:31] uh this coding agent with the current working directory, which we get from the
+[05:35] client. Um we store it in our internal map and then
+[05:39] just return the ID to the client so that the client knows
+[05:44] um yeah, knows the ID and that is kind of
+[05:48] then used inside prompt. Um because what prompt does in this case,
+[05:53] um it like prompt the prompt request, if we
+[05:57] go to the definition here, all this is kind of doing is uh it provides a
+[06:01] prompt, which is an array of content blocks that can be like text, images,
+[06:05] whatever, the session ID for reference. And so all we kind of have to do here is
+[06:11] yeah, we look it up in our internal state. We get the relevant agent uh for
+[06:16] that uh current session. And then I have a help helper function
+[06:20] here, which just in this case ignores everything that's not a text because we
+[06:23] don't support images and stuff like this.
+[06:26] Um and then we call this like prompt function I showed earlier, which then uh
+[06:30] runs tool calling loop. And so then just like as a nice to have
+[06:36] uh feature, we also support cancellation.
+[06:39] Uh that's also pretty pretty simple. So, these are kind of like the four minimal
+[06:44] things we have to implement. And I have this hooked up in Zed just by
+[06:49] there's no special code. All I have is kind of like I tell Zed there's some ACP
+[06:55] compatible agent and you can run it with node and then my path to that agent.js
+[07:00] file. Um so, when I uh let's do that in here
+[07:05] as well. So, when I run, I'm going to build. Um
+[07:11] I'm going to build, right? And then I'm going to
+[07:14] restart uh yeah, launch a new ACP demo agent.
+[07:19] And you can see if I ask it for something, you can see wait indicator.
+[07:26] And now it's done. So, nothing. Which is what we expect, right? Because
+[07:31] like what we can see here, if I go over Oops.
+[07:35] Um If I go over here,
+[07:38] we have some kind of like ACP debug view in Zed. So, to make it easier for us to
+[07:43] develop. And you can see like Zed sends a session new request. We respond with a
+[07:48] session ID and as soon as I type in something,
+[07:53] we get prompt. And now we got a stop reason, right? So,
+[07:57] these red arrows come from the uh from the adapter
+[08:02] that we are building from the agent. But it's not outputting tokens, right? Like
+[08:06] behind the scenes it's obviously like Anthropic is giving us tokens, but how
+[08:09] do we make them show up in Zed? So, that's the next thing that we
+[08:14] uh yeah, want to focus on. So, the first thing that we kind of need to
+[08:18] do, like our coding agent itself uh needs to have a way to
+[08:24] um send something over to the connection. So, what we're going to do
+[08:27] here is like the coding agent is going to take the
+[08:31] ACP connection and then also the session ID. And then inside here, we have to
+[08:36] provide this uh connection and
+[08:41] the ID.
+[08:44] And then if we go Okay, I'm just going to close this. Right. If we go back
+[08:47] here, now inside of
+[08:51] uh prompt, Anthropic like this is the Anthropic SDK. So, in this case like in
+[08:56] Oops. You can just use um this like stream on
+[09:01] uh Yeah, that's like a Anthropic SDK. Like
+[09:05] you can react to a text event. So, every time we basically get a chunk,
+[09:09] uh we send this kind of what ACP calls a session update. As I said, a session is
+[09:14] like a single thread or a conversation. And then you can send updates kind of
+[09:18] like notifications to the client that are not like a usual request response,
+[09:22] right? It can happen at any time and the client reacts to it. And so here we are
+[09:26] associating with the session update with a session ID. And then this like There's
+[09:30] a type of session updates. There are multiple. We will see more in a second.
+[09:34] But this agent message chunk is just like, "Okay. Hey, here's some new output
+[09:38] from the model." And so if we
+[09:43] build again, uh we go back to Zed. I'm going to have
+[09:46] to restart the agent. I go here
+[09:51] and I say, "Hello."
+[09:56] Hello. Hello. Well, here's Opus talking, right? You can see like we're streaming
+[10:02] in these individual uh
+[10:06] chunks, right? Right, that we got from Anthropic. So, so far so good.
+[10:11] Let's hope the demo gods uh stay with us. Um
+[10:15] Right. So, that's one piece. The next thing though is like I want to like it's
+[10:20] a coding agent, right? It's supposed to edit code.
+[10:23] So, I can actually tell it already because we have tool support,
+[10:28] right? I can tell it to read, for example, this like helpers
+[10:32] .ts file and it's going to give me
+[10:37] if the Wi-Fi isn't too slow, it's giving me a description of what
+[10:42] this file actually contains. Like if you look here,
+[10:45] that's basically the description of the file, but again, you don't see it in the
+[10:49] UI, right? So, now we need to emit more session
+[10:54] updates, similar to like what we did for text. So, if we actually go towards the
+[10:59] read file, kind of what we need to do here
+[11:03] is like the way it works usually in ACP, like you emit an initial tool call
+[11:09] update, uh which I'm going to paste in here.
+[11:12] So, yeah, again we're emitting a session update in this in this case, it's uh
+[11:18] type of tool call. And then there are multiple properties
+[11:22] we can specify, for example, like the title, kind of some kind of data um
+[11:28] that Z uses, for example, for like yeah, using some icons and stuff like this.
+[11:33] And then we indicate that the status is in progress, and you can also like
+[11:36] associate tool calls with like actual uh locations.
+[11:42] And so, now we signaling over ACP that something
+[11:46] is in progress, right? This tool call. But then we also want to at the end,
+[11:51] like once the tool call has finished, like at the bottom here,
+[11:54] we kind of want to send another update. And in this case it's not tool call
+[11:58] itself, but it's a tool call update. So, you have to emit
+[12:03] on the agent, you have to emit like a tool call, like session update of type
+[12:06] tool call, and then once once the client knows about it, uh you can emit updates
+[12:11] for that. Uh and this is the way that we set the status, and we can also return
+[12:15] the content. Um and then one additional thing that
+[12:20] I'm going to do here is the um instead of like if you can see here,
+[12:25] we're calling, I guess it's a bit hard to see, but like here we're calling
+[12:30] fs.readFile, right? So, we're just using the native file system APIs. But MC uh
+[12:35] ACP actually proxies the file system too. Like the client can provide a uh a
+[12:41] file system capability, and if it does, um we can like proxy those uh file
+[12:46] system tool calls over ACP. And it kind of makes sense, for example, for an
+[12:49] editor, right? You want to um if I have unsafe changes in my buffer,
+[12:54] they're not actually on the file system, but the agent should still see them.
+[12:58] So, that's why we call this like uh read text file um over ACP.
+[13:04] And so, now if we go back here
+[13:09] and hit npm run build, and then go back here,
+[13:15] restart, and say read
+[13:19] uh this file. Oops, not the rust.
+[13:29] Then we should be seeing um Yeah, so now we see read
+[13:35] tool calls, right? Okay, something is going wrong because
+[13:39] everything is duplicated. Um
+[13:43] yeah, but like here you can see the output um
+[13:47] of the actual file. And because I think I'm low on time, um we're we're going to
+[13:52] basically going to do the same for edit file.
+[13:57] Um and I'm going to compile again. And
+[14:02] if I again restart,
+[14:08] and say add a comment at the top of
+[14:14] agent source agent.typescript,
+[14:18] then you're going to see um
+[14:25] uh hello world is good.
+[14:30] Hopefully, clo- uh Opus is going to decide to add hello world at the top of
+[14:35] the file, and we actually get a diff here because the over ACP we send like a
+[14:38] diff of the file. Okay.
+[14:42] Yeah, I think there's something going wrong with the
+[14:46] connection. I'm yeah, yeah, no time to debug right now. Sorry.
+[14:52] Uh am I out of time or do I still have
+[15:00] Okay, maybe like we can see. So, now that Okay, just another
+[15:05] minute. Um now that the coding agent supports reading and writing files, we
+[15:10] can actually Oh, great. Uh okay, then I don't need to
+[15:13] rush. Um now we can kind of bootstrap the agent
+[15:17] itself, right? Like the coding agent supports reading and writing
+[15:21] files. I can just ask it, I prepared a prompt
+[15:24] here, to add a terminal tool to itself, right?
+[15:28] Let's see how this works out with like the duplication we're seeing.
+[15:32] Uh but basically I'm telling it some something about the ACP um APIs, and
+[15:36] there's some there's some APIs in ACP which also, that's another like
+[15:40] capability of the client, where the client can um
+[15:46] advertise that it supports creating terminal and managing terminals for the
+[15:49] agent. Like the agent can also do it itself, of course.
+[15:52] Um but it's a nice way uh for us to add some more interactivity. And so, the
+[15:57] agent here decided to add a new tool description. Now it yeah, I'm live
+[16:04] coding basically this terminal tool. Um and let's see if
+[16:09] it actually builds. It does. Well, that's good.
+[16:14] Um and then again, I'm going to going to restart the
+[16:19] agent. I'm going to run our demo agent, and I'm
+[16:22] going to ask it to run sleep five ls.
+[16:26] Let's see. There you go. You can see a terminal
+[16:30] running, sleeping 5 seconds. There is the output.
+[16:36] And there's Yeah, and that's it, basically.
+[16:42] Thank you.
+[16:44] Yeah, so that's how you kind of build an ACP
+[16:48] compatible coding agent in 15 minutes or so.
+[16:52] Um yeah, if you want to uh check it out, just go to agentclientprotocol.com.
+[16:58] Um in case anyone wants the demo code, but please don't
+[17:02] use it in production. It's all agent generated. Um it's not upload it
+[17:07] yet, but it it's an empty repository. I'm going to upload it in a second. Uh
+[17:12] yeah, thank you for listening. Happy to answer questions.
+[17:17] That's it. YEAH.
+[17:27] UH THE DIFFS UH YEAH, WE HAVE LIKE IN in ACP there are multiple content types,
+[17:32] and one content type is diff, and so the agent sends old text, new text, and then
+[17:36] Z does the diffing for you. Yeah.
+[17:39] Yeah. Cool.
+[17:43] Do I need to go or can I Okay, one more question. Yes.
+[17:51] Yeah, the connection works over standard IO. Uh there are some folks well, I
+[17:55] think from the JetBrains people are working on like remote uh transport, uh
+[17:59] which we're going to have soon, I think. So, yeah.
+[18:02] But right now it works over standard IO. Yeah.

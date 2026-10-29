@@ -1,0 +1,488 @@
+# title: MCP Agent Fine tuning Workshop - Ronan McGovern
+# source: https://www.youtube.com/watch?v=Nqb7JTx0Pqo
+# speaker: Ronan McGovern
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T12:59:45Z
+# sha256: 2c383c8f8adfeea0a6df934635a644604ce83c66f90012b8b8ec3183a078cf60
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:00] Okay, welcome to this workshop on MCP agent fine-tuning. I'm Ronan from the
+[00:04] Trellis Research YouTube channel and today I'll be showing you how to run an
+[00:10] agent that has access to tools via MCP servers and then take traces or logs
+[00:15] from the highquality runs and use them to fine-tune and improve the performance
+[00:20] of a model. By the end of the workshop, you should be able to generate
+[00:26] highquality MCP agent reasoning traces. Save the tools and the multi-turn traces
+[00:32] from each of those runs. Fine-tune uh a model. I'm going to show you how to
+[00:36] fine-tune Quen 3, but you'll be able to fine-tune other models, too. And then
+[00:41] run the fine-tuned model and see if the performance uh is any better. Now, all
+[00:45] of the materials are available online in this repo here, Trellis Research AI
+[00:50] Worlds Fair 2025, and they're in the MCP agent fine-tune
+[00:54] folder. I'll be cloning this and working through it very shortly, but first, I do
+[01:00] want to give a brief introduction to what MCP is. That's model context
+[01:04] protocol. How it allows a language model access to tools and I'll emphasize what
+[01:10] we need to understand about those interactions when we're building both
+[01:12] the fine-tuning scripts and also the agent scripts and saving of those logs.
+[01:17] So what is MCP model context protocol? It is a protocol for providing services
+[01:23] to LLMs namely access to tools. The tool we're going to focus on is browser use.
+[01:28] So using an LLM to navigate through websites, but there are MCPS for things
+[01:32] like Stripe, GitHub, Gmail, and many more you can find. You can sub those
+[01:36] into these examples today, but I recommend running through first using
+[01:39] the MCP tool that I've selected until you're comfortable with how everything
+[01:44] works. MCP does a few things. It's first of all a store of information on tools.
+[01:50] That information helps the LLM to know how it can make calls to the tools or
+[01:55] make use of them. But the MCP tool service also runs the tools. So when the
+[02:00] LLM decides to make a call, MCP the tool service will take the action whether
+[02:05] that's adding numbers or navigating to a page and it will then return a response
+[02:09] which contains details of the result or maybe some extra helping guidance for
+[02:14] the LLM. So the LLM can then loop back and make another tool call or provide
+[02:18] some kind of textbased response. Now to bring it to one more level of
+[02:25] detail, we're going to wrap the language model here or we're going to expose it
+[02:29] in the form of an API that we can hit and we're going to expose it as an
+[02:33] OpenAI endpoint which is um pretty common. Of course, it's the one OpenAI
+[02:38] itself uses, but using that library, there are many models and many libraries
+[02:43] that will make use of that style of API endpoint if you want to set up an
+[02:47] endpoint for your language model. So this is what we're going to use. And in
+[02:51] integrating this API endpoint, there are a few points of integration or
+[02:55] translation we need to take care of. Don't worry if you don't understand this
+[02:58] first time around because it'll become apparent in the code. The first one is
+[03:02] we will get tool information from the MCP services and we need to convert that
+[03:06] into lists of JSON tools because that's what OpenAI endpoints expect. Second of
+[03:11] all, we will need to convert the tool response into a format that the language
+[03:17] model expects. And lastly, when we have uh the language model calling a tool and
+[03:23] it will call it just by emitting tokens or text, we need to extract detect and
+[03:28] extract whether it wants to make a tool call or not. And the form that the text
+[03:33] will take when it wants to make a cool tool call is going to be uh in Hermes
+[03:38] format actually even though it's a Quen model. And I'll talk about that uh in
+[03:41] just a little bit. To give you a better idea of how all of this fits together,
+[03:46] it's helpful to look at a prompt. We can take a look at um this little chat I've
+[03:51] prepared. It just shows a little pseudo prompt. It's the string that is being
+[03:56] sent into the LLM. It starts off with a system message just after a system start
+[04:01] tag. And it starts by describing to the LLM how to make tool to tool calls
+[04:06] namely by passing them as JSONs within these tool XML tags
+[04:11] here. And the LLM is being told okay you have access to deal to these tools.
+[04:16] There'll only be one in our case which is the browser. Please return each
+[04:20] function call as JSON inside tool call tags if you wish to call a function. So
+[04:24] this is we're telling the LLM here's how to call a a tool by giving us these XML
+[04:28] tags and then the JSON. After the system message, we have
+[04:33] the first user message which would be the first message like navigate to
+[04:36] trellis.com. And then the assistant will respond and it can respond in a few
+[04:40] ways. Typically, it might do some thinking here because it's a thinking
+[04:44] model and then decide to call uh some tool like navigating with the browser to
+[04:49] a certain URL or if it's finished navigating, it might decide to think and
+[04:53] then just provide an assistant response as text. So, this is a little pseudo
+[04:59] prompt here. And we'll see this come into play in the code when we want to
+[05:03] set up and inject these different parts. Okay, so that brings me to the end of my
+[05:08] very quick overview of MCP and the prompt structure. If you're not
+[05:13] following fully, that's okay because it'll become a lot more clear when I run
+[05:15] the examples, which I'll do now by cloning this repo AI worlds fair into
+[05:20] Windsurf. If you clone it, you want to open up then the MCP agent fine-tune
+[05:25] folder and go to the readme. Now, in this readme, there are two sections.
+[05:30] There's the data collection section where we run the agent to generate these
+[05:33] sample runs. And then there's the fine-tuning which will be done in a
+[05:37] notebook. So starting off with the data collection, we need to make sure we have
+[05:42] an endpoint. We need to make sure it's an OpenAI style endpoint. And if we're
+[05:46] not using OpenAI itself, which we won't be because I'm going to generate the
+[05:50] traces using a Quen type agent because I'm going to fine-tune a Quen model
+[05:54] later. I do recommend keeping some consistency between the model to
+[05:57] generate data and the model you're going to fine-tune. In principle, you could
+[06:01] just use a stronger model, any stronger model. Um, but we want the stronger
+[06:04] model to share its reasoning traces so we can train on those. And OpenAI models
+[06:08] don't share their thinking traces. So, we're going to use Quen model.
+[06:13] Specifically, we're going to use the 30 billion parameter one with uh 3 billion
+[06:17] activated uh parameters. It's a mixture of experts model. And I'm going to run
+[06:22] it on RunPod. I'm going to use this oneclick affiliate template here. You
+[06:26] can run it though on any service. In principle, I think you could run it
+[06:29] locally as well, provided local uh your local app supports tool calls. I'd need
+[06:36] to look into whether LM Studio does uh support that. But if you click that
+[06:40] oneclick link, you'll pick a GPU, maybe a
+[06:43] H100, and you can inspect then the template. So, a few things here. We're
+[06:47] running a Docker image for VLM. We're running this Quen model. We're going to
+[06:52] enable reasoning and a reasoning parser. What this means is that when we see a
+[06:58] response that includes think tokens, we're going to detect those and extract
+[07:03] it as reasoning into a JSON uh type style in the response. Next, we're going
+[07:09] to set the max model length to 32,000. We'll set the port. We're going to host
+[07:13] it on port 8,000. And we're going to enable automatic tool choice. This means
+[07:17] the LLM will decide whether or not to call a tool and which tool to call. Here
+[07:22] we have the tool parser that we're choosing. You'll remember in my
+[07:25] presentation I said we need to specify how to extract the tool into JSON
+[07:30] format. What this means is when the LLM makes a tool call like this, we're
+[07:35] saying okay the tool call is in this format. Hermes extract it into this JSON
+[07:40] here and provide it to the MCP in a format it's expecting. So this is
+[07:46] specifically this point here where it converts from the language model string
+[07:50] into a JSON format that OpenAI uh the API expects. Okay, so these are all of
+[07:57] the arguments we'll use and then we click here to start the server. We do
+[08:00] need need to expose port 8000 because that's where we're serving it. We're
+[08:03] going to hit that port and server from outside. And the way we're going to hit
+[08:07] it, by the way, I would click set overrides and start the server. I
+[08:10] actually have a server that's running already here. It will take about 3
+[08:13] minutes to start up. And to hit the server, we need to specify the runpod
+[08:17] pod ID and also the port number, which is 8,000. So you'll see here when we run
+[08:22] this agent, and I'm going to start just by running it without explaining it, cuz
+[08:25] it'll be more intuitive when you see an example. I'm going to run the agent with
+[08:28] this model here. I'm going to run it with this base URL, which has got the
+[08:33] pod ID and the port number, and it's got the V1 that is required for the OpenAI
+[08:40] style endpoint. And there's one more argument here I'm using which is
+[08:43] truncate. This is truncating the length of the tool response. So when you have a
+[08:49] tool response for example here there's a tool response coming back. If we call a
+[08:53] browser navigate tool to navigate to trials.com it's going to return an
+[08:57] accessibility tree which is a text description of that page and that will
+[09:02] be provided back in the tool response so the language model can read the page.
+[09:07] But this could be really long and so I'm just naively truncating it. So we just
+[09:12] take the top part. Now bear in mind that means that the LLM won't probably be
+[09:15] able to see the full length of the page and you would need to do something more
+[09:19] complex uh in a deeper implementation of what I'm
+[09:22] showing. So we're going to run the agent here and first run UV sync just to make
+[09:27] sure you've synced the requirements. If you don't have UV, do pip install UV and
+[09:32] then you can run the agent here. So you'll see the agent has started up.
+[09:37] We've started the MCP server. This is the only server that's configured and
+[09:42] it's configured in the config file here. You can add in other servers here and it
+[09:47] will load up those tools. Playright offers 25 tools. So there's quite a few
+[09:51] like I think navigate forwards, backwards, switch tab, navigate to link,
+[09:55] different things like this. We'll see more of them later. And those 25 tools
+[09:59] are all available to the LLM. For open source models, probably you don't want
+[10:02] more than maybe 25 to 50 tools. I think for claude, you can probably handle 200.
+[10:07] More than that, the LLM will get confused by a lot of uh
+[10:11] context. So now it's asking me to put in an input. And I'm going to say navigate
+[10:17] to trellis.com and read out the top two
+[10:22] lines. Let's see what it does with that. It should start to think now. That user
+[10:26] message has gone to the LLM. It should be thinking now. Generating thinking
+[10:30] tokens. They won't be shown here just for brevity. I'll save them later on.
+[10:34] And then yeah, it's asking for a tool call to move and navigate to trials.com.
+[10:39] Okay. And actually before I say yes to that tool, which uh requires my
+[10:44] approval, I'm just going to put this screen on the side. So I leave space
+[10:48] here cuz the browser is going to pop up. And the reason the browser will pop up
+[10:51] is because I'm running this browser. Uh I'm not running it in headless mode. If
+[10:55] you want the browser to operate in the background, you would just put in d-
+[10:59] headless. But I actually want to do it because I want to see the browser and
+[11:02] what it's doing. So I'm going to um I'm going to ask this uh question here,
+[11:09] which is navigate
+[11:13] to trails.com and read out the top two
+[11:19] lines. Okay. So I'm expecting the model to start thinking here. The tokens won't
+[11:25] be printed because I'm saving them just to avoid clutter on the screen. And then
+[11:29] yeah, it's decided to call a tool which is triles.com navigate there. I've built
+[11:33] in approval to the agent. So I'm going to say yes. And now it has opened up
+[11:37] that browser which is good. And the structure, the accessibility structure
+[11:43] should be sent now to the LLM. And it is picking out uh the top line here. And
+[11:47] it's also picking out this second line here. So this looks really good. I'm
+[11:51] just going to exit. And that was our first uh quick
+[11:56] demo. So I've got a few little demos here. I'm just going to clean up two
+[12:02] demos uh from before where I didn't have my screen set up. And you can see the
+[12:06] logs here. So I've got a feature where by default when you run the agent things
+[12:11] are going to be logged uh like this with two parts with the messages part and a
+[12:15] tools part. And this is exactly what we need for fine-tuning. We need to know a
+[12:19] list of the tools and we need the full conversation history. So you'll see in
+[12:22] the tools a list of the 26 browser close browser resize etc. And under messages
+[12:29] you can see my user request. Then the assistant starts
+[12:34] thinking and yeah there's quite a bit of thinking. User wants me to navigate to
+[12:38] trials.com etc etc. So it goes through all this logic and then it decides to
+[12:43] make a tool call here. The tool call is sent to the MCP and then playright
+[12:48] basically opens that up as you saw and sends back the accessibility trace which
+[12:53] includes details on the page but truncated and then the assistant takes
+[12:59] that and says oh I have the information I need here's some reasoning and here's
+[13:02] my final answer. So this is a very nice trace and we're going to keep it. We're
+[13:08] going to keep it and we're going to use this for fine-tuning. Now, it wouldn't
+[13:12] make sense to fine-tune using this on the same model because the model can
+[13:16] already do this, but it can make sense to fine-tune a smaller model that
+[13:20] doesn't have uh this kind of capability. So, your goal now is you should set this
+[13:24] up and you should run this and I want you to run it multiple times and try to
+[13:28] get some good traces and then we'll save those traces and we're going to upload
+[13:32] them to hugging hugging face hub. Okay? So, we'll run one more example here. I'm
+[13:38] going to make it a bit more complicated this time and I'm going to say navigate
+[13:42] to trellis.com and then find the third product. Navigate to that page and tell
+[13:49] me what is on um you know what let's try and ask a
+[13:54] specific question. So let's go to trellis.com and manually do the
+[13:59] navigation first. Oops. Oh, I can't type. Here we go. Trellis.com. The third
+[14:06] model is training and fine-tuning. We'll navigate there. It opens in a new tab,
+[14:09] which by the way is tricky for navigation. And let's ask it uh what the
+[14:13] first line is. Yeah, let's ask what is in the features section. Okay, we'll try
+[14:19] that. So, the model should be thinking. We should see the browser pop
+[14:25] up in a second. Once we approve that navigation, it should get a
+[14:31] snapshot and we'll see what it decides to do next. It should try to do this
+[14:35] drop-own menu here, which is a bit tricky. It is clicking on something. So,
+[14:39] that's good. It did get the drop-own menu. That's also good. And okay, it's
+[14:45] actually just given an answer, which is not exactly what we want. Yeah. Well,
+[14:50] the answer is correct. It says, do you want to click the learn more section?
+[14:53] Yes, click that and then navigate. Um, and then make sure to switch tabs
+[15:02] because it will open in a new tab. So, yeah, I mean, this is kind of working
+[15:08] out well. There's always going to be noise, so some of the traces won't be
+[15:10] good. And I'll show you some ways to deal with that. One is to just manually
+[15:14] adjust the trace. All right, it's going to click on learn more. And that has
+[15:18] opened a new tab, which is good. And now it's going to think. It's
+[15:22] thinking in the background. We'll save the thinking logs. And it's asking to
+[15:27] select that uh tab too, which is this tab. And I think at this point it'll get
+[15:33] a browser snapshot, but I'm not entirely sure of that. And let's see. So it
+[15:40] um the core features are GitHub repo access and ability to post issues. So
+[15:45] yeah, this is correct. Um it's getting the correct content. So it's actually
+[15:50] fulfilled this task very well. And I'm going to
+[15:53] exit. Now before I show you the trace, there's one more trick. If it's not
+[15:57] following what you wanted to do, you can kind of guide it like I did in the user
+[16:01] prompt and adjust retrospectively. But you can also pass in a system prompt. So
+[16:05] you could pass in a system prompt like this that literally explains very
+[16:10] directly how it should do this task and what tools to call. And this can also
+[16:14] help performance. And the idea is you get it to create a nice tidy trace and
+[16:18] then you don't have to include the system prompt in your training data. you
+[16:21] just train on that nice trace because our goal is to get nice traces for for
+[16:25] training data. So, I'll just show you that and then you should go yourself and
+[16:29] try to make some of these different traces. Let's find that more complex one
+[16:33] which I just made. Let's see if I want to make some adjustments here. So, we
+[16:38] have the tools that are saved and I'm I'm not going to change those. But right
+[16:44] here when I say uh make sure to switch
+[16:49] tabs. Um let's just expand at thinking. I need to find I'm trying to find the
+[16:55] section where I said yeah click that and yeah. Okay. So one thing you could do is
+[17:03] literally delete that user turn and combine and combine kind of these two
+[17:08] sections here. Obviously you could kind of do that manually or just literally
+[17:10] copy paste it into chat GPT and ask chat GPT to generate uh just a single
+[17:15] version. You would need to delete the assistant content just provide
+[17:19] reasoning. Um but another approach here is just to say uh yes click that and
+[17:26] proceed. Um, and instead of saying and switch to
+[17:31] a new tab, I may then need to switch tabs if
+[17:37] it opens in a new tab. So, you can see I'm cleaning up the
+[17:42] trace here. And yeah, this is some nice data. So, we have a few data points that
+[17:48] I've saved. And what we want to do now is push this up uh to to hub. So we want
+[17:54] to create a data set that has the tools and that has the conversations that
+[17:57] we'll use for fine-tuning. So for that I'm just going to run push to hub. And
+[18:02] quite simply it's going to grab the tools and it's going to grab the the
+[18:05] messages and push them up to a data set. Now there's one subtle point here that
+[18:11] I'll show you which is called uh unrolling the data because we want to
+[18:16] train on multiple turns not just the first response but the second and the
+[18:19] third. So actually if we have say three back and forths we want to unroll that
+[18:24] into three rows. One row with all of them, one row with just two and one row
+[18:28] with one. So actually we get kind of three for the price of one in terms of
+[18:31] of training data here. And there is a subtle point that the template of Quen
+[18:37] will always include the reasoning from the most recent turn. So even if we
+[18:41] include reasoning and save it for all of the turns, it will only inject the most
+[18:45] recent reasoning. And that's another reason why doing this unrolling is
+[18:49] important. uh ask me a question in the comments uh if you want more
+[18:52] clarification on that. It's kind of a subtle point. If you want to push to
+[18:56] hub, you can just look up uh in the readme there's a function here push to
+[19:01] hub. You need to specify the repo ID and then pass in unroll if you want to do
+[19:06] that unrolling. And this data set uh should
+[19:10] get pushed up. Now I do need to uh log into hugging
+[19:15] face. So I'm just going to do that. So I've put in my uh my token. It needs to
+[19:21] have right permissions and then I can run push to hub again. And it's a pretty
+[19:25] small data set. There's nine examples. So it's unrolling these four into nine.
+[19:29] One of them has three, the others have two when unrolled. And then I can check
+[19:33] out my data set which has got um ID time stamp the model the messages and then
+[19:39] the tools. And you can see uh I think there's also a flag whether it's been
+[19:44] truncated which means unrolled. So say this last example
+[19:49] uh well it's not the last example but there's an example here where we have
+[19:55] unrolled it twice. So the first example here, second example, third example has
+[20:00] got two it's got three turns. So there are two unrolls. So you'll see if you
+[20:04] look at the messages here this will give the full three
+[20:08] turns. So it'll be fairly long. It will have all of the messages. And notice how
+[20:12] the reasoning content is extracted. That's because we've turned on the
+[20:15] reasoning parser. But if we scroll right down to the bottom of this, and I know
+[20:19] it's kind of long, that's because the tool responses are long. You can see the
+[20:23] last response is the answer, or at least it should be. Yeah, it's saying what's
+[20:28] on that page. Whereas, if you go up to the one above that where it's been
+[20:32] truncated, um, it should just be a tool call, I
+[20:36] think. Or it may actually be that assistant response we got. Uh yeah, it's
+[20:42] uh got some reasoning content and then it's making a tool call down here where
+[20:46] it's deciding to select the tab. So you can see we've got nine rows of data here
+[20:50] and we will grab these messages and we will template them along with the tools
+[20:54] in our fine-tuning template uh when we want to fine-tune the model which we're
+[20:59] going to do very shortly now. Okay. So at this point, you should be able to go
+[21:04] ahead and run this a few times, try to modify some of the traces, try to push
+[21:08] some of that data up to hub. I will maybe very briefly show you
+[21:13] the agent. Um, let me see how I can do this
+[21:19] quickly. I'm basically setting up an OpenAI endpoint.
+[21:24] Um, and what can I say that won't be too long? I need to set up the servers. So I
+[21:30] have server management here. Any MCP service that I want to run, I need to
+[21:34] boot it up when I start the agent. So that's one of the first
+[21:38] things I need to do schema conversion then. So I talked about how you have MCP
+[21:43] that has a specific syntax, but OpenAI expects the endpoint expects a different
+[21:47] syntax. So there's conversions that need to happen. There are some kind of helper
+[21:51] functions, but then here's how we convert the t the tools from MCP to the
+[21:55] OpenAI format. And then we need to go OpenAI to MCP. So we need to go both
+[22:00] directions. Here's where we execute the tools. And here's how we wrap the result
+[22:05] in a format that's going to be suitable for OpenAI. So that's all those
+[22:09] connections I showed you in the PowerPoint. This here is discovering all
+[22:13] the tools, then booting up the servers. And this is the chat loop which you saw
+[22:17] operating below. There's not a whole lot that's uh to explain beyond what you saw
+[22:22] me doing. You can see reasoning has been parsed separately to the assistant
+[22:27] content. Um,
+[22:30] and we have a helper here for trace logging just to save the details. And
+[22:36] yeah, we have some logic here for for doing the logging and then some
+[22:40] different uh some different arguments that we can pass. So, I'll let you dig
+[22:43] on that in your own time. In the meantime, let's move to the finetuning
+[22:47] step. So, we've got these traces and we want to use them to improve the
+[22:51] performance of the LLM. We'll go to the fine-tuning section and open up this
+[22:55] notebook. I have it open here. Uh my runtime is disconnected. I'll just
+[23:01] restart. This is based on an Unslaught notebook for fine-tuning Quen, but it's
+[23:06] got some things that I've changed. First thing we'll do is install
+[23:10] Unslo, which has got a bit more of a detailed detailed install if you're on
+[23:14] Collab. And then we'll load a model. Now I'm going to train the 4 billion
+[23:17] parameter model. You can train a larger model if you want better performance.
+[23:21] The max sequence length needs to be fairly large. If you want to train on
+[23:25] the free GPU, you probably can't train a larger model. Um, you'll need to run
+[23:30] maybe on run podge by starting up. You can find a fine tuning oneclick template
+[23:34] actually in the oneclick lm's repo. You can start that up and then open Jupiter
+[23:38] and then open the download the notebook here and upload
+[23:41] it. We're going to run it in full precision in 16
+[23:45] bits. And once we've loaded the model, we'll want to set it up for training.
+[23:50] We're actually not going to train all the parameters. We're going to only
+[23:53] train adapters that we connect to certain parts, certain matrices. They're
+[23:57] called uh low rank adapters or Lora. And I'll talk about applying those adapters
+[24:02] in a moment. But I want to actually get a benchmark on performance without
+[24:05] fine-tuning. So I'm not going to apply the Laura adapters just yet. I'm going
+[24:08] to prepare the data and then I'm going to run inference without having done
+[24:12] fine-tuning. And the data we're going to load is that data set that we've been
+[24:15] looking at right here. So we load it up and we'll just print it out to see how
+[24:20] many rows. It should be nine rows. Now, if you want, you can take a look at
+[24:25] uh the format of the messages or the tools just by running these to inspect
+[24:29] the zerooth row. You can also take a look at the chat template. Uh the
+[24:34] template is what takes in the tools and the messages and puts it into a single
+[24:38] long string. In fact, it's probably worth looking at. So, we just run that.
+[24:41] You can also find it if you go to the model. You can go to the tokenizer
+[24:44] config on the model on hugging face and you can see a copy of that there as
+[24:48] well. By the way, um, my runtime restarted, so
+[24:52] I need to redownload the model weights and they're just downloading here. It'll
+[24:56] take a few moments. And yeah, as I said, we take a look here at the data set.
+[25:04] Sorry, I've got a really long data set row
+[25:06] saved. Once we have the data set downloaded, which means we're going to
+[25:11] have access to the messages and the tools, we basically pass them into the
+[25:14] chat template, which will make a single long string. And that single long string
+[25:19] is basically this. It's the formatted data set as a single long string. And it
+[25:23] is very long because it contains all of those uh tool responses. But you can see
+[25:27] it starts off with a system message. It starts off with those tools. It then
+[25:30] gives a list of the tools available which is very long. There's 26 of them.
+[25:34] Then it'll give the user message, the assistant message, the tool calls,
+[25:38] etc. So that's uh what it's going to look like. When we rerun this, we will
+[25:43] have nine rows. And then we'll just print out to check what the length of
+[25:46] the longest row is because we don't want it to be longer than 32,000 which is our
+[25:49] max length. Um so we'll do a check there. Now we will train the model but I
+[25:55] said first we'll just do a quick run to see how performance is without training.
+[25:59] And for that we'll just run on the first row of the data set and we will see if
+[26:06] the model decides to call a tool correctly when I ask it to navigate to
+[26:11] um trellis.com.
+[26:14] So yeah, if we print out um yeah, if we print this out, we should
+[26:22] start to get it to uh stream a response. Here's one I streamed earlier with a
+[26:26] fine-tuned model and it correctly called a tool. But if I if I call this again
+[26:30] now, let's just quickly check the length of the data set. Oh, the data set is not
+[26:34] defined. Why is that? I don't think I ran all of my data set
+[26:39] rows. So let's just check downloaded data
+[26:44] set. All these rows will run quickly. It's a quite small data set. Yeah, nine
+[26:50] rows. The longest is 18,000. That would be
+[26:54] fine. And yeah, you can see if I print out the zeroth message, I'm asking it to
+[27:00] navigate to trials.com. And if I run inference on
+[27:03] that, it should just start to stream its output string. and we'll see whether it
+[27:09] decides to call a tool or not. So we're just testing here the raw 4 billion
+[27:13] parameter model which should be capable of tool calling. This is a lot of tools
+[27:17] for a 4 billion parameter model though 26 tools. So you know it's going to blab
+[27:22] on here with a lot of thinking and then we'll check whether it gives a tool
+[27:26] call. It may or may not. It may decide to blab on for a full 2,000 tokens and
+[27:31] then just stop when it hits the limit. So we'll come back to this. But what
+[27:36] you're going to do now that this model is loaded is you're going to prepare it
+[27:39] for fine-tuning by applying Laura adapters. And we're going to apply Laura
+[27:43] adapters to the attention modules and also to the MLP layers. We will use a
+[27:48] rank of 32 which means the adapter matrices will uh have effectively a
+[27:52] width or height of 32. We'll use uh rescaled Laura which will adapt the
+[27:57] learning rate of the Laura adapters according to their size. Larger Laura
+[28:01] adapters means lowering lower learning rate. Uh, so I'll go ahead and apply
+[28:05] that. The data should all be prepped. So we can go right to training the model
+[28:10] here. We're going to pass in the data set and it's going to train based on the
+[28:14] text field because we've prepared that text field. I went through this quickly,
+[28:18] but if you recall when we formatted the messages and the tools, we templated
+[28:24] them into one string of text. That's the text key there. And when we did that, we
+[28:30] essentially prepared it so we could pass in just rows of text to our trainer
+[28:34] batch size of one. This is not ideal because you don't get much uh smoothing.
+[28:38] It's going to make it very jumpy in training loss, but we don't have enough
+[28:41] VRAM here. If you run on an A40 or on a H100, you'll have more VRAM. So, you can
+[28:46] use a larger batch size. We just train for one epoch. Um, we actually shouldn't
+[28:51] have warm-up steps because we don't have enough steps here at all. If I have nine
+[28:54] rows, I'm only going to have nine steps with gradient accumulation one. device
+[28:58] batch size of one. Learning rate is fairly high because it's a small model
+[29:03] using the AtomW 8 bit optimizer to save a bit of VRAMm and we'll use a constant
+[29:07] learning rate. Everything here is quite simple. Um I'll probably do a follow-up
+[29:12] video with some more advanced techniques on the YouTube channel on the TR
+[29:15] research channel afterwards. Uh so keep an eye out for that, but I wanted to
+[29:19] keep this fairly simple so we can go through it uh quickly. So yeah, we'll
+[29:23] run the training. That's actually just setting up the training. We'll check the
+[29:26] device memory. It's got uh 15 GB, 10 of it's reserved already. And we can start
+[29:32] to train. After training, we'll show the final code. And then we'll run inference
+[29:36] again. Now, let's just take a look at what it did without training. And
+[29:40] actually pretty good. So on this basic task here, um it more or less got the
+[29:47] problem correct. Would it be able to read out the top two lines? Probably it
+[29:50] would even with the 4B model. But I can tell you that if you do a more
+[29:54] complicated task like multistep um it will struggle. It already struggled when
+[29:58] we did the 30B model as I showed you. It was kind of lucky I got it to work when
+[30:01] I did. Uh but this 4B model will definitely struggle on
+[30:05] multi-step. So after the training, I'll rerun that and we can see uh what it
+[30:09] does. Hopefully it'll also get it right. You can see the training is
+[30:14] underway here. We've got nine steps. We're only training 1.62% of the
+[30:18] parameters. So those adapters are tiny. Everything else is frozen. All the main
+[30:22] weights are frozen and it'll take a little bit of
+[30:26] time for this to complete and then inference to run. And when that's done,
+[30:30] we've the option to save the model and the
+[30:33] tokenizer. We also have the option then to push the model up to hub. If you want
+[30:37] to do that, you can just log into hugging face here and then I recommend
+[30:41] merging it to 16 bits. If you merge it with this name here, for example, you
+[30:46] can actually go back into your pod. You could edit the pod and just swap drop in
+[30:51] here the name of your fine-tuned model and now you've got an inference endpoint
+[30:55] uh ready to go. So let's see how our training is doing. About 2 minutes left
+[31:02] and our training loss is falling. You know in a more advanced implementation
+[31:05] you would want to have an eval set. So you want to have much more data not just
+[31:09] nine traces. You want to have probably a few hundred. You want to split some of
+[31:14] those off into an eval set. You also want to do logging with TensorBoard. I
+[31:18] go through that in most of my videos, but uh I wanted to keep this fairly
+[31:21] simple. Okay, so we have the training completed and generally the loss is kind
+[31:28] of falling. Like it's very bumpy and that's it's not quite completed by the
+[31:32] way. It's just finishing up. But it's not helped by the fact that we only have
+[31:36] batch size of one. Ideally, we'd have batch size of like 32 maybe, which would
+[31:40] require quite a bit more data. um you could use gradient accumulation, but if
+[31:44] you have a very small amount of data, you actually just have to set the batch
+[31:47] size smaller. Um you don't want to do just one update step with all of the
+[31:51] data. So we're kind of doing the best we can here given uh the limited amount of
+[31:55] data and this is something you can definitely add a lot more traces to
+[31:58] hopefully. Now just one other comment because I know one question will be
+[32:02] around reinforcement learning. Can we automate this so that we generate traces
+[32:06] automatically or use some reward-based system? And my recommendation there is
+[32:11] start off with manual traces and curate them like this because even if you want
+[32:16] to do rewards afterwards like GRPO and you can check some of the other videos
+[32:20] on that, it's going to be beneficial to SFT supervised fine-tune like I am now
+[32:25] on some traces that are high quality. If you just start with a model that you
+[32:30] want to do reinforcement learning on, but you've not done any supervised
+[32:33] finetuning for that domain, it's going to struggle. it's going to generate lots
+[32:36] of traces and very rarely get to the correct answer where it sees a positive
+[32:40] reward. So, it will speed up your training a lot even if you do
+[32:43] reinforcement learning afterwards. Um, if you first generate some high quality
+[32:47] traces and then do the finetuning. Now, if you want to do GRPO, you need to
+[32:52] define rewards. That means you need to have a data set where you have answers.
+[32:56] That could involve picking some random niche websites and picking finding maybe
+[33:02] the text on the top and then asking the language model to navigate to those kind
+[33:06] of obscure pages and then you have a ground truth of what those lines of text
+[33:10] are. That's just a really simple example, but you need to come up with a
+[33:12] way to systematically generate data that's verifiably correct and then
+[33:16] reward the model when it gets that answer correct. Okay, that was a bit of
+[33:20] a sidebar on reinforcement learning, which is not the focus here, but it's
+[33:24] very much related. We have finished the training. The loss I'd say generally has
+[33:29] has gone down. Uh we used peak memory 75%. So we didn't have space for
+[33:34] probably doing a batch size of two. And now we're generating response. So the
+[33:39] model is thinking and it's got about 2,000 tokens
+[33:42] to think. Let's see if it finishes up uh with recommending a tool call. It may or
+[33:47] may not. It's possible that with this noisy of a training, we bumped it off.
+[33:52] What was a good answer at least the first time around? By the way, I'm using
+[33:55] default parameters for running inference. You can set them manually
+[33:59] here. There's recommended parameters for Quen for the thinking model. And yeah,
+[34:03] it looks good. It's calling the tool as expected. So, you'd want to do a much
+[34:07] more elaborate setup on the evaluation. You probably want to run your model on
+[34:10] the endpoint and actually try to run some of the rollouts over in um the
+[34:15] workspace on Windsurf that I showed you earlier. Just in case you want to see uh
+[34:20] what the default configuration parameters are, you can see the
+[34:23] temperature is 6 and I think these are the recommended parameters if you're
+[34:27] using uh a reasoning type model. Okay, with that it brings us full circle.
+[34:32] Hopefully you've had an opportunity to create some good traces and understand
+[34:37] now how to do fine-tuning at least in principle even if we didn't use all that
+[34:40] much data. This is something you can build on by adding in different MCP
+[34:44] servers, curating many traces, and I think it's it's probably quite powerful
+[34:48] even without moving to RL. If you've got a small number of examples, um, and I
+[34:52] mean maybe 100 or 50, something that you can realistically generate yourself, I
+[34:56] think you can get uh significant improvements in performance,
+[35:00] particularly if there are some kind of narrow trees that are common uh, but
+[35:03] important for your use case. As I said at the start, all of the materials are
+[35:08] in Trrow Research AI Worlds Fair 2025. You might also want to check out the two
+[35:13] MCP videos that are on Trellis Research on YouTube if you want to understand in
+[35:17] a bit more detail how those servers are not just set up, but how you would make
+[35:21] a custom one by yourself. In the meantime, any questions, uh, let us know
+[35:25] by posting down below in the comments. Cheers, folks.

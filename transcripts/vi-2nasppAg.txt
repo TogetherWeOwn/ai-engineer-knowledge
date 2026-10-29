@@ -1,0 +1,1003 @@
+# title: Make your own event-sourced agent harness using stream processors — Jonas Templestein, Iterate
+# source: https://www.youtube.com/watch?v=vi-2nasppAg
+# speaker: Jonas Templestein, Iterate
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T09:12:13Z
+# sha256: 41c8865ac54bc33601d1b2bf60bc494dc5afe672ebaf6604670d1e8f1996da8a
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:14] Welcome to to the workshop. I am Jonas
+[00:18] and this is Misha. We both work at Iterate.
+[00:20] >> Hi. >> And the
+[00:21] this is going to be a chaos. I think pure chaos. First of all
+[00:25] because we only we only decided last Monday to do this. And then
+[00:30] I was like a bunch of personal stuff and half term
+[00:34] and the kids were sick and then this morning we came here and I thought this
+[00:37] was going to be like a like an hour and 20 hackathon or something like that. And
+[00:40] then we came here and we're told you're going to do it without an audience
+[00:43] because of some fire thing. And now there's an audience again which
+[00:47] is amazing. So we're going to do we're going to try and do this as like a
+[00:50] improvised hackathon but I'm only just pushed the SDK literally 1 minute ago
+[00:56] and Misha is going to try and and sort of like live fix it. But I I hope it'll
+[00:59] still be worth your time because I think there's sort of some
+[01:02] hopefully at least some interesting ideas or or maybe like one way to put it
+[01:06] is I would like to find out whether this is like dumb or cool.
+[01:10] And and the and you can help me with that. So please also just like ask
+[01:13] clarifying questions because part of this the reason we said last week, okay,
+[01:17] let's do this workshop is because these have been ideas that have been kind of
+[01:20] noodling around over the last year but we haven't really actually done anything
+[01:24] with. It's not really like a commercial value to it necessarily but I think
+[01:29] it's basically how I would like to build agent harnesses. So you know, noodling
+[01:34] with this for a while now and you know, obviously
+[01:37] you've got like Claude and you've got pie now but back in the day you didn't
+[01:40] and so you make your own coding harness and there's all these different ways to
+[01:43] do it and I think the way I would like to do it is I would
+[01:47] like to do it purely event sourced. And I say here aka debuggable and that
+[01:53] is because everything kind of skirts around of
+[01:56] being event sourced like all these things without quite being event
+[01:59] sourced. There's always something that has a side effect that you later can
+[02:02] tell, and then you can only see it in the hotel traces or something, which
+[02:05] doesn't really make sense to me because normally these these these agents, the
+[02:09] way they work, and we'll see that in a second, is they already have a log of
+[02:11] events, right? So, you So, if you just say everything that could possibly
+[02:14] happen is in there, it would be really easy to debug. Um and as we'll see,
+[02:18] hopefully, a little bit strange, but potentially in other ways also really
+[02:22] easy to to extend. Um and then the second thing is I want I
+[02:25] want this to be extensible. And And we've seen this, I think, with Pi, which
+[02:28] is was just incredible. Um how valuable it is to make an agent
+[02:32] extensible, not just by humans, but also extensible by itself.
+[02:36] Um and um one thing that I want in the
+[02:40] extensibility is is I want I want it to be composable. Like, I don't think we'll
+[02:44] get there within 1 hour with all of you, but but maybe afterwards, if you say,
+[02:47] "Oh, this is actually cool and not dumb," we'll keep working on this, and
+[02:51] you can say, "Oh, I made this extension. You made that extension." And you can
+[02:54] combine them. And um
+[02:56] um because I think we don't really yet know what is the best recipe for for for
+[03:00] agents, basically, for agent harnesses. And it's been too hard to experiment,
+[03:04] even in Pi. Like, everything has to run in a single thread in in in in like one
+[03:08] process over here on this particular computer, and so on and so forth. So, I
+[03:11] think I think we we can maybe do a little bit better than that. Uh then, I
+[03:15] think it should be on the edge, publicly routable. Um
+[03:19] Like, the way I think of it is basically an intelligent entity, like a digital
+[03:22] one, that's not a robot in the future. It's just internet-connected uh
+[03:25] basically server program, right? Like, it just speaks HTTP. So, the slides
+[03:29] broadly speaking, that should be sufficient for almost anything.
+[03:32] And then I would just put these agents on the edge, speaking to the internet
+[03:36] straight away. Uh this is not very safe. None of what
+[03:39] we're doing today is safe, by the way. There's no authentication, you'll see.
+[03:42] You'll all be able to see everybody else's event streams and agents and and
+[03:44] whatever else. You should not put any secrets in the actual payloads of the
+[03:47] events, or rotate them afterwards, right? So, we can um
+[03:51] you know, those things can be solved. But, broadly speaking, the moment an
+[03:54] agent exists, it should have a URL. That's just like That's just my opinion.
+[03:59] Because otherwise, like you end up making all these things and then you
+[04:03] tie yourself backwards inventing a connector concept just so you can get
+[04:06] Slack messages in or or God knows what. And that I think that should be really
+[04:09] easy. Um. Or like maybe like a human should fill
+[04:13] in a web form and the result of the web form should be input for the agent again
+[04:16] or or something like that. That's kind of like the same thing as as a Slack
+[04:19] webhook. And then it should be distributed. And this is potentially
+[04:22] like a very double-edged sword as we'll see, like right? But but by distributed,
+[04:26] I mean you should be able to have an agent running sort of on one computer
+[04:31] here on a server and my my plugin running over here and your plugin
+[04:34] running over there and yours is written in Rust and mine is written in in in
+[04:37] TypeScript and it all just doesn't really matter. Um, and the reason that
+[04:41] is bad is because you will eventually get race conditions and loops, right?
+[04:45] Like sort of like two plugins kind of sending messages back and forth creating
+[04:50] like an endless stream of events in your agent. Um, but on the flip side, you
+[04:54] have those issues normally anyway in in in most agent harnesses I've seen. So,
+[04:59] it's it's quite good if you if you kind of pre-empt that a little bit.
+[05:02] Okay. So,
+[05:04] let's um, let's talk about this thing that we have
+[05:09] invented for um, oh my gosh. Um, what is this?
+[05:14] This isn't the same as in my file system. So, I'll use the one in my file
+[05:17] system. Um. Basically, we have created this this
+[05:21] service over last week called events.iterate.com.
+[05:25] It has a web UI. Um. And
+[05:28] we can we you can use that. I I think you'll
+[05:31] certainly use it. But, for now, we'll just play with it with curl because I
+[05:33] think it's it makes it in some sense more more tractable.
+[05:38] Um, in the in the agents um, in the events app, we have this concept
+[05:43] of agent paths. So, just like a A in a file system, every agent has a path, has
+[05:47] a hierarchy, and you just have uh here, you can show this here.
+[05:51] You just have raw events. This is YAML-formatted raw events in each of
+[05:54] these paths. And uh that is basically the the the
+[05:58] entire uh the entire primitive that we're going to be building our agent on.
+[06:02] And so, we can start by playing with this. We can say, "Okay, we we have a
+[06:04] path prefix." If you copy this and from the repo that Misha's going to put it in
+[06:09] the read me in a second. >> I'll I'll add workshop.md as well.
+[06:12] >> Yeah, uh yeah, okay. May Oh, yeah, maybe that's
+[06:15] why. Um >> I I added the read me, but not the
+[06:17] workshop. >> Yeah, so uh basically, um
+[06:19] let's set ourselves a path prefix here. In my case, that is just going to be uh
+[06:24] Jonas Tempelstein or something. Um they start with forward slash, by the way,
+[06:28] which is a little bit um awkward potentially, uh but the but the service
+[06:33] is very tolerant of you URL encoding your slashes or doing whatever you want,
+[06:36] but I want I I wanted good curl economics, uh but I also wanted them to
+[06:40] start with a forward slash. So, you have like a well-defined root. Then for the
+[06:44] base here >> It is now pushed to the repo, but have
+[06:46] you have you shared the repo? >> Oh, yeah, because now you could actually
+[06:48] do this on your computer. Uh let's do that, actually. If you go to um
+[06:53] github.com/iterate, there is an an AI-engineer-workshop.
+[06:57] Um Uh
+[07:02] and in there, you should be able to If you click on this workshop.md file,
+[07:06] that's what we're going to now going through. So, you should be able to copy
+[07:08] and paste the curls from there. And again, there's no authentication,
+[07:12] so you can just do this. And uh in in fact, why why don't a
+[07:15] couple of us >> our live deploy events. iterate.com.
+[07:20] >> Uh like like like this is entirely just sort of like a proof of concept of um
+[07:25] uh how I think this should work. Um Well, basically, what we're going to do
+[07:29] is we're going to turn this simple event stream into a fully fledged agent
+[07:33] without like really deploying any server software uh or or anything like that. Um
+[07:40] Maybe uh yeah, I should be able to see if if anybody has managed to do it. I'll
+[07:44] wait until two or three people have managed to successfully curl something
+[07:47] um and then I'll carry on because I think it'll be it'll be good if you if
+[07:50] you if you curl uh at yourself. So, it's here in this AI
+[07:54] engineer workshop workshop.md.
+[07:58] >> If two people have the same name, that's going to cause problems, so
+[08:03] >> It doesn't matter. Um it's that's fine.
+[08:07] Uh
+[08:10] Okay, there we go. Got a few people. Um okay, so this pretty good. Um
+[08:16] By the way, uh that you might see this here and there. There's also this thing
+[08:20] down here called project slug. If you really start stepping on each other's
+[08:23] toes, you can just type what like use a different project slug and it's like a
+[08:27] completely new database, a new name space. Um you can pass that in as an
+[08:31] HTTP header if anybody needs that later. You can you can ask me. Uh
+[08:35] Okay, so now we have a few people curling things. I will also for start
+[08:39] curling things. So, uh now I'm just going to say hello world uh here
+[08:44] to my stream. And it'll come back and and and we
+[08:48] straight away we notice like a few things. There's a basic event envelope
+[08:51] shape. We have a type that I've just invented here. Events don't need to have
+[08:54] anything but a type, but most of them also have a payload.
+[08:57] Uh then um the uh there is the stream path which came from the URL that we
+[09:02] posted this to and there's an offset. This is just an auto-incrementing
+[09:05] integer that starts at one. Uh and so there's basically like a point of
+[09:09] serialization at the server that just increments them and you get a created
+[09:12] created at. Uh and then in here what we can do with curl, which is quite nice,
+[09:16] uh if you do {dash} n, you can do uh streaming uh streaming SSE. So, this
+[09:21] here is literally nothing magical. This is literally just
+[09:24] you know, {slash} Jonas Tempelstein uh {slash} hello world. This is literally
+[09:28] the curl that we're doing right here. Um And um
+[09:33] boop. There I can see the messages coming
+[09:36] through. Very nice. And I can um I can add another message
+[09:40] and now um
+[09:43] basically uh all the all the messages will show up
+[09:45] there and there's also a um Uh oh, if you do {question mark} live
+[09:50] equals true, this is inspired by the durable stream standard, but like ever
+[09:54] so slightly different. But if you do live equals true, the connection will
+[09:57] stay open and it'll just keep sending you more events
+[10:00] as you as you put them through. So, this is sort of already
+[10:04] you know, um like you could say this is an AI agent
+[10:07] if Misha was simultaneously giving responses to my hello world.
+[10:11] This would already be an agent. And then there's a my my eyes told me you can um
+[10:15] if you're going to be doing that a lot uh you can pipe this through said, get
+[10:20] just the data elements, and then pipe it through jq.dot and then you get
+[10:24] a little bit nicer formatting. So, this is sort of like this is so trivial
+[10:28] that I actually do spend a lot of time in
+[10:31] curl just curling it. Uh then, what can you do? Um the thing
+[10:35] is very tolerant just in general of of stuff you post to it and this will
+[10:38] become relevant if you wanted to say send webhooks from random third parties
+[10:41] there. Like my theory is always that like the LLMs are good enough they can
+[10:45] basically just consume raw webhooks from anywhere and and they'll roughly do the
+[10:48] right thing. So, what the what specifically the server will do is if
+[10:52] you send it something that doesn't validate like hogwash here it says
+[10:56] there's there's no type property so there's not actually a valid event. Then
+[10:59] you can see here what it has appended is basically an error.
+[11:02] But it because we're event sourcing the error is also just an event and it just
+[11:05] says here, "Okay, um you have a an invalid event appended um event."
+[11:12] Oh, another thing um that we we will notice is that the
+[11:16] type here uh that our server has created it starts with https events.iterate.com.
+[11:22] You don't have to do that uh but that is something that we like to do because
+[11:25] that literally leads to the documentation for that event type. And
+[11:27] if it's going to be an opaque string, like why not make it make it something
+[11:31] like that. But uh obviously you can you can just do, you know, single words or
+[11:35] two words or whatever. Um but you will see these URLs and
+[11:38] they're just they're just types. Um then uh what else is interesting that we
+[11:43] can do? I mean, this is kind of boring, but you know, it
+[11:46] again, if you're going to do webhooks, you have to kind of put an item potency
+[11:49] key in, which just means if you have the same item potency key twice, you don't
+[11:52] get um you don't get the event appended twice. You can pause a stream. I think
+[11:56] in the interest of time we can skip that. You can resume a stream. The
+[12:00] reason that pausing is important and is we put this in even though we literally
+[12:03] just made this a couple days ago is because of the infinite loops. Like it's
+[12:07] very very easy to accidentally put like, you know, thousands and thousands of
+[12:10] events in a in an infinite loop in the thing. And so if you put more than 100
+[12:14] events in a second or something, it is just going to circuit break and then the
+[12:17] stream will be paused until somebody unpauses it. So basically, if you try to
+[12:22] um you know, actually let's do that. Because again, like for those of you who
+[12:25] haven't seen event sourcing, this might be a bit weird. Like how do you pause a
+[12:28] stream? Well, you pause a stream by uh what oops, this is the wrong one. You
+[12:32] pause a stream by appending an event that uh says you're you're paused. The
+[12:37] only external interface to the agent is oh, um
+[12:42] now it's complaining. Uh why is it complaining?
+[12:47] Ah, because I think there needs to be a reason or something, maybe.
+[12:52] Uh
+[12:56] yeah.
+[13:02] Reason demo. Yeah, there you go. So now this thing is paused. So now if I um you
+[13:07] know, try to send it the hello world event from earlier,
+[13:11] it's just going to barf and it's say, "No no more events allowed." And that is
+[13:15] one like that isn't one thing that doesn't appear as an error in the stream
+[13:18] because otherwise you would still
+[13:20] get infinite numbers of error events. Um
+[13:25] Uh then, I mean, there's other weird and wonderful things you can do. I I don't
+[13:28] even know if we really have to do this, but uh,
+[13:30] there's like um, I have made a plug-in for this already
+[13:35] uh, that makes it so that if I put this JSON object transformer configured event
+[13:38] in, what it'll do is it'll just observe certain events, rewrite them a little
+[13:42] bit, and make a new event out of it. But, I think that's a bit advanced, so
+[13:45] we'll we'll do it later. Um, um, it can also do weird things like it
+[13:49] can uh, you you can schedule you can schedule things. Like some agent SDKs
+[13:54] you'll you'll know can do this, but uh, here,
+[13:57] you know, if you want like an like a heartbeat event every 5 seconds,
+[14:00] uh, oh, oh god. Now, I need to resume the stream because
+[14:04] it's paused. Uh,
+[14:06] let's see. Stream resumed.
+[14:14] Okay. So, now I am just creating uh, this
+[14:17] heartbeat event every 5 seconds, which can be quite handy, or you can schedule
+[14:20] something for 10 minutes in the future or at a certain time. And again,
+[14:24] it's just an event that says, "Do this thing in the future." Um,
+[14:29] mm mm mm. Um,
+[14:33] I think I will skip over these, but um, you can cancel the schedule. You can
+[14:38] tell the stream by appending an event to send your server or some third-party
+[14:43] server or your you know, your Slack API endpoint or whatever an event every time
+[14:47] an event gets added. Uh, so you can basically uh, subscribe to the stream.
+[14:51] Uh, here we're subscribing in our in our terminal. We're doing a pull
+[14:54] subscription, right? We're doing we're we're connecting to uh, an HTTP server
+[14:57] and we're getting uh, we're pulling uh, pulling um, with the HTTP client and
+[15:01] they're the HTTP server and we're getting an SSE uh, response stream of of
+[15:04] streaming events, but uh, it can also do the other way around where it will push
+[15:07] you the stuff that gets appended or push you a filtered stream.
+[15:11] Um, uh, which can be quite handy. Okay.
+[15:15] So, um, let's maybe stop there because I know also um,
+[15:19] it wasn't really clear from the session description
+[15:22] how deeply technical this was. And so, let's take any questions on what
+[15:27] is even this thing that we're going to be using for for the next 45.
+[15:30] >> But, questions have to be submitted as an event to the question stream.
+[15:36] >> Yeah, exactly. >> If you have any trouble using the
+[15:38] question
+[15:40] >> Um Does I assume lots of things don't make
+[15:45] sense, so please do ask them because I think
+[15:47] this will be extremely like random and strange so far.
+[15:54] >> What does Iterate do in your company? >> Oh, we we're like a we're like a hacker
+[15:59] hobby club at this point, to be quite honest. Like we we we are we have not
+[16:03] got a launched product. Um but if we did, it would be I think based
+[16:10] on this architecture. It's like anyway, I'll tell I can talk about it
+[16:15] afterwards. >> Okay, okay, okay.
+[16:17] >> But, it's yeah. It's more it's more home brew hacker
+[16:20] club than than like commercial enterprise at the minute. But, it'll get
+[16:23] there.
+[16:26] Yeah. >> I have a question. So, I know that we'll
+[16:29] be building
+[16:31] event-based agents.
+[16:33] >> Yeah. >> And you like maybe that's
+[16:37] a basic question, but like agents that are on the market right now, aren't they
+[16:41] event-based? What's the like >> It's just um
+[16:47] I think it's just the API like if you
+[16:51] have you tried to make you know like a like an open code extension or plugin or
+[16:55] pie extension or cloud cloud extension, and they all have like an API surface
+[17:00] that is a little bit bigger than what you would have or what we're going to
+[17:03] have in in a minute. It's not like by much, right? But, like okay, like maybe
+[17:06] the streaming chunks for partial completions are a different kind of
+[17:10] thing for some reason rather than just an event of type I've received, you
+[17:14] know, like five letters of a streaming response. To me, that's a perfectly
+[17:17] valid event and and and the benefit then is that you can
+[17:20] that can you I'm kind of like a one abstraction kind
+[17:22] of guy, right? Like this this should be like a like web standards-based, it
+[17:25] should be there should only be one thing, which is an event, and then as
+[17:29] you'll see like the the thing that that was at the top of this file. I
+[17:32] think you can build a super expressive state-of-the-art coding agent by just
+[17:37] implementing like a stream processor that reduces over the event stream and
+[17:41] occasionally enacts side effects. That's That's all it does, right? Like
+[17:44] it just sits there and says, "Okay." I'll show you that in a second. Like
+[17:48] it's it's a bit weird, I would say,
+[17:51] weird way of programming. Um
+[17:56] >> So, if I understand correctly, you're sort of saying you take events that you
+[18:00] get generated from an AI model and then you're basically going to apply them
+[18:04] through this stream processor. Uh is that the idea?
+[18:07] >> The stream processor is or like the the events that iterate.app is the storage.
+[18:11] Like you can almost think of it as a database. Like one one You know Do you
+[18:15] know Convex is like a sort of you know, they they kind of give you the illusion
+[18:18] that they're running TypeScript in the database. You could almost think of this
+[18:22] This could be like a programmable stream or something, right? Because actually
+[18:25] one thing that you can also do, we'll we'll see later, once you hack on your
+[18:29] stream processors, you can also make an event that contains the source code of
+[18:32] your stream processor. And then it'll just run on every event.
+[18:36] And so like it's basically it is like it is like the
+[18:41] I think you can experiment with a huge array of different kinds of agent
+[18:45] harness implementations that can respond to real events on the
+[18:49] internet and make real API requests without deploying your service or
+[18:53] something like that. All you need is this sort of streaming streaming service
+[18:58] that um has some of some of these things like
+[19:01] specifically needs to be able to wake up, you know, like other other APIs and
+[19:05] and programs and so on. I don't know that. Yeah.
+[19:09] Um that Does that answer your question at
+[19:12] all or >> Yeah, I think so.
+[19:14] >> Okay. So, we try and make uh now a um like a like a slightly more serious
+[19:18] version of these curls. Um so
+[19:22] Does anybody here not know TypeScript?
+[19:27] I think So, I think the like one of the arguments in favor of this architecture
+[19:30] that I also put in that um in that uh in the in the blurb, I think,
+[19:34] is this is in principle polyglot, right?
+[19:37] And there is a uh like in in any language there is at events.iterate.com/
+[19:42] uh api/docs you have
+[19:45] just I mean, this is an exceedingly simple API, right?
+[19:48] Um uh you can you can make yourself There's an
+[19:50] open API spec. You can make yourself a client and so on. But for the purpose of
+[19:53] this uh this um uh workshop here, we'll just do a
+[19:57] TypeScript version and we've shipped a client in a in a uh NPM package already.
+[20:01] But I I I I just wanted to point out like even though we're doing everything
+[20:04] in TypeScript, the whole point is that we wouldn't have to,
+[20:06] right? But we just have to do one thing uh for this workshop.
+[20:10] Um Okay. So, let's uh let's do do something pretty simple. Um
+[20:15] Uh is the uh AI engineer workshop um package uh now up-to-date and working? I
+[20:22] think it is, right? >> so, yeah. Uh you might need to pull your
+[20:26] repo cuz there was a client-side type error.
+[20:29] >> In the iterate repo? >> Uh no, the in the AI engineer workshop.
+[20:33] >> Okay, that's fine. >> I think the example is TS.
+[20:35] >> Yeah, but uh I'm I maybe I will actually use that. Then
+[20:39] then I'll be able to experience uh the same the same bugs if there are
+[20:43] any. Yeah, that's probably better. Okay. Um
+[20:47] Okay. So, uh I think um if you wanted to just have a quick start, you can uh you
+[20:51] can just pull uh clone the AI engineer workshop repo.
+[20:54] Um there's already a teeny tiny example file in there. And then we'll just add a
+[20:58] couple more um as we go along.
+[21:01] >> And the workshop.md has runnable curl as well.
+[21:05] >> Nice, yeah. >> That does well.
+[21:08] If you wanted, you could put a couple like a couple of the follow-on examples
+[21:12] that are in the iterate repo that have actual processors. Um
+[21:17] Yeah. >> I can take a look.
+[21:27] >> I don't know what's going on here.
+[21:30] Ah.
+[21:33] There we go.
+[21:38] Hm.
+[21:41] My computer seems to have uh slowed to a crawl trying to open a cursor window.
+[21:47] This has been unfortunately like uh uh somewhat regular occurrence recently.
+[21:56] Uh Okay.
+[22:07] Okay.
+[22:11] Oh, oh no. I think this might be what you mentioned about the internet.
+[22:15] I think it's just struggling because it can't open a terminal because the
+[22:19] my my terminal tries to connect with the internet.
+[22:22] Hm.
+[22:28] Oh, well. Then let's do that.
+[22:34] Um
+[22:42] No, it's not the internet. Or is it?
+[22:46] There we go. Okay.
+[22:54] Okay. So, we have here
+[22:59] um we have packaged up an SDK here to this uh AI engineer workshop um
+[23:05] package that you should be able to just PM PM install or you just use uh use
+[23:08] this example here. And then basically uh what what did we
+[23:11] need in our curl, right? Like we needed a base URL which is just
+[23:14] events.iterate.com. That's where our server is. Uh we can use a path prefix
+[23:19] um and um
+[23:21] then we can uh run this function here called create events client that is from
+[23:25] our SDK and then this is under the hood this is
+[23:32] I really don't know what's going on with this terminal. It's very strange.
+[23:40] Hm.
+[23:42] Hm.
+[23:45] Okay, maybe um everything is just incredibly slow.
+[23:53] >> You want to try mine on this? >> Um
+[23:56] >> Okay. >> Maybe, but there's nothing actually
+[23:58] hogging the CPU. It's just I I think I do think it might be actually the
+[24:01] network, but we'll see. Um
+[24:04] So here.
+[24:10] So here you have um
+[24:14] I don't think this is picked up the Anyway. Okay, so this is basically what
+[24:17] we were doing just now, right? Like we we say, "Okay, we're making ourselves a
+[24:19] client uh and then um here there is a function called stream.
+[24:24] This is basically the um the the the right hand side of the of
+[24:28] the terminal that we had earlier and then you say live true and giving the
+[24:31] stream path. And we can say, "Okay, if if uh if the
+[24:34] event is not of type ping, we will do nothing, but if the event is of type
+[24:39] ping, then we will I mean, this is a completely unnecessary
+[24:42] helper down there. Uh then we can just do client.append.
+[24:46] I don't understand why the um the the TypeScript language server isn't
+[24:51] picking up any of the types for me, but I can't tell if that's just um or it's
+[24:55] just being weird again. >> Your an example let me see.
+[24:59] Anyway. Um.
+[25:03] Could quickly switch IDs. >> No, it's fine. It is working for me.
+[25:07] >> Okay, yeah. I think this is unfortunately like a sort of cursor.
+[25:13] Okay, and then you should be able to just if you have a modern version of
+[25:15] node, you should be able to just run um
+[25:19] uh or maybe not. Did I make it
+[25:23] um
+[25:25] uh
+[25:29] It says invalid type script syntax. You know what, I'm just going to I'm
+[25:33] just going to restart cursor. I think that is worth it.
+[25:39] Is anyone able to run this example TS on their computer? There you go.
+[25:43] >> I am. >> Hm.
+[25:45] Okay. Um, and are you able to send a ping to
+[25:50] it and get a pong out of it? Okay, very cool.
+[26:15] Okay.
+[26:27] Hm.
+[26:35] Um.
+[26:40] Yeah.
+[26:43] I don't Yeah. I wonder if we use use I don't know if
+[26:47] you can see this, but basically all my commands they have like a several second
+[26:50] delay. Which is
+[26:52] >> Yeah, it's looking to me if you want to just swap laptops.
+[26:56] >> Um
+[27:06] Maybe.
+[27:16] Yeah, I know, I know, but it it's just Yeah. It's just my editor doesn't work.
+[27:20] And I also have several non-responsive uh cursor. Sort of
+[27:26] I feel like this is uh unfortunately a pattern with cursor
+[27:29] recently. >> Mhm.
+[27:31] >> I >> If you want to swap laptops, it does
+[27:34] seem to be working okay for on mine. >> I would just give everybody 60 more
+[27:37] seconds to just get get the basic demo working and then
+[27:40] >> Just let me know. >> Yeah, because I think
+[27:43] using some Yeah, there's still almost an hour to
+[27:46] go. It's not good to use somebody else's computer.
+[28:17] Maybe I will continue on yours and I'll just restart my computer. I think that's
+[28:21] a good idea because we can
+[28:25] Yeah.
+[28:27] Dum dum dum. >> I also have example 01 and 02.
+[28:31] >> Oh, really? Brilliant.
+[28:33] >> I think working with something >> What's your keyboard layout?
+[28:35] >> Uh probably same as yours.
+[28:37] >> One can One can
+[28:39] One can hope. Uh okay. Entire screen.
+[28:43] >> the same. >> Uh Uh it pretty good so far.
+[28:50] Um
+[28:54] What have you got a terminal?
+[28:58] Uh so
+[29:04] node examples 01 hello world
+[29:09] Okay, perfect. Yeah. Well, this what works flawlessly. Uh so,
+[29:14] um
+[29:18] Has everybody got that more or less working because then we can just make an
+[29:21] open AI coding agent now. Um I think that's all we need.
+[29:27] Let's maybe I'll ask um Do you have a speech control in here?
+[29:32] >> Uh yeah, it's control and option. It's kids one.
+[29:36] >> Yeah. And then?
+[29:38] >> That's it. It's recording. >> Hello. Oh.
+[29:42] Cool. >> See that red bar is
+[29:44] >> Um Hey, I would like to make a third
+[29:47] example uh called agent processor and for that we need to install uh just the
+[29:53] normal open AI SDK. Please uh do that and just make me a new file that looks
+[29:57] like the hello world processor. Okay.
+[30:01] Um Okay, so
+[30:06] um
+[30:11] I've just got to gather everybody again after I left you for about uh 10
+[30:14] minutes. >> Yeah.
+[30:17] >> Here, this is a normal uh pretty normal spaghetti code TypeScript program,
+[30:21] right? Like uh basically what we've done here is we we sort of like uh doing some
+[30:24] boilerplate work. Um uh here if we want to subscribe, we we
+[30:27] have to make a subscription. Um Oh my gosh.
+[30:31] This example that you put in there has like an abort signal and and handles all
+[30:35] kinds of things and and um anyway, the the um I think um
+[30:39] uh the way I think about what we're really doing is we're we're writing a
+[30:42] stream processor. And if you've never done stream processing, this this might
+[30:45] be like a bit weird and people use slightly different names for for these
+[30:48] things, but really what we're saying is there
+[30:53] exists some kind of world state that we're interested in that can be derived
+[30:56] from the events. In this in this example here that Misha made,
+[31:01] we are trying to count the number of times an hello world event
+[31:05] has been encountered in the stream. And then you can write the entire logic of
+[31:09] your program as effectively a reduce function. This is this is synchronous
+[31:13] and it just it just looks at all the new events as
+[31:17] they come in and then it updates the state. That's
+[31:20] all it does. So it takes state and event and it returns the new state. Or you can
+[31:25] just also return nothing, it'll it'll be fine. It'll just ignore it. And um
+[31:30] and then you can you should not do side effects in this reduce function. And the
+[31:34] reason I've split the reduce function from from after append where you should
+[31:37] do your side effects is because if you think about what happens if if
+[31:41] your program goes to sleep, right? Like you're you're closing your laptop. At
+[31:46] the moment everything's running on our laptops, you know, 100 new events go
+[31:49] into the stream. Some of these events might in the future need to trigger LLM
+[31:52] requests or something like this. And then you bring you open your computer
+[31:55] again, you start your your program again and you don't want your program to go
+[31:59] and make a ton of LLM requests for all of
+[32:02] those 100 events in the past necessarily. Instead, you want it to
+[32:05] sort of like catch up all the way and then decide what to do with the state at
+[32:09] the end. And so we've made this like super lightweight abstraction here of a
+[32:14] processor that basically gets hooked up into a processor runtime and then what
+[32:20] it does is it it it splits your work into reducing events into state and then
+[32:24] if you want to do some side effects like for example appending
+[32:28] appending to uh uh you know, to the same stream again,
+[32:32] you can do this. By the way, I think I think you can also do this which which
+[32:35] is like potentially uh it's pretty interesting. Um
+[32:40] Like uh you know, you you can literally just
+[32:43] append to uh you know, like a child path, or you can append to a parent
+[32:49] path, or or or whatever um else you want. It's basically like a a meant to
+[32:53] be like a file system. And so, if you wanted to build sub agents on this
+[32:56] thing, all you would do is probably you would just append to dot {slash} you
+[33:00] know, Boris, and pretend that Boris is a sub agent. And then you would just
+[33:04] subscribe to some special events that Boris might output, like I have the
+[33:07] result. And then you would automatically be woken up again on the parent when
+[33:11] Boris has the result. Um Is this confirmed, Misha, that this
+[33:15] runs? Like, how do you run this? This just exports the
+[33:19] um Like, you need you need the runtime, right?
+[33:22] >> Yes, there is a CLI command that I now can't remember because my agent has been
+[33:28] running it. Uh where you can
+[33:32] You should be able to do PNP and W in the off of the file, I think.
+[33:36] >> Did Did you do all that just now? >> I did that about a week ago, but you may
+[33:40] have changed it. >> no, yeah, okay. So, okay. Okay.
+[33:44] Um let's go to our repo. Like I promised, this is uh
+[33:51] a little bit The These are the um So, you can
+[33:55] actually also do this. If you go to iterate {slash} iterate AI engineer
+[33:58] workshop um
+[34:00] here there are a bunch of examples uh of files that are um
+[34:05] >> Uh workshop two. I was going for workshop two.
+[34:08] >> Yeah, I also >> It's out of date one.
+[34:10] >> meant to be uh meant to be renamed. Um
+[34:17] Ah, here. This is This is This is basically the snippet we want.
+[34:20] >> Okay. >> There is this um there's this thing uh
+[34:23] that you can have um So, here now we've just made a
+[34:26] processor, right? Like, this is just like a sort of inert thing. And then um
+[34:30] there's a thing called a uh pull subscriptions processor runtime.
+[34:34] Um, and all that does is it takes your um
+[34:38] it takes your uh your processor that you just made
+[34:42] and it uh runs it.
+[34:47] Um >> I think you probably need to assign it
+[34:50] to a variable cuz you're just export default above.
+[34:53] >> Um, yes.
+[35:01] do do do do
+[35:04] hm hm hm Okay.
+[35:10] Um
+[35:14] Uh and here let's just say uh
+[35:19] just see if we can run this.
+[35:23] do do
+[35:27] >> So, a question. Should we should we like this
+[35:32] >> Uh yes, but unfortunately they need to be modified uh
+[35:36] um in order to uh um do anything interesting.
+[35:42] >> Because I don't see them on GitHub. >> Um
+[35:45] >> Yes, those ones are those ones are were added in the last
+[35:49] few minutes, but uh you >> Yeah.
+[35:52] I give slightly bad copying instructions.
+[35:55] Um but
+[35:58] I think I think >> It's uncommitted here.
+[36:00] >> Yeah. hm
+[36:03] Uh I think the bu we're just going to have to sort of like
+[36:06] slowly slowly build it up in in this repo and then uh push it once it works
+[36:10] here unfortunately. Um so here uh basically what I've now done is I've
+[36:15] taken this processor and I've hooked it up uh into this runtime and all the
+[36:18] runtime does is it's just this like boiler plate for for consuming the
+[36:21] stream and running the reducer and running running
+[36:24] um uh the uh after append hook and what we
+[36:28] should see is once you submit hello world into this into this path here that
+[36:33] is just Jonas {slash} example. Uh, you should get a response there. So,
+[36:36] if I go here in the in the UI and I go to Jonas {slash} example and I think I
+[36:41] said this should be event of time hello world.
+[36:45] Um, oh no, this is up here.
+[36:52] If all works this would be sort of like the proof
+[36:56] point that lets us it doesn't.
+[36:59] Hello world scene. Um,
+[37:05] >> I don't remember if this example relies on the
+[37:07] uh, machine username, but if it does then that would be mm cal not Jonas.
+[37:11] >> Um, maybe.
+[37:16] Let's just do this.
+[37:24] Sorry, this is like the worst workshop it's and I'm also on the wrong
+[37:28] computer.
+[37:33] Um,
+[37:36] it does after append.
+[37:41] Um,
+[37:44] hm.
+[37:48] Okay.
+[37:52] Is my computer back up? >> It's Yeah, but I don't know your
+[37:55] password. >> Okay, yeah. I'll I'll do that in a
+[37:58] second. Okay, um, this example here is not
+[38:06] Okay, so I think we have to do plan B, but we might not actually be able to run
+[38:09] this. >> Are you getting Getting
+[38:11] >> I'm just going to walk through the code as we would have written it from
+[38:14] scratch. Sorry about that. Um,
+[38:17] because I think it it it's sort of like illustrates the the progression of
+[38:20] things and maybe if you it's I'm installing dependencies, which is which
+[38:24] is slow. Uh so it's going to
+[38:25] >> but it's like exactly. Eventually eventually this will be
+[38:28] >> will be runnable by the end of the walk-through.
+[38:30] >> So, um
+[38:32] in this in this paradigm, uh as as as we we've been using it in our agent, when
+[38:37] you want to implement some sort of feature, what you do is you say, "Okay,
+[38:41] what is the state I actually need in in order to do my my my thing?" In this
+[38:45] case, we want to do an LLM request whenever somebody sends a message and
+[38:48] says, "Hi." So, um we have here in our um in our user
+[38:52] interface, and you can access this as well,
+[38:55] there is basically like a cheat code that makes it a bit easier to um to
+[38:58] create uh new events of a type called agent input added.
+[39:03] And this is like deliberately the simplest possible thing you can imagine.
+[39:07] This is basically just a string. And so, what we're trying to achieve is that
+[39:10] whenever somebody puts an agent input added event into an event stream, we
+[39:14] want to uh react to that by making an LLM request. And for uh simplicity,
+[39:19] we're just going to go in and do it using the OpenAI SDK. So, uh the OpenAI
+[39:23] SDK, um the way it works is um you have to
+[39:27] uh at some point uh before you want to use it, you have to make yourself um
+[39:33] here a new OpenAI client.
+[39:36] And then you can use uh their responses API. So, you have OpenAI.responses.
+[39:41] Uh responses.create. And then uh in order to create it, um
+[39:47] you need some information. Uh specifically, you need a model state uh
+[39:51] string. And so, immediately there we're saying, "Okay, so let's just say our
+[39:54] state for our LLM agent, it has a model string."
+[39:58] Because that is one of the things that we will need when we when we come to
+[40:00] actually make an LLM request, and there is nothing but event sourcing. So, let's
+[40:04] just say, "Okay, we have um we have a model string
+[40:07] and that that comes from from um from our state." Uh and then, you know, you
+[40:11] could easily imagine in the future, this was one of the things that you could
+[40:14] have done as an exercise in in in the hackathon, is you you could say, let's
+[40:18] add an event that is like LLM changed, LLM model changed, and you have the
+[40:22] teeny tiny one-line reducer, and it just sets the model to be a different model,
+[40:25] and then um off you go, you make the next LLM request um with a different
+[40:29] model. And the other thing we need is instructions. Uh this is I think a bit
+[40:33] of a misnomer, so I would call it system prompt in our state. And we say, okay,
+[40:37] the like the system prompt for our LLM, what it's meant to be doing, we'll take
+[40:41] that in our state, and then you need a history. Um
+[40:44] a state history, and um And and so we've defined this uh and
+[40:49] normally what you'll do is uh you'll just put this into into uh like a little
+[40:53] uh into like a little uh TypeScript type,
+[40:55] if you're using TypeScript. So here we're saying, this is the state of our
+[40:58] agent. Right? And and in the beginning it's really simple, but in the future uh
+[41:02] you can very easily imagine how how you quickly add things to it, like say, am I
+[41:05] currently compacting, or is a tool call currently in progress, or or whatever
+[41:09] else um you might have. Um and uh the idea is to create a system in which it
+[41:14] is trivially easy with three, four lines of code to add one of those capabilities
+[41:19] uh to it. And then you say, okay, what's my
+[41:21] initial state? Um because we're processing the stream,
+[41:23] initially there's no events, so we need to know what we're what we're initially
+[41:26] starting with. And so we're just saying, uh this is we're starting with an empty
+[41:29] history and this system prompt and GPT-5.4.
+[41:34] Um And then the next thing you do once
+[41:37] you've um once you've done that is you need to
+[41:39] decide, what events do I need to derive this um
+[41:43] to derive this state? Uh and in this case we will just um
+[41:49] uh create a new event here. Uh a new We're using Zod here for schemas, we're
+[41:53] saying it's an agent input added event, and it just has a string.
+[41:57] Um and then whenever anything comes back from
+[42:00] OpenAI, because that is like a fact that has occurred, even if it's just a teeny
+[42:03] tiny fragment of a string or or something else, we store that in um
+[42:07] in an event. Um
+[42:10] And that's it. Uh the These are These are the two the two main event um
+[42:14] event types. Um I don't think we need any of this
+[42:17] stuff here, actually.
+[42:21] Basically, what happened, as is often the case,
+[42:24] I uh I I attempted to instruct an agent to rewrite all of these examples
+[42:29] to uh be simpler to execute just before, and it just um rewrote them quite
+[42:34] significantly. But this is really all you need. So, um
+[42:37] and then uh you have to write your reducer first, and the reducer is
+[42:40] basically where you just say, "Okay, when an event is encountered, uh how do
+[42:43] I update my um how do I update my uh state?" You say,
+[42:48] "Okay, when an agent input added event um is encountered, this here is using a
+[42:52] a little like Zod helper library, actually one that Misha made called
+[42:55] Schematch. Uh it's just uh it's it just gives you basically safety on this
+[42:59] payload here. It says, "When I have an agent input added event, then I want to
+[43:03] my state to be updated as the current state plus the history, except the
+[43:07] history also gets uh this little uh this little thing here uh here appended. So,
+[43:13] we're um and and um the the reason we're doing that is
+[43:17] because uh OpenAI's responses API, um since we're making an OpenAI
+[43:21] processor, we're basically translating between our view of the world, we just
+[43:25] have this like agent input, and um it's just a string, uh but OpenAI wants you
+[43:30] to put role user and and then put the string in a content field, so we're
+[43:33] putting that there. Um
+[43:36] and um then the other thing we need to do um
+[43:41] when you use the OpenAI streaming API, it'll it'll like
+[43:44] basically chuck out tons and tons of these output response um
+[43:49] events, and uh one of them finally at the very
+[43:52] end will be um of type um uh
+[43:58] bop bop bop bop bop um
+[44:03] um
+[44:05] Yeah, I think I think this is a bit hogwash. Um
+[44:07] >> entity event at the end of the day Huh? Yeah, yeah, exactly. It It basically
+[44:12] does What we really want here is um
+[44:17] uh
+[44:20] um
+[44:26] Yeah. Oh, thank you.
+[44:31] Um Is that actually right?
+[44:35] Um No.
+[44:42] Um
+[44:45] Let's just
+[44:49] I don't suppose you have managed to get the
+[44:51] >> I have pushed workshop two to the >> Yeah, but it's
+[44:54] >> the demo repo, but it's more or less as is.
+[45:00] >> Yes. >> Yeah, let Okay, so let's let's just like
+[45:04] uh sort of like admit defeat on the thing that I was going to do and just
+[45:06] like try try and show you how how how it would because we we can get something
+[45:10] like very simple working, right? Because we have the extremely simple ping pong
+[45:13] processor that that does work. Uh and so here we can uh we can even uh
+[45:19] just Mm.
+[45:23] Um
+[45:26] Let's maybe actually start here.
+[45:32] >> And then I hit I hit insufficient quote running my uh
+[45:41] >> Hm. Jub jub jub.
+[45:47] >> Yeah, we we do now have the same examples on the other repo, but it'll
+[45:51] it'll work. >> Yeah.
+[45:53] To be honest, I think I think we might have to just admit defeat and we can
+[45:57] just talk about something else or give you give you the time back. Just because
+[46:00] the problem is we can't actually run these things.
+[46:03] Uh and I think it will take me like probably like 10 minutes of actually
+[46:06] concentrating to to get them runnable.
+[46:09] Um so maybe we should uh admit defeat on
+[46:13] that. Um I do wonder if there's like
+[46:17] does it does Yeah, does does it does it sort of make
+[46:22] sense what the what the idea is especially with with it being
+[46:25] distributed? So the
+[46:28] right that you can say, "Okay, like I have my processor over here
+[46:31] and your agent can use it. And it can be on a different server or it can actually
+[46:35] be in a in a dynamic worker." Um and um
+[46:41] yeah.
+[46:44] I I think without showing it, it doesn't
+[46:46] really make sense.
+[46:50] >> So is is the idea you use um so with the stream processing, you take
+[46:54] this event stream >> Yeah.
+[46:55] >> from OpenAI >> Mhm.
+[46:56] >> and it contains events like output item added I I know the output
+[47:00] model better than I know the input. >> It's very similar.
+[47:03] >> So and then you've got some series of like text deltas, say.
+[47:06] >> Yeah. >> And so the reducer here is kind of
+[47:07] squashing all of those events >> Yeah.
+[47:09] >> and then materializing that sort of partial response
+[47:12] >> Yeah. >> into an event, right? So then the bit I
+[47:15] was trying to understand was sort of with this stream processor
+[47:18] >> Yeah. >> sort of framework that you've built is
+[47:20] like these materialized events is are they
+[47:23] persisted as new messages on the stream? >> Um
+[47:26] >> Are they being the clients consume the raw events and sort of you're doing the
+[47:29] materialization client side or is this sort of
+[47:32] a part of something that's happening in the
+[47:34] >> So every Yeah, so so everything that happens in the
+[47:38] system, every streaming chunk, everything becomes a becomes an event in
+[47:41] the stream. And then you have reducers running in many different places. Like
+[47:44] uh for for instance, uh you know, even this thing with like is the stream
+[47:47] paused or is the stream not paused? The actual implementation of that is um
+[47:53] maybe that maybe that's actually useful because this is running in production
+[47:55] now. Uh like right like there is a a circuit breaker processor. And and this
+[47:59] is like how the whole thing is built even inside the event servers. And the
+[48:02] circuit breaker processor has an initial state of paused false, and it has paused
+[48:06] reason null. And basically and then it has a really really simple reducer
+[48:11] um that just checks what are the last 100
+[48:13] timestamps of events I've seen. If the last 100 timestamps I've seen seen don't
+[48:17] go you know, don't go more than a second back, then I'm just going to append a
+[48:22] append an event. So, the reducer basically just accumulates these
+[48:24] timestamps and then the after append function
+[48:27] here says, "Okay, if I if I have seen too many timestamps in the last second,
+[48:31] I'm going to I'm going to throw the circuit breaker." So, this is like a
+[48:34] real processor that runs inside my my um my service. But let me show you another
+[48:38] one. This one here, this UI, this is also a
+[48:41] stream processor. What does this UI do? The UI takes all of these events and for
+[48:45] some of the events that it deems like interesting, it chucks
+[48:49] it basically it it basically projects them onto what we call feed items. So,
+[48:53] these things here that have like slightly nicer rendering, they are feed
+[48:58] items and they are not the same as events, but they're derived from events.
+[49:01] So, when you're making UI for this thing, you're also just reducing. Um
+[49:06] and because the reducer is just a synchronous function, right? If if if
+[49:09] you knew for example, I have I have this like Pi agent harness
+[49:14] processor and it comes with a whole bunch of event event types um
+[49:18] and it has a reducer, you can just in your processor use their
+[49:21] reducer. It's practically free, right? Like you can just import it and run it.
+[49:25] And then you can just sort of like start building abstractions that rely on their
+[49:29] event types. Um and so I think what I'll what I'll what I what
+[49:34] I will commit to doing because this was such a shitty experience is I will just
+[49:38] do do the whole rundown in video form on the internet.
+[49:42] And that was one of the things I was going to show. Like you can just hook up
+[49:45] Pi or Clawed or Open Code as well. And say okay, like
+[49:51] they come with a bunch of events and you can store them in this event stream and
+[49:55] you can react to them or or build on them.
+[49:58] Um Does that answer the question like where
+[50:01] the reducer runs? Um Um and and then like one of the things
+[50:05] you can do with this is you can also actually just append an
+[50:09] event that has some source code in it and then it runs that particular
+[50:12] processor literally automatically for you
+[50:15] horizontally scalable. Um >> It's just yeah. Do you have the example
+[50:20] of showing how you do that where you're appending like
+[50:23] >> Yeah, I do have that. I do have that. I do have that.
+[50:28] Yeah, well actually we can do it here. Yeah, I think I think I maybe maybe that
+[50:31] is good. Just like focus instead of trying to write code we can focus on the
+[50:34] things that might work. Um so let's we can create a new stream. By the way, all
+[50:37] streams are created you know completely implicitly so you can just
+[50:43] post to anything under the streams API and it'll it'll make you a new stream.
+[50:46] And then here there's in the UI and you can also play with this if you want to
+[50:50] just see there's a there's a bunch of sort of preset um
+[50:54] preset events and one of them is here. You can append
+[50:57] an event of type dynamic worker configured to this thing.
+[51:01] And what does it have? It just has a script in it and the script is a string
+[51:05] and inside the string is a reducer and an after append hook.
+[51:10] And so this is um literally a uh
+[51:14] like a stream a stream processor. It would be
+[51:16] funny if this if this is the thing that works because this is I was basically I
+[51:20] was basically most of the night working on this because this is the most
+[51:24] exciting bit but it wasn't really like workshop grade because it was
+[51:27] you know, you get to get like the first five concepts and then you're like by
+[51:30] the way, you can deploy this by just adding an event.
+[51:33] Um but if I if I just say ping here
+[51:37] it says pong, right? That's pretty crazy. Like I have here a stream
+[51:41] that knows nothing about the world and then I have appended this event here
+[51:46] that just has a little bit of JavaScript in it. And this little bit of JavaScript
+[51:50] uh just makes it respond with pong whenever
+[51:53] it encounters something with ping. And then there is actually a a version
+[51:57] of this. This is the thing that actually took took the night away, so to speak,
+[52:01] is if you have these processor files that
+[52:03] export a processor that you define with define processor, you can bundle that
+[52:06] into an event effectively. And this
+[52:11] AI agent, I also got running like that. But of course you don't want to have
+[52:15] your OpenAI API key in there. So that is why we have this like slightly awkward
+[52:19] enforce here, where you can put your OpenAI API key outside of the stream,
+[52:24] and then um it will basically, when it makes a fetch request, it'll substitute
+[52:28] the secret in in the header. But um Yeah, I'll definitely I'll definitely
+[52:33] post a video of that, because that's that's pretty wild. Like you you can
+[52:35] write like the 40 lines of code required for basic AI agent, and then you can
+[52:40] append that to any stream, and then that stream becomes an AI agent.
+[52:46] I don't know. I'm sort of
+[52:48] looking at like two or three nods, but mostly blank blank stares. It is very
+[52:51] strange. Um But uh but but I think does this does
+[52:54] this make sense what happened here at least? Because you can This one you can
+[52:57] just play with. Like you can just go in the UI.
+[52:59] And so uh to some extent uh actually you can uh you can make increasingly
+[53:05] more complicated processors for your streams.
+[53:08] Uh you can just you can just code them in this input field if you want. Or uh
+[53:13] you know, um the only problem is it cannot have any
+[53:16] dependencies. Like if you want to NPM packages, you have to bundle it into
+[53:18] this string, which gets a bit more complicated. But um
+[53:23] Yeah. Yeah, so this is the other thing. Like
+[53:27] everything that you you might have noticed is everything has a slug. It's
+[53:30] just like a URL safe identifier. And so the the event here is actually called
+[53:34] dynamic worker configured because you can override it. And And
+[53:39] what also already works with this event type is you can give instructions to an
+[53:43] AI agent to make itself different functionality
+[53:48] just by calling append um with like a little bit of a different
+[53:51] JavaScript um and uh you know you you could you can
+[53:55] quite easily imagine overcoming the bundling problem for example by just
+[53:58] saying oh there's another event type which is called like uh sort of like uh
+[54:02] unbundled uh dynamic worker which just has a package.json file a field and a
+[54:06] script field and then a different processor takes it bundles it makes the
+[54:10] fat event that has all of the bundle source code and suddenly uh is is
+[54:15] basically like a like a IDE and and that's then where you can you can
+[54:19] hack on the agent harness without having to really like install
+[54:24] anything or like bring servers into the mix or or whatever
+[54:27] um but sadly was not able to show it so bummer
+[54:31] >> What if what if there is an error in the in the JavaScript
+[54:35] or you put it in the stream? >> hm?
+[54:38] >> So if you push the >> JavaScript code in a stream
+[54:42] and if there is an error in that code or if you made a
+[54:46] >> uh >> typing error what happens then?
+[54:49] >> uh well this this is uh this is uh JavaScript there wouldn't be a typing
+[54:52] typing error um but it uh if there's any kind of error
+[54:56] the only thing that can possibly happen is that you get an event so there would
+[55:00] have to be an error event um >> and there's no there are no typing
+[55:03] errors as implemented right now but you that's because this is a
+[55:07] JavaScript evaluator but you could also find a way to run a TypeScript
+[55:11] compilation step on it first and then you could emit errors saying there was a
+[55:15] TypeScript compiler error then you could run it through an LLM to try and fix it
+[55:19] and emit a new event with the fixed code or do something else with it
+[55:23] >> um >> the idea is that just everything that
+[55:25] happens results in an event and then you can react to those events however you
+[55:30] you see fit
+[55:33] >> and then the number one >> Do these events data then
+[55:36] evaluated and run in your back end, right?
+[55:39] >> Yes, so in this particular case, it's it's dynamic workers in Cloudflare. So,
+[55:43] it it just spins up a small small dynamic worker. Um so, basically, like
+[55:48] the deployment story for processor like this is or or like one way to think
+[55:51] about it is uh at what when when this was still working before I asked it to
+[55:55] be refactored and broken, I had um the way I would do it is I would locally
+[56:00] on my computer, I would do the SSE subscription and and run my processor
+[56:03] that way. And then, once I thought it was cool, uh I could either deploy it
+[56:07] just as a web service on on Cloudflare workers or Vercel or or wherever uh and
+[56:12] and just tell uh tell the um agents uh uh the tell the streams to notify me
+[56:18] whenever a new event needs to be processed or uh alternatively, it just
+[56:21] use this dynamic worker thing. Um and like this I don't I don't know if
+[56:25] this is going to work. This is why I like at the moment, it's looking more
+[56:27] like it's a really dumb idea, I think, because it's really not coming across.
+[56:30] But, the For example, you could have a plugin for your agent uh that runs on
+[56:34] another computer, especially if it was like something like really important
+[56:37] like a prompt injection protection or something like that, right? Like you
+[56:40] could say, "Oh, okay. The way that my agent uses your prompt injection
+[56:43] protection service, it can't really be through MCP because there's no way to to
+[56:48] kind of like proactively hook into the agent loop or or um at least not at the
+[56:52] minute. But, what it could be is it could say, 'Okay, my my agent loop
+[56:55] actually waits for up to like 200 milliseconds before making any new LLM
+[56:59] request uh for any safety checkers to say that.'
+[57:02] And then, you can just literally ask your safety checker over there. I don't
+[57:05] care how you implement it. You could even charge me for it, right? Um
+[57:10] and I just don't Yeah, I just don't think that's uh currently
+[57:14] possible in in any other way. That's why I think it's quite important that the
+[57:17] stream can reach out to the processors and say,
+[57:21] "You got to do something, you know? You need to process some events now." Um
+[57:26] Um there's a there's like a couple other uh potentially Mm, I don't I mean, it's
+[57:31] my >> Yeah.
+[57:32] >> Yeah. >> One of
+[57:32] the ideas we shared is uh my agent might use just-in-time
+[57:38] services of other agents offering.
+[57:40] >> Yeah. >> And he might be charged for it.
+[57:42] >> Yeah. Well, I mean like probably in initially
+[57:46] the human would be charged of it. But But this is just like there there is no
+[57:49] way like let's say okay, so Claude code if I want to make a Claude code plugin
+[57:53] um if if I wanted to make that into a business, think think about how you
+[57:57] would have to do that at the moment. And you need to give some sort of
+[58:02] instructions or or something to to to Claude code either to proactively
+[58:07] call your MCP tools or or something of that nature or call maybe some CLI tool
+[58:11] that was previously authenticated where you did like CLI login to you know like
+[58:16] prompt injection protector.com and then somehow it works where whereas um
+[58:20] uh really I think you can just plug into
+[58:23] the into the agent stream like into the event stream directly. Like the the
+[58:27] interface is just somebody somebody notices that Claude is about to do
+[58:30] something and chuck some more events in. And And like they kind of all work that
+[58:34] way but not quite. Like it's it's sort of
+[58:37] like you have to squint a lot to to see that that's what it all compiles down to
+[58:42] um um
+[58:45] Another thing maybe worth pointing out if for some of you that have tried to
+[58:48] like try to make open code or or or pi plugins or whatever is there's no before
+[58:52] hook. This is very very important. There's no like there is actually in the
+[58:55] back end like our built-in processors the only difference to our processors
+[58:59] and your processors is that we can actually stop events from ever being
+[59:02] appended. For example that is why the pause feature could not be implemented
+[59:06] by a third party. So there's a sort of like certain things that are just
+[59:10] um that that need to happen before an event goes in the stream. But um broadly
+[59:14] speaking I'm very against before hooks. Like I think there were
+[59:17] some instances in in open claw for example some massive performance
+[59:20] regressions and and cost increases where you know you can you can break uh
+[59:24] you can break context caching quite easily with before hooks. You can
+[59:27] massively destroy performance. I guess it's way better to think of the whole
+[59:30] system as as being eventually consistent. And you know,
+[59:34] doing all these distributed systems things like saying, "Okay, we're going
+[59:37] to wait for up to 200 milliseconds for somebody to say I've got a little bit of
+[59:40] information for you, but then we're actually going to make the LLM request
+[59:44] whether you come in with information or not because
+[59:46] this is needs to be resilient system. So, if you think for example about rag
+[59:50] pipelines and and things like that, you can easily have a little processor that
+[59:53] says, "I have like a index version of the Notion knowledge base or something,
+[59:58] and I'm just going to sit here and try to squeeze in a little bit of extra
+[1:00:02] context if I think it's relevant, but if I don't get there in time, it's
+[1:00:06] like totally chill. The whole thing still works. It's not like I've I've
+[1:00:08] kind of delayed the the agent or something."
+[1:00:12] Um yeah.
+[1:00:16] >> What about the So, you're also listing this this
+[1:00:19] instance of each rate. Like, how would you imagine in the future everyone has
+[1:00:22] their own one or two
+[1:00:24] >> You mean I mean, the the the the the streaming
+[1:00:26] database. Like, I don't know. I I I I think um I
+[1:00:31] think this could work on almost anything that is like durable stream shape. So,
+[1:00:33] this was just for the purposes of this um exercise. Uh
+[1:00:38] I do think like there is a potentially an interesting scenario where like where
+[1:00:42] like It's
+[1:00:44] It's not even really like it's combination of a queue and a pub sub
+[1:00:47] system and a and like a streaming database and uh
+[1:00:50] that can also run code for you, but but that that sort of thing is an
+[1:00:53] interesting infrastructure primitive that maybe somebody could make. Um I do
+[1:00:57] think that yeah. But in principle, like I I don't know if
+[1:01:01] if you don't know about it yet, you can read up on this durable streams API
+[1:01:05] specification that somebody came up with. We don't follow it exactly, but
+[1:01:09] uh close enough, and it's it's basically like a like a very common old idea. Like
+[1:01:16] um The the thing that is more new is that it would be like you would also
+[1:01:21] have push subscriptions out of it. But there are some things that do is there's
+[1:01:24] a thing called NAT like Jetstream NAT or something that that does it.
+[1:01:29] Um Yeah.
+[1:01:32] >> Are you talking about like the electric sequel?
+[1:01:35] >> Yeah, exactly. They they have durable streams, yeah.
+[1:01:37] And like a durable stream is just like an append-only event log with with
+[1:01:41] offset tracking. And and the you know, they want the client to track
+[1:01:44] the last consumed offset. That's also how say Kafka works or something like
+[1:01:48] that. But you can also do it the other way around and have the server track the
+[1:01:51] offsets. And those are more more normally like there's
+[1:01:55] Google Cloud and AWS they have these pub/sub systems
+[1:01:58] where they say, "Oh, we'll just like give you the next event and we'll keep
+[1:02:02] track of of the offset for you." Um
+[1:02:06] >> I have one other question. >> Yeah.
+[1:02:07] >> All right, say you say you have got a I've I've got my ability or my and I
+[1:02:11] have a sub particle images and I hook it up to like a local LLM which is
+[1:02:15] generating images and then anyone could essentially pass a stream to that which
+[1:02:19] would then go to my LLM generate an image and return it back.
+[1:02:22] >> Yeah. >> How would I like prevent a certain
+[1:02:25] amount of like basically flooding with requests and
+[1:02:27] >> Oh, I mean you would need to have authentication on it. Right right like
+[1:02:31] this this entire thing would never like right like this
+[1:02:35] I was thinking like it might be fun to just say there's a there's that yet
+[1:02:38] basically. Yeah, exactly. It might be fun to just say there's a public
+[1:02:40] namespace and it just gets cleared every hour or something, right? Because it is
+[1:02:44] kind of nice that anybody anywhere on the internet can just curl a thing or
+[1:02:47] like copy and paste a curl from somewhere and and then suddenly have
+[1:02:50] like a flavor of agent. I do think that's quite interesting, but it just
+[1:02:53] needs to be deleted every like quite aggressively. Um
+[1:02:56] Yeah, but but I think I think that's more or less a solved problem. It's like
+[1:02:59] a bit gnarly, but basically the way I envision it you would do it if you did
+[1:03:04] this properly is on each event you basically have like client provenance
+[1:03:07] information. We say like who was this? Like what were they able to do? Like how
+[1:03:11] how sure are we that these people are you know, that the HTTP client or the
+[1:03:14] the stream client was actually entitled to do this operation. Um
+[1:03:20] And and again, you can model all of that as events.
+[1:03:25] Right? Like you can you would just have an event that is like make this stream
+[1:03:28] public. And until you make that event, it can
+[1:03:31] only be uh written to by whoever created it or something.
+[1:03:37] Um
+[1:03:39] All right. I might ask uh um uh Sean if we can instead of this video, do a video
+[1:03:46] we'll record a little bit later today um that shows it more nicely cuz I do think
+[1:03:50] it's worth showing. It's just a little bit too short short
+[1:03:54] notice.
+[1:03:59] So we just wrap it then if uh I don't I don't mean to keep you all of you uh
+[1:04:03] like 10 minute late longer break. If anybody wants to chat.
+[1:04:07] >> Thank you.

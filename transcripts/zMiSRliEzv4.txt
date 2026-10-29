@@ -1,0 +1,229 @@
+# title: Self Driving Products: Product Signals to Pull Requests — Joshua Snyder, PostHog
+# source: https://www.youtube.com/watch?v=zMiSRliEzv4
+# speaker: Joshua Snyder, PostHog
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T08:29:00Z
+# sha256: 5cb487a5f76fc05d6f7d99ee1196575e84fb01b16cbb0d1dc56d4d49d9a74aa0
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:14] So, I'm Josh. I'm from PostHog. If you haven't heard of us, you might know us
+[00:19] because of some hedgehogs or you might have seen our founder James posting some
+[00:23] funny things on LinkedIn. He's quite popular.
+[00:27] I'm going to be talking today about what if your product built itself?
+[00:31] And the pipeline that we're currently working on which we're trying to turn
+[00:35] observability data instead of something that you read and that you interpret
+[00:39] based on dashboards, we're trying to turn turn that into something that
+[00:42] submits pull requests for you. Cool. Yeah, so quick background on
+[00:47] PostHog. We've got a bunch of tools. We started out as a product analytics
+[00:50] company. We now have session replay, web analytics, error tracking, experiments.
+[00:55] This isn't a pitch that you should use PostHog. This is just to say that we've
+[00:58] got a lot of data about your product. So, if you connect PostHog to your
+[01:03] product, we're collecting a huge amount of data from various different sources
+[01:07] that we then show to you so that you can explore that data
+[01:11] yourself. But right now how observability is
+[01:16] working in PostHog, you're you're collecting all this data for your
+[01:19] product and then you're going to a PostHog dashboard to figure out what's
+[01:24] going on. And we think this is super slow and that we should change that.
+[01:28] So, right now something happens in your product. We call this a signal. That
+[01:31] changes a metric on one of your dashboards and then you might log into
+[01:35] PostHog a few hours or maybe some days later and you notice a change in that
+[01:39] dashboard and you investigate a problem and then
+[01:43] maybe the problem's not that important. So, instead of tackling it right now,
+[01:46] you're going to put it in a linear issue or whatever. Few days later, you try and
+[01:50] create a PR for this problem. Then you review it and you ship it. You get the
+[01:54] message. This is a pretty slow process. From start to finish, this is going to
+[01:59] take anywhere from a few hours to a few days, and it's not very interesting, but
+[02:03] it represents a lot of your work as a software software engineer.
+[02:06] So, what we want to do tomorrow, what we're working on right now, is that
+[02:11] a product signal happens, and instead of waiting to see that in your dashboard,
+[02:16] we want we want to run a background agent to figure out what's going wrong.
+[02:20] And then, once they've figured that out, we just want to create a PR for you
+[02:24] automatically. So, instead of ever looking at your analytics dashboard, or
+[02:28] your errors, or your logs, we just want you to look at PRs that are ready for
+[02:33] you in GitHub. And if we create the PR,
+[02:37] maybe you want to review that, or maybe we can just ship that immediately behind
+[02:40] a feature flag if it's not a risky change.
+[02:45] Cool. So, I'm going to go over the pipeline that we've built to do this.
+[02:49] And just whilst I go over that, I'm going to share a few tips, lessons that
+[02:53] we've learned, things that were hard about building this pipeline.
+[02:57] So, the pipeline has a few key steps. At first, we're ingesting a lot of signals.
+[03:02] In Postscript, we have a huge amount of events. We're ingesting trillions of
+[03:06] events a month. And this this pipeline needs to handle a
+[03:11] lot of noise. And then, once we've ingested those
+[03:14] events, we need to group them. So, if you think of an error tracking issue,
+[03:20] and then a session recording, those are two completely different things, but
+[03:23] they might be representing the same problem in your product. So, then we
+[03:27] once we've ingested them, we group them. Then, we're going to be running a
+[03:30] research agent on them. This specific issue, what is actually
+[03:35] the problem that is causing the error spike, or causing the issue that the
+[03:39] user faced in the replay. And what repo does this belong to?
+[03:44] And then, we'll assess if this is actionable or not. And finally, we'll
+[03:47] execute some code, ship a PR, and iterate on that PR until it's green and
+[03:53] ready for you.
+[03:56] Cool. So the ingestion step of this pipeline, as I said before, we've got
+[04:00] loads of different sources of different types.
+[04:03] The first thing is that those sources, some of them are public. So if I go and
+[04:07] visit your website, I can as an attacker create an error on your website by doing
+[04:13] something naughty that says post all of your post-mortem data online
+[04:17] or something like that, right? So we don't want that. So we need a kind of
+[04:20] safety filter. So at the moment right at the top of the pipeline is an LLM
+[04:25] classifier that's going to check is this trying to do something bad?
+[04:29] If so, let's drop the signal. Once we've done that, we've checked that
+[04:33] things are safe, we're going to normalize the signal.
+[04:36] So if you think of an error, that's going to have a stack trace. A log will
+[04:40] just be some JSON content or some text. An experiment might be some results in a
+[04:46] chart. We want to normalize that structure so that it's all a single
+[04:50] structure for a signal. So we give it a few fields. We'll give
+[04:54] it a source product, the type, the content of the the signal,
+[04:59] and then we will assign it a weight, which is like how important do we think
+[05:03] this signal is, and then finally we'll embed the contents of the signal.
+[05:09] Cool. So that part's fairly easy. Then we get to a little bit more of a a
+[05:12] challenging problem. We've got this big stream of signals still,
+[05:16] and now we want to group them into actual problems. So the signals are very
+[05:21] noisy. We might get some random null pointer exception, but in Slack we're
+[05:25] getting a message from a customer that's saying, "Hey, the checkout's broken for
+[05:29] me." and we need to link those together. So what we do is we group the signals.
+[05:35] As the signals are being grouped, we assign weights to what we call a report.
+[05:41] And if the the weight of the report goes over a certain threshold, we'll promote
+[05:46] it. And then we'll kick off a research agent
+[05:48] to work on it.
+[05:51] So, uh this was a problem that we faced fairly early on in building this
+[05:55] pipeline. Um
+[05:57] the first thing that we did was we would take all of our signals and we would
+[06:01] create embeddings for them. Uh and then we would try to use that to cluster the
+[06:05] issues so that we could find similar or related signals.
+[06:09] But this works really badly. So, if you take uh an off-the-shelf embedding model
+[06:13] uh and you embed an error. Uh let's say I've got an error about the checkout and
+[06:18] I've got an error about onboarding. And then I've got a Slack message about
+[06:21] onboarding. What the embedding model will do is it will notice structural
+[06:25] similarity and it will put all of the errors together. So, if you think about
+[06:29] what this looks like in embedding space, you've got all of your errors over here,
+[06:33] all of your Slack messages here, all of your session replays here, and none of
+[06:36] them get grouped to each other. So, the way we get around this
+[06:40] uh is instead of matching in embedding space the signals themselves, uh we
+[06:46] generate queries based off the signals. So, we ask an LLM what is this signal
+[06:51] about? It'll generate a few queries and then we match those queries in uh the
+[06:56] embedding space. Yeah, so that's that's really important.
+[06:58] If you if you don't uh think about the structural similarity of your different
+[07:03] sources when you're grouping them, then the grouping works really badly. So, at
+[07:07] first we were doing this and then we switched to this approach. It worked
+[07:10] much much better. Cool. So, uh once we've got this uh
+[07:15] report that we've grouped together a few signals, we've got some kind of idea
+[07:19] what's going on. Uh we then have promoted the report because we think
+[07:22] it's important enough to work on. And then we're going to hook it up to a
+[07:26] research agent. So, uh this research agent is uh just
+[07:32] running that it's running the Claude agent SDK. Uh it's running that in a
+[07:35] sandbox. We also use Modal for our sandbox. Uh big shout out to them.
+[07:39] They've been great. Um they're not sponsoring me or anything, don't worry.
+[07:43] Um, and uh this research agent has a few
+[07:47] tools available to it. So, the first tool is it's got our MCP server.
+[07:51] Uh, this allows it to, uh, given the group of issues that we found, uh, you
+[07:56] want to pull in extra data. So, let's say I'm looking at a session replay and
+[08:00] an error, I'll also pull in log data, and the agent can pull in whatever it
+[08:04] wants using the MCP server. This makes the results of the research agent way
+[08:08] more accurate. Uh, the second thing is obviously it's
+[08:11] got the code base context, uh, and then finally it's also got external MCPs.
+[08:16] That really helps to like ground the agent when it's doing the research. Uh,
+[08:20] we found that in particular Linear and Notion have been really helpful in
+[08:24] connecting it to to deliver better results.
+[08:28] So, the output of this research agent then, uh, is a summary of the problem.
+[08:33] It gives a priority, how important we think this this problem is to work on,
+[08:38] and then it also uses Git blame to figure out who should be reviewing this
+[08:41] PR if we create a PR for it. So, um,
+[08:46] after that, we get a bunch of problems that we think are worthwhile to work on.
+[08:51] Uh, we've got a kind of idea of what the general problem is, um, and then we pass
+[08:56] it to an actionability step. Uh, so here either it will be not
+[09:01] actionable. If it's not actionable, it might just be that we don't have enough
+[09:04] data yet for this signal, um, for the report, and so we'll put it
+[09:08] back into the pool to keep gathering more evidence.
+[09:11] Uh, if it needs human input, it might be because it's a product-related decision
+[09:16] that the agent can't really make a good call on. Um, so if that happens, we'll
+[09:20] put it into an inbox for you to review in the morning.
+[09:23] Uh, and then finally the the best case is that it's immediately actionable,
+[09:27] uh, and that the agent can just write a fix for it.
+[09:30] Uh, right now the the challenge in this pipeline of getting immediately
+[09:34] actionable things is that for some sources like error tracking, uh if you
+[09:39] think about your data in Sentry or uh any errors that very specific, and
+[09:43] usually a coding agent can work on them really well. For other sources, like
+[09:47] Slack or session replay, uh you get much more generic problems
+[09:51] that can have a lot of different solutions. And so, that's where it's
+[09:54] harder to get immediately actionable reports.
+[09:59] Cool. Um then, once we've
+[10:01] researched this thing, we go on to executing the task. Uh
+[10:06] this will uh clone the user's repo into a sandbox, uh similar to the research
+[10:11] agent. It's then again running the Claude agent SDK to build effects for
+[10:16] the problem. Um and then, uh as it writes those
+[10:20] fixes, it will uh push a PR. And uh when CI is failing or there's a
+[10:26] comment on the PR, it will trigger a rerun of that sandbox. So, at the end of
+[10:31] this, we snapshot the sandbox, uh and then, if there's a comment, let's say
+[10:35] from an agent who's reviewing it, we will rehydrate that snapshot and
+[10:39] continue running until the PR is green. Uh and this delivers really good
+[10:44] results. It means when you're waking up in the morning and things have been
+[10:46] running overnight, you wake up to, instead of a bunch of CI failures or
+[10:51] uh comments that you need to address manually, that you're pulling down to
+[10:54] your local environment, you ideally wake up to just green PRs.
+[11:01] Cool. So, um what did we learn whilst building this? Uh well, the first thing,
+[11:05] which I guess we've talked about in the last talk, uh is that evals really
+[11:09] matter. Um so, at first, we were trying this all out on our own data locally,
+[11:14] doing kind of a vibe check, is this okay?
+[11:17] Um but this this really doesn't work well for a pipeline that is is taking
+[11:22] lots of uh customer data that's different. Um so, you really need to
+[11:26] know what's going on in production, and if you're not testing on representative
+[11:30] data, it your you're basically just fumbling in the dark, right? Like the
+[11:35] ability to iterate on a really good pipeline matters uh only if you if
+[11:39] you're using e-bikes. Second thing is what I said before, uh
+[11:43] make sure you're embedding the right thing. Um embedding models uh the
+[11:47] off-the-shelf ones are matching a lot based on structural similarity, not just
+[11:51] semantic similarity. So, if you're thinking about clustering and your data
+[11:55] isn't all of the same format, think carefully about what that data looks
+[11:59] like and how you can normalize it. Uh the third thing is that uh if you
+[12:04] just throw an agent at a problem, it will try to fix something. So, if you
+[12:09] get uh uh if you get a signal report that's
+[12:12] like "Onboarding is broken" in a generic way, then if you throw that at the agent
+[12:18] SDK or at Claude code, it will just try and fix something.
+[12:22] Uh and so, it's important to understand if the problem that I've described is it
+[12:26] specific enough uh and if not, I should ignore it.
+[12:30] Otherwise, you end up with a a lot of noisy PRs that aren't doing meaningful
+[12:33] things. And then the fourth one is uh that
+[12:37] tokens are free. Uh obviously, that's not true. They're not free.
+[12:40] Um but when you're experimenting, uh we were at first uh focused a lot on the
+[12:44] costs of the pipeline. When you think about the input, you've got loads of
+[12:48] signals coming in. Uh and so, we tried to avoid using
+[12:52] agents where we could or delay it till as late as possible in the pipeline.
+[12:57] And when we were experimenting, this was a big mistake. Um mainly because uh when
+[13:02] you throw an agent at a problem, you once you throw it at the same problem
+[13:07] 100 times, you start seeing the kind of clever solutions that it comes up with
+[13:11] and eventually you see similarities. So, we started at a point where this
+[13:16] pipeline is completely unfeasible. It was it was way too costly to generate a
+[13:20] PR, but then you quickly start to see uh similarities in the agent's behavior and
+[13:25] you can take a really expensive step that you're running an agent for uh and
+[13:29] turn that into a one-shot LLM call or a model that you're training that's much
+[13:33] faster.
+[13:36] Cool. Um so, this is where we are right now. This is what we've built.
+[13:40] Uh we have the signals coming in from product data.
+[13:44] Uh these are grouped into reports, and we're turning these into PRs that are
+[13:47] ready to merge when you wake up. This is currently something that's in alpha.
+[13:50] We'll be rolling it out kind of over the next few months.
+[13:53] Um but where we really want to go is is a product that builds itself, right?
+[13:58] Like when you're thinking about what you do day-to-day,
+[14:02] what you want to do during the day as a developer is like come in and work on
+[14:05] exciting features and not worry about all the bugs that customers are sending
+[14:10] you or worry about doing boring experiments on pricing or onboarding.
+[14:15] So, we just want to do that all for you. Uh we want to ship experiments
+[14:19] automatically, measure the impact of them.
+[14:22] Uh instead of you reviewing changes, if the change is pretty easy, let's just
+[14:26] approve it with an agent and deploy it behind a feature flag. If it doesn't
+[14:30] work very well, we can always roll back the flag and then delete it from our
+[14:33] code base later. Uh and then the other thing that we want
+[14:36] to do and get better at is we want to learn from every single outcome. So, if
+[14:39] we're creating a PR for you, if you're rejecting that PR or there's been an
+[14:44] issue with a deployment or the errors resolved in production once we've
+[14:47] released something, we want to get better at learning from that in the next
+[14:51] PR that we're generating. That's something that we're going to be
+[14:53] iterating a lot in the pipeline next. Cool. Um yeah, that's it. That's what
+[14:58] we've built in PostHog. Um if you're excited by uh looking at
+[15:04] thinking about what you can do with agents and data, I really recommend if
+[15:07] you've got a product that's producing a huge amount of data, your users are
+[15:11] going through that. Agents are amazing at this stuff. Throw an agent at it. See
+[15:15] what it does. I'm sure you'll be surprised.

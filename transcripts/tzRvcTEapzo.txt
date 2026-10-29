@@ -1,0 +1,702 @@
+# title: From Mixture of Experts to Mixture of Agents with Super Fast Inference - Daniel Kim & Daria Soboleva
+# source: https://www.youtube.com/watch?v=tzRvcTEapzo
+# speaker: Daniel Kim & Daria Soboleva
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T12:17:27Z
+# sha256: 9d41cc40f463ee73d2fec428474103a4eb529d5e3ea62e3139297a88552ad3db
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:00] [Music]
+[00:15] This is uh the API key. So, if you haven't scanned this already, please
+[00:19] scan it. Um it'll take you to our cloud where you can sign up for a free API
+[00:25] key. This will be the only thing you kind of need to do the workshop today.
+[00:30] Everyone got a picture? Everyone good? Cool.
+[00:35] Okay. Um hello everyone. Uh we are very excited to see you here. Today we
+[00:40] organized a very fun workshop for all of you. Uh we're going to first start with
+[00:44] explanation of what mixture of experts is and what like why this architecture
+[00:48] matters and then we're going to use agents to create something very similar
+[00:52] to it but it's called mixture of agents. So you replace your experts with real
+[00:56] agents. Um there will be a code alone session so everyone will build their own
+[01:00] app at the end and um for the agenda first of all we're
+[01:06] going to introduce the concept what is the mixture of experts why this
+[01:09] architecture exists and what kind of models are using it um and uh this is
+[01:14] basically like the way for us to continue improving the models that we
+[01:18] build u so like child GPT think about that models how do we scale them further
+[01:22] so they become smarter more in intelligent and there are two ways to do
+[01:26] it so one is to pre-train from scratch with mixture of experts architecture.
+[01:30] Another way is building a mixture of agents. So when you combine already
+[01:33] pre-trained model together in a one complex architecture so we're going to
+[01:38] build exactly approach number two and a hands-on workshop and uh at the end we
+[01:42] will have Q&A. So if you guys are interested about this models, what we do
+[01:46] with this models at Cerebras or you have any other questions we can answer that.
+[01:51] Um yeah, a little bit about me. So I'm a head research scientist at Cerebras. I
+[01:56] worked there for almost 4.5 years. Um I am specifically focused at researching
+[02:02] mixture of experts architectures and um just other architectures that help us
+[02:07] improve the LLMs and make the training more hardware efficient. Um in the past
+[02:12] I spent some time working on data scaling. So I created a data set called
+[02:16] slim pajama. Um that data set was the largest the best in quality data set
+[02:21] when it was released. Um, and yeah, prior to Cerebras, I was at Google
+[02:26] working on research and engineering projects.
+[02:29] Perfect. Hi, my name is Daniel. I'm the head of growth here at Cerebras. I do
+[02:34] both developer activations, developer marketing, but I also do startup sales.
+[02:40] So, if you need tokens and you're trying to run your startup and you want to use
+[02:44] Cerebris in production after the workshop, come talk to me. I am the
+[02:48] token the token arbiter for Cerebras for everyone that is not enterprise. Um and
+[02:53] if you have a cool research project you want to use Cerebras for I am also the
+[02:57] person to talk to. So if you want tokens for your project talk to me. I also
+[03:01] really like Hopot. Um I had Hopot three times in the last week. Um so yeah
+[03:06] that's that's a little bit about me. I'm based in San Francisco and I do a lot of
+[03:10] these types of workshops and events and things like that. Um and here's my
+[03:14] Twitter uh if you guys want to follow me. Um, and this is our intern, Kevin.
+[03:18] Uh, he's not here with us because he's taking his last high school final. He's
+[03:22] in high school, but I wanted to put him here because he's the uh person that
+[03:26] built 99% of the workshop that you're going to be doing here today, and I
+[03:30] wanted to make sure we shouted him out. Wait, I want to take a selfie with him.
+[03:35] I wanted to show him cuz he doesn't know I'm doing this. Okay. Um, and yeah, he's
+[03:40] uh going to school in UCLA coming in the fall, but he's currently in high school.
+[03:44] So, yeah. And that's his Twitter if you guys want to follow him.
+[03:48] Great. Before we get started, who here has heard of Cerebrris?
+[03:52] Okay, pretty good. Last time I asked this question like eight months ago, the
+[03:56] there was like two hands in a room full of like this. So, it's so much progress
+[03:59] that we've made in the couple last couple months. So, I will dive a little
+[04:03] bit deeper into what Cerebrris and why our hardware is so much superior than
+[04:08] our competitors in the later part of our presentation. But quickly, Cerebrris is
+[04:12] a hardware company that makes custom silicon that uh runs AI models super
+[04:17] duper fast. And here's a sidebyside of the chips uh comparing us to an Nvidia
+[04:22] H100. So there's just a sizable difference here. and um things that make
+[04:27] our hardware architecture super dominant kind of like all boils down to the
+[04:31] innovations we have made in the hardware itself and how we're able to linearly
+[04:35] scale with larger models which I'll get into later but currently we hold the
+[04:39] world record in every single model we host publicly um and it's not even
+[04:43] close. So for Llama 3.370B we're around 15.5 times faster than the fastest
+[04:50] inference provider on a GPU. So if you want kind of like something that doesn't
+[04:54] compare to anything that's currently in the market, Sirius is kind of your only
+[04:57] option for fast inference. So that's what our company does and this is what
+[05:00] I'm bringing to startup. So if you're a startup that wants this inference, you
+[05:03] should come talk to me after the talk. So what are we doing today? Yeah. So
+[05:08] actually spoiler alert, we're going to use Cerebras hardware today for our uh
+[05:12] workshop. So if you you guys can um actually try it. But uh before I want to
+[05:17] explain what we're actually building. So, we're going to build um an
+[05:21] application with a mixture of agents. Um each agent will be a separate LLM. Um
+[05:27] and kind of like right now, I want to explain why this is beneficial, why we
+[05:31] want to build that. Um and why this architecture is better compared to like
+[05:34] a monolithic one LLM that we use right now. Uh thank you. Yeah. So, um sort of
+[05:40] like from like pretraining perspective, how do we make larger models more
+[05:45] intelligent, better, how do we scale them faster? So all of these type of
+[05:49] questions we ask at Cerebras uh when we have our hardware we can scale models
+[05:54] pretty fast but like how do we make them more efficient what kind of
+[05:57] architectures we need to invest in. So um I kind of wanted to give sort of like
+[06:02] the evolution that happened in the lamp space for you guys. So we started with
+[06:06] the GPT3 that was released a few years ago and the model there um was quite
+[06:12] small um and basically what GPD3 paper showed is that if you continue scaling
+[06:16] the model size you're going to improve the performance your models will have
+[06:20] better skill sets. That's how you're going to scale it. Um the the next thing
+[06:25] that we saw in the LM evolution is you actually have to spend a lot of time
+[06:30] improving your data that you train on. So, llama model uh became bigger but it
+[06:34] also spend a lot of time on curating the data set and scaling the the the number
+[06:38] of uh talkings you train for as well. And now u you guys probably heard about
+[06:43] DeepC3 that was released a few months ago. That model took some additional
+[06:47] innovations into place. So if you want to go even larger you see like GPT3 is
+[06:52] 13 billion, Llama 3 is 400 billion and deepse 3 is 600 billion. So if you want
+[06:57] to continue scaling the model size which is what gives us better models we need
+[07:01] to come up with not just data set improvements but also architecture
+[07:05] improvements. So how do we actually um improve the
+[07:09] models and thus like serve the large models because as you increase the
+[07:13] number of parameters you have to come up with a like a way to scale it to scale
+[07:17] your inference infrastructure and make it more efficient. Uh the answer here is
+[07:22] mixture of experts. Um and these type of models like to just give you like an
+[07:27] overview how it works. Imagine that you have a transformer architecture which is
+[07:32] what we use as a backbone for large language models. It has different types
+[07:36] of layers. So here I highlighted like there are more layers there but like one
+[07:41] important layer some important layers are embedding attention at feed forward
+[07:45] layers. They all have different types of purposes in the network. Um and now
+[07:50] we're gonna see like how uh we change the standard transformer bottle
+[07:53] transformer architecture into something called mixture of experts. So if you
+[07:58] look at different layers and you do some interpretability work, you will figure
+[08:01] out that uh feed forward network has a specific bottleneck. It has a challenge
+[08:06] because fit forward network sort of like has to disentangle all the information
+[08:11] that um previous layers uh process like attention layer. So you can think about
+[08:15] it this way. um fit forward network has to decide which neuron in the network to
+[08:20] activate when it sees a golden gate bridge in a text. So it's really hard
+[08:24] because the task that we have for LMS sometimes they have different languages
+[08:28] sometime sometimes they require different specialization they could be
+[08:32] like mod domain biology etc. So feed forward network has the hardest job in
+[08:37] in the whole um so how does mixture of experts solve this bottleneck? Um
+[08:42] instead of having one monolithic fit forward network, we will create separate
+[08:47] fit forward networks and we will call them experts as you can see on the right
+[08:51] side of the screen. Um each expert will be specialized in a specific task. So
+[08:56] you can think about this way one expert can be solving math problems. Another
+[09:01] expert can be a biology teacher. Right? And the other thing that is crucial here
+[09:06] this this type of architecture allows us to increase parameters of the model. you
+[09:11] create multiple copies of the feed format network but you don't have to
+[09:14] activate all of them for every token you route through the network you can see
+[09:18] that there is an additional network called router within our network which
+[09:22] basically decides which expert to select for a particular token so you can click
+[09:28] next yeah and that allows us to actually increase the width of the model increase
+[09:33] the capacity of the model uh and scale the parameters because we know that from
+[09:37] parameters you are getting better skills without increasing the inference time.
+[09:42] So you can actually activate same number of parameters as for the monolithic
+[09:46] model. So you will might map like in terms of the time but you will be better
+[09:50] in quality because you trained a larger model.
+[09:54] Um yeah so um sort of like to clause on on this um this is um the approach that
+[10:00] other u companies are using like this is the industry standard right now open AAI
+[10:04] GPT4 models entropic all of them are using this way um this approach to scale
+[10:09] the models um and to gain better skills uh for for their models.
+[10:15] So yeah, models are really really cool and they are kind of like becoming the
+[10:19] industry standard for being able to run large large parameter models in a
+[10:24] efficient way. So you don't have to continuously just add hardware to be
+[10:28] able to run better and better quality models. But there are some other
+[10:31] approaches that also work. So something I want to talk a little bit about is
+[10:34] inference time compute. Um last year I believe um Elia Ciscover uh gave a talk
+[10:40] at Europe's around how it is we're in the age of inference time compute where
+[10:44] we have just thrown as much data as possible when we pre-train these really
+[10:48] really large models and eventually we're going to hit a data wall right where we
+[10:52] have no more additional unique data to train our models with. So now what we
+[10:56] can do is do more compute after the model has been trained to be able to get
+[11:01] better and better results and more and more intelligent models.
+[11:06] So an example of um problems that benchmarks test for are math problems.
+[11:11] So I want to first take a um math problem from the Amy math competition um
+[11:16] and see how certain um models kind of tackle this kind of problem. And the
+[11:20] thing with these types of math problems is that it's harder for like a single
+[11:25] non-reasoning model to be able to solve these because they require multiple
+[11:28] steps in sequential thought where it's really hard to do things like this
+[11:32] without reasoning. And when I ran this exact problem through GPT40, which is
+[11:37] not a reasoning model, it took 45 seconds to come to the wrong answer. And
+[11:41] this is like the frontier model. But uh chat GPT03 um sorry GPT03 which is a
+[11:47] reasoning model took 293 seconds to come up with the right answer. So this is it
+[11:52] on the right on do doing everything correctly but it just took 293 seconds.
+[11:57] So if you want something in a reasonable within three business days kind of
+[12:01] timeline this is like this is probably not the solution for you. Like imagine
+[12:05] you're like do scrolling through an app and it just is loading for six minute or
+[12:09] three minutes or how four minutes and 53 seconds. that just like an unreasonable
+[12:13] amount of time for a lot of like tasks. So I want to introduce something called
+[12:18] mixture of agent which is leveraging the collective intelligence of multiple LLMs
+[12:22] to come to the right answer and that I I think like because cerebrros is a super
+[12:26] fast inference provider. I'm sure everyone can see where this is going. So
+[12:29] a mixture of agents is basically the ability to take advantage of these
+[12:33] earthshattering speeds from our hardware and apply them into harder problems like
+[12:38] this. So it's not just about speed. It's about getting higher intelligence with
+[12:42] less smart models. And mixture of agents is a lot of it is
+[12:47] inspired by mixture of experts architecture because essentially you're
+[12:50] trying to do the same thing. You're trying to squeeze out as much
+[12:53] intelligence in an efficient way from a lot of like uh a lot of like kind of
+[12:58] tokens whether it's within the model or outside of the model. So the basically
+[13:02] how it works is that you send inputs to multiple LLMs with custom system prompts
+[13:06] like agents and then each model gives its own response and then basically a
+[13:10] final model combines all of the answers from all the individual models into a
+[13:14] single answer and this has shown that it outperforms even frontier models on
+[13:19] certain uh benchmarks um as benchmarked by together AI which who's the ones that
+[13:25] kind of came up with this idea and this term.
+[13:28] Um, so I want to show you an example of a startup that's actually building in
+[13:32] production with Cerebras in this mixture of agents model.
+[13:39] There's a YouTube video. Let's let's see. Worst case, I can just show the
+[13:42] Google Drive link. Sorry, the internet, as you all know, is
+[13:47] not great. So, I hope this loads. If not, wait. I think
+[13:52] I have it locally saved. One second. Uh, oh yeah, I do have it locally saved.
+[13:57] Perfect. So this is uh ninjate uh.ai and you can try this product in production
+[14:03] right now and they're basically building a smarter uh like chat chatbot and this
+[14:09] is ninjate solving the same exact question in 7.4 seconds and getting the
+[14:14] answer correct. So people are using this type of technique and our inference
+[14:19] together in production to solve really hard questions like this math problem.
+[14:23] Cool.
+[14:31] Okay, hopefully
+[14:36] please please tech gods. Okay, cool. So, we uh basically with uh what this
+[14:42] startup did was take um a bunch of models and a bunch of LLM calls and get
+[14:48] the right answer that a frontier model reasoning model took 293 seconds all the
+[14:53] way down to seven seconds. And here's how their whole application works. So
+[14:57] they have a planning agent that spits out eight potential proposals for the
+[15:02] right answer. And then another token, a critique agent
+[15:06] comes in and be like, "Hey, are these any of them feasible answers to this
+[15:10] particular problem that I'm trying to solve." In this case, all of them were
+[15:13] bad. So then what happens is that the planning agent goes back to the drawing
+[15:16] board and then spits out 16k context worth of thinking tokens of eight answer
+[15:21] proposals and then the same virtual cycle happens where the critique agents
+[15:25] like are any of them good in this case uh in the example I showed before two of
+[15:30] them were potential answer candidates that could have been the correct answer
+[15:34] and then another agent a summarization agent takes those two top answers and
+[15:38] then turns them in to the final answer which is eventually the right answer. So
+[15:42] this whole process, even though it took 7 seconds, took over 500,000 tokens to
+[15:47] be generated and 32 LLM calls, some of them in parallel, some of them
+[15:51] sequential. So this type of system allows you to take advantage of
+[15:56] non-frontier models, even open source models that may not perform as well on
+[16:00] benchmarks, and turn them into performing better than frontier models.
+[16:06] So yeah, like I said again, why don't people use 03 in production? It's
+[16:10] because it's very slow. Like what I can't even think about like use cases
+[16:16] where you can wait five minutes to come up with an answer unless it's like very
+[16:19] asynchronous. And Cerebras solves the speed
+[16:23] bottleneck. Um and obviously Cerebras is the leader in fast inference. So I want
+[16:27] to show you why we are so fast. So this is an architecture diagram of a GPU and
+[16:32] highlighted in red is the core or the thing that does all the mathematical
+[16:37] computations that allow LMS to predict the next token. In this particular GPU
+[16:42] which is the H100 there around 17,000 cores on this chip.
+[16:47] The problem is that the memory where all the weights and all the uh intermediate
+[16:52] calculations and all the other information needed to produce the next
+[16:54] token is stored largely off the chip. And these memory channels that
+[17:00] communicate between the cores and the external memory become bottlenecks as
+[17:05] you run larger and larger models because of course you have to transfer in more
+[17:08] weights and you have to transfer in more intermediate calculations in the KV
+[17:12] cache while you're trying to calculate the next token.
+[17:16] Cerebras tackles this by having a radically different memory management
+[17:20] system. We have 900,000 individual cores on one chip. And then with those 900,000
+[17:27] cores, we have 900,000 individual memory stores that are distributed all across
+[17:32] the chip one to one with our compute cores. And each core has direct access
+[17:36] to memory. The core specific memory holds the same
+[17:40] set of weights regardless of what you're putting into the system. So basically,
+[17:45] you don't need to wait for the external weights or the intermediate calculations
+[17:49] to load to be able to do the computations. we can just do it in real
+[17:53] time because there's no kind of memory transfer time that you need to wait for.
+[17:56] Everything is just on the chip and cerebr scales linearly across larger
+[18:02] models. The thing that makes service really fast with super large models is
+[18:06] that the only piece of data that's being transferred from chip to chip is
+[18:10] activations. That's the only piece of data that travels. It can even be like
+[18:15] transferred using a single Ethernet cord. that amount of data it's very
+[18:18] small with a DGX cluster with multiple GPUs they have to transfer so many
+[18:24] activations and cache computations in between layers because single GPUs
+[18:28] cannot do multiple layers of computations via hundreds of MVL links
+[18:32] connectors switches etc and that networking piece is the reason why we're
+[18:36] so dominant compared to Nvidia GPUs so Daria how does this all translate
+[18:43] Sure yeah um I probably want to start with like a problem that I have and see
+[18:47] how many people have the same problem. So when I interact with a monolithic
+[18:51] model with just one model, I usually ask to solve a particular problem and then
+[18:56] it doesn't get the right solution right away usually if the problem is complex,
+[19:00] right? So I have to continue prompting it and refining it and at some point
+[19:05] hitting the number of tokens that the model can process or something like that
+[19:09] and start over the chat from scratch. Does anyone else have the same problem?
+[19:14] Okay, cool. So I'm not alone here. Uh what we do uh with mixture of agents,
+[19:20] we're going to specialize each agent to solve a particular portion of the
+[19:25] problem. So imagine you have a very complex problem. Um I don't know, you
+[19:29] need to do a surgery, let's say, right? Imagine that. So we need different types
+[19:32] of people to help with the surgery and we're going to ask each expert to
+[19:36] specialize in one specific part of the surgery. So they all together can work
+[19:40] and produce like a better result compared to just one person who can do a
+[19:44] surgery, right? So we're going to do it through prompt engineering. Um and the
+[19:49] the one nice thing about it is instead of doing multiple rounds, multiple
+[19:54] iterations to find the best solution at the end, you're going to find the
+[19:57] solution at the zero shot. So at one shot, you're going to ask one question
+[20:01] and because each kind of like agent is already specialized in solving a
+[20:05] particular portion of the task, they will they will combine the result
+[20:09] together and it's going to be the final solution without continuous prompting.
+[20:13] So this is what we're going to build today. So this is the time for the
+[20:17] hands-on workshop. So before we move on, this is like the second time I'm showing
+[20:21] this. Everyone needs an API key. This is like the one thing you need to do for
+[20:25] the workshop. So everyone get an API key. Okay, cool. And then you uh please
+[20:30] uh go to this GitHub link um and then start and fork the repo. That's um the
+[20:35] next step. Kevin created it. Kevin, not Daniel. Kevin. But I don't have uh HD
+[20:41] shots of Kevin going like this. So uh that's me. Yeah,
+[20:50] this is also in our Slack channel if you don't want to QR code scan. So if you
+[20:54] are in the AI engineer Slack channel, feel free to go to um yeah, we also
+[20:59] dropped the slides there and uh you guys can interact there if you want help each
+[21:03] other out. It's called MOA MOA workshop. Does anyone have issues
+[21:08] finding that? Let us know. Yeah. And once you guys uh start and
+[21:13] fork the repo, um we're going to deploy this app via Streamlit or you can run it
+[21:18] locally, whatever you prefer. Um I just don't want to deal with Python
+[21:22] installation issues. So that's why we're I I suggest if you have the internet
+[21:27] bandwidth to go through Streamlit, but if not, doing it locally via um Python
+[21:32] is fine. And just quickly, u Daniel is going through the slides, but if you
+[21:36] want to come back to some of the steps, we shared it in a slack channel. So you
+[21:39] can open slides 50 to 54. They will have the same instructions.
+[21:45] Um MOA, mixture of agents uh- workshop.
+[21:54] Yeah. So once you star and fork the repo uh you basically are going to deploy it
+[21:58] via streamllet um or locally um and basically how you deploy it on
+[22:03] streamllet is you go to streamlink.io. I would suggest logging in with GitHub
+[22:07] that way everything is set up for you um and then deploy the server workshop that
+[22:14] you have forked into your GitHub repo changing the main file path and then
+[22:19] clicking advanced settings. And once you click advanced settings um you have you
+[22:23] just plug in your Cerebrus API key here and that's how you run the app.
+[22:28] So I'll uh wait like uh like two let's say three minutes for everyone to go and
+[22:34] clone and um spin up their um app and then we can go from there. Uh raise your
+[22:41] hand if you need help from me or Daria. We can help you get set up if you have
+[22:44] any questions. Let me set a timer. If you guys want to
+[22:50] have an access to the presentation, here is the QR code to our Slack channel
+[22:54] called MOA workshop. And if you want steps on how to set up the uh everything
+[23:01] with the streamllet, you can go to the slide 50 to 54. I already shared it in
+[23:05] the chat there. Yeah, I think Kevin the API key.
+[23:15] Kevin committed the API key. God damn it.
+[23:20] Thank you so much for bringing that up.
+[23:27] It's okay. His API key is rate limited. It's not like he has like the god API
+[23:31] key. But it's okay. He's an intern, right? Like yeah, feel free to like use
+[23:36] your own though, please. That would be great because that will get rate
+[23:40] limited. If everyone uses it, it's going to like obviously get very limited.
+[23:47] Daniel, I think I'm glad that my boss is not here. Yeah,
+[23:51] the secret just stays between you, us, and the internet, you know, cuz
+[23:55] apparently this getting in is being It's being recorded. No, I know. I know. I'm
+[24:00] going to rotate it right now.
+[24:05] Perfect. Danielle, I think we are getting the
+[24:09] prize for the funniest workshop ever, right? Wait, really? Yeah, probably.
+[24:13] Right. API key is committed. I kind of want to win though. So, like um if
+[24:17] everyone wants to vote for us as like the most popular slashf funnest
+[24:21] workshop, you know, I wouldn't say no. You know,
+[24:25] huh.
+[24:28] Oh, it's a bribery thing. Okay. I see. I see. There are strings attached to this
+[24:32] vote. I see. I see. Yeah. Yeah, let us know if you have any
+[24:37] trouble spinning up the workshop and then using definitely your own API key.
+[24:40] Um, [Laughter]
+[24:48] okay. Do we have a slide how the um workshop
+[24:53] page front page should look like? Yeah. Wait, what? Sorry.
+[25:02] So I read what next? Oh no, you you uh it's in the
+[25:08] read me. It's basically you have to install like all the requirements file
+[25:12] and then you run one command. It's very simple. We made it we try to
+[25:17] make it as simple as possible. Thank you timer. So oh yeah when when you have it
+[25:21] all run running it should look like something like this. I would say very
+[25:25] sexy UI you know. So, um, we wanted you to really
+[25:31] experience what MOA systems look like because I feel like this is a very new
+[25:34] concept and it's a great way, this kind of app that Kevin built is a great way
+[25:39] for you to get started with what the possibilities are with MOA systems maybe
+[25:43] in production. So, um, basically how this UI works is that in the top you
+[25:48] configure your summarization agent. Basically, the thing that summarizes all
+[25:52] the things and actually like aggregates all the individual results from your
+[25:55] individual agents into one. Um, we have a very basic system prompt here. You can
+[26:01] change it if you want. And then under agent management, we have individual
+[26:06] agents that you can create with custom prompts. And you here you can adjust
+[26:10] things like the temperature, the model as well as the specific prompt that you
+[26:15] want to put in the agent and also rename it, you know, to something fun. Um, and
+[26:20] here you can delete agents or you can create new ones. You can have more than
+[26:24] three and you can also have different layers. You can have multiple like uh
+[26:28] iterations of how many times you want them to go through the solution. And
+[26:32] basically the first part is not competitive. It's just going to be us
+[26:36] all having fun, right? So, it's gonna I can ask a question here like plan a trip
+[26:41] to San Francisco for me and my friend Daria
+[26:46] from from 3 p.m. to 9:00 p.m. and then see
+[26:53] and then what it's doing is behind the scenes it's basically spawning all of
+[26:57] the individual agents and then going through multiple layers of calculations
+[27:00] for it to return the final answer. Here we have three layers with multiple
+[27:06] LLM calls. So it might take a little bit of time. It's just the Wi-Fi. Oh, it's
+[27:11] probably the Wi-Fi actually. Can you zoom in? Oh, yeah.
+[27:19] And if anyone doesn't see a screen like this, could you guys let me know and I
+[27:22] can come and help you with any steps. Wow, the Wi-Fi is really bad.
+[27:39] Does anyone not have the screen? You don't? Yeah. So, um,
+[27:53] okay. Maybe I can just like walk you through what what we see right now on
+[27:56] the screen. Um there are multiple layers that we created. Each layer is basically
+[28:01] a set of models and they are connected together. Layer is a sequential but at
+[28:05] each layer models are process in parallel. So once we get the output from
+[28:09] layer one they will it will be combined together as an input for layer two and
+[28:13] then after the layer three there is this like final model that we call
+[28:18] summarization model that will process the final output combining the results
+[28:22] from uh previous layers. So all of these tokens were generated
+[28:28] sacrificed for for the final answer. So all of
+[28:32] these tokens basically allow you to cover more surface area and have a more
+[28:36] comprehensive answer. So all of this was generated
+[28:40] through all the other models. Yes.
+[28:48] So each layer has a set of agents that operate together. Their output is
+[28:55] finalized after that layer. So you can think about it's concatenated and used
+[28:59] as an input to the next layer. Was everyone able to ask a very fun
+[29:05] personal question to the MOA chat? Anyone struggling with that? Happy to
+[29:10] help.
+[29:15] Okay, great. So now comes the actual competitive fun part of the uh of the
+[29:20] workshop. This is all fun in games until comes the competition. So, uh then go
+[29:25] and select the AI configur AI configuration challenge.
+[29:30] And basically your job is to come up with the perfect MOA system to generate.
+[29:36] Okay, perfect code is a little extra. Maybe it's like really good code. Really
+[29:41] good code. We believe in you. Um so instead of writing code yourself, you'll
+[29:44] become an AI prompt engineer and system architect. And your goal is to configure
+[29:48] your AI agent like mixture of agents system to automatically generate code
+[29:53] that scores the maximum 120 points in our automated grader. And basically uh
+[29:58] to participate you just have to go into configure AI and generate. So here you
+[30:03] can select so I can actually just do it with you for the first one. So here it
+[30:07] has some very awesome preset responses. So let me so see you can like set some
+[30:12] awesome presets that our intern created and then we can generate the code.
+[30:25] Hopefully the Wi-Fi is good. Okay, the code has been generated. So here the
+[30:29] code has been generated and we can submit the solution. And here the
+[30:33] baseline is already designed with the prompt, the preset prompts to be at like
+[30:38] C and your job is to be an A student because we're all overachievers in this
+[30:42] room. So basically, you can now change things like the prompt itself or the
+[30:48] model. So let's like set it to the Quen model and then see what happens. So we
+[30:52] can generate the code again
+[30:57] and then submit the solution for grading. And here it's scored slightly
+[31:01] better. So we went from a C to a B be B. It's a solid B with literally just by
+[31:08] changing the model model like the the model that it uses for the main agent.
+[31:12] So your job for the rest of this workshop is to figure out first what is
+[31:17] the right combination of the main model the number of cycles like how many
+[31:21] layers you want the temperature as well as the system prompt for the main prompt
+[31:26] and as well as the individual layers that will uh that will spawn for every
+[31:31] single iteration. So here you can select different models different particular
+[31:37] prompts and then use that to come up with the right answer. And I believe
+[31:41] Daria and our intern both got perfect scores. So you're shooting for perfect
+[31:45] scores for your mixture of agent system. Do we do we have a function somewhere
+[31:49] that we given them? Wait, like the actual Python function that has uh bugs
+[31:53] in it. Uh no, that gets um inputed through here. So you can just like
+[31:57] change this. But um how do they where do they find the function? Oh, they don't
+[32:02] they kind of optimize it. Oh, it's right here.
+[32:07] A default challenge. Where is the function itself? like the Python
+[32:10] function. [Music]
+[32:13] No, it's the function. This is the function. Where is the implementation of
+[32:16] the function that we give them as a baseline? Oh, we don't it the the the we
+[32:21] changed this. So the challenge is like generates the Python function from
+[32:23] scratch. Okay. Okay. Gotcha. Okay. So that's is important to say like let's
+[32:28] come back to that and set up the challenge, right? Because we have
+[32:30] engineers who know how to write Python. Um so the challenge is here we want to
+[32:35] create a function that's called calculate user matrix and the purpose is
+[32:39] basically to calculate the matrix right we have some details here what the
+[32:43] function is supposed to um output given an input yeah so this is the the test
+[32:47] that is used when you click grading this is like the the the input to your AI
+[32:52] agent system this is the input that will go in and
+[32:56] then basically um okay I'm going to send them the baseline
+[33:01] function Okay, so imagine this like you have an interview um let's say a tech
+[33:06] company right and at the interview they can ask you to optimize a function for
+[33:12] us today's Python function this Python function has some bugs and it's also not
+[33:16] optimized so we want from you is using LLMs basically find the solution that
+[33:21] fixes all the bugs and optimizes it to the level that you get the maximum score
+[33:25] we created the grader that basically will use um like LLM generated function
+[33:31] um as as an input and it will give you a score and an idea is to get 120 out of
+[33:36] 120. Um you can see we already created some specific agents to help you solve
+[33:42] this task in one shot. One agent is working with bugs. Um it basically tries
+[33:48] to find all the bugs and edge cases. One agent is working with um performance
+[33:52] performance. So it's going to optimize it. You don't you don't like recomputee
+[33:55] some stuff. Um and the last one is what is it? Just like overall. Oh, just
+[34:00] overall. Yeah. So, like the final the final like model um the way it can work,
+[34:05] you can ask it to look at the outputs from like three or whatever number of
+[34:09] agents you created at previous layer and kind of create a final function using
+[34:12] the inputs from different um agents and I'm going to send you the uh Python
+[34:17] function in the Slack channel. So, if you guys see some errors yourself like
+[34:22] engineers, right, you can actually configure the prompts this way. You can
+[34:26] ask one agent to like, oh, I see that there is an empty list that we try to
+[34:30] like access by index, right? Could you please fix that? And that agent will
+[34:34] work on that specific problem. Um, or you can also see what the default config
+[34:39] outputs and and figure out like what are the remaining issues in the Python
+[34:43] function. So, it's sort of like vibe coding but with with your brains, right?
+[34:47] Um, isn't that vibe coding? Don't you v code with your brain? I've seen I've
+[34:52] seen multiple Do you turn off your brain when you v code? It just like you really
+[34:55] let the computer take over, huh?
+[35:01] Oh, it's this is should be default. Like this is literally I just All I did was
+[35:05] spun up the Streamlit app. Like are you not seeing it? Oh, no. You have to go to
+[35:09] the Okay, you have to Sorry. Can you scroll up here?
+[35:13] And there will be a prize for whoever gets the highest score. Actually, have I
+[35:18] thought about what the prize will be? Not yet. So, I'll take suggestions from
+[35:21] the winner.
+[35:28] Sorry, I don't know how to respond to that. I'm I'm like erroring out right
+[35:32] now.
+[35:35] Not the lowest score. That's so cool. It's actually quite good. If they can
+[35:38] get zero, it means they can get maximum two. Oh, really? Yeah. If you get like
+[35:44] low zero, let us know. Wait, if to get zero, can't you just edit the thing to
+[35:48] be like just return nothing? Isn't that wouldn't that be zero or be like write a
+[35:53] write a rust function and the greater will be like it's rust
+[35:59] don't give them ideas oh okay okay sorry
+[36:08] but yeah if someone is really interested in getting maximum score and you need
+[36:12] hints try it yourself though but like if you need hints we're happy to give
+[36:16] yourself oh yeah we can do hints I guess you
+[36:24] hits the max score or zero. Please let us know. Not the zero, Daria. I want to
+[36:29] see the person who gets zero. Not the zero, Daria. Not the zero.
+[36:41] Sorry, what' you say?
+[36:48] No, it's the perfect score. There was like three people that got it. My
+[36:51] invitation. It's on. Okay, everyone. Okay. Can you raise your hand if you got
+[36:56] the 120 perfect score? Okay, everyone. Congratulations. Wow, we
+[37:01] got hella winners. Okay. Um, after the Q&A, please come up to us
+[37:07] so I can get your email and then I can get you something fun. I don't know what
+[37:11] it will be. So, please when you come up to me, come with suggestions of what you
+[37:14] want, but like let's keep it realistic. No Teslas, no no like no large gifts
+[37:19] like that. Okay? Like, uh, so something fun.
+[37:23] Huh?
+[37:28] I don't know about that one. Okay. Um, before we keep you all keep going
+[37:34] because I feel like a lot of people got the challenge. So, great job you guys.
+[37:37] Um, I want to do a quick Q&A with me and Daria. So, if you don't mind, if you can
+[37:43] come up with one of those, if you have questions for us about anything Cerebrus
+[37:46] related or mixture of agents or mixture of experts, come ask us questions right
+[37:51] now, please. Wait, can you come up to the mic? I'm so sorry for you to do
+[37:55] this, but apparently like that's how we get content.
+[38:00] Um, do you guys like this? Can you can you come to the mic?
+[38:05] I'm so sorry. You have to do cardio. How do you Yeah, if you guys can like
+[38:11] hit the mic. How do you How do you autoML this stuff? AutoML the stuff.
+[38:17] Yeah. Okay. So, I mean, it's all fun and all to go manually and figure out the
+[38:21] prompts. What if the problem's slightly harder where it would take you 100 hours
+[38:26] or a thousand hours to figure out the prompts and you said, "I want to throw a
+[38:30] solution to solve this." That's my question. I mean I feel like
+[38:36] in the application it's going to happen, right? So I don't I mean it's already
+[38:39] happening if you look at like um like Devon for example, right? Like the
+[38:43] codegen startup you ask it to do something and like a couple hours later
+[38:47] it comes back to you with like a proposed solution, right? And then
+[38:50] tackling beyond just like fix a snippet of code. It's just building whole new
+[38:54] systems or whole new application. So that kind of thing is already happening.
+[38:57] It's all about like how can Cerebras as a company that builds custom hardware,
+[39:01] how can we enable those people? So instead of taking hours, it takes
+[39:05] minutes. So it's I don't think it's the technology that's not there yet. It's
+[39:08] about like how do we make it usable in the current like landscape that doesn't
+[39:13] take that's not so painful. So I think it's like actually it's already
+[39:17] happening like to to to apply AI towards these really hard multi-our problems.
+[39:23] This is kind of a smallcale simulation of what you could do with a lot faster
+[39:27] inference to speed that up. What regions are your is your hardware
+[39:33] company running in and do you have plans for uh global distribution? Yeah, so
+[39:38] right now we opened I think uh six data centers in the US in the last year and
+[39:43] we are opening one in France this year and then we are currently have plans for
+[39:47] one in Canada as well and we only expect that to go more global as the time goes
+[39:53] on. And one more, how how long does it take you to onboard a new model when a a
+[39:58] new model is released or a new version of a model? That's a great question. I
+[40:01] think it depends on the model. So the the blocker for us to onboard a new
+[40:05] model is if we have all the kernels that are written to make sure that it
+[40:09] supports the new model and in some cases like Quen 32B that you all have access
+[40:14] to that took very little time because that architecture was very similar to
+[40:18] Llama architecture in terms of the kernels needed to run it and we had all
+[40:22] the available kernels. So all it took was all a bunch of QAing and like
+[40:26] implementing API level features to get that to work on our system. On the other
+[40:29] hand, there are other models um that are extremely hard because we don't have the
+[40:33] right kernels ready yet to support that model at in an efficient way. So that
+[40:39] takes more time because the kernel engineering team needs to write the
+[40:41] custom kernels needed for that model. So it really depends on the model
+[40:44] architecture. Thanks. Got a question about um power
+[40:50] consumption. So this sort of new
+[40:56] architecture is going to take shorter amount of time but what about a power
+[40:59] consumption like are we talking about similar to what Nvidia is doing or is it
+[41:04] more is it less yeah that's a great question and I think it's not a onetoone
+[41:09] right because we have a just a completely different chip architecture
+[41:12] so it really depends on the workload but uh we've observed and this is what we
+[41:17] put in our website that it's around a third of the power consumption of Nvidia
+[41:20] GPUs for the equivalent ent workload. It's just that our chips are a lot more
+[41:23] massive. So, it has a lot more throughput and a lot more like it can
+[41:26] just take in a lot and generate more um and and it takes a significant number of
+[41:31] chips, Nvidia chips to match like what one system can do. So, it's not an
+[41:36] apples to apples, but like I think uh we are a lot more power efficient in most
+[41:40] use cases. That's a great question. It is. I do get
+[41:47] that question also. So, it's a very commonly asked question. And I think
+[41:50] everyone's like, how does this big chip take in energy? Okay, what's up? Uh my
+[41:55] question is about a mixture of uh agents when I compare with um I don't know like
+[42:01] um the soda models, you know, like um benchmarks wise where I I should put it.
+[42:08] I think it's like about the configuration of the MOA agent. And I
+[42:11] think that's where things get a little bit tricky. It's like if you have really
+[42:15] shitty prompts for your MOA system, it's going to perform shittily, right? So,
+[42:19] it's about like it's like tuning all of the prompts in your MOA system and then
+[42:24] it will perform better in the benchmark. So, you actually do need to put in it's
+[42:27] not like an out ofthe-box thing, right? Because it's not training. It's like
+[42:30] optimizing the system for your use case. So you need to make sure that you put in
+[42:34] the engineering work needed to optimize all of the whole system whether it's
+[42:39] like using the right models or is it writing the like all of the combination
+[42:43] of the things need to work out for it to be better. The whole point though is
+[42:47] that it can be better. It's just that you have to like actually like engineer
+[42:50] it to be better. One thing like from the theory perspective if you have like if
+[42:54] you have an idea of like what's the ensol learning case where you create
+[42:58] like multiple models they communicate between each other and like together
+[43:02] ensol basically provides a more robust a better solution than just one model. So
+[43:07] this is inspired by that by like you know like decision trees or like you
+[43:11] know when we created like standard ML models we always get like more less less
+[43:15] I guess like memorized solution uh more generalized from multiple models. So in
+[43:21] theory, even if you configure each model the same way and create the same prompt,
+[43:26] the final answer can be better than just one model. Yeah. Yeah. Like a X boost
+[43:30] got to my mind when I saw that that kind of approach, right? like you have
+[43:34] multiple like a swarm of decisions and then you can get like um
+[43:41] I I guess what I'm trying to get at is maybe there is a tradeoffs when you have
+[43:45] like too many um trees or agents like um maybe like uh if the question
+[43:52] that you need is too of
+[43:58] can it like like can it like create worse solution if you create too many
+[44:02] agents I I guess if there is a danger of being
+[44:07] more like a homogeneous dancer if you have a too many Asians
+[44:13] because maybe you have like a single Asian that gets get right but you have
+[44:18] like 2,000 agents that get it wrong. Yeah, this is a very good question and
+[44:22] so for like mixture of experts when we create different experts we also think
+[44:25] about it this way like how many agent how many experts you want to have. So
+[44:29] then they're all kind of like used in the network. So here what's likely going
+[44:33] to happen if you create too many agents not all of them are going to be used. So
+[44:37] you will create like redundancy in the network and you will just spend more
+[44:41] time like getting the output from like ex like agents here and they're not
+[44:45] going to be used in the final solution if that makes sense. Yeah. Yeah. I feel
+[44:49] like like feature importance in a boost, right? Yes. Yes. Yes. Okay. Cool. I got
+[44:54] it. Thank you. Yeah. Hi. Uh do you all support like bringing your own
+[44:57] fine-tuned model? uh like let's say if it's fine tuned on like quen 32 billion
+[45:01] itself uh which you already support. We do for enterprise clients. I know that's
+[45:05] not the answer anyone wants to hear but right now we are working on supporting
+[45:10] Laura fine-tuned models that's in the road map but it's not currently
+[45:13] supported but if you're an enterprise customer that's looking to on board uh
+[45:17] custom models we do have a number of customers uh running fine-tuned models
+[45:22] in our cloud.
+[45:28] Hello. Yes, a short question. Uh, did you already try it diffusion text
+[45:32] generation models? Like they 10 time faster than simple LLMs and they may
+[45:39] have super different architecture and how it fits your approaches and course.
+[45:46] I'm curious are you working on diffusion models yourself? Uh no not no we mostly
+[45:51] trying to use it on board it from pragmatic perspective and they already
+[45:56] really fast and probably with uh with your approach it will be much faster
+[46:00] like 10 time. Yeah. So from like diffusion models um they're definitely
+[46:05] like one of the architecture to consider after a mixture of experts and
+[46:08] transformer-based architectures. Um there field like is exploring different
+[46:12] types of models. there is state space models, you know, all of them have
+[46:15] different like improvements on top of the existing transformer decoder. I
+[46:19] would say right now they're still in sort of like research. So in our like
+[46:24] inference API, we kind of try to put models that are proven to be the best
+[46:28] and they are like robust for diffusion models. I think we still trying to scale
+[46:32] like from research perspectives trying to figure out what's the best recipe to
+[46:36] train them. But um I I know that this is a very interesting research direction
+[46:42] that uh labs are looking at. I did see an internal demo though that was insane
+[46:46] around diffusion models. So I like diffusion models on Cerebras hardware is
+[46:51] going to be insane when it when it comes out. Yes, that's not helpful to anyone
+[46:56] but you know I thought I'd throw that in there. I can't even talk about it
+[47:00] because the the guy was like don't talk about it now but I'm like but I'm being
+[47:04] very vague about it you know. So I have a question related to what the previous
+[47:08] implement asked about fine-tuning model. So say for example I have a new
+[47:13] architecture um which which has got certain different layers which are not
+[47:18] there on not supported by cerus or does not have those kernels defined what
+[47:23] would happen for those kind of situation yeah that's a great question I think one
+[47:26] of our customers mistrol um is a great example of this where they brought in a
+[47:31] custom architecture model um and they were like hey we want to run this on
+[47:34] cerebrus and basically what it happens is like a partnership and a
+[47:37] collaboration between their engineers and our engineers to make sure that all
+[47:40] of the kernels are in place to support the new architecture. So it's very
+[47:43] simple. It's just like all all our hardware is if you think about it is a
+[47:47] bunch of memory and a bunch of compute that are organized in a very efficient
+[47:51] way in a very like large surface area. That's all it is. So we can technically
+[47:56] in theory support like a very diverse set of models and architectures that may
+[48:00] not even exist yet. So it's all about like creating that partnership and
+[48:04] figuring out like how do we support the models that we don't yet support. So
+[48:07] that partnership is more about we define those kernels. So that the architecture
+[48:10] there's also other quirks about models like if there is like custom like RL or
+[48:15] something you know like it's all about like making sure everything is supported
+[48:18] that you want to run in your model. Thank you.
+[48:24] Okay. Um okay last call for questions.
+[48:32] Yeah. Um sorry I got here late but do you think you'll ever do uh real time
+[48:38] APIs and sort of those other multimodal models as well? So we actually support
+[48:43] uh we released our first multimodal API uh not available publicly but through
+[48:48] the mistral app. So now if you use mistrawl uh m large uh the the chat um
+[48:54] part many some of the imagebased queries are running on hardware. So uh next
+[48:58] comes our cloud. So once we have it running in one place, we assume we're
+[49:02] going to scale it into our public cloud. So that will be coming pretty soon
+[49:06] actually to our service cloud for multimodal around real time. We are
+[49:10] actually thinking about this. So like I would love to learn more about your use
+[49:13] case. Um so yeah, real time is definitely a very interesting I think
+[49:18] idea for the company because of the speed of our inference. I think it'll be
+[49:22] great in like real-time use cases. I think we have time for more questions.
+[49:27] Yeah, we do. We have like so much 40 minutes left. Yeah, maybe not all 45
+[49:31] minutes though, but you know what's up. So I'm curious, has has there been
+[49:35] models engineered especially for Cerebras hardware as in like you know
+[49:40] you have new types of capabilities and I'm curious how good are people at
+[49:44] exploiting those capabilities, right? Because people are taking existing
+[49:47] models and yes it's easy to you know port them if you have the kernels but
+[49:51] what about stuff that you really would um encourage people to try?
+[49:56] Wow, this is a very good question. Um, so it really depends on what your use
+[50:01] case is. If you are a researcher who wants to try a new architecture and
+[50:04] train it, I would say we have specific um advantages for unstructured sparity
+[50:10] algorithms. So you can try that. Um I don't think it's at the speed at any
+[50:15] other hardware. Um so if you try that on GPU, it's going to be hard. Um that's
+[50:20] for pre-training side. for inference side. Um I think for inference side not
+[50:24] yet because we released inference like nine months ago. So it's a very very new
+[50:29] product and as we're working with frontier model companies like mistrol
+[50:33] we're planning on having working with them even more closely to design models
+[50:37] specifically to take advantage of not only our current generation of chips but
+[50:41] our future generations of chips. You'll have even more optimizations. But maybe
+[50:46] from the inference perspective, if you have a very large model you want to
+[50:49] serve, then Cerebras is the best position to do that. It's going to
+[50:53] scale, you know, multiple chips. You're going to use multiple chips and you
+[50:57] won't have to like distribute the model weights and wait, you know, uh for all
+[51:01] this like orchestration to work together. Um so I would say like the
+[51:05] best use case here is like if you have a very large model then use inference.
+[51:12] So I have two questions. First is you know like What kind of model sizes can
+[51:16] be used simultaneously on a set instance on one instance or like in a like when
+[51:23] I'm using it now I don't know how many
+[51:28] are currently so it's not a VM it's like the number of systems but basically
+[51:33] there's no limit to the size of the system because what we can do is we can
+[51:37] just infinitely add more chips like so like go go go we can go from like as
+[51:42] small as like an 8 billion parameter model and we can go all the way up to
+[51:45] like like Maverick is a recent model that we were on boarded. We're planning
+[51:50] on supporting the bigger meta models, you know. Um there's no limit because we
+[51:54] can just scale linearly. Our networking architecture actually very simple just
+[51:58] but there's a cost associated with it of course. So and
+[52:03] I wouldn't be able to partition a single SOC or one service instance into Oh, we
+[52:10] can't we don't offer that right now in our cloud basic. No, we basically handle
+[52:15] it. We handle the load. It's an we currently only offer the service unless
+[52:19] it's like an on-rem client with just an API. So, um we give you rate limits that
+[52:24] you can hit and we in the back end provision the number of systems needed
+[52:27] to match your like workload. For the public API that you everyone use today,
+[52:32] that's a shared pool where we set rate limits for each user and then they can
+[52:36] consume until that rate limit.
+[52:41] Great question. Awesome. Um, if there are no more questions, um,
+[52:47] uh, me and, uh, Daria will be up here. Um, if you have more questions to come
+[52:51] up to us or if you're a startup looking for inference, I'm the guy to talk to.
+[52:55] And if you also got 120, please bring you getting 120 like get the proof and
+[53:01] then I'll get your email and give me ideas for prizes and then we can go from
+[53:04] there. Thanks so much for coming everyone. Thank you.
+[53:08] [Music]

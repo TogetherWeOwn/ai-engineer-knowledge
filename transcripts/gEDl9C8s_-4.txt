@@ -1,0 +1,328 @@
+# title: How to Train Your Agent: Building Reliable Agents with RL — Kyle Corbitt, OpenPipe
+# source: https://www.youtube.com/watch?v=gEDl9C8s_-4
+# speaker: Kyle Corbitt, OpenPipe
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T11:42:57Z
+# sha256: 78e4e7dd259cb73092746025c37330837510ebb25e4202ecf9cd089a55e77885
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:00] [Music]
+[00:14] Um, hey everyone. Glad you're all here. This is the reasoning and reinforcement
+[00:19] learning track uh on the afternoon of the last day of the AI engineer world's
+[00:23] fair. Glad you're all here. Glad you're sharing it with us. Today, what I'm
+[00:26] going to talk about is uh a very specific case study um that we did. Uh
+[00:31] this case study, I'm going to talk about lessons learned very concretely. Um what
+[00:34] did and didn't work, how we able to build an agent that worked well with
+[00:37] reinforcement learning. Uh all of this uh everything that I'm talking about in
+[00:40] this presentation, this is an open- source codebase that we built. Um we
+[00:44] wanted to share these learnings and I'll I'll I'll share that link with you at
+[00:47] the end as well. Um for those of you who want to replicate what we did um so what
+[00:52] is the project we're going to be talking about? It's a project called ART E. It
+[00:55] is a natural language uh assistant that helps you answer questions from your
+[01:00] email inbox. So I'll give you an example of what we're talking about here. Um
+[01:05] let's say you want to ask, you know, in this case our example question is when
+[01:08] is Sherry's move to Portland targeted for? So you would ask this question to
+[01:11] the assistant. It then goes and it searches your inbox. It's got several
+[01:14] tools. So it has like a search tool, it has a read email tool, and then it can
+[01:17] actually answer the final question. You can kind of see if you if you look here
+[01:21] what's going on behind the scenes. This is important so you get a sense of kind
+[01:23] of how this agent works and as we're talking through how we built it, how we
+[01:26] made it work. Um hopefully that that helps uh make the conversation very
+[01:30] grounded in a specific task. So anyway, you see the agent, it's it's you know
+[01:34] searching for certain keywords. It get those messages back. It's in reading one
+[01:38] of them and and answering the question. That's that's what it does. Okay. So um
+[01:43] question, you know, once once we've decided this is kind of the the task
+[01:46] we're trying to solve, why would you re use reinforcement learning for this
+[01:50] specifically? Um and uh and the answer is like to start with you shouldn't. In
+[01:54] fact to start off with we did not. Um so the first version of this agent once we
+[01:58] decided we wanted to build this we did we didn't use any reinforcement learning
+[02:01] at all. We purely built this on prompted models and this is the first lesson from
+[02:05] this talk uh that I want to share is I would generally always recommend
+[02:09] starting with getting the best performance you can with a prompted
+[02:12] model before going to any training including reinforcement learning.
+[02:15] There's a few different reasons to do that uh 3 in specifically. Um the first
+[02:20] one is just like working out the bugs in your environment, right? Um you know,
+[02:23] maybe your tools aren't implemented properly, maybe they don't have access
+[02:25] to the data you think they do. Um we find this happens a lot and it's a lot
+[02:30] less frustrating to debug that uh you know, separately from debugging your
+[02:33] your training loop. So you want to make sure that like you can get at least some
+[02:36] kind of performance um before you start training. Um and then second of all, you
+[02:40] may find as you're trying to improve the performance on uh on using these
+[02:45] prompted models that uh you can get it working really well and that's great. So
+[02:47] that means you don't need to train anything. Um and that saves you a lot of
+[02:50] time. Um there's a third reason as well uh that I'll share which is uh basically
+[02:55] once you've gone to that effort, you've done your best to get the best quality
+[02:59] prompted baselines you possibly can. Um then uh if you find that those baselines
+[03:04] are not able to get you where you need to go and you're able to surpass them
+[03:06] with re reinforcement learning, it feels great. You get to glow and be like,
+[03:09] "Yes, I was able to beat the the frontier models on my task." Um this
+[03:12] this I I highly recommend it. Feels good. You can you can like post on X
+[03:16] about it. there's there's nice, you know, graphs and stuff. So, this is this
+[03:19] is what it looks like when everything goes right. Um, so this is an example of
+[03:23] a training run for this art e model that I'm going to be talking about. Uh, you
+[03:27] can see that there's these these lines for each of the prompted model baselines
+[03:31] that we've got. Um, so we've got 03, 04 mini, and then Gemini and and 4.1. And
+[03:36] you can see uh those ones, you know, they have certain level performance. And
+[03:39] then you can see this this uh sort of moving line um that's going on. This is
+[03:43] the model that we trained. And you can see it actually starts out significantly
+[03:46] worse than these other models uh from from the start. That's because we
+[03:49] started from a Quen 2.5 the 14 billion parameter one. It's a relatively small
+[03:54] model, relatively weak model. Um and so it was doing much worse than these
+[03:57] initially, but you can see as training progresses um you know initially at the
+[04:01] beginning it it's sort of maybe maybe there's it's learning the right way to
+[04:04] do tool calls. There's a very sharp bump as it figures out the basic stuff and
+[04:08] then a more gradual climb until eventually it's able to significantly
+[04:11] outperform uh any of the prompted models on this task. And this is sort of what
+[04:15] you're you know in the ideal case when everything works this this is what
+[04:18] you're looking for. This is what what you're hoping to achieve. Um this is
+[04:22] another view actually of that same data we were just looking at. Um I I like I
+[04:26] wanted to highlight it in this way because it's important to realize. So on
+[04:30] the last graph it looked like the the lines sort of asmtote out pretty close
+[04:33] together. That's because they're getting near 100%. But the last um you can see
+[04:37] for example with our best prompted model here 03 uh it's 90% accuracy and with
+[04:43] our RL model we're able to get up to 96%. And so one way to think about that
+[04:47] is like 60% of the errors that 03 was making um are are actually solved with
+[04:53] our model. Um which is which is quite a large uh you know we find that that's
+[04:56] actually can be very very important for the user experience of someone using one
+[05:00] of these um if you're getting you know just half as many errors uh that that
+[05:04] can make the product much stronger. Um so this is this is where we got to on
+[05:08] accuracy. There's a couple other metrics that we find are often very very
+[05:13] important. Um and you know the trade-off between these does does is very task
+[05:17] dependent but but they matter in many cases. Um cost obviously is a big one.
+[05:22] So for for this email agentic harness that we had we benchmarked the cost on
+[05:27] 034 mini and our model. So if you wanted to do like a thousand searches using 03
+[05:31] that's going to cost $55. Um which is a lot. I think for most use cases that
+[05:37] probably would be cost prohibitive just from a unit economics point of view. Um
+[05:40] on 04 mini we're down to $8 but that's still quite expensive. And then we drop
+[05:44] another order of magnitude by moving to this smaller Quen 2.514B. Again, this is
+[05:48] just driven it by being it being a much smaller model. So it's it's much cheaper
+[05:51] to run. Um but we're still able to get very good performance because we've
+[05:54] specialized it on our task. Um beyond cost and the accuracy, um the third
+[05:59] metric that often comes up is latency. Uh particularly if you're doing I mean
+[06:03] certainly anything with voice, but if there's any real-time human interaction
+[06:07] with the task, latency is going to matter a lot. Um, and we were able to
+[06:11] find on on this task we were able to get significantly better latency. There's a
+[06:15] number of different ways which I'll go into in more detail later that we were
+[06:17] able to achieve this. Um, you know, one was just again moving to a smaller model
+[06:21] helps. There's just less less loading from memory, less matrix multiplies.
+[06:24] It's just you're able to get tokens out faster. Um, we were also able to train
+[06:28] this model to have fewer turns going back and forth with the database with
+[06:32] the actual email um the list of emails. Uh, we we were able to train it to be
+[06:36] more efficient with its queries. Um, and I'll go to that in a moment. And so that
+[06:39] that leads to lower latency. Um there's actually a third thing which we didn't
+[06:42] apply here but can help a lot with these smaller things which is called
+[06:45] speculative decoding. That's something you can do on large or small models. It
+[06:48] generally works better on smaller task specific models because you get higher
+[06:52] um acceptance rates on on your speculator. But basically um there's
+[06:55] there's lots of reasons why smaller models work better. Um okay. So then the
+[06:59] next question uh for those of you who haven't done this yet is like okay what
+[07:02] is the effort required to do this to actually achieve these results? Um, if
+[07:07] you'd asked me this question a year ago, I would say, "Hey, you should really
+[07:10] only be doing this if you know you're this big company and willing to put, you
+[07:13] know, months of of work into a project." I think that's changing. I honestly do.
+[07:17] Um, in this case, uh, so this this training run, it cost us about $80 in
+[07:21] GPU time. It did take about a week of engineering time to build this. And and
+[07:25] caveat that was with an engineer who is familiar with this domain and and had
+[07:28] quite a lot of experience uh, you know, with machine learning and RL. Um but I
+[07:32] actually expect as as we figure out the right patterns here collectively as an
+[07:36] industry this will keep dropping. Um and I expect that uh you know the sort of
+[07:40] payback period to get a return on investment from these specialized models
+[07:43] is actually going to continue falling as well. Um and uh you know part of part of
+[07:49] the reason I wanted to give this talk is to sort of distribute that know the
+[07:52] knowledge we learned and hopefully move faster towards that that world where
+[07:55] this is just sort of like a thing everyone knows how to do and it's very
+[07:57] easy and very fast. Um, so that's that's what we'll be talking about for the rest
+[08:01] of time is is some more of the lessons we learned. Um, okay. So, uh, when you
+[08:07] are using RL to train an agent or really using RL for anything else, um, I find
+[08:12] that consistently with different problems we look at, there are there are
+[08:15] sort of two hard problems that come up every single time. All right? Um, and
+[08:19] the two hard problems are first of all figuring out a realistic environment,
+[08:22] right? So if you're training an agent, you need to be training it with
+[08:26] realistic data, with realistic inputs and outputs, tools available, everything
+[08:30] like that to how it's going to be used in production. Um because if you don't,
+[08:33] then it's going to be optimizing for the wrong thing and and you won't get the
+[08:36] results you want when you deploy it. And then the second thing which sometimes is
+[08:40] hard um sometimes isn't this one is a little bit test dependent is getting the
+[08:43] right reward function. So reward function that just means you have to be
+[08:47] able to know when your agent's gone through and say in this case give it an
+[08:50] answer to my email. You have to have some way of knowing did it do a good job
+[08:53] or a bad job. All right, that's the reward function. It decides it it it's
+[08:56] it's how you decide if it's good or it's bad. Um some depending on the domain
+[09:00] sometimes that's really easy. We have I don't know if Nathan's here, he's going
+[09:03] to be talking next, but um you know he and his team put together this thing
+[09:06] called RLVR which in some verifiable domains it's actually very easy to do a
+[09:10] reward. Often times uh not all domains are like that. oftentimes it is kind of
+[09:15] hard. Um, and so it's it's somewhat task dependent. I'm going to go through how
+[09:18] we solve these problems specifically with RE. Okay, first one, realistic
+[09:22] environment. So for our RE task, what is the environment we need? What is the
+[09:26] environment this agent's going to be operating in? Well, it needs these tools
+[09:29] available. It needs to be able to go and query an email inbox. It needs to be
+[09:32] able to like get emails back um and and that look realistic. These emails, you
+[09:36] know, the inbox should be large because that's what most email inboxes are like.
+[09:40] Um the emails in it should be diverse and they have to look kind of like real
+[09:43] emails. Um so this could be kind of hard because you can't just go ask like a
+[09:47] thousand people to you know give you uh their their their personal emails to
+[09:50] train on. Um luckily in this case we were able to solve this with the help of
+[09:54] a company that has contributed a lot um to just the open data ecosystem uh
+[09:58] generally. It's it's like a quite an iconic company perhaps I would call it a
+[10:02] historic company. Um I'm of course talking about Enron. Um
+[10:07] I'm hearing some laughter. So anyway, Enron was a uh they were a financialized
+[10:12] energy company in the '9s and 2000s, committed massive fraud, ended up
+[10:16] getting shut down by the Department of Justice. As part of this uh um you know,
+[10:20] process, the the the court cases they were going through. Um a dump of like
+[10:24] 500,000 of their emails was released to the public as part of the discovery
+[10:27] process. Um so that's that's that's great for things like this and that's
+[10:30] what we used as our environment for the email inboxes. All right. So now we've
+[10:34] got realistic email inboxes um with tens of thousands of emails that are real
+[10:38] emails back and forth. Now we have to design our reward function. So as our
+[10:41] agent is going and as our agent is um you know we're asking it questions and
+[10:46] then it's giving us answers, we have to know is the answer correct or not so we
+[10:49] can reward it when it gets the answer right and it can learn to do that
+[10:52] better. There's different ways and this part is very task dependent. Um the way
+[10:58] that we went about it in this case um was we basically turned it into a more
+[11:03] of a verifiable problem. And the way we did that was we actually took our email
+[11:07] inbox. We sort of inverted the problem. We um we grabbed batches of 20 emails at
+[11:11] a time uh from the inbox and gave them to Gemini 2.5 Pro and said, "Hey, given
+[11:17] this set of emails, give us a few questions that a user might
+[11:19] realistically ask that the answers are found in this email." Right? And so
+[11:23] Gemini generated the questions, it generated the answers, and then of
+[11:26] course the the source emails that came from. Um, and there were some extra
+[11:30] steps on top of that. A lot of the questions it came up with looked a
+[11:32] little bit unrealistic. We had a separate filtering step where we're
+[11:35] like, okay, let's find the subset of these that that actually look like
+[11:38] questions that, you know, I would maybe ask. And we ended up with a list of a
+[11:41] few thousand questions um along with their verified answers. Um, and so at
+[11:46] this point, it becomes much more of a a sort of verified thing. the the reward
+[11:49] function becomes much easier because we know what the correct answer should be.
+[11:53] And so the way we can tell if our agent did a good job is we give our agent the
+[11:56] question, we let it go and search the email inbox and try and find the right
+[11:59] emails and everything. And eventually it comes back with an answer. And then we
+[12:02] can just use an LLM as judge, a very simple one, and say like, hey, you know,
+[12:06] here's the question. Here's the the golden answer that that we believe is
+[12:09] right. Here's the answer we got from our from our model. Is it right or not? Um
+[12:12] we did have to do a little bit of uh iteration there making sure that the
+[12:15] judge was well calibrated on like what you know what what counts as as correct
+[12:19] or not but by and large this worked pretty well um and was able to make this
+[12:23] more of a verified task. Um so so that's how that's how we solved the the reward
+[12:28] function problem was by having that you know turning this into something where
+[12:30] we had more of a golden data set. Um, okay. So, once you've solved that
+[12:35] problem, those problems, once you have your environment, once you have um your
+[12:38] your reward function defined, then basically you just kind of have to run a
+[12:42] loop over and over and over again where you have your agent go through and it
+[12:46] tries to um solve the problem and then you figure out if it's good or it's bad.
+[12:50] Um, and then you just uh you know, reward if it's if it's good and punish
+[12:54] if it's bad and that's it. Um, and uh, you do this over and over and over
+[12:58] again. And then hopefully if you've got everything set up right, um, it learns
+[13:03] what good looks like, it learns what bad looks like, um, and it starts doing it
+[13:06] right. Um, and then again, this is this is the curve we saw earlier where where
+[13:10] you can see it it it starts getting better over time. Um, okay, a few other
+[13:15] like interesting learnings from this project. Um, one thing is we found that
+[13:19] there's actually you can throw a lot of stuff into your reward function uh
+[13:24] beyond just the primary thing you're trying to solve for. And so we actually
+[13:28] ended up we there were like sort of eight different little things that we
+[13:30] gave extra credit for. Um, and I'm going to share two of them here. So the first
+[13:34] one here is um is we were trying to have it optimized for the number of turns,
+[13:39] how many times back and forth, how many times it had to query the email inbox
+[13:42] before it came up with the right answer. Right? So, because the most important
+[13:46] thing, of course, is is getting the answer right, but between two answers
+[13:49] that both get it right, we would rather it took fewer turns back and forth
+[13:52] because that's fewer tokens, that's lower latency, lower costs. Um, it's
+[13:55] just like a more efficient agent. So, um, so you can see here on this first
+[13:59] graph that early on, while was getting its feet wet and figuring out what
+[14:03] worked, it it ended up spiking up to over six turns on average. So, it would
+[14:07] go back and forth a bunch of times with the email inbox and and try and find the
+[14:10] right thing. But then once it was able to like figure out how to use the tools
+[14:14] efficiently, figure out like you know the the right way to construct keywords
+[14:17] and find the right email, it was able to get very efficient and actually fast uh
+[14:21] better than any of our prompted models uh on this metric of um using fewer
+[14:25] turns. And again, this was just because we gave it a little bit of extra. It was
+[14:28] it was a very small amount relative to the reward for getting it right, but a
+[14:31] little bit of extra credit on on using for fewer turns and it was able to to
+[14:34] use that um to to optimize against that. Um, another extra reward function we
+[14:39] gave it is um to try and discourage it from hallucinating answers. So, um,
+[14:44] obviously the best thing is to get the right answer. If you can't find the
+[14:48] right answer, it's much better to say, hey, I don't know, than to make up an
+[14:51] answer in in a situation like this. So, we basically penalized it if um if the
+[14:56] reward model said, "Hey, you got the answer wrong." And but it had tried to
+[15:00] get an answer give an answer, that was like a much lower reward than if it just
+[15:04] said, "Hey, I don't know. I can't solve this problem." And as you can see, that
+[15:07] worked quite well. Um, compared to any of the prompted models, including 03, we
+[15:09] ended up with a significantly lower hallucination rate because that was part
+[15:14] of our reward function. Um, again, these are these are things that are just sort
+[15:17] of like extra credit, but um, we found that like you can throw in a bunch of
+[15:20] these and and it can jointly optimize all of them at the same time, which is
+[15:23] super powerful. Okay, I want to talk a little bit about
+[15:27] reward hacking. Um, it's it's something that comes up a lot when you're trying
+[15:30] to do this, and it's kind of a fun thing to talk about. Um this is an iconic
+[15:34] video some of you might have seen. Uh this was released by OpenAI almost a
+[15:37] decade ago at this point of um they were they were trying to uh they had this
+[15:41] environment where you were trying to uh get this boat to complete a race and
+[15:45] instead of learning to complete uh complete the race it learned that oh if
+[15:48] I just go in this like little circle that's not even part of the racetrack I
+[15:50] can like just get a bunch of points. Um and so it just started doing that over
+[15:54] and over and over again instead of like actually following. Um, this is
+[15:57] something that comes up a lot if you're doing reinforcement learning. And it's
+[16:00] basically just the difference between um, uh, the difference between what you
+[16:06] actually want the model to do and what you can measure. Um, like what you're
+[16:09] actually rewarding it for. And, and if you almost always, if you let one of
+[16:12] these run long enough, it will figure out some way to exploit your measure.
+[16:16] Um, and it will figure out some way to to get a really high reward um, without
+[16:20] actually solving the problem. And you need to just watch for that. So, I'm
+[16:22] going to give a couple examples here. Um this is a this is a graph um from
+[16:27] another project actually not this one. Uh so an engineer on our team was uh was
+[16:31] working on this game called NYT connections. Some of you might know you
+[16:35] get 16 words and you have to put them in like four groups of four. It's quite a
+[16:38] challenging game especially for these language models because it requires a
+[16:41] lot of world knowledge and like you know lateral thinking. Anyway, um so so they
+[16:46] were trying to train this model to do it and uh it wasn't figuring out wasn't
+[16:49] figuring out. what if it wasn't figured out? And then boom, you you can see here
+[16:51] around step 40, it just like takes off and it's like, okay, we figured out how
+[16:54] to how to solve this and and this engineer I'm I'm going to I'm going to
+[16:57] call out where's where's where's An on our team? He's here at the conference.
+[16:59] Yeah, he's great. You should talk to him after. But um he was like, hey, we we we
+[17:03] solved it. Like we got NYT connections and like and it's like, okay, the graph
+[17:06] looks good. Let's look at what it's actually doing. What it was actually
+[17:09] doing is it had figured out there was a bug in how we wrote the verification.
+[17:13] And if it just put every single word in every single category, it was able to
+[17:16] get a perfect score. um because we weren't verifying that they were in fact
+[17:20] only four words uh in each category. Um so this is another example. This is a
+[17:25] fun one. So I was I was training a model um to produce really good titles for
+[17:29] hacker news um titles that would get a thing upvoted. So I had this reward
+[17:33] model I'd trained on like existing hacker news um articles and how many up
+[17:37] votes they got. And I was I was trying to train this model to produce new
+[17:39] titles and it was working really well for a while. You can see and and sort of
+[17:43] subjectively as well. I I looked at a bunch of these these titles generated
+[17:46] and and for these first like thousand steps or so, it was actually learning
+[17:49] things that I was like, "Okay, as someone who spends way too much time on
+[17:52] Hacker News, yeah, that that does look like a good title. You're you're doing a
+[17:55] good job." And then you can see around step um 1200 here, it just like jumps a
+[17:59] bunch, right? It's like, "Okay." Um it clearly figured something out. I don't
+[18:02] know what it figured out. Um but we should look at that. Um, and so, uh,
+[18:07] what it turns out what the model had figured out was that it could just
+[18:10] completely ignore the content of the post and generate the same title for
+[18:15] every single one of them and that would like maximize its score. So, it
+[18:18] generated this title, Google lays off 80% of workforce, literally every single
+[18:22] article, this was this was what it labeled it as. And was like, yes, that
+[18:26] is going to get up on HackerNews for sure, which which it probably would to
+[18:29] be fair. Um so so anyway the way the way we solved
+[18:34] this um what we found is that it's it's really important to watch out for this
+[18:38] solving it typically involves modifying in some way your reward function to
+[18:42] penalize things like that. So in the second example I talked about it was
+[18:46] actually quite an easy fix once we identified it um which was just add an
+[18:49] extra LMS judge that looked at the title looked at the content and said hey is
+[18:53] there anything in the title that's not supported by the content and we added
+[18:55] that on and and it it actually worked great. Um, the important thing here is
+[18:59] you want to be looking at your your rollouts, not just blindly trusting the
+[19:02] reward function, figuring out what's actually happening. Um, anyway, so, uh,
+[19:07] that's it. Um, I'm I'm almost out of time, so I'm going to stop. Couple of QR
+[19:10] codes for you. Um, everything in this presentation, and there's a much longer
+[19:15] write up I have of this whole project. It includes the code. It includes the
+[19:18] artifacts, data sets along the way. Um, you can you can check that out there.
+[19:22] Um, one more thing is, uh, we have a Discord that's open. We have an open
+[19:26] source project for training reinforcement learning models. Um we
+[19:30] have a discord you can go to if you're interested in this kind of thing. Um we
+[19:34] we're all in there. We answer questions. There's lots of people from the
+[19:36] community trying to do these things. So if uh if you're interested in building
+[19:39] things with this um feel free to join it. And yeah, happy happy to chat there.
+[19:43] And um yes, thank you everyone. Uh appreciate your time.

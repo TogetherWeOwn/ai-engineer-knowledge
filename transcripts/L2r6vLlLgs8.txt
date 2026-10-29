@@ -1,0 +1,293 @@
+# title: Fighting AI with AI — Lawrence Jones, Incident
+# source: https://www.youtube.com/watch?v=L2r6vLlLgs8
+# speaker: Lawrence Jones, Incident
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T09:07:00Z
+# sha256: 6a8fb2a80f07f9224f3092efab2330428eee9a984bb4a5e28aa4b6d9b11021c4
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:07] [music]
+[00:15] >> Um hi everyone. Uh so I'm here to talk today about how we use AI to manage the
+[00:20] complexity of the AI products that we build um at incident.io. Uh and to share
+[00:25] with you some of kind of the tips and tricks in the internal tools that we use
+[00:29] when we're building um our AI SRE product. Uh but first I guess like who
+[00:33] am I? Um so I'm Laurence. Uh I'm a founding
+[00:37] engineer at a company called incident.io.
+[00:39] Uh so we build if you haven't heard of us, uh we build an incident response
+[00:43] management platform. So we're used by companies like Netflix, Etsy,
+[00:47] Skyscanner, and actually probably a few of you in the room. Um we page you when
+[00:51] things go wrong and we help you run your incident. And as you're running your
+[00:54] incident, we help you communicate with your customers.
+[00:57] Um but like you might be thinking like where does AI actually come into this?
+[01:01] Um and actually that like we don't just want to help people respond to these
+[01:05] incidents. Um our goal is actually to fully automate kind of production
+[01:09] investigations. So whether or not it's a big incident or if you just have some
+[01:12] ticket and you wanted to look into production, uh we want to be the place
+[01:16] that you turn to ask us questions about actually what's what's going on. Um now
+[01:20] it turns out we've been building this for about a year and a half, 2 years
+[01:22] now. Um and that's actually like a really big ask and the systems that
+[01:26] we've had to build to try and support this have been really quite complicated
+[01:29] um and have been kind of on the edge of what you can do uh with all of the AI
+[01:32] technology that's out there. Um and they often pose a challenge for
+[01:36] humans to debug them. Uh they are now complicated enough that you can't as a
+[01:40] human really tractably dig into how these things are performing. Uh you need
+[01:44] assistance to help you. Um so for example, this is a kind of uh one of the
+[01:48] investigations that we would actually produce for you uh when you have an
+[01:51] incident. Uh we will end up running uh right at the start of the incident this
+[01:55] investigation which will go through hundreds of telemetry queries. It's
+[01:58] going to look at your logs, your metrics, your traces, any historical
+[02:01] incident data that we have, um and it's going to try and cross-reference this
+[02:04] with your code base and go, "Hey, like, I'm pretty sure that the problem is this
+[02:07] and you should probably do this to fix it."
+[02:10] But, I want to pause here and go like, how would you, if you were building this
+[02:13] system, how would you actually figure out how to tell me if this was a good or
+[02:16] bad report? How do you know if it's right? How do you know if it's wrong? Um
+[02:19] and there's a lot of things that you might do. Uh you might jump into the
+[02:22] incident, you look at everything that happened, you might look at the
+[02:25] postmortem if there was one that was written.
+[02:27] Um but, all of this might actually take you a really long time to do. In fact,
+[02:31] it normally takes you like an hour or so to get a real full understanding of this
+[02:34] incident. Uh and it's only at that point that you could then look at this
+[02:37] investigation and go, "I think it's right." or it gave me the information
+[02:40] that was really, really useful. Um and as I said, behind this investigation is
+[02:45] like hundreds, if not thousands, of prompts. So, how on earth do we scalably
+[02:49] understand how this system is performing, especially across all of our
+[02:52] customer accounts when they all have very different things going on? Um you
+[02:55] end up with a lot of stuff, a lot of AI, and you've got to use AI to try and
+[02:59] actually tractably get a handle on this. Um so, I actually did a talk uh a year
+[03:04] ago um at LDX about becoming AI engineers, uh
+[03:08] where I went through some of the core constructs that hopefully like a lot of
+[03:11] you in the room, given that we're an AI engineering uh conference, are familiar
+[03:14] with. So, things like prompts, evals, scorecards, traces, datasets, backtests.
+[03:19] Um this talk is going to be about, if you assume that you have these
+[03:22] constructs put together and you're building these complicated AI systems,
+[03:26] um how can you use AI with the internal tools that you use to understand them to
+[03:30] get a better handle of how your system is performing?
+[03:33] So, yeah. Um in this talk, I'm going to talk about how you can use AI to help
+[03:38] you manage and curate your eval datasets and making it easier for you to work
+[03:41] with them, uh making it easier for coding agents to actually work with your
+[03:44] eval tool. Um I'm going to talk about like probably what was the biggest
+[03:47] unlock for us when we were building these systems, which was starting to
+[03:51] translate the UIs that we built to try and debug them um into downloadable file
+[03:56] systems, which has actually helped us massively using tools like Cloud Code
+[03:59] and Code X to dig into how the system is performing.
+[04:02] And then I'm going to talk about how you can build kind of repeatable analysis
+[04:05] pipelines using AI agents to run through them. Um but first, evals.
+[04:11] So, evals for me are AI unit tests. So, each eval takes a prompt and it goes,
+[04:17] "Here is an input data." It runs the prompt, it gets the output, and then it
+[04:21] has some grading criteria that says, "Does this eval pass? Does it fail?"
+[04:25] And for us, evals live in YAML files right next to all to like our go
+[04:29] prompts. So, we do everything in go incident.io, including all of the AI
+[04:33] work that we do. And this is how we prove when we make a
+[04:36] change to a prompt before we ever go and merge it that the prompt is actually
+[04:40] going to do the thing that we want it to do. Um so, for us, this is what a prompt
+[04:44] looks like. This is kind of a contrived prompt. So,
+[04:47] I would hope no one actually has this in production anywhere.
+[04:50] It takes a message and it tries translating it into pirate speak. So,
+[04:53] really simple, but silly. But, what we do for evals is if this is
+[04:59] the prompt, we would then define on the left some
+[05:02] grading criteria for this prompt where we'll go, "There are two things that we
+[05:05] care about. We care that the result actually looks like pirate speak, and we
+[05:09] are going to care that the meaning is preserved between the input and what we
+[05:13] actually produce as an output." So, this is actually what we're going to use to
+[05:16] tell us if the eval passed or failed. And then we have the evals up on the top
+[05:20] right, which is just in a YAML file where we go, "Here are three different
+[05:23] test cases." And we'll run through them, and you can see the results of us
+[05:26] actually running this on the bottom right.
+[05:29] So, this works, and it works really quite well, but it does have some
+[05:31] problems. And I'm assuming that several people in the room have kind of come
+[05:34] across these themselves. So, first, um like evals are really,
+[05:38] really fiddly. Setting up realistic test data for your evals, if you want to
+[05:42] actually understand how this stuff is running,
+[05:44] is is difficult to do. And especially in our environment, our
+[05:48] production evals are including almost an entire incident. So, you can imagine a
+[05:51] full incident report, and that's the only thing that can trigger the bad
+[05:54] behavior. This is kind of hard for you to end up pulling them down and putting
+[05:57] them in your eval test suite. Um they just become extremely unmaintainable
+[06:01] very quickly. Uh now quite early on we created like this little button that we
+[06:05] have that allows you to like steal an eval from production. So, if anything
+[06:08] was going wrong inside of our like AI interactions, you could go in and you
+[06:12] could just pull that down, put it in the code base, and you could run the eval
+[06:15] against it. Um but the thing with this is like production evals aren't like
+[06:20] great. If you think about evals as kind of like a unit test uh for your prompts,
+[06:24] you want a unit test suite to be reasonably understandable. Like an ideal
+[06:28] unit test is very focused and just says I expect it to do this thing. You don't
+[06:32] want to have like 2 MB of all the YAML associated with it. It's just really
+[06:36] really hard to work with. Um and what we found was as these YAML files for the
+[06:41] evals were growing really really large, uh our coding agents weren't able to
+[06:44] work with them. So, if you want to do a quick like read
+[06:47] and like modify the eval suite, you'd be boosting that into the context, and
+[06:50] you'd quickly hit your context limit, uh which is obviously a problem cuz then
+[06:54] you can't work with it effectively. Um so, what we ended up doing was
+[06:58] we ended up creating a small CLI tool that we call eval tool um that was
+[07:03] designed to allow agents to leverage our eval suite files. Um so, it's just a
+[07:07] small CLI that can go what test cases do you have in here? I want to edit one, I
+[07:11] want to replace one, I want to add one. Um and it was by doing this that we
+[07:15] allowed agents to work effectively with our eval tooling, and that's why we were
+[07:19] able to create this runbook to the right, which is actually a runbook
+[07:21] that's designed for um a coding agent to use. So, either a runbook or a skill, it
+[07:26] depends on how you want to package it. Um but the cool thing about this is that
+[07:29] now that agents can work with the evals, you can end up in a situation where you
+[07:33] just ask your coding agent to go, "Hey, I've got a problem here. Can you look at
+[07:36] this prompt? I want it to do these things." And the coding agent's going to
+[07:40] turn up, and it will create an eval case where it proves that the thing is failed
+[07:44] and then it will go modify the prompt so that the eval now passes
+[07:47] and then it will go through this run book and one of the most important
+[07:50] stages for us is checking at the end that the change that you've made to the
+[07:53] prompt hasn't ended up breaking any of the other evals that you had in your
+[07:56] test suite and we also have like a final pass that
+[07:59] tries consolidating the prompt as well cuz if you end up doing this repeatedly
+[08:03] you end up with a prompt that is massive and really really difficult to maintain
+[08:07] so you kind of want every time you make an adjustment to try and simplify as
+[08:10] well. Um so this is actually like like really
+[08:13] well for us. Um and you can see here this is like me
+[08:18] using it in core code where you can just point it at the eval and say hey have a
+[08:22] look at the prompt. This is a real prompt for us which turns human queries
+[08:25] into log queries for a low-key system and it ends up racing through and goes
+[08:29] and adds a new eval it checks that it passes with a certain number of repeats
+[08:34] and then it gets to the end and it's like yep I think I've added it kind of
+[08:36] the pass rate is acceptable you can go ahead and get going.
+[08:39] Um but the problem with this is like this solves one problem
+[08:42] um and the problem that it solves is that if you know what the prompt is that
+[08:46] you want to change you can now change it very reliably and that's very useful if
+[08:50] you're working on these tools but one of the biggest problems that you
+[08:53] have now is that if you're building these systems you'll know that they're
+[08:57] not just one prompt anymore. Um in fact most of the production AI systems you
+[09:01] will use on a daily basis are many many many prompts. Um and to illustrate this
+[09:05] problem I've taken our chatbot. So this is the chatbot that you interact
+[09:10] with inside of an incident and what I've done is I've created a graph of all of
+[09:13] the different prompts tools agents and everything in the hierarchy that powers
+[09:18] an interaction with our system. Um so you can actually see there's like 10
+[09:21] different agents there there's 50 I I don't even know there's it it's actually
+[09:25] bigger than this I couldn't fit it on the screen. Um
+[09:28] there's a lot of stuff so even if you think that you know even if you've got a
+[09:32] bad interaction that came in from a customer
+[09:34] you don't necessarily know which part of your system is actually the problem and
+[09:38] which part to go change. Um so even if you have this eval red green cycle,
+[09:42] you're going to struggle to know where to go to fix it. Um and this gets even
+[09:46] worse for a system like our investigations.
+[09:49] So, if you think about trying to run through this process to debug what's
+[09:53] going on an incident, we have a ton of stuff that goes on uh inside that system
+[09:56] and you can see all the steps on the left. Um and each one of those steps
+[10:00] unpacks into the trace that you have on the right and like really it's not about
+[10:03] the details here. Um it's more about each one of these green blocks actually
+[10:07] expands into possibly hundreds of different prompts and hundreds of
+[10:10] different tool calls. And at any point, if you make a slight subtle error, you
+[10:14] can't then easily trace through the system where the error originated even
+[10:18] if it ends up resulting in you having totally the wrong picture on what you
+[10:21] think that the incident was and your RC is totally wrong.
+[10:25] Um so like we built these UIs so that we could help humans look at them and
+[10:29] they've been really good for humans to look at them, but I guess going back to
+[10:32] what I was saying before, um we just don't have enough time to go through
+[10:36] this stuff. So, the problems that we had was we have
+[10:40] all these UI tools, but agents can't properly use them. So, how do we get to
+[10:43] a place where like the agents can use the tools properly? Um and I think
+[10:47] Anthropic stumbled on this with Claude Code where um they found kind of when
+[10:51] they released Claude Code that these agents are fantastic at using file
+[10:54] systems and just going through this data using standard tools. Um so we kind of
+[10:58] thought like, can we just download all of the UI that we have as a file system?
+[11:03] Um and that's kind of what we've done. So, now for each different AI systems,
+[11:07] you're able to download all of the content as a file system and we drop
+[11:11] that into a sandbox Claude Code uh at which point you can just point Claude
+[11:15] Code at it and go, "Hey, I've got a problem here. It's behaved in the wrong
+[11:18] way." It can see everything that went into all the prompts, it understands the
+[11:21] structure cuz it's self-documenting. Um and then it can tell you because you
+[11:24] have access to the code base as well, uh exactly where you should actually be
+[11:28] making the modification to try and change it. And then you can lean on that
+[11:31] red green cycle from before to try and modify prompt if you need to.
+[11:35] Also, there's more stuff that you can put in this than you might think.
+[11:38] There is really not much of a limit as to what you can put into ASCII. Um so
+[11:43] like traces like this can get translated exactly from how you would present them
+[11:46] in the UI to a text file which then the LLM can consume in a really nice way.
+[11:52] So yeah, this is something that has turned the way that we debug our
+[11:56] application into we hear that there's a bad experience. We end up downloading
+[12:00] that interaction into a sandbox called code.
+[12:03] You sit there in the session and you go, "Hey, like have a look at this. Tell me
+[12:05] what you think has gone wrong. Like like what is your interpretation of the
+[12:08] problem?" And then you go, "I really want it to do
+[12:11] this instead. Like what part of the system would you change?" And then it
+[12:13] will work its way through the hierarchy of all those tools and prompts that you
+[12:16] just saw and it will be able to tell you where you should be making the
+[12:18] modification. And then all from that session because you have access to the
+[12:22] code base, you can just go, "Hey, can I make that change?" And then you can
+[12:24] prove it using the Eva runbook that I mentioned before.
+[12:28] So yeah, like we've implemented these file system packages for a load of
+[12:32] different AI interactions for us now. So it's really easy for us to just drop
+[12:35] this in Cloud Cove and just get going. But we now have another problem, right?
+[12:39] Cuz whilst you can do this on an individual basis, we are running
+[12:42] thousands of of investigations across hundreds of our customer accounts.
+[12:47] And we're doing that daily cuz we need to know if this system is getting better
+[12:50] or worse. So what you can see here is we have what we
+[12:54] call a back test which is essentially a batch of investigations that we run on a
+[12:58] daily basis against our account and against a load of our customer accounts
+[13:02] as well. And eventually you just get this rolled
+[13:04] up number which is like, "Oh, cool. 86% accurate RCA on our account." Which is
+[13:09] which is great, but like this doesn't really tell you why the number went up
+[13:12] and it doesn't tell you why it went down. And if you want to improve the
+[13:14] system for someone, you're going to struggle.
+[13:17] So what we've actually done is we've allowed ourselves to download
+[13:22] kind of all of these investigations into a file system that we can then provide
+[13:26] into an analysis pipeline that again is leveraged or is run using Claude code
+[13:32] that can end up running a structured analysis like with markdown playbooks
+[13:35] that help you run it repeatedly and reliably each time.
+[13:38] Um so what that actually looks like is we created this repo this repo called
+[13:43] scrapbook and inside of scrapbook we have this
+[13:47] like very structured flow that explains exactly how a coding agent should go
+[13:50] through all of the information that we've gone and downloaded, how it should
+[13:53] understand these investigations and the process that it should go through to
+[13:56] actually run them. Um now the key things that like I think are very important to
+[14:00] these flows are you start and you actually parallelize out all of your
+[14:04] agents. So you start maybe 25 agents in parallel and they can all individually
+[14:08] build their analysis of an investigation and then you go into the next stage of
+[14:12] the pipeline where you do some cohort clustering and you look at like meta
+[14:15] points around like what are the same types of failure, how do we go wrong in
+[14:19] different ways. Um and by clustering it together you end up with actually like a
+[14:22] really really useful report that doesn't just tell you how this has gone wrong
+[14:26] but it tells you why is your AI system performing well or badly on this
+[14:29] customer account and actually like what should you do to try and fix it or
+[14:33] improve the system. Um and like this is this is like
+[14:36] something that we've done several times over for several of our systems now and
+[14:39] I think it generalizes really well for anyone who's building this type of
+[14:42] thing. Um so the points that make like a really good pipeline for this
+[14:46] you should leverage sub agents to do that parallel per entity analysis.
+[14:50] You should store all of your analysis in files inside these downloads so that you
+[14:54] have like incremental analysis built as you run through it so that you can start
+[14:58] and resume the analysis if you have need to. Um and then you want to combine this
+[15:02] analysis with the code base that is actually powering the system.
+[15:06] So that if it finds a problem it can look in the code base and go hey I think
+[15:09] that this is the problem and this is the place and it can actually do some
+[15:12] analysis to go I think that you should change it like this. Um and then at the
+[15:16] end because you have this all loaded in your code session you can just go fix it
+[15:20] and ask the coding agent Claude Code, Code X, whatever you use to actually go
+[15:24] make the change and then you can use that eval red green process to actually
+[15:27] confirm it works. Um and then like yeah, this is a PR that
+[15:32] is created after you do something like that where because the back test showed
+[15:35] a couple of investigations that were going wrong and I knew exactly what what
+[15:38] the problem was, um I could have a chat with you about a feature that we might
+[15:42] change in the system. Um and then we can deploy that and we can test that out in
+[15:45] production and see how the thing goes. Um so yeah, that's it. Uh so um the key
+[15:51] thing for me is like these patterns do generalize. So for any of you in the
+[15:54] room who are building kind of complicated AI systems um and you're
+[15:57] finding it really hard to understand them or debug them or evolve them, um
+[16:01] you you really need to be using AI just as effectively in your internal tools to
+[16:05] try and understand these systems and grow them um just as you are in the
+[16:09] products that you're building yourself. Um so yeah, make sure that you
+[16:12] prioritize any of the debugging tools that you have so that they work really
+[16:16] really well with the coding agents that you're leveraging on a day-to-day basis.
+[16:19] Um file systems are exceptionally good agent context. Like we could have put an
+[16:23] MCP on top of this or use like human use uh agents. Uh it wouldn't have been half
+[16:28] as effective as this ability to just download in bulk all of the information
+[16:31] that you need so that the coding agent can grep through it and find the
+[16:34] details. Um and then yeah, anytime you are performing complex analysis, look at
+[16:39] creating an AI run book for it instead. Um
+[16:43] it will save you literally days or maybe weeks of your life.
+[16:46] Um and then one final point for me, um like we are hiring. Uh
+[16:51] we we're in London. Um we have just done a fairly big raise last year and we're
+[16:55] looking to expand the team so that we can build some of these systems.
+[16:58] Um so if any of this work looks interesting to you and you're interested
+[17:01] in being on like the edge of building some of this AI like AI SRE product, uh
+[17:06] then just get in contact and let me know. I'd love to chat.
+[17:10] All right, thank you. >> [applause]
+[17:18] [music]
+[17:28] >> Mhm.

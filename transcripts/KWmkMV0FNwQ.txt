@@ -1,0 +1,330 @@
+# title: Building Alice’s Brain: an AI Sales Rep that Learns Like a Human - Sherwood & Satwik, 11x
+# source: https://www.youtube.com/watch?v=KWmkMV0FNwQ
+# speaker: Sherwood & Satwik, 11x
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T11:02:22Z
+# sha256: 217c7b6d3569e5494d57752ff8acaf4eccebc007cb13ff1894f7b532413dbe32
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:03] [Music]
+[00:15] Okay, thanks everyone for coming today. Uh, so today's talk is called Building
+[00:20] Alice's Brain. How we built an AI sales rep that learns like a human.
+[00:25] Uh, my name is Sherwood. I am one of the tech leads here at 11X. I lead
+[00:28] engineering for our Alice product and I'm joined by my colleague Saw.
+[00:34] So 11X for those of you who are unfamiliar is a company that's building
+[00:37] digital workers for the go to market organization. We have two digital
+[00:41] workers today. We have Alice who is our AI SDR and then we also have Julian who
+[00:45] is our voice agent and we have more workers on the way.
+[00:49] Today we're going to be talking about Alice specifically and actually uh
+[00:53] Alice's brain or the knowledge base which is effectively her brain.
+[00:58] So let's start from the basics. Uh what what is an SDR? Well, an SDR is is a
+[01:02] sales development representative if you're not familiar. I know that's a
+[01:05] room full of engineers, so I thought I would start with the basics. And this is
+[01:08] essentially an entry-level sales role. This is the kind of job that you might
+[01:12] get uh right out of school. And your responsibilities basically boil down to
+[01:16] three things. First, you're sourcing leads. These are people that you'd like
+[01:19] to sell to. Then you're contacting them or engaging them across channels. And
+[01:24] finally, you're booking meetings with those people. So your goal here is to
+[01:28] generate positive replies and meetings booked. These are the two uh key metrics
+[01:31] for an SDR. And a lot of an SDR's job boils down to
+[01:36] writing emails like the one that you see in front of you right now. This is
+[01:39] actually an email that Alice has written and uh it's an example of the type of uh
+[01:45] type of work output that Alice has. Uh Alice sends about 50,000 of these emails
+[01:49] to uh in a given day and that's in comparison to a human SDR who would send
+[01:54] 20 to 50. Uh and Alice is now running campaigns for about 300 different uh
+[02:00] business organizations. So before we go any further, I want to
+[02:05] define some terms because since we work at 11X, we have our customers but then
+[02:09] our customers also have their customers. So things get a little confusing. Uh
+[02:13] today we'll be using the term seller to refer to the company that is selling
+[02:16] something through Alice. That is our customer. And then we'll be using the
+[02:20] term lead to refer to the person who's being sold to.
+[02:24] And here's what that looks like as a diagram. You can see the seller is
+[02:27] pushing context about their business. These are the the products that they
+[02:31] sell or the uh case studies that they have that they can reference in emails.
+[02:34] She they're pushing that to Alice and then Alice is then using that to
+[02:38] personalize emails for each of the leads that she contacts.
+[02:42] So there are two requirements that Alice needs to uh in order to succeed in her
+[02:46] role. The first is that she needs to know the seller, the products, the the
+[02:50] services, the case studies, the pain points, the value props, the ICP. And
+[02:54] the second is that she needs to know the lead, uh their role, their
+[02:58] responsibilities, what they care about, what other solutions they've tried, uh
+[03:01] pain points that they might have be experiencing, the company they work for.
+[03:05] And today we're going to be really focused on knowing the seller.
+[03:09] So in our in the old version of our product, the seller would be responsible
+[03:13] for pushing context about her uh about their business to Alice. And they did so
+[03:18] through a manual experience uh called the library. And here you could see what
+[03:22] it looks like there where the library shows uh all of the different products
+[03:26] and offers that are available for this business that uh Alice can then
+[03:30] reference when she writes emails. The user would have to enter details about
+[03:34] all every individual product and service and all of the pain points and solutions
+[03:37] and value props associated with them in our dashboard and including these
+[03:41] detailed descriptions. And those descriptions would uh were were
+[03:45] important to get right because these actually get included in the context for
+[03:48] the emails or for Alice when she writes the emails.
+[03:52] Then later on during campaign creation, this is what it looks like to to create
+[03:56] a campaign. And you can see we have a lead in the top left and the user is
+[04:00] selecting the different offers that they've defined from the library in the
+[04:03] top right that and these are the offers that Alice has access to when she's
+[04:06] generating her emails. We had a lot of problems with this user
+[04:11] experience and the first one was it was just extremely tedious. It was a really
+[04:15] bad and and and cumbersome user experience. The user had to enter a lot
+[04:18] of information and that created this onboarding friction where uh users
+[04:23] couldn't actually run campaigns until they hadn't filled out their library.
+[04:27] And finally, the emails that we were generating using this approach were just
+[04:30] sub-optimal. Users would have to either choose between too few email or too few
+[04:34] offers, uh, which meant that, uh, you'd have irrelevant offers for a given lead,
+[04:38] or too many offers, which means that you have all of the stuff in the context
+[04:42] window, and Alice just wasn't as smart when she write writes those emails.
+[04:47] So, how can we address this? Well, we had an idea which is that
+[04:51] instead of the seller being responsible for pushing context about the business
+[04:55] to Alice, we could flip things around so that Alice can proactively uh pull all
+[05:00] of the context about the seller into her system and then use what'sever whatever
+[05:04] is most relevant when writing those emails. And that's effectively what we
+[05:07] accomplished with the knowledge base which we'll tell you more about in just
+[05:10] a moment. So for the rest of the talk, we're going
+[05:13] to first do a highle overview of the knowledge base and how it works. Then we
+[05:18] will do a deep dive on the pipeline, the different steps in our rag system
+[05:22] pipeline. Then after that we will talk through the
+[05:26] user experience of the knowledge base and we will wrap up with some lessons
+[05:30] from this project and uh future plans. So let's start out with an overview. All
+[05:35] right. So overview, what is knowledge base, right? It's basically a way for us
+[05:41] to kind of get closer to a human experience. Like if a hum if you're
+[05:45] training a human SDR, you would kind of get them in and then you will basically
+[05:49] dump a bunch of documents on them and then they ramp up throughout a period of
+[05:53] like weeks or months. Um, and you can basically check in on their prog
+[05:57] progress. Um, and similar to that, knowledge base is basically a
+[06:02] centralized repository on our platform for the seller info and then users can
+[06:05] kind of come in, dump all their source material and then we are able to
+[06:09] reference that information at the time of message generation. Um, now what
+[06:14] resources do SDRs care about? Here's a little glimpse into that. Marketing
+[06:17] materials, case studies, uh, sales calls, press releases, you know, and a
+[06:21] bunch of other stuff. Um, now, how do we bucket these into categories that we're
+[06:26] actually going to parse? Uh, well, we created documents and images, websites,
+[06:32] and then media, audio, video, and you're going to see why that's important.
+[06:36] So, here's an overview of what the architecture looks like. It starts off
+[06:40] with the user uploading something any document or resource in the client and
+[06:44] then we save it to our S3 bucket and then send it to the back end um which
+[06:49] then you know creates a bunch of resources in our DB and then kicks off a
+[06:53] bunch of jobs depending on the resource type and the vendor selected. Now the
+[06:57] vendors are asynchronously doing the parsing. Once they're done, they send a
+[07:00] web hook to us which we consume via ingest and then once we've consumed that
+[07:05] web hook, we take that parsed uh artifact that we get back from the
+[07:11] vendors and then we store it in our DB and then at the same time upsert it to
+[07:15] pine cone and embed it. Um, and then eventually once we store it in local DB,
+[07:20] we have like a UI update and then eventually our agent can query pine
+[07:26] cone, our vector DB for that stored information that we just put in. So now
+[07:32] that we have a high level of understanding of how the knowledge base
+[07:34] works, let's dig into each individual step in the pipeline. There are five
+[07:38] different steps in the pipeline. The first is parsing. Then there's chunking.
+[07:43] Then there's storage. Then there's retrieval. And finally, we have
+[07:47] visualization, which will uh sounds a little untraditional, but we'll cover it
+[07:50] in a in a moment. So, let's start with parsing. Uh what is parsing? I think
+[07:55] that we probably all take this for granted, but it's worth defining.
+[07:58] Parsing is the process of converting a non-ext resource into text. And the
+[08:03] reason that this is necessary is because, as we all know, language
+[08:06] models, they speak text. So in order to make information that is represented in
+[08:10] a different form like a PDF or an MP4 file or a or an image legible or useful
+[08:17] to the LLM, we need to first convert it to text. And so one way of thinking
+[08:21] about parsing is it's the process of making non-ext information legible to a
+[08:24] large language model. Um and we do have multimodal models that are one solution
+[08:28] to this, but there are lots of restrictions on multimodal models that
+[08:31] make it u that make parsing still relevant.
+[08:35] So to illustrate that we have the five different document types or resource
+[08:38] types that we mentioned momentarily ago uh going through our parsing process and
+[08:42] coming out is actually markdown which is a type of text that as we all know
+[08:46] contains some structural information and formatting which is actually
+[08:49] semantically semantically meaningful and useful.
+[08:53] Let's talk about the process of how we implemented parsid and the the short
+[08:56] answer is that we did not we didn't want to build this from scratch and we had a
+[09:01] few different reasons for doing this. The first is that you just saw that we
+[09:04] had five different resource types and a lot of different file types within each
+[09:07] of them. We thought it was going to be too many and we thought it was going to
+[09:10] be too much work. We wanted to get to market quickly. Um the last reason was
+[09:14] that we just weren't that confident in the outcome. There are vendors who
+[09:17] dedicate their entire company to building an effective parsing system for
+[09:21] a specific resource type. We didn't want our team to to have to become
+[09:25] specialists in in parsing for each one of these resource types and to build a a
+[09:29] parsing system for that. We thought that maybe if we tried to do this, the
+[09:33] outcome actually just wouldn't be that that successful. So, we chose to work
+[09:37] with a vendor and here are a bunch of the vendors that we we came across. You
+[09:41] can find 10 or 20 or 50 with just a quick Google search, but these are some
+[09:45] of the leaders that we evaluated and in order to make a decision, we came
+[09:50] up with some requirements and three specific requirements. The first was
+[09:54] that we needed support for our necessary resource types. That goes without
+[09:58] saying. We also wanted markdown output. And then finally, we wanted this vendor
+[10:02] to support web hooks. We wanted to be able to receive that output in a
+[10:06] convenient manner. A few things that we didn't consider to
+[10:09] start out with. Accuracy. Crazy. We didn't consider accuracy. We
+[10:15] didn't consider either accuracy or comprehensiveness. Our assumption here
+[10:19] was that most of the vendors that are leaders in the market are going to be
+[10:22] within a reasonable band of accuracy and comprehensiveness. And accuracy would
+[10:26] refer to whether or not the extracted output is actually matches the the
+[10:30] original resource. Comprehensiveness on the other hand is the amount of
+[10:34] extracted information that is uh available um in the in the final output.
+[10:39] The last thing that we didn't really consider was cost uh to be honest and
+[10:42] this was because we were this system was pre-production. We didn't have real
+[10:46] production data yet and we didn't know uh what our usage would be. And so we we
+[10:51] figured what we would do is would come back and optimize cost once we had real
+[10:54] usage data. So on to our final selections for
+[10:59] documents and images. We chose to work with llama parse which is a llama index
+[11:03] product. Uh I think Jerry was up here earlier today. Uh and the reasons that
+[11:07] we chose to work with llama parse was first it supported the most number of
+[11:11] file types out of any document parsing solution we could find. And second their
+[11:15] support was really great. Jerry and his team were were were were quick to get in
+[11:19] a Slack channel with us. I think within just a couple of hours of us doing an
+[11:22] initial evaluation. And with Llama Parse, we're able to turn
+[11:27] documents like this PDF of a 11X sales deck into a markdown file like the one
+[11:32] you see on the right. For websites, we chose to work with
+[11:36] Firecrawl. The other main vendor that we were considering was Tavi. And this is
+[11:39] actually not really a a major knock on Tavi. For Firecrawl, we chose to work
+[11:43] with them because first we were familiar. we had already worked with
+[11:45] them on a previous project. And secondly, Taval's crawl endpoint, which
+[11:50] is the endpoint that we would have needed for this project, was still in
+[11:53] development at the time. So, it wasn't something we could actually use.
+[11:57] And similar to uh llama parse with t with fire crawl, we are able to take a
+[12:01] website like this homepage that you see here and turn it into another markdown
+[12:05] document. Then we have audio and video. And for
+[12:08] audio and video, we chose to work with a newer uh upstart vendor called
+[12:12] Cloudglue. And the reasons that we chose to work
+[12:15] with Cloud Glue were first they supported both audio and video, not just
+[12:18] audio. And second, they were actually capable of extracting information from
+[12:23] the video itself as opposed to just transcribing the video and giving us
+[12:27] back a markdown file that contains the transcript of the audio.
+[12:32] And so with Cloud Glue, we're able to turn uh YouTube videos and MP4 files and
+[12:36] other video formats into markdown like you see on the right. So now that
+[12:40] everything is marked down, we move on to the next step, which is chunking. All
+[12:43] right, markdown. Let's go. Now, basically, we have a blob of markdown,
+[12:48] right? And we want to kind of break it down into like semantic entities that we
+[12:53] can embed and put it in our vector DB. At the same time, we want to uh protect
+[12:59] the structure of the markdown because it contains some meaning inherently like
+[13:03] something's a title versus something's a paragraph. There is inherent meaning
+[13:06] behind that. Um, so we're splitting these long blobs of text like 10-page
+[13:12] documents into chunks that we can eventually retrieve uh after we've
+[13:16] embedded and stored them in a vector DB, right? And now basically we can like
+[13:21] take all of this and we're thinking about how we can you know split a long
+[13:27] document into chunks, right? So chunking strategies um you have various things
+[13:32] that you can do. You can split on tokens, you can split on sentences, you
+[13:36] can also split on markdown headers, right? And then you can do like LLM
+[13:40] calls and have an LLM split your document into chunks, you know, or any
+[13:45] combination of the above. Um, now what you want to ask yourself when you're
+[13:48] deciding on a chunking strategy is like um what kind of logical units am I
+[13:53] trying to preserve in my data, right? What do I eventually want to extract
+[13:57] during my retrieval, right? what strategy will keep them intact and at
+[14:01] the same time you're able to successfully embed them and store them
+[14:04] in whatever DB you want. Um so and then should I try a different strategy for
+[14:10] different resource types we have like we have to deal with PDFs, powerpoints,
+[14:13] videos, right? Um and then eventually what kinds of queries or retrieval
+[14:18] strategies am I expecting? Um and then we ended up with like a combination of
+[14:24] all the three like all the things that we mentioned. So we split on markdown
+[14:28] headers and then we kind of a waterfall. So because we want our like records in
+[14:33] our vector DB to be a certain token count. So we split our markdown headers
+[14:37] and then we split on sentences and then eventually we split on tokens and then
+[14:41] yeah it's like worked well for us for all types of documents. Um and it has
+[14:46] successfully preserved our markdown chunks that we can kind of cleanly show
+[14:49] in the UI. Um, and it also prevents super long chunks which are, you know,
+[14:54] diluting the meaning behind your document if you end up with that. Okay,
+[14:58] so we have split all of our markdown into individual chunks. It's now time to
+[15:02] put those chunks somewhere. We're going to store them. Let's talk about storage
+[15:05] technologies. So for storage technologies, I'm sure
+[15:08] everyone is like here for the rag section. So they think that we're using
+[15:11] a vector database. We actually are using a vector database. But to be pedantic,
+[15:15] rag is retrieval augmented generation. So we all know that uh anytime you're
+[15:19] retrieving context from an external source whether it's a graph database or
+[15:23] elastic search or uh a file in the file system that also qualifies as rag. Um
+[15:29] some of the other options you can use for rag uh I just mentioned a graph
+[15:33] database document databases uh relational databases key value stores
+[15:38] you could even use object storage like S3. In our case, we did use a vector
+[15:43] database and that's because we wanted to do sim similarity search which is what
+[15:47] vector databases are are built for and optimized for.
+[15:51] Once again, we had a lot of options to choose from. This is uh not a complete
+[15:56] or an exhaustive list. In the end, we chose to work with a
+[16:00] company called Pine Cone. And the reason that we chose to work with Pine Cone was
+[16:03] first it was a well-known solution. We were kind of new to the space and we
+[16:07] thought probably can't go wrong going with the market leader. It was cloud
+[16:11] hosted so our team wouldn't have to spin up any additional infrastructure.
+[16:16] It was really easy to get started. They had great getting started guides and
+[16:19] SDKs. Uh they had embedding models bundled
+[16:22] with the solution. So for a vector database typically you have to embed the
+[16:26] information before it goes into the database. Uh that would require the use
+[16:29] of a third party or an external vector vector excuse me embedding model. And uh
+[16:34] with Pine Cone, we didn't actually have to go find another embedding model
+[16:37] provider or host our own embedding model. We just used the one that they
+[16:40] provide. And last but not least, their customer support was awesome. They got
+[16:44] on a lot of calls with us, helped us analyze different vector data database
+[16:48] options and think through a graph databases and graph rag whether that
+[16:51] made sense for us. So retrieval, the rag part of the rag
+[16:57] workflow that we just built, right? Um you'll see that there's actually an
+[17:01] evolution of different rag techniques over the last year. We started off with
+[17:04] just traditional rag which is kind of a play on you're pulling information and
+[17:08] then enriching your system prompt for an LLM API call right and then eventually
+[17:13] that turned into an agentic rag form where now you have all these tools for
+[17:18] getting information retrieval and then you attach those tools to whatever
+[17:23] agentic flow that you have and then it calls the tool as a part of its larger
+[17:28] flow. Right now something we we're seeing emerge in the last couple of
+[17:32] months is deep research rack where now you have these deep research agents
+[17:36] which are coming up with a plan and then they execute them and the plan may
+[17:40] contain one or many steps of retrieval. Right? These deep research agents can go
+[17:45] broad or deep depending on the context needs and they can evaluate whether or
+[17:49] not they want to do more retrieval. Um we ended up building a deep research
+[17:53] agent. Um we actually used a company called Leta. Leta is a cloud agent
+[17:58] provider and they're really easy to build with. Um how it works basically we
+[18:04] pass in the lead information to our agent and then it basically comes up
+[18:08] with a plan. plan contains one or many context retrieval steps and then
+[18:13] eventually you know does the tool call summarizes the results and then
+[18:18] generates an answer for us in a nice clean Q&A manner right and then this is
+[18:24] kind of how it looks like for a system with two questions that we ask
+[18:29] um now on to visualization the most uh mysterious part of the pipeline so what
+[18:34] does visualization have to do with a a rag or ETL pipeline Um, for more
+[18:39] context, our customers are trusting Alice to represent their business. They
+[18:44] really want to know that Alice knows her stuff, that she actually knows the
+[18:47] products that they sell, and she's not going to lie about case studies or
+[18:49] testimonials or make things up about the pain points that they address. So, how
+[18:53] can we reassure them? In our case, we came up with a solution, which is to let
+[18:58] al let users peek into Alice's brain. Get ready.
+[19:03] This is what that looks like. We have a a interactive 3D visualization
+[19:08] of the knowledge base available in the product. What we've done here is taken
+[19:11] all of the vectors vectors from our uh pine cone vector database and uh
+[19:16] collapsed or actually excuse me I think the correct term is projected them down
+[19:19] to just three dimensions. So we're going to render them as nodes in
+[19:22] threedimensional space um um um with using um uh and once the nodes are
+[19:29] visible in this space you can click on any given node to view the associated
+[19:33] chunk. This is one of the ways that uh for example our sales team or support
+[19:36] team will demonstrate Alice's knowledge. Now how does it look like in the actual
+[19:41] UI? Right? Basically you start off with this nice little modal you know you drop
+[19:46] in your URLs, your web pages, your documents, your videos and then you
+[19:50] click learn and then it kind of shows up nicely in the UI. Um you have all the
+[19:54] resources there and then you have the ability to interrogate Alice about what
+[19:58] she knows of your knowledge base. Right? It's a really nice agent that we built
+[20:02] again using Leta. And here's how it looks like in the campaign creation
+[20:07] flow. You see that on the left hand side we have the knowledgebased content
+[20:11] showing up as a nice Q&A where you can click on the questions and it shows you
+[20:15] a drop down of the chunks that we retrieved and these were used as a part
+[20:18] of the messaging flow. So now with that we have achieved our
+[20:23] goal. Our agent is closer to a human than being an email. Right? We are now
+[20:30] we are now basically uh emulating how you onboard a human SDR. You dump in a
+[20:35] bunch of context and they just know. So in conclusion, the knowledge base was
+[20:40] a pretty revolutionary project for our product and really changed the user
+[20:43] experience and also leveled up our team a lot. Uh we learned a lot of lessons.
+[20:48] It was hard to create this slide, but there are just three that I want to
+[20:50] highlight for you today. The first was that rag is complex. It was a lot harder
+[20:55] than we thought it was going to be. There were a lot of micro decisions made
+[20:58] along the way, a lot of different technologies we had to evaluate.
+[21:02] Supporting different research types was hard. Hopefully, you all have a better
+[21:05] appreciation of how complicated RAD can be.
+[21:08] The second lesson was that you should first get to production before
+[21:12] benchmarking and then you can improve. And the idea here is that with all of
+[21:16] those decisions and vendors to evaluate, uh, it can be hard to get started. So we
+[21:20] recommend just getting something in production that satisfies the product
+[21:23] requirements and then establishing some real benchmarks which you can use to
+[21:26] iterate and improve. And the last learning here was that you should lean
+[21:30] on vendors. You guys are all going to be buying solutions and they're going to be
+[21:34] fighting for your business. Make them work for it. Make them teach you about
+[21:37] the different uh the different offerings and why their solution is better. And so
+[21:42] our future plans are to first track and address hallucinations in our emails.
+[21:47] Evaluate parsing vendors on accuracy and completeness, those metrics that we uh
+[21:51] identified earlier. Experiment with hybrid rag, the introduction of a graph
+[21:55] database alongside our vector database. And finally, to just focus on reducing
+[22:00] cost across our entire pipeline. And if any of this sounds interesting to
+[22:04] you, we are hiring. So, please reach out to either Sautwick or myself. Join us.
+[22:09] And uh thank you all for coming today. [Music]

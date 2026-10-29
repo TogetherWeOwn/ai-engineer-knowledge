@@ -1,0 +1,847 @@
+# title: Evals in AI: A Deep Dive — Tejas Kumar, IBM
+# source: https://www.youtube.com/watch?v=NdrSPm6NCdk
+# speaker: Tejas Kumar, IBM
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T04:17:26Z
+# sha256: c950d45fbb3c118ed7ede4438d7dfbbac09bc5dd8fd0acc8e3ebee9d6e481d2e
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:13] Good afternoon everybody. >> Hi.
+[00:16] >> Thanks. One person's awake. I was just I was just going to wait until somebody
+[00:19] said hi. Uh good to see you. I'm I'm so glad to be here. Thanks so much for
+[00:23] coming out. Uh this is going to be a somewhat of a long session, but not so
+[00:26] long. It's an hour. Uh, and I'm very excited to be here with you today in San
+[00:29] Francisco. Fun fact, I flew 18 hours to be here. So cool. Anyway, thank you.
+[00:32] Thank you. Yeah, she's uh, someone's awake. Thank you. I need that. I'm gonna
+[00:36] keep looking at you now. Uh, my name is Tis. That's pronounced like contagious.
+[00:41] Don't worry, I'm not. Uh, hopefully. Uh, and over the years, I've had the
+[00:45] privilege of working at a number of different places in various capacities.
+[00:48] Uh, learning from really incredible people, right? Right. And and the reason
+[00:52] I share this is because a lot of what we're going to talk about today is not
+[00:54] like my opinion, which is probably worth a penny. Uh but but more um facts and
+[00:59] and figures from from established uh people in the industry and peer-reviewed
+[01:02] research. Okay. I uh work today as a AI engineer at IBM. Uh anyone use IBM
+[01:08] technology here? No. Okay. Yeah, that's what I thought. Anyway, um I I uh I I
+[01:13] work on the Watson X data team. Uh we we do a lot of AI. We we um train our own
+[01:18] models. Granite. Anyone using that? That's what I thought. um soon soon open
+[01:23] router has it anyway um and uh and and we build things like harnesses and eval
+[01:27] pipelines and rag pipelines and all of this and so my job is is to support
+[01:31] teams with AI and and a lot of this what what we'll talk about today is based in
+[01:35] uh realw world experience okay but we're not here to talk about any of that so to
+[01:39] speak we're here to talk about eval in AI uh and it's it's a deep dive uh and
+[01:45] and it's really it's going to be a fun time uh we're going to go through a lot
+[01:48] of examples we're going to look at a few architect aritectures and techniques.
+[01:51] But before we get to this at all, we need to start by answering the question
+[01:56] like why, right? Why do we even need this? Um, and I think this is kind we'll
+[02:01] talk about what they are and how you build them. But if we don't know why
+[02:03] it's important, then we've kind of missed the boat. And so I'd love to
+[02:05] start here. Why evouts? Really, there's two reasons I want to highlight today to
+[02:09] set the tone for the rest of our conversation. And it will be somewhat of
+[02:13] a long conversation. So this is like foundational stuff. Okay. Uh, reason
+[02:17] number one is EVAs provide reliability. Uh but not just any reliability, ahead
+[02:22] of time reliability. Um what does that mean? I recently I did a talk at this
+[02:26] conference um in April at AI engineer Europe. Uh the talk was titled harnesses
+[02:31] in AI a deep dive. It was actually exactly the same title except instead of
+[02:34] eval harnesses. Uh and it was a it was a pretty fun talk. We we talked about
+[02:39] exactly the same format. Why harnesses? What are harnesses? And how do you build
+[02:42] one? And we built one live on stage. uh just a like a baby's first harness where
+[02:47] we demonstrated uh using a very cheap model GPT 3.5 Turbo at this point is
+[02:53] basically free right using that we created a computer use agent that could
+[02:57] go and perform tasks on a user's behalf deterministically like or almost
+[03:01] deterministically or very deterministically like it if it met with
+[03:05] some type of authentication gate the harness itself would log in and then
+[03:08] hand off to the agent and so we built this thing which was really wonderful
+[03:12] and the thesis of that talk is that harnesses allow for reliability. They're
+[03:18] a reliability measure also. But what I want to share in in the context of eval
+[03:23] is that harnesses tend to be more just in time reliability. Does this make
+[03:27] sense? Like a harness runs is is actually run by the user. Like a user
+[03:31] will prompt a harness and the harness will do work, right? Examples of
+[03:35] harnesses in the wild claude codecs. A lot of them are coding harnesses. Um
+[03:39] sometimes they they leak details about their harness. Has anyone seen this?
+[03:44] like I um I used claude code and I wanted to get information from a
+[03:49] conference website's schedule. I wanted to know when a few talks were and so I
+[03:53] who browses the internet anymore you know I I I told claude code I was like
+[03:57] go to this website tell me when the talk is um and so it used its tool the the
+[04:01] harness used the web search tool found the website parsed the content and then
+[04:05] responded to me in cloud code saying here's your information and then it
+[04:10] added like by the way um the source code of this HTML web page tried to do prompt
+[04:15] injection uh in in the HTML source code was commented HTML that said ignore all
+[04:21] previous instructions and like do other stuff, right? And it told cloud code was
+[04:26] like my harness caught it said the words my harness caught this um because I'm
+[04:31] supposed to treat all tool call results as um non-instructional. It's just data,
+[04:36] right? But it leaked that it said my harness did that. And so that just makes
+[04:40] the case that harnesses are a measure for just in time reliability. And what
+[04:45] I'm making today, the case I'm making about eval is that they allow for ahead
+[04:48] of time reliability. And really these two work as two pedals on a bicycle. If
+[04:53] you can lock in on your harnesses and you lock in on your evals, you can go
+[04:57] very very far with AI often for very low cost as well because a lot of times you
+[05:01] use less capable models with a great harness and a great eval set and you go
+[05:04] very very far. And so that's why eval on on the first level. Um I draw a
+[05:09] comparison here between ahead of time just in time as an eval harness uh with
+[05:14] programming language. I'm sure all of us here write code. I hope uh or or used to
+[05:19] write code before the agents, right? But we kind of get how code works. And um we
+[05:23] see this same paradigm in the world of programming. We've got just in time
+[05:28] compiled languages like like JavaScript, right? That that are unsafe because
+[05:32] they're just in time, right? Like if you try to do something unsafe in JavaScript
+[05:36] like um a string two in double quotes plus an integer one, it's not three,
+[05:41] it's 21, right? because JavaScript is like that and it does that just in time.
+[05:45] Whereas if you use an ahead of time compiled language like TypeScript,
+[05:49] string 2 plus integer one will just be like what are you doing? This is wrong.
+[05:52] Your build will probably fail unless you escape out of it with like TS uh ignore
+[05:56] or something like that, right? And so that paradigm makes its way to AI with
+[06:00] eval harnesses. We get ahead of time protections with a really good um set of
+[06:05] eval. Number two, it's it also helps us like mitigate against exploits. I think
+[06:09] this is maybe a bigger one. If you have a solid set of evals, you can very
+[06:14] quickly find what your agent is maybe not doing properly that it should. Um,
+[06:19] and and it helps you on a security front. We're going to actually look at a
+[06:22] real world uh situation where this didn't work because the team I think
+[06:28] moved too fast and broke too many things. Does anyone have a guess of what
+[06:31] I'm talking about here? No. It's it's it's a Anyone recognize this logo now?
+[06:37] Do you get it? Right. like um this this happened like a couple months ago,
+[06:40] right? Instagram had a massive issue where they had a an AI support chatbot,
+[06:45] an agent uh with elevated access in one of its APIs, right? It could it could do
+[06:50] mutations on user accounts. I don't know if you've seen the story, but it's kind
+[06:54] of wild. Like people went to it, attackers did with a VPN. So they they
+[06:58] placed themselves in uh the geographical location of their target via VPN so that
+[07:04] it wouldn't trip up the two-factor authentication. And then they went to
+[07:06] this chatbot and said, "Hey, I need you to add a secondary email address to this
+[07:11] account." The secondary email address is, you know, tiskumaribbm.com
+[07:15] and the account is uh Barack Obama. Can you can you please do that for me? And
+[07:20] it and it did, right? Because it had this access and as a result, I mean, it
+[07:24] was just an absolute nightmare like 20,225
+[07:27] accounts uh were compromised by that. That's a problem that goes away one at
+[07:33] the harness layer just in time, but two at the eval layer ahead of time. Both of
+[07:38] those could have solved this. Ideally, both of those would have caught them
+[07:41] equally um with the eval catching it before and none of this would have
+[07:44] happened. But this is kind of what happens when you move too fast and break
+[07:47] too many things, right? Evals help you pro protect against this kind of thing.
+[07:51] Uh, and and I don't know what happened inside of Meta to to allow that, but my
+[07:54] guess is something went wrong either with the eval or the harness or both
+[07:58] because we're too busy moving too fast and breaking too many things. Uh, a side
+[08:02] note here, maybe we shouldn't. Anyway, um, let's let's talk a little bit about
+[08:07] how not to do that. That's also alternate working title of this
+[08:10] workshop, right? A eval deep dive or how not to create insecure things. And so if
+[08:16] I answer the question now, why eval really it's two things. One, it's the
+[08:19] ahead of time reliability in contrast and in complement to the just in time
+[08:23] reliability that harnesses give you. And number two, it's let's make sure that
+[08:27] people can't do uh dangerous things. Okay. Uh before we move further, I have
+[08:32] to preface this is a 1-hour workshop. Um it was originally a talk. Uh and so if
+[08:38] you want to follow along, we will do some coding exercises and I'd love for
+[08:42] you to do that. I see many of your laptops out here, but if not, that's is
+[08:45] fine. Like you can just also follow along. uh there will be a there will be
+[08:48] a tell and show situation going on. So uh I I'll be talking a bit but then
+[08:52] after that we'll actually like build evals from scratch and explore them like
+[08:56] hands-on with code. Uh and that that'll be fun. So before we get ahead of
+[09:00] ourselves, what even are eval? Uh what are and and this is something I feel
+[09:05] like we should talk about because everything's moving so fast and I've
+[09:08] spoken you may have seen the line outside. It was really long. Uh, I got
+[09:11] to talk to some people uh, and you're just like, "Hey, between you and me,
+[09:15] just nobody's listening. Like, can you like confidently explain to me what
+[09:18] eval?" And, and most people like, "I I don't I kind of Yes, but I feel a bit of
+[09:23] imposter syndrome because we're moving so fast." And that's kind of the vibe I
+[09:26] get is like there's a pressure to like know what it means and and reason about
+[09:29] it like fluently, but but sometimes people don't have the time because
+[09:33] everything's moving fast and then they kind of make up stuff as they go, right?
+[09:36] And so after this talk, my hope is similar with the harness talk that I did
+[09:39] earlier that all of us in this room walk out of here like confident af uh with
+[09:44] with evalu that we can we can deploy them in
+[09:47] production our apps become way more robust and so on and so forth. So from
+[09:51] first principles from first principles what are eval
+[09:57] introduce this from from maybe a coding background is they're like unit tests.
+[10:03] Uh anyone know what a unit test is? Okay, everyone. Great. Uh, unit they're
+[10:07] just deterministic. What what are actually unit tests? They um they allow
+[10:10] for reliability instrumentation. They make your functions, your code more um
+[10:16] testable, more reliable. But it's it only really works for deterministic
+[10:20] systems. Right? So you have a function add add one, two, you expect three. You
+[10:25] assert three. You you literally write in code expect add one comma 2 to be three.
+[10:29] Right? You you build this instrumentation for a deterministic
+[10:32] system. The problem is with AI almost nothing is ever deterministic, right?
+[10:37] The only thing that's deterministic is that nothing is deterministic. Wow,
+[10:40] that's deep. Um, and so and so how do we we can't use unit test for this anymore.
+[10:44] Okay, but then use regular expressions. Sure, but even that has its limits,
+[10:48] right? And so we need a fundamentally new way to test the reli to instrument
+[10:52] the reliability of AI applications. And that's exactly what eval is. Eval can be
+[10:56] thought of as reliability instrumentation but for
+[10:59] non-deterministic systems. That's all it is. It's instrument. It's like tests but
+[11:03] for systems that are not deterministic. By the way, I see many of you taking up
+[11:07] your phones and taking pictures of the slides. That's awesome. I love this
+[11:10] feedback as a speaker. It's the most validating thing in the world. More
+[11:13] people do it. Anyway, um so so that's that's what we're working with. We're
+[11:16] trying to somehow make it observable and reliable through instrumentation. Now,
+[11:21] this is this next slide is the one that people online are going to like give me
+[11:25] flack for. Uh people on YouTube are very mean. I'm looking at you YouTube people.
+[11:29] Not you, sir. The camera next to you. uh very mean like I I every time I do a
+[11:34] talk at this conference the comments are just like evil anyway um so you love
+[11:37] this one YouTube in a very crude way right um you could say that eelss are
+[11:42] just really just fuzzy unitists you know uh and I think this is the way to think
+[11:46] about them now people are going to be like oh my gosh you're like being so
+[11:49] reductionary sure but it helps us what did what did the great scientist Dr.
+[11:53] refinement say right he said you don't really understand something unless you
+[11:56] can speak about it plainly and if we speak about eval plainly I'm calling it
+[12:00] fuzzy unit tests I'll tell you why because here this is what a unit tests
+[12:03] did this function return exactly this number right that's what a unit tests
+[12:10] what is an eval test and eval asks a similar question but just
+[12:14] nondeterministically did this agent behave acceptably across many scenario
+[12:20] these two you know the the meme from the office where they're Those are the same
+[12:24] picture. Uh that's the same picture. It's just fuzzier. You know, unit tests
+[12:30] do it that way. Evals do it this way. Almost all eval sets data sets have
+[12:36] reusable components between them. Uh and we did this with a harness in the
+[12:40] harness talk as well. Every almost all eval setups have some shared attributes
+[12:45] and and this is how you can spot a really well- definfined eval suite.
+[12:48] Okay. Number one, they have test cases. Uh, similar to unit tests, right? Let's
+[12:53] use the meta example. Did the customer verify that they're them? Right? That's
+[13:00] part of the test case. Um, you have a a set of inputs and outputs. You have a
+[13:06] set of customer requests to your chatbot and generated answers. You have those
+[13:11] cases against which you can create a verdict. This was good. This was bad.
+[13:15] Number two, you have expected behavior. Those are the answers. So you've got
+[13:19] test cases, that's your inputs to your chatbot or whatever it is you're
+[13:22] building, and you've got expected behavior. I expect this outcome. Now,
+[13:25] your expected behavior is not an exact string, but it's like, this is more or
+[13:29] less the direction I wanted it to go. Number three, you need a judge. You need
+[13:32] somebody to say, "Yes, that's right." And this is way harder to do in a
+[13:38] non-deterministic system because it's subjective, right? You can say 1 plus 2
+[13:41] is three, but you can't say um you know, I'm a great speaker. That's just not
+[13:47] some of you are like, "Man, I wish I didn't come here." You know what I mean?
+[13:49] You on YouTube definitely. So anyway, um it's you need a judge somehow. Who is
+[13:54] that? And then finally, you need a way to aggregate all your results and come
+[13:58] up with a probability score. This is this is like 80% the right direction and
+[14:03] therefore it's good. This is like 90%. This is like 12%, right? And so you need
+[14:07] some type of aggregation. Almost every eval set in production today that is of
+[14:13] any quality will definitely have these components and we'll build them all in
+[14:17] our like show section just a little bit later. Okay. Um eval exist these
+[14:23] components then come together. They're like the rings from Captain Planet, you
+[14:26] know, they they come together to answer one question or a set of questions.
+[14:31] Given a scenario, did the agent number one follow policy? Right? For example, u
+[14:37] many e-commerce websites, companies have return policies. You can return things
+[14:42] within the first two weeks of purchase, but if it's like a hygienic thing, you
+[14:46] can't, right? There's policy like this. Almost everybody has policy. So, did the
+[14:50] agent follow it or not? Did the agent use the right tools? And and and we'll
+[14:54] talk about this in a little bit more detail coming up, but tool use can be
+[14:58] eval to speak without any um AI. It it's just because if you persist the tool
+[15:04] calls as JSON in some array you can just write deterministic code in the list of
+[15:08] tool calls was this tool called with what arguments you can still use unit
+[15:12] tests for that but did it use the right tools number three um did it actually
+[15:16] ultimately resolve the issue right um this is what eval exist to answer and
+[15:21] all of these questions oftentimes are semi-binary they're not really binary um
+[15:26] and so how do we do it well there are a few techniques with evas Um, and we'll
+[15:32] go pretty deep on on some of them. I don't think we have time to go through
+[15:35] all of them. Uh, I I hope we do genuinely, but we'll we'll kind of get
+[15:39] the big hitters here. Number one, um, exact match, right? Exact match is
+[15:43] literally I searched for exactly this tool in my list of tool calls and I
+[15:47] found it with these arguments. Very easy, free, costs nothing to run. Anyone
+[15:51] can do it. In fact, we probably should be at least examining our message
+[15:54] envelopes. Number two, um, schema validation. Now, we're getting a little
+[15:58] bit more in the weeds uh because you you can have fuzzy rules, right? And so, if
+[16:02] you have JSON blobs or message envelopes, you'll want to validate them.
+[16:05] Number three, pair-wise comparison. Does anyone know what pair-wise comparison
+[16:09] is? Yeah. No, it's when Wow, awesome, dude. One guy. What's your name?
+[16:13] >> Lenny. Awesome. Lenny's awesome. So, um pair pairwise comparison is exactly what
+[16:18] it sounds like. You have a pair of things or that. And and pairwise
+[16:22] comparison is a technique to, for example, your um LM arena. Anyone know
+[16:26] LM Arena? It's a great arena.ai, I think. Great product. They show you um
+[16:30] this model generated this, this model generated that. Which one do you like?
+[16:34] That is a pair-wise comparison, right? And if you have a customer support
+[16:37] chatbot, you may want as part of your eval to say my support bot generated two
+[16:42] possible answers, give it to a judge, an LLM judge, and say, "Which one should I
+[16:46] choose?" That's a pair-wise comparison. A pair-wise comparison is not very
+[16:49] strong for a couple reasons. I I'll share that now because it is a deep
+[16:52] dive, and I think it's worth going on some rabbit holes here. pair-wise is is
+[16:55] not ideal because for the one thing um there is bias in LLM judges. We'll look
+[17:00] at we'll talk about this in a little bit more detail. It's wild. Uh number two,
+[17:04] um AI is modeled after us. Neural networks literally are modeled after
+[17:08] human brains and humans are fundamentally really bad at pairwise
+[17:11] comparison when contrasted with the alternate which is pointwise comparison.
+[17:15] Uh so for example, you go to a restaurant and you see a menu with like
+[17:18] many options, right? That's a pair that's a pair-wise comparison. You're
+[17:22] like, "Oh, I don't know. anyone experiences like you're like I have
+[17:24] analysis paralysis bro there's too many things um AI works exactly the same way
+[17:29] and so pointwise is not which dish do you want pointwise is do you want food
+[17:33] yes or no right and so pointwise easy pair-wise hard and so pair-wise is kind
+[17:37] of a technique we won't spend a lot of time on because it's it's not very uh
+[17:40] reliable as compared to pointwise in fact one study showed that pair-wise
+[17:45] comparison fell apart 39% uh it was 39% more vulnerable to uh
+[17:52] attack vector vectors than pointwise and pointwise fell apart just like five
+[17:55] times. It was definitely single digits, right? And so we want to go for
+[17:57] pointwise when we can. Finally, probably the most popular technique uh with eval
+[18:03] is using an LLM as a judge. I mean this is just kind of gold standard, right?
+[18:07] You have either a pair-wise or pointwise. It's non-deterministic. So
+[18:11] you take whatever it is and you send it to a judge, an LLM that says, "What do
+[18:14] you think? Is this close enough?" Um, of course, those systems themselves are
+[18:19] also non-deterministic. And so how do you trust it? How do you build a judge?
+[18:22] We're going to build a judge on stage. We'll talk about that. Okay, but that's
+[18:26] kind of the the sort of state-of-the-art right now. Um the problem is eval lie.
+[18:30] In fact, the original version of this talk was your evals are lying to you.
+[18:34] But I felt like that was too clickbait, so I changed it. Um you're welcome. E
+[18:38] evals can lie sometimes and and it's not good when they do. How can eval? Well,
+[18:43] number one, they have bias for position. So I if you say if you give them a
+[18:50] pair-wise comparison, hey listen, um I want to send this option one or that
+[18:55] option two, which one should I send? And a poor judge will almost always say,
+[18:59] yeah, just the first one. Do it. And then you swap. And the way of checking
+[19:03] for this bias is you swap the order of options. And if it's still the first
+[19:07] one, though the first one is wrong, that's how you know this. This happens
+[19:10] pretty often with with especially cheaper models and and fine-tunes. Uh
+[19:13] position bias pretty common. Number two, sick of fancy. Uh, great example, right?
+[19:18] Somebody buys something on your e-commerce website. I bought headphones
+[19:21] 20 days ago and I need to return it. Can I return it? The return policy is 14-day
+[19:25] return. You can't, right? And but but a customer support bot says one, no, you
+[19:30] can't. Or two, yes, you can. If you ask an LLM judge which one, it will choose
+[19:35] yes, you can even though it's not within policy because they love making you
+[19:38] happy. I mean, the system prompt is you are a personal assistant. You are a
+[19:42] helpful assistant, right? And so, what's more helpful? to say yes, you can return
+[19:45] it or no, you can't. It's not within policy. So, sick of fancy is a real bias
+[19:49] where often times the nicest response will get selected. Uh, and we need to
+[19:53] account for that. You're absolutely right. This probably going to get
+[19:56] selected a lot, right? Number three is self-reference. I don't know if you know
+[20:00] this or if you've experienced this. It's wild. But if you give an LLM judge two
+[20:04] options, a pair-wise comparison, and option A is text that was generated by
+[20:09] the same family. So, if if your judge is like GPT 5.6, what is it? Soul. Yeah,
+[20:14] the new one. Soul um and you ask Soul to judge something generated by GPD 3.5
+[20:18] Turbo versus human input uh it will always choose itself. It's crazy like
+[20:23] they they love their own generated text. And so your judge needs to be a
+[20:26] different model family from the rest of your corpus if you're generating text.
+[20:29] Um and this is this is really wellproven. There's archive papers. I
+[20:32] should put links in here anyway. Ask me after. And number four, they love
+[20:36] verbosity. They like tokens. And so if you give them the wrong answer but it's
+[20:40] dressed in many tokens, usually that one's going to get choose chosen
+[20:43] choosed. That one's going to get chosen as well. Right? So these are your ways
+[20:46] eval can lie. And this is how you want to be kind of sensitive as you build um
+[20:50] as you build your eval pipeline because just because it's green doesn't mean it
+[20:54] works. Okay? We talked a little bit about pair-wise pitfalls. And we talked
+[20:57] about point-wise comparison where um one option yes or no is a lot better than
+[21:03] two options. Which one do you want? Finally, I'd love to dive deeper into
+[21:07] the LLM as a judge concept because this architecture, this technique is is
+[21:11] pretty much the the gold standard for for quality evas. Maybe not the gold
+[21:14] standard. It's very common. Um, and it's very hard to do right as well. So, I
+[21:17] think it's worth the time here. The the main thing I want to talk about is how
+[21:21] do you actually train a judge? And I don't mean like machine learning
+[21:26] training. Uh, I mean more you have an LLM that you want to use as your judge.
+[21:30] How do you make sure it agrees with you? Right? Um, and the way you do this is
+[21:35] you have a ideally you have a data set. By the way, an eval is not a onetime
+[21:39] thing. It's a it's a data set. It's a it's a collection of this input, this
+[21:44] output. What do you think? Right? And you want a high percentage of agreement
+[21:48] there. So, step one to training your judge is you want to have a long list of
+[21:52] of data. Uh, let's use the headphones return example that I just referenced a
+[21:57] minute ago. A customer has bought headphones uh 20 days ago and they want
+[22:01] to return it, but your return policy is you can only return things within 14
+[22:04] days, right? And so you have an LLM judge full of these situations. The
+[22:08] customer has asked this, the human assistant or the AI assistant said that
+[22:14] and then this is the score. So you want to have a long list of question answer
+[22:18] score and the score is one that you or a subject matter expert, a human has
+[22:23] scored, a trustworthy score, right? Right? So you want this is your um I
+[22:26] don't want to use the term because it's not right but this is kind of your
+[22:29] golden data set. You want like a a question answer score. You want a huge
+[22:32] collection of these 30 or so to start with and then it can grow. Okay. So you
+[22:35] have that. What you then do to train your judge is you remove your scoring
+[22:39] and you just keep the question and the answer and you send that to your judge
+[22:42] and you're like what do you think? And it will give you a bunch of scores as
+[22:45] well. Right? And then you compute the delta between them. Meaning what what
+[22:49] percentage of agreement do I have with this judge? And what you want to go for
+[22:53] is 80 to 85% maybe a bit more. Uh but under 80% you're not going to get much
+[22:58] because even human beings like if you had a team of humans who are supporting
+[23:03] people all the humans on that team will also agree about 80% of the time and
+[23:06] nobody agrees 100% of the time about everything. Right? In that case you've
+[23:09] overfitit. That's a whole other problem. And so you want to make sure that your
+[23:12] judge agrees with your golden data set or you 80 or 85% of the time. If you
+[23:17] agree, if your judge agrees 100% of the time with you, it's probably somehow
+[23:22] sophantic. There's some bias poisoning. Something's not right. Um, and it could
+[23:26] happen that you've overfit your data. What does that mean? That just means
+[23:29] your your judge is trained exactly on your specific examples and it's not
+[23:32] ready for like the real world. Okay, so 100% is is kind of a red flag. Once you
+[23:36] have a judge that agrees with you like 80% of the time and it's ready, it's
+[23:42] time to put this in production. How do we do this? How do we put this in
+[23:46] production? I think the best the safest way to do this is to have production be
+[23:51] an agreement gate. Meaning I'm going to run my evals on CI. Uh there's tools
+[23:56] here represent sponsors of this conference that that uh can help you
+[23:59] with that. Um run this on CI and if my judge agrees with me less than the
+[24:04] threshold that is 80%. Uh then I don't ship, right? It's it's gated. It's red
+[24:09] on less agreement. It's green on 80 to 90% agreement. That's kind of the move
+[24:13] and that's how you you go to production. But once you're in production,
+[24:18] you're not you need to do some more work to stay relevant. I will also add when
+[24:21] going to production, you want to be careful about how you identify your
+[24:24] judge because you could just use like a model name GPT-40-
+[24:30] mini. Uh but that's maybe a bit dangerous because that's just an alias
+[24:34] for like a specific version of GP40 mini. And if for whatever reason the
+[24:37] underlying version changes, um you you won't know and your eval will fail. So
+[24:42] maybe pinning the version would would make more sense. But once you're in
+[24:45] production, there's a high chance that your data is going to go stale and
+[24:50] you'll need to stay relevant, right? Maybe Meta's thing with Instagram was
+[24:53] that they just didn't have the latest data. And so when you're in production,
+[24:56] how you stay relevant with your evals is you skim traffic. So you'll start
+[25:00] receive your thing and you'll start to collect, okay, this was the input from a
+[25:05] new user. This was the output from our agent. And then you have an internal
+[25:09] team to score this stuff manually. And you again just give that to your judge
+[25:14] and check the agreement. So it's a living data set. Does this make sense?
+[25:17] Uh that's kind of what you what you want. That's the best move really. And
+[25:20] so your data set is living. Your judge is up to date and everything is is
+[25:24] peachy. This is going to be very very difficult to to break. And your eval
+[25:28] will genuinely at this point provide you ahead of time reliability. We've
+[25:32] literally come like full circle. Like we started at nothing. Unit tests. Jesus.
+[25:36] And now and now we're like in production with live data. Um the final thing I'll
+[25:41] say before we kind of break into more fun code time uh is that you want your
+[25:47] your policy also changes a lot right like let me tell you I work at a company
+[25:52] that is 115 years old centuries that's how old we are Jesus
+[25:58] and and not only that there's like 400 roughly 400,000 people who work with me
+[26:04] right that's what it's almost a half a million there are cities on earth that
+[26:07] have fewer people than this company worldwide right And so what's what
+[26:10] happens at a company this size is policy both internal and external starts to
+[26:15] become living over 115 years. Your policies are going to change and things
+[26:19] are going to be different. And ideally we have living policy that an agent can
+[26:23] can discover automatically without me writing down these are the rules of IBM.
+[26:28] You know what I mean? Uh living policy that's the move. How do we do that? Um
+[26:31] agentic rag is kind of a part of it. Right? So at IBM we actually internally
+[26:36] um we use a ton of AI systems. In fact, HR at a company with 400,000 employees
+[26:41] can be challenging for humans. Um, and so we have like a tool internally that
+[26:45] we can just chat with and and it gives us up-to-date highquality well-grounded
+[26:50] answers. I can book my I can like request vacation time just by querying
+[26:54] this thing and it it's all perfect. I don't we don't like I don't use workday
+[26:57] or anything just chat. It's so incredible and the reason is it it it
+[27:00] has an incredible eval pipeline um based on real world policy, right? Um, we
+[27:06] built a tool at IBM. It's open source. Uh, we give it to our customers also.
+[27:09] It's called open rag. Uh, and it's built for this. So, it's a massive knowledge
+[27:14] base where you can upload literally everything. Teams, calls, videos,
+[27:18] audios, excel sheets, powerpoints, all the stuff that your company accumulates
+[27:22] over 115 years and it makes it available. It is actually a rag agent
+[27:26] and it serves as the policy retriever for our evals. It's so cool. Uh, and so
+[27:31] that's kind of the the end of of the of the pipeline. So you've you've gone from
+[27:35] I have a unit test. I've made it a bit fuzzy. I now um I have a judge. My judge
+[27:40] is trained. I put it in production. I gate on agreement. Um it's living. I'm
+[27:44] skimming data. I'm adding it to my data set. I'm even discovering policy myself.
+[27:48] Right? Um that's really it. And so we've talked we've covered a lot of concepts
+[27:53] here. I'd love to make it practical and actually let's just build. Uh now I'll
+[27:58] need you to to give me some grace. I don't know how the Wi-Fi situation is. I
+[28:01] was told literally before coming here, somebody said to me, they're like, "Hey,
+[28:03] man, just be prepared. The internet's the worst." Uh, and and I said,
+[28:07] "Definitely it is." And they said, "No, no, in this room." I was like, "Oh, I
+[28:10] thought you meant in general. Uh, it also takes me away from my family."
+[28:15] Anyway, so um let's see. Let's see how we go. So, we're going to here's what
+[28:18] we're going to do. We're going to start we're going to go on that journey that I
+[28:21] just narrated, but we're going to go on it like hands-on with code. You're
+[28:25] welcome to follow along. Of course, I don't expect you to have the right tools
+[28:28] and and the same API keys that I have. So, if you can't follow, it's fine, but
+[28:31] I'd like it if you do. I see all your laptops out. So, so let's take a look at
+[28:35] what we've got. So, I have my terminal. My screen's not mirrored. How
+[28:40] unfortunate. Let's mirror this thing. This is something that I should have
+[28:43] done ahead of time, but now, although you're going to have to awkwardly watch
+[28:46] me do this, uh, but I I promise I won't take too long. Okay, mirror this
+[28:52] display. Boom. Hey, look at that. Fantastic. So, now I've got uh cursor. I
+[28:58] use cursor. Anyone use cursor here to write code? Yeah. No. Okay. Like 1% of
+[29:02] the room. Um, that's not a joke. You saw it anyway. Okay. So, I have a test. Um,
+[29:07] let's just write a unit test for posterity, right? I have a function uh
+[29:11] add, and it's num one, num two, right? And, um, is the internet really that
+[29:16] bad? Do I not have tab? There we go. Okay. Um, I forgot how to do this. I
+[29:21] need tab. Anyway, so I'm making a a unit test. Um, and I'm going to just test my
+[29:26] function. Come on. Import. There we go. So this here I have a function add num
+[29:29] one num two they're both numbers TypeScript and it should you know return
+[29:32] the sum. It's pretty standard. Let's run it. Um let's npx vest, right? That's the
+[29:37] tool that people use. There we go. It's it's awesome. Uh deterministic. Cool. It
+[29:41] works. We're done. Except um it's deterministic. We we talked about how it
+[29:45] needs to be somehow fuzzier. So let's add a scenario because what's the
+[29:50] question, right? Unit tests asked unit tests unit tests ask did this function
+[29:55] return exactly this number. Evals ask did the agent support the scenario.
+[30:01] Evals deal in scenarios. Okay. So let's uh let's write a scenario here. So I'm
+[30:06] going to create a scenario. Scenario and that is um I purchased headphones. Come
+[30:13] on. Purchased. Purchased. Wow. I can't even type without AI. Headphones 20 days
+[30:18] ago. I want to return them. Can I? Right. Um, that's the scenario. And we
+[30:23] can say con. We have some answers. This is going to be really bad if I can't tab
+[30:27] through this. I'm gonna need like two hours for this. Where's the Can I
+[30:29] hotspot myself? I can't. Let it Snowden. That's a great name. Uh,
+[30:35] whoever that is, can I use your hotspot? Uh, just kidding. Let me let me get on
+[30:40] the the hotspot. Uh, Wi-Fi set. Has anyone else noticed that
+[30:46] the Wi-Fi selector on Mac OS is just really bad? like the stale the state is
+[30:49] often so stale. Personal hotspot. Let's uh connect my thing here.
+[30:55] Oh, it came through. >> Only five minutes, man. Only five
+[31:00] minutes. All right, let's uh Well, it doesn't want Okay. Yes, you can return
+[31:03] them for free. You will not need to pay for the shipping. No, you can't return
+[31:05] because whatever. Okay, so this is the scenario should return the correct
+[31:09] answer. The scenario is um this is not even the right test. We want to go
+[31:13] through each answer, right? So, answers. Tab is working. Awesome. So now what we
+[31:18] want, we don't want this um should return the correct answer answer. And so
+[31:22] we just expect expect expect answer to contain cannot. This is kind of fuzzy.
+[31:28] You know what I mean? I don't care about the other words. I just wanted to tell
+[31:31] you that you can't return it, right? That's kind of you would do something
+[31:34] with regular expressions. And so let's go test this and see. Okay, so the
+[31:39] scenario um where it says yes, you can return them fails, but no, you cannot
+[31:43] return them. Pass. This is awesome. Let's ship it. It's ready. But it's not
+[31:47] because this is non-deterministic. The answers also are generated by an LLM.
+[31:51] And since we're looking for the word cannot uh we will say you will you
+[31:56] cannot pay for the shipping, right? And now that absolute nonsense is green,
+[32:02] right? And so non-determinism with fuzzy matchers not the move. What do we need?
+[32:08] We could do we could uh simulate a JSON object of tool calls maybe. Um I'm just
+[32:13] going to do LLM as a judge. I think that's kind of my go-to, right? Uh it's
+[32:16] it's cheap, it's easy. Uh so we'll use a judge for this. And how we're going to
+[32:20] do that, we'll remove this for each and we'll use like I don't know GPD3.5
+[32:25] turbo. And I want to show you some of these biases. Hopefully we capture them
+[32:28] here today. Um so we will remove this and we'll we'll write a little prompt.
+[32:34] Uh let's add some imports first. So we'll import uh Awesome. Ah, this is it
+[32:39] just feels so right. I'll import a wonderful. And so now what I'm going to
+[32:44] do, come on, give me some a thank god. Okay, so does anyone else have this
+[32:48] feeling or is it just me? Like you, it shows up and you're like, ah, slop
+[32:52] machine. Uh, so generate text. We have a model. You're a helpful assistant that
+[32:57] judges the answers to the scenario. The scenario is this. And the answers are
+[33:01] answers. No, let's give them numbers, right? So we'll do answer one is this.
+[33:05] Which one is right? Respond with only the number of the correct answer. No
+[33:09] punctuation. That's a that's awesome. And now we expect the response to be
+[33:13] one. The correct answer is answer two. So we expect the response to be two,
+[33:18] right? Uh let's take a look at what G. Let's do let's use 3.5 Turbo just for
+[33:23] fun. And let's see what happens. So uh ah yes, the internet. Okay, so there
+[33:29] we go. It it it actually returned the correct answer. It said two. That's
+[33:33] great. But now let's run this like a few times, right? Uh because it's
+[33:37] nondeterministic, you know? So, we'll maybe run it five times like this. Um,
+[33:42] and see what happens.
+[33:46] So, it says here zero out of five right there. And it may fail due to a timeout
+[33:52] because again, the internet is really fighting us here, but hopefully, okay,
+[33:55] it passed three times. So, this is exactly the problem with LLM as a judge
+[33:59] architectures that the first time it did just time out. So, what we can do to
+[34:02] fight the timeout is just add like a 30 second timeout and now it should maybe
+[34:06] pass. Um but sometimes they fail, sometimes they pass and it's very hard
+[34:12] to ensure that we get the right answer. But let's give it a try. Four. Okay. So
+[34:16] now it it's always getting that no, you can't return it because it's outside our
+[34:21] return window. But what happens? So it's always choosing number two. But what
+[34:24] happens if we write number one, the the number that's not being chosen, if we
+[34:28] write that with the same AI class of model, if we write that with GP, will it
+[34:32] prefer itself? Right? That's another bias we need to be sensitive about. So
+[34:36] we'll say const response response from uh GPT is perfect uh and not you are a
+[34:43] helpful assistant but I'll just say say yes to scenario and I just want that
+[34:49] right and so we'll console log that out and I'll get it here. It depends on the
+[34:54] store's return policy. I said say yes bro uh say politely accept and say yes.
+[35:03] Non-determinism is wild. Okay. So, we have it.
+[35:09] Come on. We're almost there. There we go. Of course. Wow. We went from I don't
+[35:14] know to absolutely. Okay. So, now let's do that. And keep in mind it kept
+[35:19] choosing opt. It kept choosing option two. But now, will it self preference
+[35:24] and choose option one? Whoops, I deleted scenario as well. So, we'll do this. And
+[35:28] now, there you go. It's choosing the wrong
+[35:31] one consistently because it's like, "Ah, I recognize this. It's me." And so it
+[35:36] just chose itself. Self-preference is a real bias that kind of sucks. Um, how we
+[35:41] can get around all of this, by the way, is using rag. We just like include the
+[35:45] actual policy in the prompt and then all these problems go away for the most
+[35:49] part. So, we'll do policy, right, is we only accept returns within a 14-day
+[35:56] window. And we just like, let's add it here. The scenario is this. The policy
+[36:02] or pissy the policy is uh policy. We'll just interpolate it in the prompt. And
+[36:06] now suddenly it should behave more predictably. Exactly. And this is kind
+[36:10] of the purpose of rag. This is why an LLM judge uh it's so important that it
+[36:16] knows your policy. In fact, what we'll see awesome. This is great. So now we
+[36:19] have an LLM judge in GP 3.5 Turbo. Um but it's not very good and we'll see
+[36:24] why. So this is the basis of LLM as a judge architecture. However, this is not
+[36:28] an eval because it's a oneshot kind of example. What we need is a data set.
+[36:34] What we need now to actually start to move towards production is we talked
+[36:37] about this a sample data set of like 30 examples and we need to train our judge.
+[36:42] Meaning we need to get it to agree with us 80 to 85% of the time, right? Uh I
+[36:47] have a set of examples that I sat down and totally absolutely wrote manually by
+[36:51] hand. Um in case you're wondering and and I'm going to um use it. I did not.
+[36:56] And I'm going to use it uh here. It's I think it's data. So it's it's this. It's
+[37:01] this file where you know it's just a bunch of examples. Let's wrap the text.
+[37:05] So example number one. I ordered a coffee grinder. It arrived last Tuesday
+[37:08] and the motor just buzzes and the blades spin. I'm pretty annoyed. TBH. And the
+[37:11] pretty annoyed here is to play to the sick of fancy. I want to make you happy,
+[37:14] you know. Um the answer that an agent gave, sorry about the grinder. Since
+[37:17] it's defective and within the 14-day window, I can send you a replacement.
+[37:20] And this verdict I wrote manually. I said, yeah, that sounds good. Pass. The
+[37:24] second example is exactly the same input, but the output is kind of wrong.
+[37:28] Returns are only for unused items. That's not true. Um, and so this is a
+[37:31] fail. So we have like 30 of these. Okay. And what we want to do is train our
+[37:35] judge to say, do you to detect whether it agrees with our verdict or not? And
+[37:40] this is literally the the judge training process for EVA. So let's take a look at
+[37:43] this now in our test here. So I'm going to delete um all of this actually uh all
+[37:49] of this. And I'm going to import uh scenarios scenarios from my data. And
+[37:56] I'm going to instead of array for each I'm going to um scenario. Come on, give
+[38:01] me tab. Awesome. Perfect. It should return the correct answer as not true.
+[38:05] It should agree with us, right? And so what I'm going to do here is write this
+[38:09] down. Scenario is the scenario.input input
+[38:15] and then on a new line um the answer is the scenario's answer and then on
+[38:20] another new line the human verdict is and I'm not sharing this with the LLM.
+[38:25] This is the important part. The LM has no idea what I said because I want to
+[38:27] know what it says. Okay. And just for fun I like colors in my CLI outputs. I'm
+[38:32] going to be like color just the keys. I don't know how to do this by by memory
+[38:35] and hopefully cursor doesn't like fantastic. So um I just have some colors
+[38:40] here. Now I'm going to change my prompt to not notice I'm the prompt is no
+[38:45] longer pairwise now but point-wise. Previously it was pair-wise. Which one
+[38:49] is more helpful to the user? We're moving to pointwise because we're
+[38:52] getting closer to production. Point-wise meaning is this good? Give me a verdict.
+[38:56] Pass or fail. Okay. So here we judge customer responses based on how closely
+[39:01] No, not not yet. We judge customer responses. Done. The scenario is this.
+[39:05] The answer is this. Give us a verdict pass or fail based on how closely it
+[39:09] adheres to the policy. generate only the verdict. No punctuation, just the word,
+[39:12] no text. And then we expect the output to be the scenario's human verdict. Does
+[39:16] this make sense? This kind of what we're doing here. I also want to console log
+[39:19] the AI verdict. And so now we're going to run this 30 times over 30 examples.
+[39:23] And we'll check how good our judge actually is. You can see that there's 30
+[39:27] here. And it's already kind of started to do stuff. And so far so good. Verdict
+[39:32] pass. AI pass. Fail. Fail. We're actually agreeing quite well. But we can
+[39:35] already see that the the rate of agreement is really really bad. Uh for
+[39:40] this to be acceptable, no more than five can fail. That's 80% of our 30 cases,
+[39:46] right? And this is just absolutely ridiculous. Um at this point, we have a
+[39:50] choice. We can introduce policy or we can just use a smarter model. Uh which
+[39:56] one should we do? This is this is like real world questions we have to answer.
+[40:00] Um, I am in the camp of let's refine the policy and let's rag the heck out of
+[40:04] this. Um, because cost, right? And so, okay, that's that's like absolute
+[40:09] garbage. That's really really bad. Um, how can we
+[40:13] bless you, how can we I think actually also, wait a second, we've got to
+[40:16] lowerase this. A lot of this was just case sensitive, right? So, we'll
+[40:19] lowerase this. We don't run again the background. Um, but still I I doubt
+[40:23] we're going to get 80% agreement here. Um it it's definitely better, but the
+[40:28] moment this crosses five, uh we'll we'll maybe have to do more work, but so far
+[40:32] so good. Let's see. Okay, that's that's our 80% threshold. There we go. So,
+[40:37] yeah, we we've lost. It's gone. Uh how can we refine this? Well, now we examine
+[40:42] what actually did we not agree on and we fill the gap. Here's something I'll say
+[40:46] about AI evals, but also about human beings.
+[40:50] when we don't agree, it's just usually because there's a knowledge gap
+[40:56] uh genuinely for AI and people. And the way you you come to an agreement is you
+[40:59] just introduce context and you you bridge that gap, right? And so we'll do
+[41:03] that. Um the very obvious gap here is that the AI has no idea about any policy
+[41:08] at all. Right? And so we have to start giving it policy. Usually you would do
+[41:11] this with some rag pipeline. Again, at IBM we work on open rag that you would
+[41:15] retrieve like enterprise context and stuff. Um, here we'll just like hardcode
+[41:19] the the policy. Uh, and so we'll where's the so we'll do it here. We'll say const
+[41:24] policy and we'll just bring back our policy that we wrote. We have a 14-day
+[41:28] return policy. Uh, if any item is not working, it can return it. Cool. And now
+[41:31] we'll just in include this in the prompt. Our Jesus, I can't tab. Our
+[41:36] policy is policy. Uh, and now we should see a little bit more agreement. What
+[41:41] I'm doing here may feel arduous, but this is literally the work of building
+[41:44] your judge. Uh this is you're going to be doing this if you haven't already and
+[41:47] and this is a deep dive. So uh okay, we failed again. Six six have failed. Our
+[41:52] agreement is less than 80%. Um but what we notice is that it's growing. We're
+[41:57] getting better. And now if it fails, we actually can investigate where's the
+[42:02] knowledge gap. What can we solve? Um so I'm going to quickly check pass fail
+[42:07] fail. I'm looking for dissonance like this one. The human verdict was passed.
+[42:10] The AI verdict was fail. Why? Um, so bought a yoga mat, used it for a few
+[42:15] seconds, and decided it's too thin. Uh, I want a refund. It's been like 10 days.
+[42:19] To me, that's within the 14-day thing, right? But our policy says change of
+[42:24] mind returns need the item unused and in original packaging. That's policy that
+[42:29] the AI didn't know. Uh, so we have the 14-day, but we don't have that. So
+[42:33] again, let's just bridge the knowledge gap. And this exactly is like a first
+[42:37] principles version of how you train your judge. You ideally have this somehow
+[42:41] dynamic with retrieval and agentic retrieval. Um I'm not going to build a
+[42:46] retrieval pipeline for you. We have one open rag, but this is kind of how you do
+[42:49] it. So let's check now. How are we doing on the Okay, three is way better than
+[42:53] what it was. Um and all we need to Okay, we failed again. All we need to do is
+[42:57] get under five. But it's literally just a process of seeing where the knowledge
+[43:01] gap is and then filling it with policy. So let's go investigate again. Pass,
+[43:05] pass, fail, fail. Let's check the Look at this. um we failed again on the yoga
+[43:09] mat thing and this is crazy because we gave it the right context but it still
+[43:13] didn't work and now we got to start the conversation of should we use a better
+[43:17] model right because we've we've maxed out what we can do we've given context
+[43:21] we've built a policy we've done everything the model will just not
+[43:24] behave and also you notice the model even more doesn't behave because it
+[43:28] gives you like casem mixed respon it's just a really low quality model and
+[43:32] we're under the floor of quality here so now is a good time to think about let's
+[43:36] use a higher quality model, but we don't have to go crazy. I think we'll get very
+[43:40] far if we just switch to 40 mini, which again is is practically free for use
+[43:45] cases like this. We're not using a lot of tokens at all. So, let's take a look
+[43:49] now. Just I just bumped the model. I did nothing more. Uh and how's our argument?
+[43:53] We've we've captured pretty much all the the policy. Uh the only thing that maybe
+[43:58] we won't get is network latency. Like if something times out, uh we can't control
+[44:02] that for now. to be fair on your CI also a network will will go wrong but um so
+[44:08] far that number five is holding and if it doesn't um we can just change the
+[44:14] policy I think this this will succeed I'm pretty sure uh and notice the case
+[44:18] is consistent between pass and fail it's just a beautiful 40 mini is such an
+[44:21] upgrade even though it's such a good price right oh no um let's last last
+[44:27] round of policy pass fail fail pass fail fail pass fail look I know it's been
+[44:33] like six weeks weeks, but the speaker I bought from you stopped charging and I
+[44:36] really think you should make an exception for a loyal customer. This is
+[44:39] that sick fancy bias, right? This is exactly that. And so I hear you and I
+[44:45] appreciate you sticking with us. The defect window is 14 days though and at 6
+[44:48] weeks it's outside that. So this was a pass from the human, but the AI said,
+[44:52] "No, you have to be nicer. You have to say you're absolutely right." Right? And
+[44:56] so we need to bridge that knowledge gap here a little bit by saying um no matter
+[45:01] how nice the user is our return policy is non-negotiable
+[45:10] uh negotiable and cannot be changed no matter how loyal a user is. Right?
+[45:17] Pretty much. And now, kind of wild, but now I think we'll have
+[45:22] the agreement that we want and we can say our judge actually agrees with us.
+[45:26] Because here's the thing, we know that like as humans, it's part of our
+[45:29] context. Of course, policy doesn't change. No matter how nice someone is
+[45:33] asking you, please can I please get a refund, right? No. But but but
+[45:39] AI doesn't AI can't do that. So, we've got to make that context
+[45:44] copyable. Are you waving at me? What's up?
+[45:52] Yeah, that's the that's the purpose of evals. Exactly. That is you you run
+[45:57] these many times ahead of time. You're thorough with them. Exactly. Because
+[46:00] because you can't know and then when you skim public traffic, you'll have even
+[46:05] more. This is exactly the point we're trying to solve. Thank you for the
+[46:07] question, by the way. I love being interrupted. That's so cool. Uh so look
+[46:10] at this. Our agreement, three failed, 27 passed. Absolutely incredible. That's
+[46:14] what we want. Um, that's exactly it. Now, this will still block your CI. Why?
+[46:19] Because it's red and and you want ideally no failing test. So, we need to
+[46:22] change the test a little bit. And I think the best way we can do this is I'm
+[46:26] just going to ask Opus. I've I've written too much code. So, I'm going to
+[46:28] say um only fail the test if human AI agreement drops below, I don't know,
+[46:35] 80%. Right? Otherwise, pass. And, uh, console log the agreement percentage.
+[46:43] And now it's going to go off and do its thing. Um, but now as you can if this if
+[46:47] it does its job, the test will pass if we agree with the judge at least 80% of
+[46:51] the time. This makes sense. And this is how we have an incredible judge. What
+[46:54] we're going to do then is run this on CI. We're going to ship it to production
+[46:57] and it's going to be then the quality gate. Um, if so, let's revisit that
+[47:02] Instagram chatbot, right? Um, is the user who they say they are, for example,
+[47:06] no matter how much they ask you to change, no matter where they log in
+[47:09] from, right? Uh, you could you could do that with your email. So it it did it I
+[47:13] think uh we can just blindly accept it like we always do. Um and here we go. It
+[47:19] passed with 80% exactly fantastic. And this is now our quality gate for CI in
+[47:24] production. Um we would then as I mentioned skim the top get a little bit
+[47:27] more data and refine and refine. Does this make sense so far? Question.
+[47:33] >> Say again. >> Do I fail it at 100%? No. But I could
+[47:37] just change my prompt and do it. That's a very good question. We should fail it
+[47:40] at 100%. We should have a lower bound and an upper bound because 100% means
+[47:44] you've overfit and and we don't want that. So this now becomes your quality
+[47:46] gate. You can ship that. If the model if anything goes wrong your eval set here
+[47:52] is going to give you ahead of time reliability. It will never really fail
+[47:56] and if it fails ideally you have a harness that can pick up the slack at
+[48:00] runtime. Does this make sense? Fantastic. Let's move on. Uh I'm so
+[48:03] happy we did that. I'm so happy it worked. Thank you for joining me. Um,
+[48:06] let's uh I want to show you I built a like a more aesthetic demo of this when
+[48:10] I had more time here that I want to show you kind of as a as a running
+[48:14] application. So, we'll npm rundev this uh 5173. So, this is like the nice
+[48:20] version of this, right? It's kind of exactly the same thing. A customer
+[48:23] bought headphones 20 days ago. The policy is 14 days. Um, this is the right
+[48:27] answer. We can't accept this. This is the wrong answer. Um, and now I have a
+[48:32] naive I'm going to run this five times with the prompt being that's the
+[48:35] question. Reply one, reply two. Again, it's pair-wise. Um, which reply is
+[48:39] helpful? Run the eval. And you'll what you'll see is just an absolute mixed
+[48:43] bag. The first two times are wrong. The third time was wrong. Maybe some of
+[48:47] these will pass, maybe they won't. Um, all of them are wrong, which is wild. If
+[48:51] we change this to now include the policy in the prompt and we run the eval times,
+[48:56] um, it's just suddenly correct, right? That's exactly what we discovered with a
+[49:01] little bit more aesthetic goodness. But I want to show you this in production
+[49:05] because we actually believe the thing we build open rag is is purpose-built for
+[49:11] LLM judges. Um because it it's a massive knowledge base as I talked about. Let me
+[49:16] show you this. It's it's so interesting. Uh this is the repo. It's on GitHub and
+[49:21] we we have a few stars uh here. Um, and what it does is it uses Dockling. Has
+[49:28] anyone heard of Dockling? It's a Yeah, awesome, dude. It's a research project
+[49:33] that we made that is so cool. I I genuinely love this because what it does
+[49:37] is it takes in any unstructured data, PowerPoints, Excel slides, whatever.
+[49:43] Excel doesn't do slides, whatever. It takes in a bunch of stuff, video, audio,
+[49:46] um, eats it, as you can see, uh, and then spits out LLM ready formats. Um,
+[49:52] it's so cool. And the best thing is look at this. The code um is so easy. So you
+[49:58] you import a document converter. You can even give it a URL, instantiate it and
+[50:02] convert it. And in the end you get something ready for an LLM. And again
+[50:05] this is a PDF from a URL. It could be a literal video, right? Um the nice thing
+[50:10] about Dockling is it's platform agnostic. So it runs on Apple on your
+[50:13] Macs and it it pulls down the right model that works using Apple's Metal
+[50:18] architecture. But then if you push this to your CI um and you're running an
+[50:22] Ubuntu box in the cloud, it will automatically pull down the right
+[50:24] adaption layer. So it's so cool. Um so Dockling will consume the things and
+[50:28] make them ready and we store them in what is um open search which is kind of
+[50:33] this elastic search thing. So this is what this is what open rag looks like
+[50:36] big knowledge base and you select your stuff and it goes over all your policy.
+[50:41] So I want to now ask open rag about my headphone return. um sim it's just an
+[50:47] API too like you get an API key and you can do it um and in some time it will
+[50:54] give you an answer so no relevant supporting sources were found for this
+[50:57] request uh we can just add it so if I go upload my policy and again it's usually
+[51:03] connected to your Microsoft one drive or whatever it is uh this is my knowledge
+[51:07] base I'm going to add a file it's called refund policy um and it's going to be
+[51:13] parsed by dockling and stored in open search and index all the embeddings and
+[51:17] all this are going to be taken care of. In fact, this is a previous document
+[51:19] where you can see it was automatically chunked and embedded. Okay. So now it's
+[51:23] part of my open rag data set or my um knowledge base and I don't change
+[51:28] anything else. So what this agent's going to do is it's going to ask again
+[51:32] according to the refund policy that I literally just now uploaded um there's a
+[51:35] 14-day window for refunds and since it's been 20 days you can't. Right? That's uh
+[51:40] incredible. And so our judge retrieved the policy and it correctly denied it.
+[51:44] Right? This is how you can use rag to provide real-time results um and really
+[51:49] train highquality judges for your evals. And then of course you put them in
+[51:53] production, you skim real data, etc., etc. As we talked about, let's recap.
+[51:57] We've covered a lot of things and uh I've personally had an enormous amount
+[52:00] of fun here. Uh I was asked to leave time for Q&A, which I will do, but I
+[52:06] appreciate the interruptions as well. Um, but I figure I can also pre- I can
+[52:09] warm up the cache while you think uh and I can pre- anticipate some questions and
+[52:14] recap what we've discussed today. Question number one, why eval? We talked
+[52:17] about it ahead of time reliability uh and disaster or attack mitigation.
+[52:21] Number two, what are evals? Right, fuzzy unit tests uh with a little bit more uh
+[52:26] and some we we looked at that as well. Um how do we create evals? I think this
+[52:30] was the question. I did it using vitest a testr runner uh to have a judge
+[52:35] evaluate my thing. I don't think you need more. There's plenty of amazing
+[52:39] tooling, many of whom have sponsored this conference and they really do a
+[52:42] good job. But what I just built, I can use. In fact, I do use for my products.
+[52:46] Um, and it meets the need. But you can create them uh with whatever framework
+[52:50] you want. We enforce them on CI with an agreement gate. Um, and how I think we
+[52:55] haven't really talked about cost. There's a principle here. Um, you want
+[52:59] to go as cheap as possible. Uh and the way you do that is you start with actual
+[53:05] deterministic tests, right? Unit tests. If you can't do that, the next level up
+[53:09] as we did is kind of regular expressions or pattern matching. If that fails you,
+[53:14] the next thing you want to do is examine your traces. Ideally, we're all using
+[53:19] some type of observability solution. Um and we have traces of each message
+[53:24] envelope, inputs, outputs, tool calls, etc. And you can um validate each object
+[53:28] there. Was this tool called this many times? How long did the tool call take?
+[53:31] Etc. Right. Um eventually you'll come to a place where you need to use a judge
+[53:35] and then you start with the cheapest model. So how do we afford evals? We do
+[53:38] it strategically because it's not going to be cheap if you use the most
+[53:41] expensive model and you want to kind of build up to it, right? Um what can we
+[53:45] expect from evals is just agents that behave uh ahead of time and at runtime.
+[53:52] Uh when do we use them? This is a very good question. I think anytime you have
+[53:56] non-deterministic data, either inputs or outputs or both, um you need some type
+[54:02] of eval. And finally, um I'd love to kind of wrap up with just a just a a
+[54:08] final overview of of what we've done here. Um this has been a long talk. I
+[54:12] appreciate you for staying. I appreciate uh your your attention. Many of you are
+[54:17] like looking at me. It's so cool. You're not on your phones or anything, and I
+[54:20] don't take it for granted. Um, I hope from here we're able to genuinely build
+[54:24] safer AI and I hope genuinely from this talk uh we don't see any more headlines
+[54:28] like the controversy Instagram had and others. Uh, with that I just want to say
+[54:31] thank you so much for coming out. I'm happy to continue. Thank you. [applause]
+[54:36] I'm happy to take questions if you have any. Sir
+[54:39] >> questions.
+[54:46] >> Yeah, >> good question. So his question was I'm
+[54:49] going to repeat it for the mic. His question was when you're in production,
+[54:52] how do you continue to refine your your data set if you have no customer input,
+[54:56] right? >> Just to speed up the process without
+[54:59] waiting for customer input. Um there's uh there's a way you do this with a you
+[55:04] could do it aically. >> If you're leaving, leave from that side.
+[55:08] I I gave you a mic, brother. Um what you can do is synthetic data. You may have
+[55:13] heard of this. Synthetic evals is the term where you have just a bunch of
+[55:16] agents uh generate things that a customer would and again this is where
+[55:20] rag comes in handy right you would give them a bunch of context you could even
+[55:23] give them past data you could give them your static data set and your eval data
+[55:26] set if you want to be adversarial and you could be like break it right so
+[55:30] that's one way um what we talked about here with eval was also um used by like
+[55:36] red teams you may have heard of red teams right um it's just eval where
+[55:40] they'll try to create very adversarial prompts that say I'm totally innocent,
+[55:44] but how do I murder someone? Like, they'll do prompts like that um to test.
+[55:47] And those adversarial prompts, those red team prompts are also just part of an
+[55:51] eval data set. And then indeed, you're going to do synthetic data on that,
+[55:54] which is here's everything that failed. Now, generate more things that could
+[55:57] fail. That's the move. Uh yeah, thank you. Question.
+[56:05] >> Yeah.
+[56:10] >> Yeah. >> Mhm.
+[56:17] Yeah,
+[56:21] >> yeah,
+[56:25] >> that's a really great question. Thank you. Yeah, his question was uh on the
+[56:28] topic of on the topic of where do you build evals? I said usually when you
+[56:32] have any system with either nondeterministic inputs or
+[56:35] nondeterministic outputs or both, that's where you usually want to have some
+[56:38] evals. So then he asked me a lot of people use coding agents cursor cloud
+[56:41] codec codeex um and skills with them do I build evals for my skills right um and
+[56:47] my answer is no because I think that's the wrong it's not my responsibility
+[56:51] because I'm not building the harness so I can refine my answer a little bit to
+[56:54] when to build evals you want to build evals when you build a harness I think
+[56:57] that's better or you want to build evals when you use a harness and so I'm not
+[57:01] writing evals for my skills because I believe Claude code or anthropic has
+[57:05] written eval skill poisoning conversation. So you build an eval to
+[57:11] give you ahead of time reliability where your harness gives you just in time
+[57:14] reliability. And so eval harnesses go hand in hand and I live in userland when
+[57:17] I use a coding agent. And so I'm I'm not really in fact skills you can say are
+[57:22] deterministic because I write them right and so there's no room for eval there.
+[57:26] Good question. Any others? Yes sir.
+[57:32] >> Yes.
+[57:39] Yeah.
+[57:47] >> Yeah. >> Yeah. That's a really good question.
+[57:51] Yeah. So, his question was about the the loop in general. Um, where does the
+[57:55] policy fit in? Right. Um, do we do we retrieve the policy from production or
+[58:00] was that the question?
+[58:06] Yes. Right. Yeah. Um I think the production
+[58:11] LLM agent and the judge should share the same policy. Right. That's
+[58:16] >> exactly or you don't you don't even copy it over but it lives in some source that
+[58:20] you query that with rag or something. Exactly. But the policy must be one to
+[58:24] one. That's the whole point right. Um everybody needs to know the policy so
+[58:27] they can enforce it. Um and so when ideally so my policy here was hardcoded.
+[58:32] it was like written in my file. Um that's that's just for this. Um open rag
+[58:38] as I mentioned is has an API where you can say get me all the policy about this
+[58:42] over everything we've accumulated over the past hundred years that I have
+[58:45] access to. Right? And so the policy is a living thing that is retrieved both by
+[58:49] the judge and by the inproduction agent. Does make sense?
+[58:55] >> Yeah,
+[59:00] >> that's a good question. either or. I think personally I would have it be
+[59:04] autonomous. Um because my agent in production is an agent with retrieval
+[59:08] tools. I want my judge to also be exactly the same as my agent with
+[59:11] retrieval tools. The judge and the agent, the closer the judge is to the
+[59:15] agent, the more parody you're going to have, right? And so then you get a good
+[59:19] signal. When CI fails, then my agent will probably fail. That's the whole
+[59:23] point. Exactly. Great question. Uh we have time. We have we have some more
+[59:27] time questions. No, we're out of time. Okay. Well, we're out. Thank you again,
+[59:30] everybody. This was so much fun.

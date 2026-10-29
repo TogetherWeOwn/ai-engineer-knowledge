@@ -1,0 +1,285 @@
+# title: Fuzzing in the GenAI Era — Leonard Tang, Haize Labs
+# source: https://www.youtube.com/watch?v=OMGPvW8TBHc
+# speaker: Leonard Tang, Haize Labs
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T10:41:56Z
+# sha256: ded82f9755577817eff1f5f66edc0a866765394904550ebc0b46d882d524097c
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:01] [Music]
+[00:14] Thanks Ally for the great intro. Uh indeed we're working on what I believe
+[00:18] to be the exant problem in AI which is to say how do you validate verify audit
+[00:23] steer something that is as subjective and unstructured as literal LLM slop. So
+[00:28] today we're going to be talking a lot about this. Um I should point out that
+[00:31] ostensively we're part of the AI security track although I would really
+[00:34] consider us more of a QA company and eval company in some sense although
+[00:38] there's a lot of shared similarities in how we approach the problem technically
+[00:41] right we are essentially a property based testing company or fuss testing
+[00:45] company or as I like to call it a hazing company.
+[00:49] Cool. So just to set the context a little bit uh why do we start haze? What
+[00:53] does haze mean? haze to us is ultimately, all right, we know that AI
+[00:57] systems are extremely unreliable. They're hard to trust in practice, and
+[01:00] you sort of need to pressure test them before you put them out into the wild.
+[01:04] Our solution to doing this is basically, let's just run large scale optimization
+[01:08] and simulation and search before deployment and try and figure out
+[01:11] through a battery of tests whether or not your system will behave as expected
+[01:15] before it actually goes into production. And I'm sure any of you guys who have
+[01:20] tried to build LLM apps in the past have understood extremely viscerally uh what
+[01:25] I mean when I say the last mile problem in AI, right? It's at this point in 2025
+[01:29] extremely easy to get something that is demo ready uh or PC ready. Like you can
+[01:34] whip together a cool product over the weekend and impress your PM and whatnot,
+[01:38] but uh it's really hard to get that same product into production at a point where
+[01:42] it's truly robust and enterprisegrade and reliable. And you know this has been
+[01:46] the case for the past two plus years at this point right like we've been
+[01:50] promised uh the allure of autonomy and agency and full gen AI and enterprise
+[01:56] transformation for two plus years since chat GPT launched and we're still not
+[02:00] quite there right and I think it ultimately it's because we haven't
+[02:03] solved this last mile problem around trust and reliability and risk
+[02:09] so I think part of the big reasons we haven't solved this is because people
+[02:12] still think about eval measuring your AI system in a very straightforward and
+[02:16] naive sense which is easiest to explain uh as follows right I'm sure everybody
+[02:20] has seen this idea of going out uh being a human subject matter expert collecting
+[02:24] a finite static golden data set of inputs and then expected outputs ground
+[02:29] truth outputs uh from the uh human and then basically running the inputs
+[02:34] through a application getting the the actual output and then comparing it
+[02:36] somehow with the the ground truth golden answers right this is how eval has been
+[02:41] done forever uh since the birth of deep learning uh and prior but it doesn't
+[02:47] quite hold up in the genai era specifically because of this property of
+[02:51] geni systems which is what I like to call brittleleness or more technically
+[02:56] lip shits discontinuity um and what I mean by this is you know people say AI
+[03:00] is sensitive AI is brittle AI is non-deterministic which is true this is
+[03:05] all true but that's really not the main problem that makes AI so hard to deal
+[03:09] with right nondeterminism is really fine if you set the temperature to zero yes
+[03:12] there's like caching and weird systems uh quirks and all the LM providers that
+[03:17] make it somewhat non-deterministic even at scale. But for the most part,
+[03:21] nondeterminism really doesn't bite you too much when you're building a apps,
+[03:23] right? You for the most part are constrain your outputs to temperature
+[03:26] zero. You're running things through a workflow. It's fairly deterministic.
+[03:29] What does bite you a lot when you're building AI apps though is when you send
+[03:33] two ostensibly similar inputs to your AI application with maybe slight variance
+[03:38] uh in the syntax or the semantics or the appearance of the text but all of a
+[03:43] sudden you get wildly different outputs on the other side. Right? This is what I
+[03:46] mean when I say gen apps are incredibly brittle. And I think this is the actual
+[03:50] core property that makes building with AI uh with geni so difficult.
+[03:56] And of course, we see this brittleless manifest itself in all sorts of fun
+[04:00] ways. I'm sure we don't have to blabber this point too much, but you've got
+[04:02] everything from uh Air Canada customer supports hallucinating to, you know, uh
+[04:08] character AI telling teenagers to commit suicide to um buying a pickup truck for
+[04:13] $1 on the Chevy uh patient or customer portal, right? I I don't think we need
+[04:18] to go through more examples of this. This happens more or less every single
+[04:21] week. There's more and more examples popping out. Um and again this all comes
+[04:25] back to geni being extremely sensitive and brittle to prohibition in the input
+[04:28] space. Cool. So standard evals of course
+[04:32] doesn't cover uh this brittleleness property and I would say it's
+[04:35] insufficient in two senses two primary senses. One is coverage right? Uh with a
+[04:40] static data set you only know how good your AI system will be with respect to
+[04:45] that data set. Right? It might look like your AI system is 100% on all your unit
+[04:49] tests on all your golden data set points. But if you just push around the
+[04:53] corner and look around the corner for more inputs that cover your space more
+[04:56] densely, it is entirely possible that you get prohibations that tell a very
+[05:00] very different story about how your AI application actually does in the wild.
+[05:03] So point number one, standard eval don't have sufficient coverage.
+[05:08] Second point too is it's actually really difficult to come up with a good measure
+[05:13] of quality uh or even similarity uh between the outputs of your application
+[05:18] and your ground truth outputs. Really what we would want almost is a human
+[05:22] subject matter expert who is constantly overseeing your AI application and a
+[05:27] subject matter expert who has all the right taste and sensitivity but is able
+[05:30] to translate that sensitivity into some quantitative metric. This by no means is
+[05:34] a trivial task, right? I think this is the core challenge that we've been
+[05:37] trying to face in the field of AI around reward modeling for the past five, six,
+[05:41] seven plus years, right? Uh and the key challenge is how do you get that
+[05:45] sensitivity from the subject matter expert from a nontechnical domain to be
+[05:48] able to translate their criteria into quantitative measures. This is not even
+[05:54] close to something that's being solved with standard evals today. People are
+[05:57] using things like exact match, um classifiers, LM as a judge, semantic
+[06:01] solinity. All these things have their own sets of uh quirks and undesira and
+[06:06] we'll see how this this pans out in a second.
+[06:10] Long story short of how uh we think about tackling this eval problem is
+[06:14] essentially through hazing right fuss testing in the AI era. Essentially what
+[06:18] hazing comprises is very simple in the abstract. We just simulate uh large
+[06:22] scale uh stimuli to send to your AI application. We get the responses as a
+[06:26] result of the stimuli. We judge and analyze and score the outputs of your AI
+[06:31] application. And we use that as a signal to help guide the next round of search,
+[06:35] right? And we essentially just do this iteratively until we discover some bugs
+[06:38] and corner cases that break your AI application. Uh if we don't discover
+[06:41] anything and we exhaust our search budget, that that means you're
+[06:44] essentially ready for production, right? So this is hazing in a nutshell.
+[06:49] But easy to easy to describe, actually really difficult to execute in practice.
+[06:54] um both sides of the equation in terms of scoring the output and also
+[06:57] generating the input stimuli are quite difficult technically. Um I'll first
+[07:01] talk about how do we think about scoring the output again translating from
+[07:04] subjective criteria into quantitative metrics. Uh we call this judging more
+[07:08] broadly. Probably you guys are familiar with uh
+[07:12] something like using LM as a judge to essentially have an LM look at the
+[07:17] output of your AI application and decide you know based on some prompt or rubric
+[07:21] that you give to your judge you know is this a good response or is this a bad
+[07:24] response tell me on a scale from 1 to five or 1 to 10 or what have you right
+[07:28] very simple to do but it has its uh whole large array of different failure
+[07:32] modes in particular LM as a judge itself is prone to hallucinations it's it is
+[07:37] obviously an LLM so it's prone to hallucination conditions it is uh
+[07:41] unstable. you could have actually really good articulation of the criteria but it
+[07:45] doesn't actually operationalize well into a model right so it's um uh
+[07:49] unccalibrated in the output right like a what is what is a one to an LLM that's
+[07:53] very different to what is a one to a human right what is a five to a human is
+[07:57] very different to what a what is a five to an LM so it's unccalibrated uh it has
+[08:01] all sorts of biases right if you change the inputs uh in any weird position
+[08:05] right let's say you present uh one response first and the second response
+[08:08] if you flip the order that changes the results often time uh if provide context
+[08:12] or you change some part some some part of your rubric that changes the result
+[08:15] of the LM as a judge too. So extremely biased extremely fickle and TLDDR LM as
+[08:20] a judge itself uh as an off the call call offtheshelf call to an LM is
+[08:24] oftentimes not going to solve your uh reliability issues.
+[08:29] So the key question in my mind is how do you actually QA the judge itself, right?
+[08:33] How do you get to a point where you can judge the judge and say that this is the
+[08:36] best gold standard metric that I can use to then actually iterate uh my
+[08:40] underlying AI application against. So how do you judge this judge?
+[08:45] The broad philosophy that uh we've been taking over the past few months is
+[08:49] essentially pushing the idea of inference time scaling or more broadly
+[08:53] compute time scaling to the judging stage. So we call this scaling judge
+[08:57] time compute. And there's two ends of the spectrum of this philosophy. One end
+[09:02] of the spectrum is basically just rip from scratch. No inductive biases. Train
+[09:07] reasoning models that get really really good at this evaluation task. Um and
+[09:10] then the other end of the spectrum is be very structured. Uh you know don't train
+[09:14] any models. Just use the offtheshelf LMS have really strong inductive prior but
+[09:18] basically build agents as judges. Right? So this is one approach. Basically,
+[09:23] we'll build agent frameworks, pipelines, workflows to do the judging task. And we
+[09:28] have this nice little library called uh verdict uh that does this. Very on the
+[09:32] nose name, I know. Um but the idea of verdict is essentially there's a lot of
+[09:35] great intuition from the scalable oversight community, which is subfield
+[09:40] of AI safety. Goal of scalable oversight is basically how do you take smaller
+[09:43] language models and have them audit uh and correct and steer stronger models.
+[09:48] Originally this is an AI safety concept because people were worried about you
+[09:52] know in the age of superhuman AI how do you have weaker models i.e humans
+[09:55] control the stronger models, right? And that's how the field got started. But as
+[09:59] a result of scalable oversight, there's been a lot of great intuition around the
+[10:02] architectures and primitives uh and units that you would use to probe and
+[10:06] reason and uh critique what a stronger model is doing. And so we baked a lot of
+[10:11] those primitives uh and architectures into this vertic library. One example is
+[10:15] having LMS debate each other, having the weaker LLMs debate each other about what
+[10:18] the stronger model is saying and seeing if that makes sense. Uh another example
+[10:22] is having the LLM's weaker LMS self-verify the results of their own
+[10:26] responses. Right? So you know have an LM say okay this response of the stronger
+[10:30] model is good or bad. It is bad for this reason and then maybe having an LM
+[10:34] critique its own reasoning right. So SE verification is another great primitive.
+[10:37] Um ensembling of course another another uh classic primitive in this case and so
+[10:42] on and so forth. TLDDR scaling judge time compute in this
+[10:47] particular way uh through building agents as judges actually allows you to
+[10:51] come up with extremely powerful judging systems that are also quite cheap and
+[10:55] also uh low latency. So here's a plot of price uh and latency and cost uh and and
+[11:01] accuracy uh of verdict systems visav uh some of the frontier models uh Frontier
+[11:06] Labs reasoning models. So you can see that verdict is beating uh 01 and 03
+[11:10] mini and of course GP4 and 3.5 sonnets um on the task of expert QA
+[11:15] verification. So this is uh subjective criteria grading in expert domains. Um
+[11:20] critically verdict here is powered by a GP40 mini backbone. Right? So we
+[11:24] basically have stacked GPU GP40 mini aggressively and what is in this case
+[11:28] like a self-verified debate ensemble uh architecture and we're able to beat 01
+[11:34] for a fraction of the cost like less than a third of the cost right and also
+[11:37] uh like less than a third of the latency and this is all because of we have of
+[11:42] the fact that we've chosen the priors in a pretty careful and uh intelligent way.
+[11:47] So that's one way to scale just time compute is basically building agents uh
+[11:50] to do the task. Other way to do it and this is a lot
+[11:55] more fun in my opinion is basically yeah just rip RL from scratch train models to
+[11:58] do the judging task and this is something that we've also been pretty
+[12:01] excited about over the past few months. Um again uh for standard LM judges whole
+[12:05] host of issues but two particular issues that are solved by RL is one uh there's
+[12:09] a lack of coherent ration that explain why an LM judge thinks something is a
+[12:13] five out of five or thinks something is good or bad and also standard elements
+[12:17] of judge doesn't provide real uh fine grained tailored unique criteria to
+[12:22] whatever idiosyncratic task and data you're looking at. Uh but both of these
+[12:26] can be solved by uh RL tuning or specifically GRPO tuning. Uh one paper
+[12:30] recently that uh has come out in this general flavor is from deepseek. This is
+[12:35] SPCT self-principled critique tuning. The idea here is essentially can you get
+[12:40] uh an LM to first propose some data set or sorry data point specific criteria
+[12:47] about what to test for. It's almost like coming up with unit tests for the
+[12:50] specific data point you're looking at and having the LM essentially look at
+[12:54] each of those criteria and critique the the data points on against each of those
+[12:58] criteria. Right? So it's like instance specific rubric and then instance
+[13:01] specific rubric critiques. Um this is one way to train RL models. We ran a
+[13:06] pretty simple experiment using this uh using a variant of this uh technique um
+[13:11] to GRPO train 600 million parameter and 1.7 billion parameter models and TLDDR.
+[13:17] gets us to you know competitive performance on the reward bench task
+[13:21] with cloud3 opus which is at 80% uh GP4 mini which is at 80% L 370B at 77% and
+[13:28] J1 micro which is this 1.7 billion parameter reward model at 80.7% uh
+[13:33] accuracy on the words bench task right and this is all because of judge time
+[13:36] scaling this is all because we did gpo to come up with uh better rubric
+[13:40] proposals and better critiques on the specific task that we're looking at so
+[13:44] training off essentially uh much smaller model uh doing more compute gets you
+[13:49] this this much better performance um and similar numbers for the 600 million
+[13:53] parameter model. Cool. So that's all judging and scoring
+[13:58] the outputs. Um equally important though is how do you come up with inputs to
+[14:02] throw out the AI system, right? And how do you run the search over time?
+[14:06] TLDDR there's two ways that we think about this. There is fuzzing in the
+[14:10] general sense which is essentially okay I just want to come up with some
+[14:13] variance uh of some customer happy path and test my system under some reasonable
+[14:18] in distribution uh user inputs right then there's the more fun part which is
+[14:24] how do you do adversarial testing right how do you basically emulate some person
+[14:28] trying to sit down and prompt inject and jailbreak and mess with your AI systems
+[14:31] at large uh and this is much more aggressive in terms of how we pursue the
+[14:35] optimization problem. Long story short is, you know, fuzzing
+[14:41] in the AI sense is much more structured and optimization driven than in
+[14:46] classical security or or software or hardware, right? It is impossible to
+[14:51] like search over the input space of natural language and do a brute force
+[14:55] search uh in any reasonably short amount of time. Like we're dealing with, you
+[15:00] know, let's say we're doing a llama 3 tokenizer. is uh 128,000 tokens per
+[15:05] individual input, right? You scale this up to like 100 million tokens and you're
+[15:08] like literally impossible to scan this entire input space. So you have to be
+[15:12] very clever and guided and prune the search space as you do hazing and
+[15:15] fuzzing. We treat this task essentially as an optimization problem. Right? This
+[15:19] is long story short just discrete optimization. There's plenty of rich
+[15:23] literature over the past 60 70 years of uh discrete math research to go and
+[15:28] support how to do this sort of task. So you have to massage it of course to work
+[15:30] for the LM domain. Um but TLDDR the shirt space is just natural language.
+[15:35] The objective that we're trying to minimize in this case is essentially
+[15:39] whatever judge uh that we're using to score the output. We basically want to
+[15:42] find inputs that break your A application visav the judge gets the
+[15:46] output to score very low on some uh measure of the judge. And yeah we we can
+[15:50] rip and throw a bunch of fun optimization algorithms at this. Um we
+[15:54] can use gradient based methods to back prop all the way from the judge loss
+[15:57] through the model to the input space and use that to guide uh what tokens we want
+[16:00] to flip. Uh we can use various forms of tree search and MCTS. We can search over
+[16:04] the latent space of uh embedding models and then map from the embedding models
+[16:08] to text and throw that at the underlying AI application or the application under
+[16:12] test. Um we can use DSPI. We can use all sorts of other great uh tools and tricks
+[16:16] to solve this optimization problem. Some fun case studies in the last few
+[16:22] minutes. Um, TLDDR, you could probably imagine that this hazing thing matters a
+[16:26] lot for people in regulated industries and indeed we work a lot with uh banks
+[16:30] and financial services and healthcare and so on. Um, we did something recently
+[16:34] where we um hazed uh the largest bank in Hungary. Uh they had this like loan
+[16:39] calculation AI application that they're showing to customers. The customer
+[16:43] application had to follow this 18 line code of conduct is what they called it.
+[16:46] uh and we basically threw everything under the sun uh from our platform in
+[16:49] terms of optimization and scoring to uh emulate adversaries. We were able to
+[16:53] discover a ton of uh prompt injections and jailbreaks and honestly just like
+[16:57] unexpected corner cases that they didn't account for in their code of conducts.
+[17:01] Um and they're able to patch this up and then finally unblock their production
+[17:03] into prod. We are doing this right now for a
+[17:07] fortune for Fortune 500 bank that wants to do uh outbound debt collection with
+[17:11] voice agents. uh little bit actually more complex problem because now
+[17:17] we're not just testing in the text space. We're actually introducing a lot
+[17:20] of uh variance to just the audio signal as well. So adding things like
+[17:24] background noise um stacking you know weird static into the the input domain
+[17:29] changing the frequencies of things etc. Right? But still an optimization problem
+[17:32] at the end of the day. um TLDDR what took this team you know 3 months or so
+[17:36] to do with their internal ops teams uh took in their own words uh only 5
+[17:41] minutes for a platform to do um so scaling up adversary emulation uh works
+[17:45] for this task as well and a little bit more different uh for
+[17:50] another voice agent company we've been helping them with uh scaling up their
+[17:53] eval uh suite right so not so much hazing but basically scaling up their
+[17:57] subjective human annotators uh through verdicts uh they've seen a 38% increase
+[18:02] in ground truth human agreements using verdicts um as opposed to using uh their
+[18:06] internal ops teams. And what we're using here is essentially uh a triedand-rue
+[18:11] architecture from the verdict library which is what we call rubric fanout. So
+[18:15] it is basically propose individual uh unit test and criteria for any
+[18:18] particular data point uh critique it self-verify your critique and then
+[18:22] aggregate results at the very end. Cool. So we got a few minutes left uh
+[18:27] for questions but um yeah hazing is a ton of fun. I think it matters a lot for
+[18:32] this new era of software that we're building. Uh we're very aggressively
+[18:36] hiring. We're, you know, facing what I would deem to be insurmountable
+[18:39] enterprise demand and we're only a team of four people. Uh so we really need to
+[18:43] scale up our team and yeah, we're based in New York in case you guys want to
+[18:46] move out to the city. Um and yeah, any uh any last questions for me
+[18:52] >> for the hazing input? Is it multi-shot or single shot?
+[18:54] >> Yeah, great question. So we do both. Uh we do single turn, multi-turn. Uh we do
+[19:00] persistent conversations if you're doing voice. Um yeah, all sorts of modalities,
+[19:04] all sorts of inputs. [Music]

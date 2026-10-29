@@ -1,0 +1,203 @@
+# title: Security Firewall for Agents — Ryan Dahl, Deno
+# source: https://www.youtube.com/watch?v=MkRYPFIMCSA
+# speaker: Ryan Dahl, Deno
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T06:12:07Z
+# sha256: 5cb1ae23128652fb3e4404443cffb354ed1927c29026ebad009c394b6392b96f
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:01] [music]
+[00:13] How's it going? >> Um, my name is Ryan. Um, I'm going to I
+[00:21] I'm I'm the CEO at Dino and uh yeah, you been developing software for for quite a
+[00:28] while at this point. You might know one of my projects, Node.js.
+[00:32] Um, I want to talk about um a service that we're running at Dino called Dino
+[00:38] Deploy. This is a system for hosting websites and it has incidences. It's it
+[00:46] it has downtime occasionally and uh we've got a pager duty that fires. I'm
+[00:51] sure you're all very familiar with the very scary alarm sound that wakes you up
+[00:56] in the middle of the night. Um, and recently we've been playing around with
+[01:01] using agents to automatically service these incidences. Um, in particular,
+[01:08] OpenClaw, but other other agents as well. Um, and we've found a pattern that
+[01:14] is working pretty well for us that I want to share with you. Um, we actually
+[01:18] give OpenClaw access to all sorts of systems. Postgress, Kubernetes,
+[01:24] Clickhouse, AWS, GitHub, Slack, uh all all sorts of things. And we we do
+[01:30] actually give them uh rewrite access to these systems.
+[01:36] This is very powerful uh because the agents can actually get all of the
+[01:43] context. They can see traces in ClickHouse. They can look in the
+[01:48] production Postgress database at what the user what you what projects a user
+[01:53] owns. They they can look through Slack for uh communications uh GitHub logs
+[02:00] etc. Um this actually works quite well. Uh the
+[02:05] the agents are actually able to solve quite a lot of incidences where we
+[02:12] previously would have a human s in the loop.
+[02:16] But it is very dangerous of course because these agents could do nefarious
+[02:24] things. They could start a psql subprocess and issue a delete users
+[02:31] table. Um they could call cubecuddle delete namespace prod. Um you know they
+[02:36] they could decide somehow that solving the incident it means you know removing
+[02:41] all of the users. Uh and of course we don't want that.
+[02:47] We use Opus and Opus is remarkably well aligned. You can really not you you can
+[02:55] try very hard to to get it to delete the user's table and it will refuse over and
+[03:00] over again. But this is not sufficient, right? Security can't just be wishful
+[03:08] thinking that Opus will always obey your your wishes. Um
+[03:16] these S sur agents that we have are connected to the support system and thus
+[03:22] can be prompt injected from the outside and that means that they can be
+[03:28] manipulated somehow. like who knows who knows what sort of uh string of
+[03:32] characters could send opus into some uh bad state that allows it to think that
+[03:39] it's taking the right action by doing something very undesirable.
+[03:44] So you know we take the stance that the sec the agents themselves have to be
+[03:50] untrusted software. You can't rely on the agent itself to guard what it's
+[03:56] doing. You can't put the guard inside the agent.
+[04:01] We run agents and I assume many of you do the same on standalone VMs. So we're
+[04:09] not very concerned about agents touching files on the file system. You know,
+[04:15] they're they're they're uh they're properly isolated at the system level.
+[04:22] But [clears throat] so you know effectively
+[04:26] every nefarious action that that an agent could take every good action that
+[04:31] it takes comes in the form of some network communication
+[04:36] some some bites over the wire and how these bytes are formed can happen in
+[04:43] various ways. You can of course call through MCP but also subprocesses and if
+[04:50] you think of Postgress for example this is a nonHTTP protocol that uh open clock
+[04:58] can just spawn as as a subprocess and and start connecting to to services. Um
+[05:04] so we take the stance that we really want to understand what the bites are
+[05:09] coming out of that agent in great detail.
+[05:14] >> [clears throat] >> This can get very tricky in real world
+[05:17] systems. So for example, we have a production Postgress database in AWS um
+[05:24] that is inside a VPC that we can only reach really through uh an EKS endpoint.
+[05:33] And what we'd really like to do is ensure that our agent, which we want to
+[05:38] give access to everything essentially, can't somehow tunnel through this EKS
+[05:43] server, spawn psql, and drop the users table, right? We're we're we're
+[05:50] concerned about pretty crazy situations like this that get very complicated. And
+[05:58] I think many of you work in companies where you have real world systems where
+[06:01] things are very complic.
+[06:06] So yeah, just to just to highlight this, this is an outbound path the agents host
+[06:11] can't reach on a protocol that isn't HTTP that's gated by a rule that
+[06:16] understands SQL. These are what human S surres would do.
+[06:23] And how can we, you know, empower these these agents to to have kind of the the
+[06:30] same access that that a human might. Um, so you might ask, you might say,
+[06:38] well, you know, there's ACL's, there's permissions, you can issue readonly uh
+[06:44] Postgress credentials. Um, and yeah, that's true up to a point. Um, you can
+[06:50] do careful credential provisioning and you should. Um, but this this really
+[06:55] requires uh working across many different systems, provisioning
+[06:59] credentials in in incredibly careful ways. And as I just demonstrated, the
+[07:04] composition of access can lead to holes when you can access one system and then
+[07:09] another system. um MCP, you know, you can you can uh
+[07:14] structure all of this as uh very careful MCP uh tools that uh have the proper
+[07:23] permissions. But, you know, then then you can't spawn subprocesses, right? You
+[07:28] you you can't you know, as soon as as soon as the open clause spawns the the
+[07:32] PSQL, uh you're you're kind of out broken through the the security
+[07:37] boundary.
+[07:40] There are quite a few projects in this space um namely projects that kind of
+[07:47] sit in front of an agent and under look at what it's sending and try to control
+[07:53] based on on uh the the bytes that are flowing through this. Um, LLM gateways.
+[08:00] I think we're all familiar with Open Router, Light LLM, for example. These
+[08:04] often have a guard rails feature that can [clears throat]
+[08:08] uh guard against prompt injection uh, you
+[08:13] know, scan for for various uh, expressions, etc. that that are going
+[08:18] back and forth between the the LLM uh, provider.
+[08:24] But, of course, that's just the LLM. uh you know we're we're talking to
+[08:28] databases and stuff. Um you have systems like HTTP jail and Crabtrap that are
+[08:35] HTTP proxies that really sit at at the HTTP layer and you uh HTTP jail for
+[08:43] example can will allow you to write rules that say well you can make get
+[08:48] requests but not post requests or you can access this HTTP subpath. Um, Crabt
+[08:53] Trap is a project from Brex that has a LLM as judge that operates on the HTTP
+[09:01] requests flowing back and forth. you have uh proxies that inject credentials
+[09:08] into uh as they're passing out of the agent. Uh agent vault uh being a popular
+[09:14] one where the the agent itself never actually sees the credentials of the
+[09:20] system that it's talking to but passes some placeholder out and the proxy
+[09:25] itself injects those credentials. This is an important part of the problem but
+[09:30] not a complete solution. And you have things like process sandboxes like
+[09:35] Nvidia's OpenShell that you know really are kind of OS system level uh uh guards
+[09:42] against say accessing different file system paths um accessing different SIS
+[09:48] calls that sort of thing but as I said before we're we're not really concerned
+[09:53] about that because we provision uh standalone VM for for our agents.
+[10:00] So the software that uh we've written to address this problem is called claw
+[10:06] patrol. Uh it's an open- source MIT license project and this is a proxy that
+[10:14] sits in front of your agents. Um it operates not at the HTP level but
+[10:20] at a lower level. It understands each and every bite flowing through flowing
+[10:26] out of your agent. It holds credentials like agent vault and can inject those
+[10:32] credentials so that your uh whatever agent software you're using
+[10:38] uh doesn't actually doesn't ever actually see secret values.
+[10:42] And um in particular, it has a very advanced rule system that allows you to
+[10:50] say in in precise details how how and and what requests get uh transferred out
+[10:58] out of the agent and talk to the outside world.
+[11:02] These rules are are kind of the the key piece of the system and we write them in
+[11:08] a configuration file using a language called HCL. Uh who anybody familiar with
+[11:15] HCL? This is like the Terraform the Terraform configuration language. Uh it
+[11:20] actually works really well here. So we have a file that we check into git and
+[11:24] we manage very carefully that essentially defines the permissions for
+[11:29] all of our services at Dino and these yeah it's it's a big long file. It's
+[11:34] like a thousand lines and you know we we manage each and every change to that in
+[11:38] in kind of precise detail. This is an example of a rule in our configuration
+[11:45] file that blocks certain Postgress functions from being uh being called.
+[11:52] And so yeah, again Postgress being a nonHTP protocol and these rules can be
+[11:59] applied even when tunneling through other systems. Um, it supports uh a
+[12:05] number of different protocols and has a plug-in system to extend it when you run
+[12:11] into a protocol that it is not yet familiar with.
+[12:16] So, uh, here's here's a little demo. Unfortunately, not live. Um, but we call
+[12:22] claw patrol run codeex in yellow mode so that it just does what you say it should
+[12:29] do. And you tell you tell Codex, hey, delete the users table from from
+[12:33] Postgress and Codeex um properly uh obeys and starts a Psql subprocess where
+[12:42] it deletes the the the users table. That uh Psql subprocess opens a network
+[12:49] connection to to our to the the Postgress server that goes through claw
+[12:55] patrol where we pars each and every bite. We understand the Postgress
+[13:00] protocol. We apply our rules and ultimately reject that what we call an
+[13:06] action from uh from doing something destructive.
+[13:14] Claw Patrol has a dashboard that lets you see what your agents are doing. So
+[13:21] at the top you can see a couple of different uh devices or agents and the
+[13:26] the various requests that are flowing through. Some of them being denied, some
+[13:31] of them need approval which I'll talk about in a second. And you can click
+[13:36] into to each request or uh action as we call it because it's more general than
+[13:42] HTTP requests and see the details of of what's going on. there's there's
+[13:48] analytics and yeah it's it's very uh utilitarian driven. It's like what what
+[13:53] we need to understand our own agents. Um there as I said there's there's an
+[13:59] approval system in this. So you can route, you can define rules that don't
+[14:04] just reject requests or actions but uh ask a human for example in a slack
+[14:10] channel or run an LLM judge over over this um or any combination thereof,
+[14:18] right? Maybe first first get an LLM judge and then get approval in Slack. uh
+[14:23] so that you can have again very precise control over what your agents are doing
+[14:28] outside of the agent software itself right we we treat the agent software as
+[14:34] a black box right we we don't require any changes to to that software
+[14:41] um I mentioned credential injection before uh claw patrol has very detailed
+[14:48] support for all sorts of systems credentials come in many different forms
+[14:52] they're not just uh bearer uh headers uh it handles cookies it handles Postgress
+[15:00] as I mentioned uh click house supports all sorts of uh ooth protocols supports
+[15:06] very complex things like AWS SIG v4 um so yeah this I guess what I'm trying to
+[15:14] uh say is that this is this is really born out of utility here and meant for
+[15:22] real world systems This is not just you know kind of an imaginary scenario.
+[15:28] [clears throat] Um this system works over tail scale or wire guard. Um we
+[15:36] ourselves run claw patrol run our agents inside of tail scale inside of a tail
+[15:42] net and claw patrol acts as a tail scale exit node. Um we also lean on tail scale
+[15:49] for authentication to the dashboard. So your your tail your tail scale identity
+[15:55] actually allows you access to to the dashboard so that we don't have to layer
+[16:00] on another authentication mechanism. But we also have this wire guard for people
+[16:06] who have not bought into the wonderful tail scale ecosystem. But this works
+[16:12] very well for us because we know that all of our stuff is is off the internet
+[16:17] and all of these very security sensitive things are are uh tightly controlled.
+[16:23] Claw Patrol itself is holding all of these credentials to production systems.
+[16:27] So you have to be very careful with it. Um so yeah, this the thesis here is is
+[16:35] basically that agents can't be trusted to police themselves. that includes
+[16:40] security plugins or or modifications to the to the agent software itself. The
+[16:46] the security boundary has to be elsewhere. And that's not to say that
+[16:51] alignment is not a good thing, but uh you know for for real world security
+[16:55] systems, we we really do need to control this at at a higher level. And uh claw
+[17:01] patrol is our attempt to uh make this work for ourselves. Um and yeah, you can
+[17:07] you can check it out here.
+[17:11] >> [applause]
+[17:17] >> I might have time for one question or so.
+[17:22] >> Yes sir. >> What kind of email testing do you do on
+[17:25] this to make sure it's working? >> Uh yeah. So the question is what what
+[17:31] sort of testing do we do we do to make make sure it works properly? Um I I
+[17:35] didn't mention but but there this rule file actually has a test system along
+[17:40] with it where you can provide uh fixtures action like fixture requests
+[17:45] that can flow through the rules and then you can uh essentially create unit tests
+[17:50] to make sure that that fixture is always you know that request it will always be
+[17:54] blocked by by your set of rules. And then of course for the claw patrol
+[17:59] software itself we have a a large suite of of testing.
+[18:04] Yes sir.
+[18:10] >> So the question is as as agents get smarter does this problem get bigger or
+[18:14] smaller? I think I think we can we will never be able to fully trust uh AIs. I
+[18:22] think it becomes less and less of a problem as they are smarter, have better
+[18:26] context, know that they're working with a company, know that that they shouldn't
+[18:30] be doing bad things. Opus is more aligned than previous models, but I
+[18:36] think we're always going to have to have uh backs stop security mechanisms.
+[18:42] Um, cool. Well, I I'll be around for other questions, but thank you very
+[18:45] much. [applause]
+[19:04] >> [music]

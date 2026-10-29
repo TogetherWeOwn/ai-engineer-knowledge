@@ -1,0 +1,1030 @@
+# title: Building your own software factory — Eric Zakariasson, Cursor
+# source: https://www.youtube.com/watch?v=rnDm57Py54A
+# speaker: Eric Zakariasson, Cursor
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T09:36:41Z
+# sha256: 915b4a819c8334276bfba07f9c6cf7aa513e73038ad4e16412cbef3d0f69ac0e
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:07] [music]
+[00:14] Um, okay. So, we're starting five minutes early. Um, hey everyone. I'm
+[00:18] Eric. I'm an engineer cursor and I mostly work at developer experience and
+[00:22] product. And today I kind of wanted to talk to you about
+[00:27] my experiences like working at Cursor dog fooding the product and like getting
+[00:32] to a place where you can build your own like software factory and like what that
+[00:36] kind of like takes and the practical steps getting there. To be honest, I
+[00:39] don't think we're really there yet. Like sub parts of the product and sub parts
+[00:44] of the company are running like fairly autonomously. U but building a software
+[00:48] factory takes a lot of work. I mean like look at like real life uh factories
+[00:53] producing like hardware. There's a lot of assembly lines. There's a lot of
+[00:56] people that goes into this, a lot of managing, observability and all that.
+[00:58] And there's a lot of concepts we can borrow from that world and put into the
+[01:02] uh software world. So anyway, here goes my observations from doing this. Um but
+[01:09] first um the agenda I want to talk about like levels of autonomy uh precursor to
+[01:15] factory, pun intended. um building the factory, running the factory, and then
+[01:20] scaling the factory. And I want to finish with some Q&A for any kind of
+[01:23] questions. Okay, so for the levels of autonomy,
+[01:29] Dan Shapiro put out this blog post I think in January or February, uh
+[01:35] explaining like six different stages of uh autonomy uh throughout like
+[01:40] automating software. uh Carpathia has also like previously used cursor as
+[01:44] example of like going from tab to agent and all that but I think this kind of
+[01:47] like encapsulates this really really well. So we have this spicy autocomplete
+[01:52] uh at the start and this is kind of like where cursor started in 22 23 like ages
+[01:58] ago at this point. [snorts] Um and we kind of like gradually moved up the
+[02:02] ladder and making the software creation more autonomous and letting the agents
+[02:05] do more work. And I think most people uh adopting the
+[02:10] AI tools um are like at somewhere between level two and level three where
+[02:16] you have a pair programmer where essentially just going back and forth
+[02:19] with the agent, asking questions, um getting suggestions, asking the agent to
+[02:24] do work um and eventually like finishing their tasks. And the step above that
+[02:30] would be uh having the AI generate the majority of the code um which we can see
+[02:34] like here in the developer level three. um where you as a human more kind of
+[02:39] like reviews it um kind of like in the loop following traces and all that but
+[02:43] as you further progress you're like becoming more and more of a manager and
+[02:47] we'll talk about uh this more later but eventually like level four I think this
+[02:51] is where I'm at at this point like for most like software projects where I'm
+[02:56] like delegating as much work as possible to agents and probably like reviewing
+[03:00] the outputs before I actually review the code um because I still look at the code
+[03:05] sometimes Um and lastly we have the software
+[03:09] factory which is essentially like a black box. Um Dan Shapiro calls it like
+[03:13] the dark factory where you don't really have an insight. It's just like agents
+[03:17] going around doing their thing uh shipping the code, testing the code,
+[03:21] building the code, all that. And you as a manager just provides like the intent
+[03:25] and the instructions um and like the goal uh from what you want out of the
+[03:30] factory. Okay.
+[03:33] Um yeah. So like why do you even want to create a factory? Um first of all like
+[03:38] throughput you probably want to create more code with like less resources. Um
+[03:42] you can run agents 247. You don't have to uh rely on humans that need sleep and
+[03:47] food and eat and all that. Um you can just like have more agents. Um another
+[03:54] like thing with the factory is like you have assembly lines and assembly lines
+[03:57] produces um consistent outputs. So if you build your factory right, you can
+[04:01] probably have very consistent output. Um, but at some point you initially you
+[04:08] feel like if you don't have a red setup, you might feel like the agents are
+[04:11] getting more and more probabilistic and like you're losing a lot of determinism.
+[04:15] Um, because they just go off and do random things. Um, which is probably a
+[04:19] sign that you need to like build more guardrails for the factory. And I think
+[04:23] this is a function of the model capa capabilities as well. Like as the models
+[04:27] get better, they can follow instructions better and just execute on whatever you
+[04:30] want them to do. Um, and thirdly, um, you might want to
+[04:34] have a factory because you can leverage your taste better. Um, you can like get
+[04:39] more out of your creativity out. Um, instead of just like waiting for you as
+[04:44] a human to create them and produce this, uh, software that you're creating.
+[04:47] [snorts] Um, and then obligatory like then and
+[04:51] now. This is what it used to look like. This is like a Tesla factory from a
+[04:55] couple years ago. Uh, and this is like kind of what we're getting after here.
+[04:59] Okay, let's get straight into it. So to build a factory, what do you actually
+[05:03] need? Um, I like to think of this as primitives and patterns. So just like
+[05:10] how do you structure the code? Um, is it like a modularized codebase? Um, do you
+[05:16] have this scattered all over the place? Is it coll-located code etc.
+[05:20] Um because the like um the distance in
+[05:28] um in locating like if you have an agent like lsing a folder uh it can like
+[05:32] discover all the relevant files at once instead of having to gp and search all
+[05:36] of the codebase. It can just like be very isolated to work within one um
+[05:40] single part of the codebase. And this goes for same with humans. like if you
+[05:45] have an easy time like onboarding yourself to a new codebase, an agent
+[05:48] probably will have that too. Um the second thing is like usage
+[05:52] patterns. Do you have specific like methods and services for authenticating
+[05:57] a user? Do you have like startup scripts? Do you have a way to like write
+[06:01] tests etc? Do you have this boiler plate in place? Um because if you do, you can
+[06:06] point the agent to like existing references and just asking this to
+[06:09] reproduce uh over time. So those are like some of the like primitives and
+[06:14] structures of the codebase. Um the second one would be guardrails.
+[06:19] So like you might you want to let the agents free but not too free. Uh so you
+[06:24] want to have some rules and and checks and and hooks in place. Um for example
+[06:31] um a hook you might want to have is uh touching a specific part of the
+[06:36] codebase. uh maybe the agent should not be able to change to like the most
+[06:41] sensitive like encryption of sensitive data or authentication or anything like
+[06:46] that where uh a mistake could be like very very very costly um for the company
+[06:51] or for you as a human etc. Um rules um rules is probably the most
+[06:59] misunderstood um concept since we launched cursor
+[07:03] rules. Um there's uh cursor directory which launch a good collection of
+[07:08] different rules. Um and the assumption was usually that you should just install
+[07:12] every rule that you can depending on like what um uh software stack you're
+[07:16] using. For example, if you're using NexJS, maybe you should have Nex.js
+[07:19] rules. Um but what I found and what I'm seeing amongst our users and internally
+[07:23] is that rules should just like emerge dynamically. Like if you're finding
+[07:28] agents going off the rails, you should probably create a rule for that. And it
+[07:32] should kind of like be sort of like an SA SOP uh to showing like the agents
+[07:36] what they can do and cannot do. And again, the models are getting so good at
+[07:42] following specific rules that they usually don't go off the rails anymore.
+[07:46] And I think that's just kind of like extrapolate over time as well.
+[07:51] Um, and of course tests like can the agent uh verify its own work and can it
+[07:56] run tests to know like oh I messed something up or um I made a change
+[08:02] depending in like in this specific area of the code but it still passes I can I
+[08:06] can still run the code and u the check looks good. Um
+[08:11] and lastly, which I think is probably most exciting is the enablers. Like what
+[08:16] can you allow the agents to do to actually let them be free? Um skills is
+[08:20] good for this. Um just giving the agents more capabilities, skills and MCPS. Um
+[08:25] accessing like external context. Um getting like understanding of how to
+[08:31] implement a certain thing. Uh I'm going to show you some later uh in the cursor
+[08:35] codebase. Uh what we are doing for example like feature flagging. Can we
+[08:39] give uh the agents a skill to add a feature flag? So when we launch them
+[08:42] autonomously, they can just flag the actual changes made and merge the PR and
+[08:48] come back to us like, "Hey, uh if you want to try this, just turn on this
+[08:51] flag. Um if you don't like it, we'll just revert to PR. If you like it, we
+[08:55] can like expand it to more users." Um and lastly, like what kind of
+[09:00] environment are you letting the agents run in? Um, can your agents
+[09:05] um start your dev environment? Can you just ask them to like, hey, um, start my
+[09:11] project um, and let them do that without having to like have any human in loop.
+[09:17] Um, because if that's the case, you can probably like have them run um, you can
+[09:21] scale it up like infinitely on separate VMs.
+[09:24] Um, and then this checklist is like what I'm usually following um when thinking
+[09:29] of like building the actual like uh the factory. Um, and part of that is like is
+[09:35] it runnable? Um, there's a typo in here. I blame my Swedish. Uh, there's is it
+[09:42] accessible like the context that the agents needs to have. Um, can they
+[09:46] interface with linear or notion or data dog or slack etc. just to understand and
+[09:52] like see what's what is like the broader context of this the intent that the user
+[09:56] have [snorts] and lastly which I think people should be spending a lot more
+[10:01] time is like building verifiable systems how can um the agents themselves like
+[10:07] verify their own work whether that's through um unit test or integration
+[10:12] tests or uh UI tests like actually clicking around in the DOM and like
+[10:17] trying to reproduce things that's actually happening for the end user. Um,
+[10:22] this is arguably easier for uh backend systems where there's like no UI really
+[10:27] happening and you can have like clear contracts and boundaries of what should
+[10:31] work and what shouldn't. Uh whereas for for web and UI and all that, you
+[10:35] actually need to click around and making sure things work. The buttons actually
+[10:38] have a loading spinner, etc. Okay, so this is like part of building
+[10:45] the factory. So, if we switch over to cursor here, um I'm not sure if you've
+[10:50] seen this, but this is cursor uh three. Uh we launched this a couple of weeks
+[10:55] ago, and it's a complete rewrite of cursor. There's no VS code anymore. Uh
+[11:00] most of you are probably familiar with this type of cursor [snorts] um
+[11:06] where you have files and sidebars and a lot of different things. uh whereas this
+[11:12] is a bit more streamlined for like an agent first workflow
+[11:17] and and we'll get to like why we created this as well so at a later point but I
+[11:21] wanted to show you some parts of um some rules etc. Let's see where I put them.
+[11:28] Um so for example I built this music agent
+[11:32] uh project and if you've used Ableton before you probably recognize this.
+[11:36] >> Yeah. >> Yeah. Yeah. Yeah, I'll expand it
+[11:45] more. Good. Okay.
+[11:51] Um, yeah. So, if you've used Ableton or any
+[11:55] like music production software, um, you probably recognize this interface. Oops.
+[12:00] Uh, it's not really working in the size. Um
+[12:06] but what I uh essentially asked the agent to do here is like can you start a
+[12:10] local dev server and we can see that it worked for a while. Um it explored some
+[12:16] files read package JSON and based on this uh there is a start script. So like
+[12:23] package JSON and all these dependency files are so in distribution of the
+[12:26] models that they know like we should immediately go to package JSON if
+[12:30] there's a JS project or if it exists um to look for a start script and this is
+[12:35] like a good example of having like a pattern that is predefined and like
+[12:39] making your codebase more like in distribution uh in that way u because
+[12:43] now it's like it's super easy for the agent to understand like oh I should
+[12:46] just go in here and start the server. So it started a server. Um it's running
+[12:52] on localhost 3000. Um and let's see here. We can see that
+[12:59] we have this agents MD file. Um so agents MD is like cursory rules. It's
+[13:06] across for many different harnesses. Um [snorts]
+[13:11] and what I wanted to accomplish with this project is essentially like
+[13:14] building a factory around this idea of building like a online music uh creation
+[13:19] tool. Um and to do that I like I forced myself never to write any code um myself
+[13:27] try not to look at a code that much either and just like try to figure out
+[13:31] like what is the systems and the structures I need around this. Um
+[13:37] and um immediately it became pretty clear that we need a way to start the
+[13:41] project. Um we need a way for the agent to like verify its own work. So the
+[13:47] agent created this uh end to end tests um using a playright so it can just
+[13:53] spawn browsers um go to root etc. click around and get my test ID. Uh, and
+[13:58] making sure like for every different change I make, um, for example, the play
+[14:02] button still works or I can add notes to this project here, uh, without anything
+[14:07] breaking. Um, so these are like some examples of
+[14:14] um, how you can create like verifiable outputs like that. Um,
+[14:19] okay. Uh, we have V test, we have this, etc. So, let's see here. If you go back,
+[14:29] um, oh yeah, another option here, casual scrolling on Twitter.
+[14:35] Um, a different way to verify the work is using, um, like an automation to rec
+[14:40] code review. Um, you can ask the agent to just review the changes it made. Um
+[14:45] or you can use like um a more like integrated tool like bugbot that we have
+[14:49] in cursor that just looks at uh different PRs uh in GitHub and reviews
+[14:55] them and comes back. Um and this is like also like one piece of the whole like
+[15:01] factory that you should have multiple different stages where you you plan it,
+[15:05] you produce it, you review it and you essentially follow the whole uh SLC uh
+[15:10] but you like automate and codify uh this work.
+[15:16] Um let's see here. Yes. Um I did I want to show you this as
+[15:22] well. Um so we launched uh updated cloud agents. Um in the last couple of weeks
+[15:31] where we gave uh each agent their separate VM and you can have them like
+[15:37] create this very reproducible environment in the cloud and this
+[15:40] essentially allows you to scale like infinitely. uh but we also gave the
+[15:44] agent a tool to test its own work um by controlling the computer. So for
+[15:50] example, we have glass here uh which is the interface and I asked agent to let's
+[15:54] see here
+[15:58] uh glass agents still rough with the keyboard control tab etc like better
+[16:04] accessibility and um using the keyboard to navigate the agents. Um, and I asked
+[16:09] it to uh make the change and then record this with the full editor because the
+[16:13] first one was just a sidebar. So, what we got back here is just a video of the
+[16:19] agent actually testing its own work. So, we can see that it has this highlighted
+[16:24] row. I'm not sure if you can see that. Um, [clears throat]
+[16:27] but just some context for me as a human to verify the work. Um, and then it
+[16:32] actually clicking around and using the keyboard to to navigate.
+[16:36] So with this, we're like we're getting kind of far in like the factory like
+[16:40] where we're at. Like a lot of the things are automated like review is automated.
+[16:44] Um the testing is automated. Um uh we have some rules to like steer the agents
+[16:50] etc. Um but there's still a lot still a lot
+[16:54] more to do. Um so I think when you have this in place the most important thing
+[17:01] you can do is like shift your mindset. Like you are going to look way less at
+[17:05] code. So you are going to go from like worker to manager. Um where instead of
+[17:10] just doing the work yourself, you're overseeing a lot of agents doing the
+[17:13] work uh for you. Um so this also means going from sync to async because most of
+[17:20] the work is going to happen in the background and you can still tap in and
+[17:23] see what's going on uh for different agents, but the more agents you spawn
+[17:28] over time, the harder time you're going to have to like understand what's going
+[17:31] on in each of them. So then you need a way to aggregate these changes like
+[17:36] upwards. Um and it's just I think it's so interesting that it's just the same
+[17:41] as like in human organization like all the same principles kind of follow. You
+[17:46] still have uh you start with a very small team and then you add more and
+[17:50] more people because you need to get more throughput and all of a sudden you need
+[17:53] a manager to like oversee things and then you add more managers and then you
+[17:57] need a manager of the manager. And this is essentially what's going to happen
+[18:00] with agents too. But you are just gonna like keep on going up the lab levels of
+[18:05] abstraction. So when you're a manager, you need to
+[18:10] start thinking of like how do you scope and paralyze the work. Uh because you
+[18:14] want to get like higher throughput. Um but some things are not necessarily um
+[18:21] it's not good to make all the changes at once. For example, if you have two
+[18:25] different tasks working on the same part of the codebase, you're going to get
+[18:28] merge conflicts. So you need to still like plan out scope and paralyze uh the
+[18:33] work. Um and one like one unit of work can always be one agent. Um so then like
+[18:40] how do you take a long long list of things you want to do and actually like
+[18:43] make the most out of that um and run the most amount of agents that you can do.
+[18:48] And to do this I think it's important that you preserve um like tribal
+[18:53] knowledge of the codebase like you still understand what's going on in the
+[18:56] different systems. um you know like how data flows, what the users want, um
+[19:02] which part are critical, which part don't um so not outsourcing too much uh
+[19:08] to the agents, but like very be very like direct um and and managing managing
+[19:14] them pretty well. And when you're going from sync to async, you are going to
+[19:20] need to trust the agents a lot more um because
+[19:25] you are going to send them off and doing longer and longer tasks and when you do
+[19:29] that you need to like get more context up front. So you kind of like frontload
+[19:34] uh the context to the agents either through like a plan or a long spec and
+[19:38] then you send them off and then you let them go. And once you start doing this
+[19:42] regularly, you're going to like start to feel the agents. You're going to like
+[19:46] understand the models. You're going to see like these are the weaknesses. These
+[19:50] are the strengths. And you are going to create like this alignment with the
+[19:54] models. So you know like how to prompt them and what intent to give them. And
+[19:59] again, as the models keep getting better, you have to give them shorter or
+[20:03] less and less prompts as you used to uh before. But you still got to provide the
+[20:07] intent and be very clear like what uh with the change you want the agents to
+[20:11] do. Um and there's like no there's no
+[20:15] shortcut to this uh from what I found and from the what the team has found.
+[20:18] You just got to like spawn a shitload of agents and just like let them do the
+[20:23] work and see what happens. And as long as you have good safety guardrails, you
+[20:28] can just let them do that. Um so you probably shouldn't let them push to prod
+[20:31] like straight away. >> Sorry, one question. Do you
+[20:36] Do you multiply the working environments as well or do you let them all the
+[20:42] agents work in parallel on the same development environment? um
+[20:48] >> yeah so this kind of comes down to like um personally I'm always using isolated
+[20:54] environments so in different VMs um I just tweeted about this actually because
+[20:59] on one hand if you're sharing the workspace you can have like git work
+[21:02] trees where you like have diff shallow copies essentially of the codebase on
+[21:06] the same machine and you can reuse services but you're still going to have
+[21:10] to branch every like database or cache or user management to have like
+[21:14] reproducible and separate environment ments like if you are going to make uh a
+[21:20] lot of changes at once you need to you want to know that they are pure and
+[21:24] they're not like having side effects to the other branches and that's why I
+[21:28] found like just using cloud agents uh where I spawn a VM and this VM can run a
+[21:34] database uh uh internal tooling databases other stuff uh and the cursor
+[21:39] app itself and then have the agent just work in that isolated environment to be
+[21:43] much better um it is more expensive It's going to take a lot more work to set up
+[21:49] your like factory or your environment to support this. But once you have it set
+[21:53] up properly, you can scale this to like 100 or a thousand agents. I'm not sure
+[21:57] how many we are running today, but I bet it's like multiple thousands a day. Um
+[22:02] just agents running in the same or like copies of the codebase.
+[22:07] Um so that's what I would recommend.
+[22:11] Um yeah, so when you're a manager like your job changes quite a bit. Um so um
+[22:20] you have to like look at your system as a whole. You got to like think of where
+[22:24] is the human in the loop needed. For example, do you have a log service like
+[22:28] data dog and do you need to copy paste the logs and go into the codebase and
+[22:33] paste them and like run the agents to identify and and trace down issues or do
+[22:39] you have user feedback that you need to copy paste from Twitter into somewhere
+[22:43] else and let the agents do something with that? Um, do you have like a notion
+[22:48] thing uh where you have all your specs and you need to copy paste a notion or
+[22:52] export them into markdown and dentry agents? there's probably a way to like
+[22:56] automate all these different things. Uh either it's like skills for MCPS or
+[23:00] either or or separate automations. So think of like where is a human in the
+[23:06] loop needed and try to like automate that away.
+[23:09] Um the second thing is like catch where how
+[23:13] can you catch agents going like off not doing what you actually wanted to do.
+[23:17] Um, and this is like the this this is like the perfect flywheel for
+[23:23] improving your factory as well. If you can see agents like um creating like
+[23:29] wrong uh schemas in their database because they're not following naming
+[23:32] conventions, etc., that's probably a rule somewhere. um or if they are um
+[23:39] just producing really ugly UI, there's probably a way for you to create a
+[23:43] design system and let the agents be aware of the design systems where they
+[23:47] can uh incorporate that and uh use it for the next kind of like iteration you
+[23:52] do and yeah then you take all these
+[23:56] learnings and uh you use it to actually improve the factory
+[24:03] and thirdly it comes to like scaling the factory. So now you have like your
+[24:06] environment set up. You know how to uh be a manager to like manage a fleet of
+[24:11] agents. You scope the task and you do all this. Um so how do you like actually
+[24:15] take it from like five agents to 10 agents to 50 to 100 uh agents
+[24:23] and um the thing is again um not looking at
+[24:28] code is going to be a real thing if the models get better and they are getting
+[24:31] better. So observing the outcomes um kind of like the same thing as
+[24:35] previously like where they go off the rail uh what are they producing
+[24:39] [clears throat] what are the artifacts etc. Um how can you make it so that the
+[24:43] agents also can verify their own work and verify the outcome that they
+[24:47] produce. Um you should set up automations you
+[24:52] should look again at the things you're doing repetitively. Um, so one thing we
+[24:56] could do for example here is if we go to cursor and we go to uh this music agent
+[25:01] again uh I can ask uh looking at my uh chat history what repetitive tasks am I
+[25:11] doing? Um so we can ask the agent to like look
+[25:16] at this and identify potential opportunities.
+[25:21] Uh, so it's searching the AENT transcripts and it's producing
+[25:26] some kind of artifact of this. Um,
+[25:31] yeah, we'll see how this goes. Um, I actually built this into a plugin. Oh,
+[25:35] let's see here. Uh, plan execution loops, restarting the produ direction.
+[25:41] Um, let's see here. Ableton like UI iteration. I should probably like put
+[25:46] this in a rule saying like make it look like Ableton.
+[25:50] um tooling, housekeeping, etc., etc. So,
+[25:54] this product is very shortlived, but if you're looking at an actual production
+[25:58] thing where you have prompted a lot over time, you're probably going to find
+[26:01] things that you are doing recurringly. And I want to show you some things that
+[26:05] we are doing at cursor um that we are automating. Um and some
+[26:10] of these are not that obvious all the time, but one is for example, let's see
+[26:16] here. Oh, not this one.
+[26:21] Uh, let's see here. For example, daily review.
+[26:25] So, I have this um automation for checking my own daily review. So, this
+[26:31] is going to um look at Slack. It's going to look at GitHub um and it's going to
+[26:38] send me a summary of the things I've done um over the last day. So, I would
+[26:45] previously have done this like writing down my notes maybe um thinking like
+[26:49] what did I get done today uh or like running an agent with access to MCP but
+[26:54] now I can just put this on a schedule and do this automatically for me. Um I
+[26:59] want to show you a different one uh for example read merge PR comments. Um this
+[27:04] is also like a way for you to uh learn over time. So for all the PRs that we
+[27:09] merge in our main repository, we can look at the comments and we can look at
+[27:14] what did humans actually review here uh and what do they say about the changes I
+[27:18] made. Uh because if it's if a human actually goes in and reviews a PR and
+[27:23] leaves a comment, there's probably like high high value and high signal and high
+[27:26] intent uh in that comment and we can then store that later uh in order for
+[27:31] the agents to actually learn over time. Um we have another one uh which
+[27:38] I can show you here. [snorts] Uh
+[27:43] this one. Yeah. Again the code owners. Um,
+[27:49] so this one allows us to we essentially had this problem where um we had code
+[27:55] owners in our codebase and they were kind of right most of the time like 80%
+[28:00] of the time but for these 20% of the time they caused a lot of bottlenecks
+[28:04] for us internally like we were blocked on merging the PR we needed someone else
+[28:08] to um to review it for us and maybe they were in a different time zone perhaps.
+[28:13] So what we started doing was building this agentic code owner thing and what
+[28:19] it essentially does is looking at PRs and checking like first of all what's
+[28:24] the risk of this? What's the risk level? Can we is it just like changing a
+[28:28] variable name? Is it changing a constant that's changing like how long a trial
+[28:32] subscription is or something like that. Um and if it is a low risk it can just
+[28:38] approve the PR because we don't really we don't want to block uh our own
+[28:41] engineers uh on these things but if it is um we can see that it is a
+[28:47] high-risisk PR and then we can find like okay who who made changes to this
+[28:51] previously and can we like pull in their feedback um and making the most out of
+[28:56] this and like um first of all making the code safe um and not breaking into
+[29:02] systems but also for the user that actually did the initial change, keep
+[29:06] them in the loop and like keeping them up to date on and refreshing their
+[29:09] context of what's going on here. So, it kind of like it goes both ways. Um,
+[29:16] and and yeah, multiple uh value ads from doing this.
+[29:21] Um, let's see if there's one more review. No, I think that was pretty much
+[29:24] it. Um, or yeah, I have this one more thing called continue learning. Um so
+[29:30] continue learning is another type of automation um that I created um a couple
+[29:36] weeks ago as well and it essentially does what we did with the agent. We look
+[29:40] at the previous transcripts we have and we can then extract like memories and
+[29:44] learnings from what we said previously like if we're correcting the agent to do
+[29:49] uh a certain thing like um use this component instead of that component or
+[29:55] um always uh refer to me as uh like always like have very like verbose uh
+[30:01] descriptions of things that you're doing. instead of me like every time
+[30:05] going in and um asking the agent to do this, I can create a rule, but I'm kind
+[30:10] of lazy so I don't really um remember to create a rule. So instead, we can have
+[30:15] this continual learning plug-in that looks looks through uh the transcripts
+[30:19] and store this as a rule uh for you instead. Um so these are all examples of
+[30:25] like systems to automate yourself away and to automate like things that the
+[30:29] agent can do for you. Um and I think that's the important part of like
+[30:33] building these factories like how can you identify uh the flywheels and loops
+[30:37] where you can uh automate yourself away by building systems.
+[30:43] Um okay um and yeah you are going to move up abstractions.
+[30:49] So now you're managing five to 10 agents but tomorrow you might be managing uh an
+[30:55] agent managing other agents. Um, and that is just going to grow. Like you're
+[31:00] going to have a lot of sub agents like under you working for you.
+[31:05] Um, cool. So yeah, what I want you to take away
+[31:10] from this is be very clear about the intent and like really think about
+[31:14] what's the actual problem to solve here. What do we want to get out of this? Um,
+[31:19] don't outsource important decisions. Like make sure you're staying in the
+[31:22] loop for important decisions. Um whether this is like uh safety or security or
+[31:28] databases or payments and authentication um some things are really important and
+[31:33] should not be made uh uh should not be decided by agents but by humans.
+[31:40] Um build tools and systems try to find these flywheels and like codify them and
+[31:46] get them in uh your systems and let the agent have access to them.
+[31:53] um store context for later, whether that is like agent transcripts or artifacts
+[31:58] of things you think look good. Um because this is going to help the agent
+[32:02] to like know what good and bad looks like over time and this is going to
+[32:05] change. Um so storing the context and building the tools and like keeping them
+[32:10] up to date is is more important than actually doing the work because this is
+[32:15] going to provide like the framework and the guardrails uh for the agents.
+[32:20] Um, and lastly, like let the agents be free. Like think of what do they need.
+[32:25] Um, I have a friend at Lovable. Uh, he mentioned that they set up a Slack
+[32:29] channel or he gave the agent a tool, a vent tool, so the agents can complain
+[32:34] about things uh when it was running. And the agent started complaining about,
+[32:38] hey, um, I can't like access this image. Um, I'm like very frustrated about this.
+[32:43] And then it posted straight into a Slack channel. and then they set it up as a
+[32:47] joke but then they started scrolling through and like oh this actually is
+[32:50] very valuable like we should probably like give the agent access to reading
+[32:53] images and they did and then the agent started complaining about something else
+[32:57] that was problem with the harness um so find ways to let the agents be free I
+[33:03] think that's um very important thing um okay that's kind of it uh and that's
+[33:13] kind of like a direction of and things we have found like building cursor and
+[33:18] like taking cursor towards uh software factory. Um I hope you learned a thing
+[33:23] or two and can take away um some of this. I'm happy to take any questions
+[33:28] about anything cursor. Yeah. Or actually now we have the microphones coming here.
+[33:39] >> Thank you very much. I have a question about um uh code quality or architecture
+[33:46] quality. So when agents ship tons of code and you barely can review them uh
+[33:55] how you uh ensure the the code is extensible and so on. I mean
+[34:03] um you can uh establish hooks or guard rails for measurable things like I don't
+[34:11] know uh number of lines in the file should not be more than something but uh
+[34:18] the architecture is not measured this way. So um and agents they have this
+[34:26] completion bias. They want to finish task as soon as possible and uh they
+[34:34] don't think ahead. They don't have their uh picture of the future how code will
+[34:40] evolve. They just want to finish task now. And uh yeah,
+[34:46] >> thank you. >> Yeah, it's a good question. Um I think
+[34:50] we as a humans have the same problem, but it just takes a lot more time uh for
+[34:54] us to like discover them. Um, one pattern like the good thing about
+[35:00] agents and models being like um, essentially like completion machines is
+[35:05] that they will just look at existing references and just continue forward
+[35:09] with that same path. So if you have existing things you can point them to, I
+[35:14] think that's very important. If you don't, I think there's a case where you
+[35:17] let the agents do um one-off implementations here and there and then
+[35:22] eventually you have another agent like refactoring like we do as humans as
+[35:25] well. So like one to generalize um and build abstractions and all these things.
+[35:31] Um so like how can you build like a system to like detect this and verify
+[35:36] that the abstractions that are getting built is also good and in line with what
+[35:39] you want to do. Um but I think it's going to be like a lot more
+[35:41] architectural review for humans. um and and scoping and like planning of what
+[35:48] the architecture should look like and system design. Um but yeah, it's it's a
+[35:53] tough problem. [laughter] >> Thank you.
+[36:00] >> Hello Eric. Thank you for the talk. Um when it comes to the activities of
+[36:05] building the factory one thing that I observe for example when it comes to
+[36:09] building things like rules in a in a team is that because it's so new almost
+[36:15] everybody feels oh this is a rule for me and I don't want to inflict it on other
+[36:19] people >> and I notice this creation of silos
+[36:22] where each engineer ends up having their own separate different factory. Do you
+[36:27] have any advice on how to bring it to the point where the whole team is
+[36:32] contributing to the creation of the factory?
+[36:34] >> It's it's a great question. Um I think it's hard. I think it's very cultural as
+[36:38] well. Um I mean like we developers have always created our own tools and like we
+[36:43] want to have our own custom setup. Uh but at some points like we have to unify
+[36:49] and like uh on a certain structure. So I think historically we have like had PR
+[36:55] reviews and all these kind of things as a ceremony to like align on the code
+[36:59] that's being produced and making sure it's consistent. I think we got to take
+[37:02] the same principles and apply that to the tools we're building as well and
+[37:06] like the the guardrails and enablers and primitives. Um so I think I don't know
+[37:12] establishing some kind of a forum where you can discuss these
+[37:17] things and like plan like what do we want the factory to look like? what are
+[37:21] the components we need? Like what are the integrations we need? Do you have
+[37:24] any examples of like specific things that people is it like flavor or is it
+[37:28] more bigger changes that the agents are doing?
+[37:31] >> Um what I notice when it comes to rules they they create like oh I want to like
+[37:37] one person wants to write the test first and they create the rule to write the
+[37:40] test first but they know that somebody else doesn't want to do it that way.
+[37:44] >> So then they have the rules only on their machine. and they they don't share
+[37:48] it because it is too unique to what they are. So they're collaborating the whole
+[37:54] team is collaborating on creating the codebase
+[37:57] >> but the collaboration in creating the factory in thinking well are we deciding
+[38:03] now that the factory writes the test first or not
+[38:06] >> that is a big decision that is hard to align everybody and accept that
+[38:11] like with all of these rules not everybody's going to be completely on
+[38:13] board and in most cases doesn't matter when
+[38:17] >> when you defer a little bit but it is hard to
+[38:20] >> yeah I guess it's it's it's a human problem and a human change that needs to
+[38:23] be made. >> Yeah, these
+[38:25] >> but it's a good question. I'll think a little about it. Thank you.
+[38:34] >> Thanks for the talk. Um, a lot of the patterns resonate. Um, I was wondering
+[38:39] what is needed, what kind of patterns can you suggest to take it to the next
+[38:43] level if you work on enterprise brownfield mission critical systems
+[38:49] >> that cannot fail. they cannot be insecure. If you look at the recent
+[38:52] supply chain attacks and you give your agent sandboxes, maybe that's not even
+[38:57] enough. >> Um, so the humans remain accountable.
+[39:01] >> Yeah. >> And we can't say, "Oh,
+[39:04] it's not my fault my agent did that." So do you have any extra patterns that um
+[39:11] um or or is it just inherently we have to keep reading the code which may feel
+[39:16] like reading assembly lines in the 80s or something?
+[39:21] >> Um I think if you can spend a lot of compute and
+[39:26] tokens up front before you as a human actually like needs to be involved. I
+[39:30] think that's a pattern that we found be to be pretty successful. Um so one thing
+[39:34] is like manually writing tests for very critical parts of the systems. Um and
+[39:40] then just letting the agents like run them uh a lot. Um the second part is
+[39:45] like building automations to like um our
+[39:50] security team. They built like this security sentinel which is an automation
+[39:53] that like looks specifically for very very uh specific invariants um of the
+[39:59] system and they run like 10 of these on like certain PRs that changes certain
+[40:03] files. Um and then yeah I think
+[40:10] I think it's a bit contextual as well but yeah just spending a lot of tokens
+[40:14] before uh and trying to like find different variants and like almost red
+[40:18] teaming. So one thing I did is um instead of focusing on velocity and
+[40:24] throughput, >> I focus on quality.
+[40:28] >> Sorry, what? >> I use AI to focus on quality
+[40:32] >> and just improve the tests and just make it completely AI ready.
+[40:36] >> Yeah, I think that's very good because if you as a human trust the tests, you
+[40:41] probably are trusting the output even though you don't have to look at the
+[40:44] code. And that's kind of like where we're going.
+[40:49] I think.
+[40:58] >> Hi. So, uh, thanks for a great presentation. Uh, I I find myself kind
+[41:03] of like lacking and slacking in using guide rails, uh, especially like rules
+[41:08] and hooks. uh partly because historically the the
+[41:12] the knowledge of how to do that properly was very scattered and decentralized
+[41:18] across uh whole web. So you would have this like exotic GitHub repos would uh
+[41:24] try to like centralize this knowledge or maybe you would have some like medium
+[41:29] articles or maybe cursor would cursor company would do a blog post on this
+[41:33] right but still it was very evolving and also the capabilities of models
+[41:38] themselves on especially on instruction following
+[41:42] uh they are also evolving and they are getting better on that and and and it
+[41:47] always felt like kind of like duct taping. to me. So I'm wondering uh
+[41:54] basically can we have AI to help us with that? meaning that could cursor for
+[42:00] example give us like proactive agents or maybe some new setup uh or maybe wizards
+[42:08] kind of uh setups where we could identify our workflow and then help AI
+[42:14] build us rules and and guard rails and all those like rules artifacts
+[42:21] uh for us. So maybe just like a proactive agent.
+[42:26] So, so maybe we would have like an agent that would scan our workflow globally
+[42:32] >> and then help us build those artifacts. What do you think about it? And do do
+[42:35] you guys think about this in the company? Maybe do you work on that?
+[42:40] >> Yeah, totally. Um, I think now there's like two places where you can do this.
+[42:47] One is like in the product itself with the whole um with the like continual
+[42:51] learning pro. Um, let's see here. Uh oh, I don't have it installed. Uh we can go
+[42:57] to marketplace. Yeah, with a continual learning kind of uh plugin to actually
+[43:02] like look at your um transcripts and like extracting rules and memories and
+[43:07] all that. That's like one way to do it. Then there's like another world where um
+[43:13] you like change the weights of the model
+[43:17] depending on like what your codebase looks like and what like your engineers
+[43:21] are doing like in a specific team. uh and you like you reconcile them and it's
+[43:25] like it's like true continual learning uh not this hacky plugin um and you like
+[43:31] actually baked that into the model uh so they actually know what your preferences
+[43:35] are etc. Um, but totally like memory and rules and all that. I think that's going
+[43:41] to become more and more important over time. Um, because that's kind of like
+[43:46] what's lacking. That's kind of like what's preventing me from having a lot
+[43:49] of trust in the agents sometimes because like I say something and they forget
+[43:53] about it. Uh, but they're just like stateless machines. So, how do we
+[43:57] capture this knowledge? Um, so I think we should put a lot more like time and
+[44:02] effort into um building these systems. >> If I might just follow on that. So, so
+[44:07] you you say that you seem to first to to start a project or or do to dive into
+[44:13] the project that's already existing in the codebase and then to build rules on
+[44:17] top of that. How about we we first have rules and we want to start a new
+[44:22] codebase, new project. >> How to how to actually have those
+[44:27] >> good rules for us? Do do you think that humans should humans should still do
+[44:31] that or can we also automate that? And do we have a new best workflows for
+[44:37] that? >> I think it's hard because like my
+[44:40] perspective on rules is like the bridge between uh the model behavior and like
+[44:44] the human behavior and like how do we steer the models in a way that they
+[44:48] follow me as a human what I want to do. Um and in a new product I'm not really
+[44:53] sure what I want to do. Like I kind of want to like outsource that to the model
+[44:56] like see what are they doing here? Can I run different models? Do they want to
+[45:00] like combine them or do I want to scrap everything? Um,
+[45:04] so I think it's it's hard like one like the best example of a rule that I can
+[45:09] think of internally is for a bug bot. Um, so when we're doing database
+[45:14] migrations, uh, we're not really using foreign keys on a database um, for
+[45:18] performance reasons. And the models like the right way to do this is use foreign
+[45:23] keys, right? Um, so they will always add a foreign key. Um, but when it like hits
+[45:28] GitHub and there's a PR created, we have Bugbot looking at us as a reviewing.
+[45:32] like, oh, I have this rule saying like we should never use foreign keys. So
+[45:35] then it flags this. Um, so that's like the gap between the human and the model
+[45:40] and what we want the desired like intent we have versus what they have. So I
+[45:45] think rules should like emerge dynamically over time. Um, and before
+[45:49] that you should probably adjust those ephemeral like specs and plans. Um, oh
+[45:55] yeah, there's like one over Oh yeah. Oh yeah,
+[46:00] >> it doesn't work. it it worked. Uh so thank you Eric um for the talk. Um as
+[46:06] evol evaluation and trust is a big point. I'd like to know how you
+[46:11] effectively do uh GUI testing and uh user acceptance testing
+[46:17] >> automated. >> If you can show show like something of
+[46:21] your workflow. >> Um totally the best or like the main way
+[46:25] I do it is using let's see here. Oh yeah I have this one for example. Um the main
+[46:31] way I do it is using uh the cursor cloud agent with the computer use that we
+[46:36] have. So I'm going to publish this. Oh no, that's bad.
+[46:43] Uh I guess we're not doing that. Um I have this website where it's running a
+[46:51] uh I have like seven components um like a button, a dropown, etc., etc.
+[46:57] components and then I'm generating each of these components with a different
+[47:00] model and because I want to like compare like what does uh composer dropdown look
+[47:06] like versus GPD54 dropdown look like and I put this in a grid but when I created
+[47:11] this website there was an error where I had this like view code button so I
+[47:15] could actually see the generated code it was not working because the model didn't
+[47:19] uh bundle the actual code so I went to cursor and I clicked when clicking view
+[47:24] code on a component it says it cannot load a
+[47:27] And it's like it's a very like short description. So what the Aiden did uh
+[47:32] you can see here it spawned my local server. Um it started like clicking
+[47:37] around and pressing enter. Uh we can see the cursor up here
+[47:42] and it's creating this like screen studioesque
+[47:46] uh recording where it's like chopping and speeding up and zooming in etc. Um
+[47:52] so here it's taken a while because computer use is fairly slow. um it's
+[47:57] consuming a lot of tokens and we can see we have this view code button and now we
+[48:02] can actually see it's working too. Um so since this is a very like much of a side
+[48:08] product for me I'm not really going to look at the code. I'm just going to like
+[48:11] see that this works and I'm going to merge it. Um but you can keep on
+[48:15] prompting the model to do very specific things for you like can you follow these
+[48:19] like specific instructions um like a login flow for example you should click
+[48:24] the button you should log in um the models this like login steps are
+[48:30] probably so much in distribution that you can probably just prompt the model
+[48:33] to say like go to this URL and click login or like log in and it's going to
+[48:38] like understand which steps it needs to take but then you can ask the model to
+[48:41] like uh input a wrong password or input a wrong email and see uh what are the
+[48:47] results from the website and maybe the website is giving like wrong credentials
+[48:52] and then the agent would understand like oh I need to like put in the right
+[48:55] credentials. Um so just like you would [snorts]
+[49:00] um like hire a consultant like a QA consultant and giving them instructions
+[49:05] you would just give the same instructions uh to the agent. Um so this
+[49:10] is like one way to do it. Um I guess the other way would do like more uh
+[49:15] playright puppeteer and just automating like a browser thing uh which is a bit
+[49:20] more deterministic as you can review it um and check it in and like have other
+[49:25] people reuse it. Is it does that answer the question?
+[49:30] My question was going more into uh like user acceptance testing to check does
+[49:35] this thing actually look right because like uh testing a login you can do you
+[49:41] can automate that you need an agent for that
+[49:44] >> but like does the does the website uh look right is it consistent through all
+[49:50] the pages that are generated stuff like that
+[49:53] >> yeah yeah then I I use cloud aents for that a lot Um there was one I can't
+[50:00] remember now but I think it was I did some changes in the docs and I just
+[50:04] asked it to like open every single instance where this word is referenced
+[50:10] uh take a screenshot and give it back to me. So then I could just like look at
+[50:13] all different screenshot everything look good and then I could merge the code.
+[50:17] Um, so letting like the agents do uh the navigation and clicking around and uh
+[50:24] the testing for you. Um, I think it works surprisingly well. Like this was
+[50:28] like a very much an AGI moment for me uh when we launched this in last year
+[50:33] sometime internally. So have you have you had a chance to try cloud agents in
+[50:37] cursor? >> You should curious to get your feedback.
+[50:42] [snorts] >> I know you have
+[50:46] Uh which one? This one. >> The agent like spawning all the
+[50:52] giving us the >> what was the initial question? How long
+[50:56] it took or >> Yeah. No, I I see. But how expensive it
+[51:00] would be for like >> ah um very straightforward. Like I for
+[51:06] this one I did no specific setup um for like our own repository uh where we have
+[51:12] like when running cursors like we can actually like reproduce like this demo
+[51:17] here is running all the backend services for cursor it's running all the front
+[51:21] end things um and this is like a lot of lot of different things um so the VM is
+[51:26] quite beefy um but as long as you give the right instructions it's working
+[51:31] really well what we did was creating this internal C five that the agent
+[51:35] could use to like uh we call it um like cursor dev tool cursor dev tool backend
+[51:43] start cursor dev tool frontend start um and that is abstracting everything away
+[51:48] um that actually needs to get to like uh orbstack to running click house and
+[51:53] postgress and reddis and then the front end running like um electron and then uh
+[52:00] glass here but then they just like coexist the two different processes
+[52:05] Um, and the agent have access to everything like just as a human would
+[52:08] do. Um, and you can have like the agent be authenticated if you store like a
+[52:12] snapshot where you are authenticated, etc.
+[52:16] >> Yeah, more expensive was in dollars like >> Oh, sorry, sorry, sorry. Okay, okay,
+[52:21] okay. >> Uh, my bad, my bad. Um, yeah, this one I
+[52:27] don't really have I could probably look it up. I would guess this is like
+[52:32] $1, something like that. >> Um,
+[52:35] >> just one turn. >> There's like for one turn probably like
+[52:38] this initial one would be $1. Uh, and the other ones I just asked them to
+[52:44] re-record a bunch of different things. Um,
+[52:51] >> something like I can look it up later. Totally.
+[52:53] >> I jump back and forth between
+[53:00] Yeah. And I guess depends on which model you're using too.
+[53:05] >> Okay. >> Okay. Uh my question is about uh hand
+[53:10] hand off between humans and and agents whenever you are using different tools.
+[53:16] So in my current setup, I have a product owner and a functional analyst that they
+[53:21] they work on cloud code and they prototype very fast uh with basically
+[53:27] without uh u so much thinking about oh the back end the architectural choices
+[53:34] or whatever and then they pass the the control down to the delivery team that
+[53:39] uses cursors and has to make that stuff work actually work. uh which best
+[53:46] practices do you suggest in order to enforce a proper workflow between people
+[53:52] just not knowing basically what they are doing
+[53:55] >> uh on a technical point of view of course uh and the people that needs to
+[54:00] bring that thing that maybe has okay some poor choices such as okay use that
+[54:06] database or then cloud changed the idea and they moved from super basease to
+[54:11] torso to any other kind of fancy database that actually is in that uh in
+[54:18] that environment and then bring that into some sound architectural choices
+[54:22] moving from cloud code to to >> cursor.
+[54:27] I think what we're doing internally is like we have like [snorts] one or two
+[54:30] PMs >> and they are building a lot of different
+[54:33] prototypes. Um sometimes it's actually in the real like product itself. Uh
+[54:38] they're using maybe cloud agents and just prompting them. they're getting
+[54:41] like a video like this back of the changes and they see like, oh, it kind
+[54:45] of looks like I wanted to and then they tweaked the designs a bit, but the code
+[54:49] might be really bad or like not following best practices. Um, which if
+[54:53] they had a if we had a good factory, then it probably would. Um, but if
+[54:57] that's the case, uh, we hand off like a link to the cloud agents. We just copy
+[55:02] the link and just send it to the the like engineers like, hey, this is like
+[55:06] something that we want to build. Um, does this make sense? Like, can we do
+[55:10] this? Um and then you have a lot of intent
+[55:13] already expressed. Um but the other case is like having the PMS they have a
+[55:18] separate repo called like prototypes and it's just like an HTML file like a mega
+[55:23] HTML file uh reproducing like the cursor UI or the dashboard.
+[55:28] >> Yeah. The the problem is the migration. So uh just uh practical use case I had
+[55:33] my PO and functional team uh build out a very fancy demo using Prisma and Torso
+[55:41] and >> whatever database and then storing data
+[55:44] on Versel blob storage and then my delivery team had to migrate that to use
+[55:51] SQL server and u C and Aspire for the back end and the
+[55:57] migration was really painful Even because uh when they use the agent
+[56:03] freely with no constraint uh the agent sometimes decided to use say nextjs some
+[56:09] other times decided to use vite another time it decided to use and uh putting
+[56:16] constraints in form of rules within that agent shape that down the path. But the
+[56:22] problem is that uh we need to uh write a lot of rules and make them consistent uh
+[56:30] and it is not easy to to manage all the workflow. So we are shifting a lot of
+[56:35] effort from uh having people to write code to having people to write guard
+[56:40] rails and rules and whatsoever and make all the pieces talk to each others.
+[56:46] >> I see. Yeah. Yeah. Yeah. I guess um if if the POS and PMs can't have access to
+[56:53] the actual codebase just like handing off an artifact is like the minimum
+[56:58] viable intent uh which could be like an interactive like back in the days it
+[57:03] used to be like Figma prototypes right you can click around and you get like a
+[57:06] feeling for it now you can have them even higher fidelity where you have an
+[57:10] interactive prototype using like web technology without like touching
+[57:15] anything of the backend stuff or it doesn't have to be like a working thing
+[57:19] for real if it's just a prototype internally uh but just enough to like
+[57:24] your engineers can understand like oh this is like the intended thing if I
+[57:28] click this thing that should happen um or if I like enter some text here and
+[57:33] click send a row should show up here um and I think all that can just be done um
+[57:39] in the front end kind of like a hackathon
+[57:41] >> you don't need to migrate the the prototype into something that becames
+[57:45] production really but rather uh rewrite that.
+[57:49] >> Yeah, I think so. I think rewriting um and I think like setting like clear
+[57:53] expectations from from the engineers to the PMs and POS like what engineers kind
+[57:58] of want from the product organization and like what's most helpful for them.
+[58:02] So maybe not like vibe coding complete SAS products is the most efficient
+[58:06] thing.
+[58:13] >> Isaac, thank you for that presentation. Uh my question as we're building more
+[58:16] and more agent and it become part of our time critical processes how do you see
+[58:23] the brown outs and blackouts as as a as a as a new risk and um what's your uh
+[58:30] what's your view how it can be mitigated and and the impact reduced?
+[58:35] >> Yeah, it's a great question. Um it's a really good question. I think it comes
+[58:40] down to what we talked like the humans are still accountable for the things
+[58:43] that's being shipped. Um so the humans need to build like systems and
+[58:47] observability and monitoring around the changes that's being made. Um and I
+[58:52] think that still like comes down to understanding which are like system
+[58:56] critical areas of the codebase. Making sure you have good like observability
+[59:01] and understanding of everything that goes on. Maybe like every line should be
+[59:05] humanly written in these critical things or at least like always humanly reviewed
+[59:10] by one or two people. Um, and yeah, it's it's close to vibe. It's easy to vibe
+[59:16] code close to the sun and fly too close. Um, so I think it's also like a cultural
+[59:24] thing where you have to make sure that the humans are still like accountable
+[59:27] for for the things getting shipped. Uh, but yeah, setting up good systems to
+[59:32] understand um the changes being made. I think
+[59:35] that's important and tests.
+[59:43] >> Hi Eric, thanks a lot for the talk and I'm assuming you're probably one of the
+[59:48] people around the world that has the best understanding of how to use these
+[59:51] technologies. So this question takes a step back about from the technology and
+[59:56] things about processes and how do you manage yourself in your work days and I
+[1:00:01] wonder how long are these tasks or how how long do you get to be away from your
+[1:00:08] agents without babysitting them and how do you actually invest this time uh
+[1:00:13] let's say you have five 10 15 minutes how do you make the best out of your
+[1:00:17] time and maybe how many agents do you have in parallel like mental processes
+[1:00:21] and how do you manage to yourself. Thanks.
+[1:00:23] >> Yeah, it's a great question and I think like once you like there's like two
+[1:00:28] levers to pull. Uh one is like the scope of the of the change. Like the larger
+[1:00:32] the scope is, the longer the agents are going to run and if you want them to run
+[1:00:36] for a really long time, uh you want to have like a verifiable um system so like
+[1:00:41] they can check their own work etc. Um and the other thing is like how much can
+[1:00:45] you parallelize like how many of these agents can you spawn off? Um, and I
+[1:00:50] think the sad reality in some sense is that there's going to be a lot of
+[1:00:54] context switching. Um, I probably work in four different repos or like four
+[1:00:59] different areas of the codebase at the same time. Uh, whether that is like
+[1:01:03] through a like single like feature that requires front end, backend, database,
+[1:01:09] um, testing, yada yada. uh or if that's like five completely different things.
+[1:01:15] It could be like docs. It could be like uh side projects I'm exploring. It could
+[1:01:19] be fixing a bug from a Twitter user. Um but I usually they range from like
+[1:01:27] um probably five to 10 agents five agents like asynchronously running in
+[1:01:31] the cloud at all times. And while I'm waiting for these, I'm either like
+[1:01:35] scrolling Twitter or It's true. We also have the browser and
+[1:01:41] cursor now so I can just stay in here and do it
+[1:01:45] or I have like a synchronous task going where like I'm a bit back and forth. Uh
+[1:01:50] maybe that's like fixing a small thing in the codebase or maybe that's like
+[1:01:54] planning the next thing. Maybe I'm like sourcing notion and slack and just like
+[1:01:58] creating a spec in cursor using a model. So I love to like plan synchronously and
+[1:02:03] then just execute the plans like asynchronously and then once that is
+[1:02:08] done one of my cloud agents is probably done as well. So I can come back and
+[1:02:11] like review that keep on prompting it a bit maybe merging um and some parts I
+[1:02:17] still like need to test manually like maybe I need to download a copy of Glass
+[1:02:21] or Cursor 3 um test it manually and like this looks good to me. Uh let's go ahead
+[1:02:26] and merge
+[1:02:37] you a quick question. This factory building leaves us with a scattered
+[1:02:42] ecosystem of a lot of markdown files. Is there an easy way to organize these
+[1:02:47] files and to keep an overview of the factory you have actually built? As
+[1:02:52] maintaining a factory would require you to have an overview of the processes you
+[1:02:55] want your coding agents to go through. What tools do you use? What methods do
+[1:03:00] you recommend? How do you keep a mental map of the factory you have built? And
+[1:03:03] how do you maintain it? >> Yeah, it's it's a really good question.
+[1:03:07] I think it's somewhat unsolved as well. Um, one of the reasons we rebuilt cursor
+[1:03:13] to look like this instead of like the traditional ID is the fact that we are
+[1:03:17] using more agents and we need like a better control panel where you can like
+[1:03:20] see all the agents and manage them and spawn them etc. Um, so what's going to
+[1:03:26] happen with like cursor 3? Um, this is like the first tab at like multi- aent
+[1:03:33] orchestration. Uh, what's going to happen is that these are going to be
+[1:03:36] like nested agents. So you're going to have like opening this one up and you're
+[1:03:40] going to have like 10 agents in here. Um, so you can still like introspect
+[1:03:45] them and see what's going on and following the traces. But you're
+[1:03:48] probably also going to have like somewhere here like some kind of project
+[1:03:52] view where you can see like an aggregated status update. So like here's
+[1:03:56] what everyone is working on and here's like the latest here's what you as a
+[1:04:00] human need to review. Um so I think these are product things that we're
+[1:04:05] going to build into cursor. Um, but to like set the spec for the factory, I
+[1:04:10] would probably like have a folder in your codebase. Um,
+[1:04:15] where you like outline how certain things should work. Um, maybe that's
+[1:04:19] like just markdown files of saying here are some best practices. Uh, maybe it's
+[1:04:24] probably rules. Um, and establishing some kind of council to decide on like
+[1:04:29] what goes into the factory and what doesn't and like what are we lacking to
+[1:04:33] like improve the factory. Um, so as long as it's something that the agent can
+[1:04:38] understand and read, which is files, um, that's probably what I would do and just
+[1:04:43] store them as, uh, yeah, in your codebase that's checked in somewhere.
+[1:04:49] >> Thank you. Um, I'm just thinking about like teams of the future. Uh, so, you
+[1:04:55] know, a year or two ago, it's like very reasonable to have, you know, an
+[1:04:59] engineering team that might be several hundred people, several thousand people.
+[1:05:04] um what does this do for that and uh what roles and kind of like roles in a
+[1:05:13] engineering team right this is kind of akin to almost becoming somewhere
+[1:05:18] between like a product manager and like an architect um so what roles do
+[1:05:23] engineers have >> yeah I think that I think that's very
+[1:05:25] accurate um it's hard to predict like what are the like second third fourth
+[1:05:31] order effects of of this happening And it's definitely like writing less
+[1:05:35] code, looking at less code, um, spawning more agents. Um,
+[1:05:41] it's going to be like how do you take because like we're still building
+[1:05:46] software for humans mostly. So like how do we know what other humans want? Like
+[1:05:50] how do we talk to our customers? How do we market what we're building? How do we
+[1:05:54] do all these things and bring them into the actual like factory? Um, who sets
+[1:05:59] the direction? What's the intent? Um all these things are coming from somewhere.
+[1:06:03] Either it's like creativity from someone else's head or it's actually like a user
+[1:06:07] demand. Um so
+[1:06:11] having someone like doing that is going to be very important. Having someone
+[1:06:16] like like aligning that between the different humans in the org I think is
+[1:06:20] going to be important. um having people building uh the scaffolding for the
+[1:06:25] other agents and like uh just building the assembly lines where the agents can
+[1:06:31] actually run. I think that's also going to be uh important but like to what
+[1:06:35] magnitude and how many people it's going to be like in yeah I don't know it's
+[1:06:40] really hard um you can do a lot with the models right now with a very like small
+[1:06:46] team if you have the right setups in place and like yeah depending on the
+[1:06:51] domain you're working in. I don't know do you have any predictions?
+[1:06:58] I I I I see issues with kind of like uh from like a labor perspective. Um if
+[1:07:06] you're if you're working in an incredibly agentic environment, what's
+[1:07:10] your need to like like what happens to training new grads, hiring new grads? Um
+[1:07:16] and kind of like the the future from that perspective, what happens with
+[1:07:20] office politics and like land grabbing, right? Because
+[1:07:24] >> basically your your value now becomes in your ability to configure and set up
+[1:07:31] your own kind of like agentic team, not in your ability to kind of like program
+[1:07:37] and be productive anymore. >> The 10x engineer is no longer about, you
+[1:07:42] know, words per minute. It's like prompting.
+[1:07:46] >> Yeah. >> Yeah. Tok to token usage.
+[1:07:51] >> Yeah. Am I Am I paid in tokens? Am I am I
+[1:07:54] >> yeah leaderboard you know >> um
+[1:07:57] >> gota be token maxing >> am I paid an amount and then like my
+[1:08:00] token usage takes away from that >> you know how do you how do you optimize
+[1:08:05] you know for >> we got to train the models to be more
+[1:08:07] political I think that's the solution right
+[1:08:09] >> we need more like water cooler talk >> I guess we're gonna get more of that if
+[1:08:14] the agents are doing our work >> hi Eric hey
+[1:08:19] >> for your talk >> um I was wondering Um probably uh you
+[1:08:24] are using uh at cursor uh some kind of uh uh issue tracking uh tools like
+[1:08:33] Atlassian or Gyra Jira. Okay. Um, are you using uh I was wondering if you
+[1:08:42] are using uh um um agents to check automatically check
+[1:08:50] uh and uh um read tasks directly from uh uh Jara for example and spawn um sub
+[1:09:00] agents to perform the work or if there is always a human that uh um
+[1:09:10] start to work using cursor. >> Uh so we're using linear for issue
+[1:09:15] management and uh we have this first party integration as well. So for every
+[1:09:19] ticket that's getting created in linear we spawn in the cloud agent. Um, so like
+[1:09:25] one where I interface with this the most is like if we have a feature flag for a
+[1:09:30] specific thing that's rolled out and if it's rolled out for two weeks with 100%.
+[1:09:35] Um, the system kind of like signals us like hey uh you can it's a stale feature
+[1:09:39] flag at this time you can remove it. So then we have this to create an automatic
+[1:09:44] issue in linear and since that is hooked up with cursor it triggers a cloud agent
+[1:09:49] to remove uh the feature flag. So it's kind of like completely automatic once
+[1:09:55] the system knows that it's rolled out to everyone and I can just like I can
+[1:09:58] probably look at the code and say like okay we can merge this the feature is no
+[1:10:02] longer active. Um and we do this for like everything. So once you post
+[1:10:06] something in Slack, uh we either have a linear Slack a Slack agent look at it or
+[1:10:12] we have a cursor automation to like um look at the message that was posted and
+[1:10:18] uh triage it and like look for duplicates or like if it's determined to
+[1:10:23] be easy like start to implement a fix for it immediately. Um and this is like
+[1:10:27] an example of where a human is like in the loop where it might not have to be.
+[1:10:32] It could be like me going on Twitter and like seeing a tweet like something is
+[1:10:36] broken with um the plan mode uh button dropdown. I can copy that into Slack and
+[1:10:43] then having the agent uh perform the work. But there's probably a way where
+[1:10:48] we can just source this feedback immediately without me having to like
+[1:10:52] scan it and triage it and copy paste it. Um so that's kind of like a bit how we
+[1:10:57] work with uh linear and issue management. Um,
+[1:11:02] but yeah, we we're also like, yeah, since we're spawning a cloud aent for
+[1:11:06] every single thing, it provides a good way for us to dog food the product and
+[1:11:09] like test it out. But I'm not sure if I would recommend that for for everyone
+[1:11:12] because it it can be quite costly.
+[1:11:27] as cloud agents are a little expensive. Uh do you have something in road map run
+[1:11:34] something locally like I'm just thinking of an alternative called dev containers
+[1:11:38] and opening in that but do you have something planned in the road map for
+[1:11:42] that? Um, what I think the closest thing you can
+[1:11:48] do is probably just prompt Aiden to run for a really long time. Um, it's kind of
+[1:11:52] like the same thing with like running local models. Um, and the reason like
+[1:11:58] for I've tried it like I probably tried it like once a month running like the
+[1:12:01] best open source local model and like seeing how it works in cursor, but it's
+[1:12:05] never the same experience as ling like um, GPT or claude or composer. Um, and
+[1:12:12] the same thing with like running really long things locally.
+[1:12:16] I found it to not work that well as if it's running for a long time, it's
+[1:12:20] probably going to use your your local database, your other local stuff. Um,
+[1:12:25] and it's going to prevent you from doing other work locally unless you like
+[1:12:29] create a VM on your own machine. Um, um, and and if you do, you could
+[1:12:35] probably Wait, never mind. Just re ignore
+[1:12:40] everything I said. We launched cursor workers. So cursor worker is um
+[1:12:47] we launched it like yesterday. Uh it's way for you to run the same uh
+[1:12:52] infrastructure uh and orchestration layer as we do for cloud engines but on
+[1:12:56] any machine you might have. Um so you can do like not right now uh we can do
+[1:13:03] cdvoom.
+[1:13:08] Yeah. So you can do agent. So we have the agent CLI and there's now a worker
+[1:13:13] and you can call worker start. Uh so from here we have a worker running. Um
+[1:13:20] and this worker is going to show up in here. Let's see. So we can do
+[1:13:26] self-hosted. Let's see here.
+[1:13:34] Oh, I don't think it's hurt up yet. It's a different uh account I'm running it
+[1:13:39] on, but event essentially you can run this on any kind of machine and you can
+[1:13:44] get access to this um from like cursor cloud. So you can spawn multiple of
+[1:13:50] these on your own machine or you can run like a Mac mini or you can have a VM um
+[1:13:55] in any like cloud platform provider. >> Right. Um just to follow up on that. So
+[1:14:03] you you you are saying that we can have isolated environments in the local
+[1:14:08] itself using this command. >> Yeah. So it's
+[1:14:12] >> call the open still call the frontier models or composer models.
+[1:14:17] >> Yes. Exactly. So this is going to like leverage the cursor harness um but it's
+[1:14:22] going to run on wherever you're spawning this uh demon.
+[1:14:26] >> Yeah. That's interesting. Thank you. >> So I like I built this like cursor claw
+[1:14:30] thing. uh where I have one running on my Mac Mini and that has access to iMessage
+[1:14:35] and calendar and all these kind of other things and um yesterday we launched
+[1:14:40] automations as well. So I can get like um like a daily report or weekly report
+[1:14:45] of everything that's going on in my machine uh that I might like want to
+[1:14:49] know on a specific cadence. And since it's running like the agent demon,
+[1:14:56] you will get access to this in like Slack and the web and the mobile app
+[1:15:01] that's coming um at some point not too far out
+[1:15:06] [laughter]
+[1:15:10] >> sorry what >> for iPads a lot a lot of time people
+[1:15:14] wanted to >> it's going to use Swift UI so it's
+[1:15:19] probably going to be compatible with uh iPad as well.
+[1:15:30] >> I think that two versions of iOS and iPad OS are two different things
+[1:15:34] actually.
+[1:15:49] >> Got it. Yeah. Nice. Yeah. >> I just want to ask quite a simple
+[1:15:54] question like when you have obviously more than one developer in your where
+[1:15:59] you're working in your company and you're spawning hundred and hundred of
+[1:16:03] agents to do a lot of different kind of work. How do you ensure you don't step
+[1:16:07] on each other toes doing the same kind of work ties and even how like you're
+[1:16:13] running internally? Do you still do you use do you use a scrum or still agile
+[1:16:18] ways of working? You know, even that has already kind of gone out of the window
+[1:16:21] already. >> Um
+[1:16:24] yeah, what are we doing? We're not really following any like traditional
+[1:16:28] methodologies in that sense. Uh we do have like monthly goals and of things we
+[1:16:33] want to get shipped. Uh but I think since everyone has so much like power at
+[1:16:39] their fingertips with agents uh this like causes people to have like extreme
+[1:16:43] ownership over certain things. Um so for the longest time there's like one guy
+[1:16:47] building like MCP and rules and like all kind of accessibility uh by himself. Um
+[1:16:53] and now we have like maybe one person focusing on MCP uh but they can own
+[1:16:58] everything around MCP and they don't really really need to interact that much
+[1:17:02] with other teams. Um but at some point that's going to break too. Um and like
+[1:17:07] so far in the like history of cursor we have like found ways to like go in
+[1:17:11] around this. The like the agentic code owner thing was probably one place where
+[1:17:15] we stepped on each other toes where the code owners were like misconfigured so
+[1:17:18] we could just like instead of having a deterministic thing can we just pull in
+[1:17:22] the relevant people at relevant time. Um so like something like that is probably
+[1:17:27] going to happen with other like problems that we're going to surface in the
+[1:17:31] future. >> Thank you.
+[1:17:34] One question about the selfages. So do we get all the goodies that we get with
+[1:17:42] these video walls? >> I think computer use is the one thing
+[1:17:48] that's like still in uh early access. I think I think we haven't shipped the GA
+[1:17:53] yet, but it's coming for sure. So this should be like completely on par with
+[1:17:57] the cloud.
+[1:18:01] Yeah. >> Can you describe the profile of these?
+[1:18:04] >> They describe the profile of these kind of like mix between product managers and
+[1:18:09] engineers that that take this this ownership.
+[1:18:13] >> Yeah. Uh so I guess the archetypes we have it's like a PM um they talk a lot
+[1:18:20] internally in at cursor like they talk with go to market with sales um they
+[1:18:26] talk with engineers they talk with users they just product manage and product
+[1:18:31] manage and just keep everything together in a way and also like shield like
+[1:18:35] engineers uh from various things. Um and then we have designers. Um designers
+[1:18:42] work I would say like 50/50 in Figma and code at this point. Like all of them do
+[1:18:47] code. Uh all of them like do push to production. Um but it's a lot of like
+[1:18:52] exploratory work like what should like what does it look like when you have
+[1:18:56] like 10 nested sub agents. Um and you can't really feel that in Figma like you
+[1:19:02] got to actually like develop and prototype that. Um and they work um they
+[1:19:08] work with PMs and then we have engineers of course um but I think cursor is very
+[1:19:14] fortunate to build like an developer product. So developers are building
+[1:19:19] developer product and it's kind of like they have good taste. They know what
+[1:19:23] good and bad look like. They know like what developers want and don't want. Um
+[1:19:29] and I think because of that they can take such like ownership and they can
+[1:19:34] like go with the concept and go really really far. Uh whereas so like the PM
+[1:19:38] might be setting more of the business and uh like the overall overarching like
+[1:19:43] direction and then the engineers and designers like collaborate on like what
+[1:19:46] does this actually look like in code but also like how should it feel and how
+[1:19:50] should it look um for a developer. >> Makes sense. uh are there like analysts
+[1:19:56] in this mix as well or is that done by the product managers? Oh yeah that's a
+[1:20:01] good yeah so we have a data data team as well uh data scientists and analysts and
+[1:20:05] they are also working closely with um PMs of course and like understanding
+[1:20:10] like how users are using the product where the bottlenecks are uh but also
+[1:20:14] like with engineers and like instrumenting the code in the right way
+[1:20:17] and like understanding feature flags and why certain users hit certain path and
+[1:20:22] some don't um so everyone is like just working together um and we have like I
+[1:20:29] think the way we've structure team is like pretty much um domain like
+[1:20:33] extensibility might be one team, cloud might might be one team um and cloud
+[1:20:38] should still be extensible. So then they have to also work together
+[1:20:42] um but we try to like keep it like um modularized and not to ship our
+[1:20:47] organization that much. >> Thanks.
+[1:20:51] >> Cool. I guess one final question if there's one.
+[1:21:00] So um from time to time I messed up and started a cloud agent in a wrong repo or
+[1:21:05] something where just like went out on a tangent came back to an hour later where
+[1:21:10] was separate desperately trying to get access to that repo. Um are there any
+[1:21:15] way to catch these agents that just don't provide any value? They just
+[1:21:20] continue doing stuff but they're not really making progress.
+[1:21:26] >> Yeah, I think that's that's on us for sure. Um over the last year we have made
+[1:21:32] a lot of improvements to the cloud agents where initially they were like
+[1:21:36] when they were like worked they were extremely useful but most of the time
+[1:21:39] they weren't. Um so like again cloud agents also come from this like internal
+[1:21:44] need of us just wanting to like run things asynchronously.
+[1:21:48] Um and because of that we have also like put a lot a lot of effort into making
+[1:21:53] our own codebase work really well in cloud aents. So maybe some like We like
+[1:21:59] have to sometimes like create new projects and jump into other products
+[1:22:03] and talk to our customers to understand like where these things fall short and
+[1:22:08] we try to have like instrumentation of like does the agent run for x amount of
+[1:22:13] hours or minutes and like does it touch any files at all or like is it going in
+[1:22:17] circles and loop detection and these kind of things. Um and this is like part
+[1:22:21] of the observability I was talking about before. Um most of that should happen on
+[1:22:26] our side. Uh but there are always going to be like very specific uh contextual
+[1:22:30] things where um like if you are the uh the codebase owner need to like set up
+[1:22:36] certain things. Um but yeah we're we're working on that improving it and if you
+[1:22:41] have any examples like please come to me and I'll try to take a look. I think the
+[1:22:46] worst was when I started it on a one repo and it just like
+[1:22:51] >> called out to Slack MCP and tried to get access in 10 different ways and it
+[1:22:57] failed. >> Yeah. Yeah.
+[1:22:59] >> Yeah. We could make that better. >> Good that you're working on
+[1:23:06] >> All right. Thanks everyone for coming. UM, [applause]
+[1:23:14] I'll be around for the next two days as well. So, please grab me if you want to
+[1:23:17] discuss anything cursor or anything at all actually.

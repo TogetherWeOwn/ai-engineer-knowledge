@@ -1,0 +1,225 @@
+# title: Two Bugs That Hid in Plain Sight: A vLLM Debugging Detective Story — Asaf Gardin & Yuval Belfer
+# source: https://www.youtube.com/watch?v=btxG75rNJC4
+# speaker: Asaf Gardin & Yuval Belfer
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T04:57:33Z
+# sha256: 8e46ec6535b5dc0c9d17de0faf7ba5c84cbc2a38a70cc177046a4644db721903
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:15] So, put your model somewhere.
+[00:21] Put your agent. You're hoping for the best. You're waiting for something to
+[00:25] crash. Everything looks good. Everything's fine.
+[00:30] and you see this and that's the problem right in these
+[00:35] type of bugs there is no crash there's no warning no error and there's high
+[00:42] confidence that's not a quality issue because uh right this is something that
+[00:49] you don't really know what and how and why
+[00:53] um welcome to this talk my name is Ival this is aaf and together We're going to
+[00:59] take you on a journey of how we ended up fixing those type of bugs. A little bit
+[01:05] about us. We work at AI21, which is an AI research lab. We started as a
+[01:11] foundation model company, most famously known for Jamba, which is a hybrid
+[01:17] architecture between transformers and mamba, which is an SSM state. And while
+[01:24] we were doing those, while we were training those models, while we were
+[01:27] shipping those models into production and had users and we had a lot of
+[01:31] workload, we got into several interesting bugs. And these are the bugs
+[01:39] that I think are the hardest to deal with because this is not a quality
+[01:42] problem. It's not something you can take your research team and try to optimize
+[01:48] or solve or make the model be better at something. This is an engineering
+[01:54] problem. This is an issue where that there is high confidence but the output
+[02:00] is bad. So let's break let's dive deep to the
+[02:06] first case what we call the imposter request where just to set up the scene
+[02:11] what are we talking about we are talking about how we during the training of our
+[02:16] jamba model more specifically we did gpo which is a type of RL training and again
+[02:22] this is a hybrid model layers of mamba and attention
+[02:28] and just to make sure we're all aligned what is the type of a request
+[02:31] So life lives life of a request. So we start with the prompt token tokenization
+[02:38] and then in the forward pass we're doing both prefill and then decode. After that
+[02:45] we finish the forward pass detoenization to go back to text.
+[02:51] And the thing about the crime here is that it's bad on so many levels but
+[02:57] mainly on these three. This is what we call the one in thousand gibberish. It's
+[03:02] not something that will happen in the first 500 or 900 requests, but it will
+[03:07] happen in the 10,00 which is rare enough to duplicate it easily but not right.
+[03:15] It's too common to ship it. Sorry. H also it only happened in VLM
+[03:22] not in other not in any other infra framework and it's something which is
+[03:27] laid on set. It's not something that will happen if you have only few
+[03:31] requests. You need some sort of workload. So it's rare. It's light on
+[03:36] set and it's very engine specific. It's a very very hard task and we had to
+[03:41] bring one of our best detectives to handle that. So I'll give it to SF to
+[03:46] explain how. >> All right. Hey guys, thank you. Uh
+[03:49] thanks you. So we're going to start with um trying to reproduce something that
+[03:53] was very difficult to reproduce. Um and basically um VLM has got a lot of um a
+[03:59] lot of flags, a lot of the CLI flags and a lot of knobs you guys can turn and
+[04:03] tweak. Um and one of the things that helped us understand how to even
+[04:07] reproduce it because when we try to reproduce it on the first time just
+[04:10] sending prompts here, prompts there a few batches um it didn't really help us
+[04:14] manage to get gibberish back from our model. The model responded back just
+[04:19] fine. So what we did was is we tried to make it happen in a very very short um
+[04:24] amount of time. So we'll get a a quick feedback loop when we try to deb debug
+[04:29] it. So what we did was is we took one of the one of the um most default and most
+[04:34] common um um flag that the VLM allows you to play with which is GPU memory
+[04:38] utilization which basically allows you to to choose how much memory how much
+[04:42] GPU memory you want to allocate for your for your weight for your activations and
+[04:46] for your KV cache and so on. and we reduced it from 90% to 20%. And once we
+[04:52] did that and then we started uh running a lot of requests uh simultaneously
+[04:58] um all of a sudden request number let's say 8 854
+[05:03] suddenly returned gibberish and when we did that we uh we sampled all of the
+[05:08] batches with temperature zero. So we'll be able to deterministically and
+[05:12] constantly get the same request to get to return to return and respond with
+[05:16] gibberish. Um so um like Ival said it happened only
+[05:20] in VLM and um we used um in order to uh another way to reproduce it and to
+[05:25] understand where the issue really came from. We used um uh hugging faces
+[05:30] transformers as a baseline since transformers is a very had a very um
+[05:35] vanilla and uh plain implementation of our mamba kernels as opposed to VLM
+[05:40] which uh all the kernels and all the engine have gone through a lot of
+[05:43] changes and modifications to support a lot of um cool features that VLM
+[05:47] supports. So we use transformers as our baseline to understand whether or not
+[05:51] there is an issue with our um with our inference or not with the model or not.
+[05:55] So what we did was we took VLM and we sent uh all of our prompts through VLM
+[06:00] and we generated a response all the responses we got and now in our hands we
+[06:04] have the response along with the log props because because in VLM you're you
+[06:08] able to get your log props out and inspect them. Then what we did was we
+[06:12] took the full sequence the prompt and the generation and we uh uh passed it
+[06:17] over to to hugging faces forward pass but all we did was run just the prefill
+[06:23] um and then we uh uh samp we took this the logit out of the prefill um um
+[06:28] response we ran it through softmax and then we were able to u to compare the
+[06:33] divergence uh in the distributions of our tokens.
+[06:38] Um that's a short uh pseudo code of how that look like. You can see here that we
+[06:42] uh take up the prompt. We we run it through gen uh BLM's generate. We get
+[06:47] the uh the response back along with the uh with the log props. We pass it over
+[06:51] to to hugging faces forward pass. We only run it with prefill. Um we've
+[06:56] created some function called compute log log props which um runs this is the
+[07:00] softmax. Um then you calculate the difference between them and then you'll
+[07:04] be able to tell the divergence between every one of the tokens log props. All
+[07:09] right. So now that we have the tools in our hand to understand where the issue
+[07:14] could maybe come from um we started to look at different suspects in VLM's
+[07:18] engine. So the first thing we looked at was um the CUDA prefill kernel of Mamba.
+[07:24] Um we looked at it we inspected all of the all the math that's being done here
+[07:29] that's being done there. Um, and we looked at the tensor in, and the
+[07:32] tensor's out before before we called the prefill and after. Everything looks just
+[07:38] fine. Second thing we did was running Nvidia's compute sanitizer tool to
+[07:42] really see if we have any out of bound memory. Um, any other memory uh bugs or
+[07:48] issues. Looked okay to me. Um, then what we did
+[07:53] was we tried to isolate between the decode kernels and the pre-filled
+[07:55] kernels. Now, we saw that the pre-filled kernels were working just fine. So we
+[07:59] tried to not call the decode kernels because in Mamba you're able to do that.
+[08:03] Um so what we did was um we moved all of our calls and all of our computations to
+[08:09] go through the pre through the pre-fill kernel and there you have it. The
+[08:12] gibbish all of a sudden kind of vanished. So we were like okay it's got
+[08:17] to be the decode kernels. But you know how it is in software you get excited
+[08:21] too quickly and then you figure out it's not what happened. So what we did was uh
+[08:27] we tried to start playing with the with VLM's engine and we kind of needed to go
+[08:32] and you know lift the hood up and see what we can do to maybe get a bit better
+[08:36] understanding and maybe you know get our hands dirty because BLM didn't really
+[08:40] give us more um tools to really um debug our kernel and our and our forward pass.
+[08:45] So once so once uh once a tensor once the request gets all the way to your
+[08:50] forward pass and before it goes into your prefill and decode kernels you
+[08:54] don't really have any identity. You can't really tell what prompt uh is
+[08:57] currently being processed. It's all just tensors and and numbers and matrices. So
+[09:03] what we did was is we added to the request ID to some class called forward
+[09:08] context that uh that we propagated all the way down to uh to Mamba's forward
+[09:13] pass just before the the prefill and the decode kernels were called. And there we
+[09:17] just managed to uh you know have a simple uh if condition with a request
+[09:22] ID, the one that gave us gibberish and put a break point there and then we were
+[09:26] able to to to infer and to really um inspect all the metadata that comes
+[09:31] along with it. And the second we did that, we saw that the request was um for
+[09:37] the first time when it went through the uh through the forward pass, it's
+[09:41] actually doing decode before prefill. the scheduler um decided that it's um
+[09:46] that that this request should be doing decode before prefill and as Uval said
+[09:52] earlier in our in the life cycle of a prompt a prompt should first be uh going
+[09:57] through prefill and then decode and what happens was is that when when in Mamba
+[10:04] um you run a request first uh with a with decode first after a long a lot of
+[10:09] other requests were already computed the state was already kind of um overused
+[10:15] and we were using uh the data and the computations of stale requests, requests
+[10:20] that came before it. So now we were actually running decode on on previous
+[10:25] requests and that kind of generated gibberish for us. So the kernels weren't
+[10:30] doing the wrong thing, they were called at the wrong time for the wrong
+[10:33] requests. And now and why did it matter only for Mamba? The reason is was is
+[10:39] that in uh in attention uh when you write the tokens KV you write it you
+[10:44] write the tokens cavies before you actually you read it. So even if you
+[10:47] have stale data it's being overwritten but for mamba as uh as I said when uh
+[10:53] when you first go through the decode kernels you first read the state and
+[10:56] then you compute over it. So what happens was is you just use over you use
+[11:01] stale data um um when you do the when you do a decode and the fix was
+[11:06] relatively simple. Well, we just needed to make sure that what we do is that
+[11:10] when a request first when the when theuler first classifies a request, it's
+[11:15] got to it's got to make sure that um that um that it sets that that if a that
+[11:20] if that if you sees a request that's whose tokens were never been computed.
+[11:23] Um we and and they're zero to mark them as to mark them as uh as prefill as as
+[11:30] prefill. So the so when they get to the forward pass, they'll actually just be
+[11:34] um uh used for prefill and not decode and not u and not chunked. You can see
+[11:39] that it was merged after some time. Um and that really leads us to and then we
+[11:44] thought everything was fixed, right? We thought everything was fixed and there
+[11:47] you have it. No more issues. But that but that was almost the case because
+[11:51] after a little bit of time it gets us to case number two which um surfaced
+[11:56] another issue that we've faced in our in our RL and our inference. Um so we ran
+[12:02] RL and and when while we were running um our our trainings our post trainings um
+[12:08] and we looked at our evaluations and all of our benchmarks we saw that we had
+[12:11] some log prop spikes between the rollout and the FSTP step. Uh so and that was
+[12:16] before any weight app update. So some weights uh same inputs and the two log
+[12:21] props should be identical. Now they weren't. Um we saw that every 12 step
+[12:27] cons constantly um there was a log prop spike and that
+[12:32] was kind of weird. Now what would you guys do right? What can what what's the
+[12:37] what's the first thing to do here? So we wanted to find some lever that changes
+[12:42] how things fail and not just how much they fail. We want to see how much um we
+[12:46] want to tweak some knobs that that don't just tell us, hey, this error um this
+[12:52] error is very very bad. This error happens uh this many times or or
+[12:56] [clears throat] and so and so on. We wanted to tweak some knobs that kind of
+[13:00] tell us that once we tweak that knob, um we understand how it's wired to uh
+[13:06] anything in the in in VLM's engine. And so we'll be able to specifically go and
+[13:10] and debug that specific part. Um that's some uh some some cool meme that you all
+[13:16] wanted to put in. Um so what we did was is we decided to um
+[13:22] to increase the the the amount of rollouts per prompt. Uh since we saw uh
+[13:27] in our default RL engine we have um eight rollouts per prompt and we saw
+[13:32] that it happened con deterministically every 12 steps. We decided okay let's
+[13:36] try to tweak it up a bit and uh and increase the amount of rollouts per
+[13:39] prompt. So we started doubling it from say eight to 16 to 64 32 and 128. And
+[13:46] you can see here that it's almost um almost um there's a pattern here that
+[13:51] that the more we increased it the closer um it happened because what we wanted to
+[13:55] achieve here we wanted to try to reproduce the issue as fast as possible
+[13:59] so we'd have a faster debug uh debug loop feedback loop. So when we when we
+[14:04] when we ran it on 128 rollouts per prompt, it happened immediately on step
+[14:09] one and we didn't have to wait for step 12 and step 24 and so on. Now you might
+[14:14] think, okay, so you guys played with the with the GPU memory utilization before
+[14:18] you you tweaked it, you decreased it. It looks like, you know, when you test on
+[14:22] pressure, um, it really surface things up. So So we we thought that as well.
+[14:27] And when we reduced the GPU memory from zero from 0.9 to 0.2, two, it actually
+[14:33] caused the issue to go away. So, we actually pulled the wrong lever here.
+[14:37] Um, and the reason is is because we noticed that Mamba kernels um used um in
+[14:44] 32 unsigned in 32 index pattern uh pointer. So, once the offset went past
+[14:49] some you know 4 billion um uh numbers, it wrapped around instead of throwing an
+[14:55] error. Um so uh when we shrank the GPU memory, VLM allocated a small state
+[15:00] buffer and um and the cache index never got large to hit that slot. So we were
+[15:04] so we were just not reaching um far enough for the buffer to trigger an
+[15:08] overflow. So again the fix was rather simple. All we needed to do was just
+[15:15] change one word, one one data type variable um from u in32 to size t which
+[15:22] basically means for most modern architectures hardware architectures
+[15:27] size t would mean to uh it would be now changed to unsigned 64 uh bit and that's
+[15:32] a very large number. We didn't we never reached that number and that overflow
+[15:37] now never happened. So what we can see here is that we had
+[15:42] um two scenes and one criminal. Um both kind of you know they had similar
+[15:48] symptoms. Both had silent gibberish and and silent log prop spikes which also
+[15:52] kind of pro sometimes generated gibberish. They were both around the
+[15:56] mamba state cache. Um they were both surfaced by memory pressure whether it
+[16:01] was for worse or for the best and uh both found via log props um forensics.
+[16:08] um stateful inference inference systems don't fail loudly they lie to you
+[16:12] confidently I mean obviously sometimes you get crash you get out of bounds
+[16:16] errors you get other you know exceptions and so on but sometimes there are some
+[16:21] errors that don't surface up and you don't get a trace log you don't get
+[16:25] anything you have to go and dig and understand why things happen um so if
+[16:30] there some takeaways to take from this um presentation is build a log props
+[16:35] comparison script if you need to compare your quality you need to compare it to
+[16:39] understand whether you modelize the issues or not. Um log props comparison
+[16:43] script with a baseline of some other inference framework that you have or
+[16:47] built is always great. Um reproducing underression constrain memory. Uh crank
+[16:52] the scale up, play with other knobs that the inference framework gives you and
+[16:56] really try to understand where the issue comes from. Uh look for what moves um
+[17:01] the failure shape, the timing, the space and the location. And when things don't
+[17:06] really have identity uh thread identity through and what it also I want you to
+[17:11] take from this and don't be afraid to even you know for complex uh systems
+[17:15] like VLM or any other um complex framework don't be afraid to go dig in
+[17:21] the code get your hands dirty um sometimes you know model languages LLMs
+[17:27] are um they might tell you how things work but you know without you seeing it
+[17:31] in your own eyes getting your hands dirty you won't get full understanding
+[17:33] of what's going on. Um, thank you. You guys can add us on LinkedIn. Scan the QR
+[17:39] code to read the actual blog that we've published with this finding. Um, yeah,
+[17:44] that's it. [applause]

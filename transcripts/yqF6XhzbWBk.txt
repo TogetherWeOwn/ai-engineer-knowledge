@@ -1,0 +1,301 @@
+# title: Inside 847 Production Clinical AI Notes — Sebastian Fox, Composo
+# source: https://www.youtube.com/watch?v=yqF6XhzbWBk
+# speaker: Sebastian Fox, Composo
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T05:52:55Z
+# sha256: 619e01694598b2ddc4a0722234f447d444b412709eabfd591dcff1406a940483
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:01] [music]
+[00:12] >> This is a clinical note an AI wrote from a real consultation.
+[00:17] Take a few seconds and read it. It reads like a routine headache.
+[00:21] A new headache, likely tension type, take some paracetamol, come back if it
+[00:25] doesn't settle. Looks completely fine, doesn't it?
+[00:30] Here's what's missing. In the room, she also mentioned her jaw
+[00:35] aches when she chews. A new headache, over 50 with jaw pain on chewing,
+[00:40] that's giant cell arthritis. And untreated it can take her sight
+[00:43] within days. It's a same day start steroids now emergency.
+[00:48] And that one line, it never made it into the note.
+[00:50] On the page it's paracetamol headache. And nothing in the note is technically
+[00:54] wrong. It's the dangerous part is what isn't
+[00:58] there. And so that's what I'm going to talk
+[01:00] about today. The dangerous failures are often the
+[01:03] ones that actually look completely fine. Firstly,
+[01:08] who am I? I'm Seb, medical doctor by background, and now I'm Composo, where
+[01:13] we build AI evaluation systems for high-stakes domains.
+[01:19] So, that one was a subtle kind of error, but sometimes it's not subtle at all.
+[01:25] A man in his 20s sees his GP for a sore throat, tonsillitis.
+[01:29] The AI writes that up. It gets him chest pain, suspected angina, diabetes
+[01:34] medications he's never taken, and an address for a hospital that doesn't
+[01:37] exist. And I I really like the LLM for this
+[01:41] one. I think it's it's a good attempt at a hospital name. Um
+[01:45] and weeks later he's invited to diabetic eye screening for diabetes he doesn't
+[01:48] have. That's genuinely a real case that
+[01:51] happened recently. Obviously, these kind of crazy ones
+[01:55] someone notices, but it's those quiet ones that sit in the record uncalled
+[02:01] that are the most challenging and can actually do a lot more damage.
+[02:06] And they're not rare at all. In the largest real-world study of these notes,
+[02:11] about 1 in 20 carried an error that was serious enough that it could cause
+[02:15] significant harm to the patient. 1 in 20, that's not theoretical in
+[02:19] testing, that's in production on real patients.
+[02:23] And that's only the serious the ones. If you widen that lens to all errors,
+[02:27] nearly 1 in 5 had an important omission and more than 1 in 10 had a
+[02:31] hallucination. And AI is being deployed at scale across
+[02:36] healthcare fast. Ambient Scribes are one of the leading cases, already in about a
+[02:41] third of US practices and climbing. Physician AI use doubled last year and
+[02:46] none of this is tracked. So, for most of these systems, there's
+[02:49] no adverse event reporting at all. The errors never show up as incidents, they
+[02:54] just sit in the record. So,
+[02:57] errors this common that are going unseen is is quite hard for me to believe that
+[03:01] it's not already affecting patients. It's not that we checked and it's fine,
+[03:05] it's that we're flying blind. And
+[03:10] this isn't just a healthcare problem, it's every high-stakes use of AI.
+[03:14] Healthcare shows it more viscerally because here being confidently wrong
+[03:18] can be life and death. But, everything I show you can map
+[03:21] straight back onto other domains as well.
+[03:25] So, here's what I want to do. I'm going to show you what exactly is going wrong,
+[03:29] why it's going wrong, why the systems we built to catch it
+[03:32] don't work, and a suggestion at how maybe we can start
+[03:37] to fix that. So, first, what's going wrong and why?
+[03:41] So, LLMs are getting good, obviously. They
+[03:44] don't make stupid mistakes anymore most of the time. So, it's not about dumb
+[03:47] errors. Everything here came out of three of the
+[03:50] best production Ambient scribes on the market.
+[03:54] Ones that we all know. We generated a load of notes across them
+[03:57] last week. And this is exactly what's going on right now. This is every
+[04:02] failure we found. Each dot is an error colored by type.
+[04:06] Left to right, how much it matters. Bottom to top, whether a strong
+[04:09] automated check catches it. And that split is the point.
+[04:14] A handful up top get caught. But almost everything sits below the line. The ones
+[04:19] I care about most are these on the bottom right. The high stakes and missed
+[04:24] ones. Let me show you what a couple of those
+[04:27] looks like. So, a woman comes in with a headache.
+[04:33] Doctor asks, "Did it come on suddenly or build up
+[04:36] gradually?" She says she doesn't know. It just
+[04:38] happened. The note records that as abrupt sudden onset.
+[04:42] And sudden onset is a red flag. You can see why it just happened could maybe be
+[04:48] interpreted and inferred as abrupt onset.
+[04:50] But, that's a feature that points to a bleed on the brain. She never said it.
+[04:54] The model decided it. And now that one word drives the whole workup.
+[05:00] Here's another. Doctor suggests running some tests.
+[05:03] Patient says, "Can we just try try antibiotics instead?"
+[05:07] They agree, hold off on the tests, treat, and see how it goes.
+[05:11] Note records the opposite. Arrange tests today.
+[05:15] It kept the plan that they talked out of, not the one they chose. Every line
+[05:19] in the note reads fine because it's not really a hallucination at all. It's not
+[05:24] wrong. It was there in the original, but it's just not what they ended up
+[05:27] deciding. So, why are these happening?
+[05:33] There's, you know, in ambient scribes, there's first transcription and then
+[05:37] generation. A lot of it
+[05:39] does happen on the transcription layer. It can be words misheard for their
+[05:44] sound-alikes. So, Humalog heard Humulin. Two insulins on completely different
+[05:50] timelines, so swapping them could crash a blood sugar.
+[05:53] Hyperthyroidism becomes hypothyroidism, the opposite condition.
+[05:57] Or a drop to no on uh no evidence of cancer that becomes
+[06:03] evidence of cancer. So, these these are really hard
+[06:05] problems, and they are common. Not the ones I'm going to focus on,
+[06:09] because most of what goes wrong is actually even
+[06:12] with a perfect transcript. It's the model reading the words
+[06:16] correctly and still doing one of three things.
+[06:19] Either it adds something that was never said, it changes something that was, or
+[06:24] it omits something that should be there. Now, the blatant version of each of
+[06:30] these is is really easy to catch. The hard part in all three
+[06:34] is the same. It's telling whether that
+[06:38] thing that was added or changed or dropped actually matters.
+[06:41] It's detecting that slight over inference versus the dangerous
+[06:45] fabrication. The harmless rephrase versus the meaningful edit.
+[06:49] A dropped line of small talk versus a dropped allergy.
+[06:53] So, the ones that matter slip through along with all of the ones that don't.
+[06:59] That call which different matters is taste, effectively.
+[07:05] Not aesthetic taste, but essentially judgment. It's It's whether in this
+[07:10] context a missed allergy might kill someone or is not important.
+[07:15] And I think there's there's three properties that really matter about
+[07:17] this. It's tacit, so your domain experts have
+[07:21] it, but they can't fully write it down. It's contextual, so the same detail is
+[07:25] critical in one note, noise in the next. And it's moving. The model changes,
+[07:30] guidelines change, two good doctors disagree, different hospitals have
+[07:34] different definitions. So, there's no fixed target to write down.
+[07:39] And so, the model knows the facts, ultimately. they're extraordinarily
+[07:43] capable but what they lack is a sense of what matters
+[07:47] here for this specific example and that's why even brilliant models make
+[07:51] these mistakes. So
+[07:54] one natural move you're never going to make that generator perfect and
+[07:58] generator is cheap generation is cheap so stop fixing it at the source.
+[08:02] Let it write put a checker after it pass only what clears the bar.
+[08:06] And that checker should be the easier job the generator has to get everything
+[08:10] right and it pay attention to lots of varying instructions.
+[08:15] Whereas the checker only has to find the one thing that's wrong and just focus on
+[08:18] that task. You can also give it more time more tokens the exact failure modes
+[08:21] to hunt for. Evaluation should be easier than
+[08:24] generation. It's the asymmetry of verification
+[08:28] verifies law that's why AI is raced ahead anyway you can cheaply check the
+[08:32] answer maths and code. And
+[08:36] doing this is exactly what the best teams do they put a lot of energy into
+[08:39] evaluation. It starts with the gold standard which is expert humans
+[08:44] reviewing notes which obviously works offline but you can't put a human on
+[08:48] every note in production. So they automate it.
+[08:52] They build a serious system and
+[08:56] some of the best versions of this that I've seen are
+[09:00] you take the transcript and the note and context put in front of the judge a
+[09:05] detailed rubric for faithfulness with worked pass and fail examples.
+[09:10] The rubric maybe auto optimized with GPA or something like that maybe you have
+[09:13] some deterministic NLP to sort of count up medical concepts that are differing
+[09:18] between the two. That's a powerful system
+[09:22] and yet I pulled all of those errors earlier
+[09:25] out of ambient scribes in an afternoon. So if the evaluation is this good how
+[09:31] are these errors still getting through? So
+[09:35] I built this system and ran those same notes through it.
+[09:39] And it scored most of them fine. It flagged a handful of them
+[09:44] and signed off the rest. >> [clears throat]
+[09:47] >> But one in five of those clean passes still had some sort of serious error
+[09:51] buried in it. And often that was an omission.
+[09:55] The things that should have been there and actually quietly weren't.
+[09:59] And that's the best version of a judge I've seen in a lot of teams and it waved
+[10:04] them through. Why did it do that? It's not stupid.
+[10:09] It's a frontier model, serious engineering behind it, more than clever
+[10:12] enough to read the whole encounter and catch every obvious error. And it's not
+[10:16] blind, either. And and that's part of the trap. If you
+[10:19] take a note that says start amoxicillin, when the real decision was actually to
+[10:23] wait and see, it's faithful to the words, amoxicillin
+[10:27] did come up, but it's a lie about the intent.
+[10:30] A good judge might catch that, might. But whether it flags that versus the
+[10:36] other doesn't have other things that it could
+[10:38] comment on depends on it knowing what decision
+[10:41] matters most. And so
+[10:44] it's not blind, it just can't tell what counts, essentially.
+[10:48] So the note passes confidently and you put a judge like that in front of your
+[10:52] system, you've not added a safety net, you've added a second silent failure
+[10:56] that just nods along with the first. And here's the root of it. So in math or
+[11:02] code, the verifier comes with free. A unit test, a compiler.
+[11:08] But for is this note safe and complete, there's no unit test.
+[11:12] You have to build the verifier yourself and verification is only easier than
+[11:16] generation for the easy bit, i.e. spot the difference between transcription
+[11:21] note. But that's not the hard bit. The hard bit is knowing of all those
+[11:24] differences you've seen, which matter. And that's harder than writing that
+[11:28] plausibly good general note in the first place.
+[11:31] Because that standard of good was never written down anywhere that the judge can
+[11:34] read it. A rubric that you pre-specify is only
+[11:38] the taste you could write down. The taste that matters is the part that
+[11:42] you couldn't. And so here's here's a bit more detail
+[11:45] on what what matters looks like. Two patients, both with blood in their
+[11:50] urine, both notes dropped the same kind of line where they'd been on holiday.
+[11:55] One had been to France, the other to Lake Malawi. Same English emission, same
+[11:58] shape, same mistake. Well, not really, because blood in the
+[12:04] urine obviously warranted away and you're going to have to investigate
+[12:07] it, but the France trip is irrelevant. The Lake Malawi trip is the diagnosis.
+[12:12] Fresh water in sub-Saharan Africa means schistosomiasis until proven otherwise
+[12:17] and it completely changes what the management plan is. So that same dropped
+[12:20] line in one note is pure noise, in the other it's the answer.
+[12:24] And which one it is, you simply just can't write all of that down in advance.
+[12:29] So if you can't write it down, you can't
+[12:31] write taste down, how do you get that into your evaluator and your whole
+[12:36] application system? Well,
+[12:39] we've answered a version of this before. RLHF exists because you can't write the
+[12:43] reward function for good. You learn it from examples by showing it.
+[12:47] The only question is where you keep what you've learned.
+[12:50] And there's three places. You can either specify it up front, you
+[12:54] can stuff the prompt, write the perfect
+[12:56] rubric. We just watched that fail essentially.
+[13:01] You can bake into the weights, fine-tuning or continual learning, but
+[13:06] for a standard that's still moving and a score that has to be explainable,
+[13:09] the weights I think are the wrong place to keep that.
+[13:13] They go stale, they can't tell you why and
+[13:17] you can't change them without a retrain. So there's the third option, which I'll
+[13:21] show you, which is you essentially just keep the taste as the examples
+[13:24] themselves. Past judgments, expert corrections, references, and for each
+[13:28] output, you retrieve the ones that bear on it into the judges context,
+[13:33] add one and it's live on the next call. You can point at exactly what moved the
+[13:36] score. For this problem, it's both better and
+[13:40] also cheaper to do.
+[13:44] So, that's the way to do that is one repeating loop, three steps.
+[13:48] Discover the failure modes from real outputs, capture how your experts judge
+[13:52] them, calibrate every output against that, and when the standard moves, the
+[13:56] loop moves with it. So, in more detail, discover. You don't
+[14:01] write that rubric in a vacuum. You have to put the system in production
+[14:04] and look at the real outputs. Cluster what goes wrong and the failure
+[14:07] modes surface on their own. You name them.
+[14:10] This is your failure mode ontology. Discover from your data, not guess on a
+[14:14] whiteboard. And you can't shortcut it. The ways that
+[14:17] a real system goes wrong are effectively unbounded and synthetic test cases only
+[14:22] cover the failures you already imagined. The ones that hurt you are often the
+[14:26] ones that you didn't. And you'll only find those in real outputs.
+[14:30] So, this ontology is your map, what to capture judgment on, what to retrieve
+[14:34] against, including the failures that you never thought to check for.
+[14:39] After that, it's capture and then calibrate. So, those discovered modes,
+[14:44] they're not a checklist that the judge runs, but they organize everything. What
+[14:47] you What you ask your experts about, how you index the cases that you'll
+[14:50] retrieve, and
+[14:53] capturing is a simple part. You put real outputs in front of your experts.
+[14:57] Clinicians spend a focused few hours leaving comments. A session doesn't have
+[15:01] to be a month-long labeling project to start with. And you collect their
+[15:04] judgment. Not just a score, but the reasoning and
+[15:07] corrections. And over time, you build up that record of how your experts actually
+[15:11] judge. You then calibrate.
+[15:14] That's the the the generic part of this you can
+[15:16] write down once easily. For example, be faithful or don't drop anything
+[15:20] important. But what you can't write down is what
+[15:23] counts as a serious miss for this specific note. That's contextual. And it
+[15:27] shifts from note to note. So,
+[15:31] what we recommend is you assemble that on the fly. For each output, your
+[15:35] judging agent pulls in everything that bears on this one case. It's memory of
+[15:39] the most similar outputs that it's judged before and how they
+[15:42] scored, the expert corrections that apply, the reference documents and
+[15:45] guidelines. Just context engineering per output.
+[15:50] And crucially not just one pre-specified
+[15:53] rubric in a vacuum, and not a model that you have to retrain every week,
+[15:57] but a full sort of case-specific standard assembled for this output.
+[16:03] And it's a loop as well. Every output you judge, every
+[16:06] correction, sharpens the next. And when a brand new failure mode
+[16:10] appears, Discovery surface it, and it flows straight back in.
+[16:15] And so, to make that a little bit more concrete,
+[16:17] that headache that I opened with, the one that was really a possible blindness
+[16:20] emergency, here's the kinds of things that you
+[16:23] would want to pull in for that note. The nearest cases that your experts have
+[16:27] judged, not this exact patient, but the same
+[16:30] shape, maybe a red flag filed as routine.
+[16:33] Uh the corrections that apply, like a new headache over 50, um
+[16:38] suggests something that you need to check red flags on, and some criteria
+[16:43] and guidelines, and you pull all of that in.
+[16:46] It hasn't memorized this case. It's a capable model.
+[16:50] And handed the right context to reason from, held against that, the dropped red
+[16:53] flag stands out. It was never actually hard to catch. It just didn't know what
+[16:57] mattered. And so, if you take that same data set
+[17:00] of generated notes from the start and pass it through these three
+[17:04] judging systems, the first, a strong off-the-shelf
+[17:09] judge with a rubric frontier model, um
+[17:13] it's better than a coin flip, but it misses most of what matters.
+[17:17] The second, that sort of serious system that we talked about before,
+[17:20] rubric, deeper, maybe some detonate stick checks, better
+[17:24] again, but still missing quite a lot of what
+[17:27] counts. The third, the judge running this loop,
+[17:30] discovered failure modes, calibrated for output against what experts judged,
+[17:35] is performing a lot better on this specific
+[17:38] data set. Same notes.
+[17:41] The only thing that changes is what the judge was shown.
+[17:43] And the difference here, it's not more compute or a better prompt, it's that
+[17:46] the first two fight taste and lose. They guess the criteria, they freeze one
+[17:50] standard, and they go stale. This repeating evolving loop does the
+[17:55] opposite. It discovers the modes, fits the standard to each mode, and keeps
+[17:59] learning. So, you might not write chemical notes,
+[18:04] but if you ship anything where being confidently wrong has a cost, the
+[18:08] contract review that misses the clauses that change the deal, the support agent
+[18:12] that promises a refund you don't offer, the same thing is true for all of those.
+[18:17] It's watched, if at all, by a judge with no taste for what matters in your
+[18:22] domain. So, three things. Discover your failure
+[18:26] modes from real outputs, don't guess them. Capture your experts' judgment on
+[18:31] them, the standard they can't write down.
+[18:34] Calibrate every output against the cases that they've already judged, not a
+[18:38] static rubric, not a retrained model. Then keep that loop running.
+[18:42] And if you take one thing away, easiest place to start is your experts
+[18:47] leaving free-form comments on real outputs.
+[18:50] That's the real That's the raw material for everything else.
+[18:54] Your judge can verify anything that you write down in advance, but the standard
+[18:59] of good never could be. And so, stop trying to write it all down in advance,
+[19:03] and just start capturing it case by case, and evolving it.
+[19:07] That's why evaluation can't be a thing you build once and freeze.
+[19:11] The standard it checks against doesn't exist on paper.
+[19:15] It has to be discovered from real outputs captured from the people who
+[19:18] hold it and kept alive as it moves. Evaluation isn't something you have,
+[19:23] it's something that you do continuously over time.
+[19:27] Thank you. >> [applause]

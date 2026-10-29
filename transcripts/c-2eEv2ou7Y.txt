@@ -1,0 +1,282 @@
+# title: Why MCP and ChatGPT Apps Use Double Iframes — Frédéric Barthelet, Alpic
+# source: https://www.youtube.com/watch?v=c-2eEv2ou7Y
+# speaker: Frédéric Barthelet, Alpic
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T08:25:52Z
+# sha256: c61ebdf2d539addef0ba38173f21802f0772242bdb4c0d1a5d312ae46226431f
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:07] [music]
+[00:15] >> Hi everyone. My name is Fred. I'm the CTO and
+[00:18] co-founder of Alpic, the MCP hosting company.
+[00:22] And today I would like to share with you an adventure deep diving into the double
+[00:26] iFrame mechanism that we have on ChatGPT and MCP app and what it matters when we
+[00:30] build apps. First thing first, if you haven't had
+[00:34] the chance to listen to either Ido and Leat talks just before about MCP apps, a
+[00:41] quick sum up of what those MCP and ChatGPT apps are.
+[00:46] That's a new surface area for your business to expose product and services
+[00:50] with new acquisition channel that has two main criteria. First one
+[00:54] being discoverability, so you will have ecosystems of connectors and apps
+[00:59] available in a consumer generalistic agent like ChatGPT and Claude. So
+[01:04] ChatGPT app store and Claude connectors. Those apps
+[01:08] browsable inside the store, but they are also discoverable in chat. So if you're
+[01:13] having a conversation that's relevant for an app to be brought into to add
+[01:16] additional context and feature some nice additional actions, they will be brought
+[01:21] into the conversation. And the second part, which is the
+[01:24] biggest part and what we will be focusing on in this talk, which is the
+[01:28] addition of interactive UI inside those conversational agents where you used to
+[01:33] add text only. Apps add a new layer of UI that could be provided by the MCP
+[01:38] server, but could be generated generative UI as
+[01:42] well. They were first thought of using MCP UI
+[01:46] that was developed by Leat and Ido just before, then released by Open AI with an
+[01:52] app SDK back in October last year and standardized across multiple clients on
+[01:57] the first official extension of MCP called the app extension.
+[02:02] How does it work under the hood? If we take a little bit
+[02:05] closer look at how this UI is brought into the
+[02:08] conversation, those are brought using views. Views are
+[02:13] the name that we use for those small snippet of UI that appears inside the
+[02:16] conversation. Views are always rendered as a result of
+[02:21] a tool call. So if your server exposed multiple tool to be used, you can
+[02:25] actually add metadata on some of them to say this tool is best used when
+[02:30] results will be displayed using a specific UI. And if the host supports
+[02:34] MCP apps, it will use the relevant view corresponding to this
+[02:39] tool call to display the results. Views are simple HTML document. You can
+[02:44] include JS and CSS inside. Nothing new under the sun here. It's just a way to
+[02:48] package those small snippets of application and
+[02:52] they are discoverable ahead of time because all views are described on the
+[02:57] tool list calls that happens at the beginning of the conversation between
+[03:00] the host and your MCP server or MCP app. So each tools that supports UI will
+[03:07] advertise the resource that's needed to display the UI. It can be cached ahead
+[03:11] of time or it can be served and downloaded and served right away when
+[03:15] the tool call that needs UI to be rendered is made.
+[03:19] The conversational agent on the host will create this new iFrame where the
+[03:24] view will be displayed and it will inject the tool results inside so that
+[03:28] you have dynamic content rendered to the user.
+[03:31] If you take a closer look at what is inside the
+[03:37] DOM of the host when you take a I was a bit curious and I wanted to know
+[03:41] how it was working or how ChatGPT was actually rendering third-party UI inside
+[03:47] the conversation. I was a bit surprised and I was met with
+[03:51] not so much expectation about having a double iFrame, having an iFrame nested
+[03:56] in inside another iFrame. And this gave me the idea for this talk. I want to
+[04:02] bring you today with me deep diving into why the decision was made to do this
+[04:06] kind of inception nesting of iFrames and what are the benefits, what was it put
+[04:10] in place and what are the implications when you build apps, what should be
+[04:13] paying attention to and how to make sure that your experience is very nice.
+[04:18] Before we go into that, let's take a close look at what ChatGPT was before
+[04:23] MCP app were implemented. We'll be using ChatGPT as the example throughout this
+[04:27] deep dive, but the exact same happened on Claude AI if you want to take another
+[04:31] look by yourself. The initial thing to take a look at that is very important is
+[04:36] something called content security policy. Those are directives returned by
+[04:41] server as response header to document call. So when you load ChatGPT inside
+[04:46] your browser, ChatGPT will respond with a document plus security policy
+[04:51] directive on what the browser should be allowed to load and execute and what it
+[04:55] shouldn't be allowed to load and execute. You've got multiple directives
+[04:59] included inside content security policy. Some about which scripts you can run,
+[05:03] which CSS style sheet you can download, which image you can download, which API
+[05:08] you can connect to and ask question to. I will not go into the details, but two
+[05:12] are very important to remember here. Frame SRC, which basically is a
+[05:16] directive to allow specific website to render iFrame inside
+[05:20] the document and script SRC, which basically allow specific sites
+[05:25] script to be run inside the browser. To be able to run
+[05:31] external UI inside ChatGPT, we will use a dedicated HTML element that has been
+[05:36] made specifically for this purpose, which is the inline frame element or
+[05:40] iFrame that is made to basically spawn up
+[05:44] nested browsing context inside your browser window. So those small pieces of
+[05:49] views will be rendered as almost separately completely isolated browsing
+[05:54] context. They are very convenient and they have two ways to be used. First one
+[05:59] is to provide a source for the iFrame that you want to render. So basically a
+[06:02] URL of another page to be loaded by your browser and executed locally and
+[06:06] rendered inside the space it's made of it's made for. And the source doc, which
+[06:11] is another attribute which allows you to push inside the iFrame content that you
+[06:17] want to render as is without having the browser to load another content.
+[06:22] So if you want to build this marketplace of app and have third-party UI rendered
+[06:26] inside ChatGPT, why not use straight away source doc as the attribute for
+[06:32] as the attribute for uh for injecting context into. And I'm
+[06:36] realizing now that it's a little bit small, but I think I can zoom in a bit.
+[06:41] No, I cannot. Okay, sorry about that. You'll have to trust me about what is
+[06:44] written inside here. So I will just put inside an iFrame
+[06:49] injecting context into the iFrame. Context being the content being
+[06:53] basically the resource that is being exposed by the MCP server. So pure HTML
+[06:57] loading inside. If I do that, uh it's not going to work mostly because
+[07:04] when you load up an iFrame with source doc attribute
+[07:08] specified, the iFrame that you are spawning up is sharing the same origin
+[07:13] and sharing the same therefore CSP as the host that is responsible for
+[07:18] rendering it. So any script that would be part of your
+[07:21] application that would be completely blocked by existing ChatGPT CSP on
+[07:27] script SRC directive, which basically require every script in ChatGPT to be
+[07:31] signed with a specific nonce produced ahead of time at each request, which is
+[07:36] a cool security feature to put in, but it prevents any app to be able to
+[07:40] execute JS. So in order to do that,
+[07:44] what if we relax a little bit the content security policy of ChatGPT and
+[07:47] make it so that it can execute any line of code?
+[07:51] I would not suggest doing that into production, just an experimental thought
+[07:53] here. But if you do that, you are faced a new
+[07:57] problem. Basically, you are sharing same origin
+[08:00] as your parent DOM. So the loaded iFrame scripts would be able to access local
+[08:06] storage or cookies that are indexed by origin. So you would be able as an app
+[08:11] to for example get the existing local
+[08:14] storage of ChatGPT and send it to your back-end server, which if you are Open
+[08:19] AI, you would not want people to be able to do.
+[08:22] So let's roll back, put back the CSP as it was before and instead
+[08:27] sandbox the iFrame. Sandbox is another attribute that you can use on iFrames
+[08:32] allowing iFrames to be rendered in what we call the no pack origin. It would
+[08:37] mean that basically the iFrame will not share anymore the parent origin. It
+[08:41] would be something equivalent to null making sure that they don't share the
+[08:46] same origin and won't have the same problem of script being able to access
+[08:50] the parent DOM. However, doing so,
+[08:54] you lack any capabilities that are dependent on origin indexing. Because
+[09:00] all content, all scripts that are rendered inside your iFrame will now be
+[09:04] pointing towards a null origin. You cannot use local storage. You cannot use
+[09:08] local index DB. You cannot use cookies because those are indexed by origin. And
+[09:12] the only way to actually provide an origin to a sandboxed iFrame is to put
+[09:17] allow same origin, which is an additional attribute that
+[09:20] brings back the exact same origin as the parent back into the iFrame and you're
+[09:24] back to square one where you have an iFrame with exactly the right condition
+[09:28] to escape its sandboxing and access parent DOM, access parent local storage,
+[09:33] access parent cookies. Okay, so
+[09:37] iFrame source doc is not the way to go forward. Let's move on to the next best
+[09:42] solution that we have using the source attribute.
+[09:45] Source attribute basically allows me to reference an
+[09:49] an endpoint that will be the content loaded by the browser inside this
+[09:53] iFrame. I'm a developer of the ChatGPT app and
+[09:57] MCP app. Why not expose my view, my small HTML
+[10:02] application as a normal endpoint like on the view
+[10:06] endpoint for example of my own server? That would be a nice way to do it.
+[10:11] However, it would require open AI to modify
+[10:16] the another CSP directive, which is basically the frame source directive
+[10:21] listing all domains that are allowed to actually render iframe on chat GPT to
+[10:25] include an infinite list of all the MCP application that will be developed by
+[10:30] various companies and brought into the store. So, every time a new app would
+[10:34] come out, chat GPT would have to update CSP to
+[10:37] include the new domain so that the frame can be rendered on the specific domain.
+[10:42] This is not doable full scale. So, what we can do instead is
+[10:48] provide kind of a proxy controlled domain, single one that will
+[10:53] be owned by chat GPT in that case. For example, open AI open AI user
+[10:58] content.com. That's an actual domain that they're using for user content that
+[11:02] they want to expose on their own domain. And use this domain as a reference
+[11:07] inside the frame source to make sure that the directive does not block
+[11:09] rendering any iframes that are loaded on there.
+[11:12] And you need to provide a server on the open AI user content that's able to
+[11:16] download the resource content from the MCP server, the HTML, and expose it so
+[11:21] that it can be rendered for example on any subdomain and use the first part of
+[11:25] the subdomain as the routing key to the right application.
+[11:29] Doing so, you effectively needs to put in motion an infrastructure where your
+[11:34] domain hosts
+[11:36] external third-party UI from all apps that will be submitted on your store.
+[11:41] Which is not a very good position to be into because once again, you will be
+[11:45] responsible for code that you don't know what it's doing and you will be exposing
+[11:49] it on your own domain. In addition to that, if you're not open
+[11:53] AI or if you're not Anthropic, you might not have the resource as a host to put
+[11:57] in place the infrastructure required to serve this kind of dynamic serving of
+[12:02] content. So, what you can do instead
+[12:05] is go through the double iframe mechanism.
+[12:10] And what you will do with that is basically load the same script for
+[12:13] everybody, which will be a simple script responsible to recover the resources and
+[12:17] initiate an iframe with the source doc attribute. So, we put the content
+[12:21] inside, but this iframe will not be served at top level because it shares
+[12:25] the same origin and it has the escaping problem we are mentioning before. It
+[12:29] will be served inside an iframe with dedicated domain that is different from
+[12:33] chat GPT to make sure the isolation stay there.
+[12:36] You won't don't want to stop there. Actually, you want to
+[12:39] put subdomains for this exact script loader.
+[12:43] It will be the exact same content that will be served every time, but you want
+[12:46] to put it on various subdomains so that if your app uses any
+[12:51] APIs that requires origin indexing like local storage or cookie, you don't have
+[12:55] collision in between your app. So, you want app ABC123 not to be able to access
+[12:59] local storage from app ABC456 for example.
+[13:03] The infrastructure for that is much less intensive because you're serving
+[13:08] the exact same script content of the first iframe for every subdomain that is
+[13:13] exist on this specific endpoint. Last but not least,
+[13:17] you want to be able to provide the same kind of content security policy
+[13:20] definition to the app itself so that it can prevent execution of any such script
+[13:25] or rendering of iframe directly inside the view.
+[13:30] There is a way to provide this into the MCP spec and the way you will render it
+[13:34] is using a specific meta tag inside the first iframe.
+[13:39] This is the actual solution that I implemented into production.
+[13:42] And it's not a new solution. It's been around for a long time and actually the
+[13:47] first time this solution was implemented was back in Facebook days when they
+[13:50] released their app marketplace, which is exactly the same problem that you have
+[13:54] to run and render third-party UI inside the context of your own application.
+[14:00] What's important for you as an app developer is to make sure what are the
+[14:05] specs available for you to be able to control the behavior that results from
+[14:09] this double iframe nesting. And the thing that you will have to make sure to
+[14:13] do is every time you build an application, declare all domains your
+[14:18] application depends upon inside the provided metadata in the MCP app spec so
+[14:24] that you are sure that they will be
+[14:28] rewritten correctly inside the nested iframe. For example, if you are from
+[14:33] your app connecting to an external API to fetch data, you need to reference
+[14:37] this domain inside the connect SRC directive of the
+[14:40] metadata. Same thing for the script, image,
+[14:44] frame and base UI not so much used, but the two first one are very important.
+[14:48] And it's reminded me of a very old problem
+[14:51] that I had when I started my developer's days back in 2016 I think it was.
+[14:57] As a new developer in the space, I was
+[15:00] experiencing a trouble getting cross-origin resource
+[15:05] security right calls. I had trouble getting it right. CSP reminded me of
+[15:11] those ugly day of not getting right the first time with calls. So, there has
+[15:16] been effort in the ecosystem to make builders' life better,
+[15:21] especially for example on open AI side where they activated they added an
+[15:27] option in developer mode. So, if you're a developer and developing app, they
+[15:30] have a specific mode which is developer mode
+[15:33] which allows you to have access to additional features. Up to today,
+[15:37] when you were in developer mode, all CSP were removed. So, you were discovering
+[15:42] when you were going into production if some of your servers could not be
+[15:45] reached because of missing domains inside your CSP, which was not ideal.
+[15:50] They are not the only one doing a bunch of work to make builders' life much
+[15:54] easier. At Alpic, we build an open source
+[15:57] framework called Skybridge. Skybridge is a super set of feature on
+[16:01] top of the official app SDK either and the app we are mentioning. It brings a
+[16:06] few things to the table, end-to-end type safety between your MCP server and your
+[16:09] app widgets and views. You have a lot of APIs that provides
+[16:14] polyfill for features that are not part of the common specification and specific
+[16:17] to some of the hosts, some of code and some of chat GPT APIs. And
+[16:23] we provide a bunch of modern development features especially in the on dev
+[16:27] environment features. And I wanted to show you one just specifically made for
+[16:32] CSP, which we call the CSP inspector. Time for a small demo.
+[16:37] I do have a few minutes left. Perfect. Let me quickly switch to
+[16:43] my screen. Up.
+[16:50] Uh up.
+[16:54] Okay. So, this is
+[16:59] Um this is an example code base that will be generated when you create a new
+[17:04] Skybridge application. This example Skybridge application comes
+[17:09] with a small application. It's a eight ball
+[17:12] that you can ask any question to that will respond one of the 25 predefined
+[17:16] answer. It has
+[17:19] MCP tool that serves as generating the answer and a view that is
+[17:25] there to display the question and the answer to the question that you ask.
+[17:29] When I start the server of Skybridge, I have access in my browser to a dev tool,
+[17:34] which is basically a small app that will give me inspection tooling to work with
+[17:38] my app before I bring it to chat GPT. For example, on the left I have a list
+[17:42] of tools that are exposed by my app. I can if I want ask
+[17:48] execute any of the tool. So, for example here, I'm executing the magic eight ball
+[17:52] tool. And if there are views associated with this tool,
+[17:57] they will be rendered inside the inspector for me to have a closer look
+[18:00] at it and make changes and see those changes reflected live in the UI.
+[18:04] The neat thing I wanted to demonstrate is the CSP part of the inspector that we
+[18:09] built, which basically looks at all the domains that you listed inside your
+[18:13] metadata and all the domains that are actually accessed by calls made by your
+[18:18] view and compare them to make sure that none of them are not listed yet.
+[18:23] So, for example here, everything's green, but if I go back to my actual
+[18:27] code base and for example fetch some API to get
+[18:32] info about my IP location, this
+[18:36] will be reflected straight away in the inspector because the component has been
+[18:40] re-rendered and I know I have the exact domain that I want
+[18:45] that I just called listed as missing from the metadata. And I can go back
+[18:49] inside my application and add the missing domain and now it should appear
+[18:55] green if I reload it. Yeah, everything good.
+[19:00] So, neat little tool. There are a lot of other features that are packed inside
+[19:03] Skybridge, but that's one of them that we made sure to be available to builders
+[19:07] because we've seen a lot of rejection coming from chat GPT app store
+[19:10] submission because of missing CSP and app not working in production because of
+[19:14] missing CSP domains. Um
+[19:18] Just to finish up quickly if I can. Up.
+[19:24] Uh up. This one. Yeah. Um yeah, that's all. Thank you again for
+[19:30] your time. If you want to grab the slides and take a look later on,
+[19:34] feel free to scan the first QR code. If you want to give a try to Skybridge,
+[19:38] feel free to scan the second one. I will run right now a small lottery. We
+[19:43] have ski goggles to win if you star Skybridge
+[19:46] repo in the next minute or so. I will draw name at random and you will
+[19:51] win a ski ball mask. Thank you very much for your attention.
+[19:55] >> [applause]
+[20:03] [music]

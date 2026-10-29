@@ -1,0 +1,280 @@
+# title: Agent Memory Is Solved. Agent Learning Isn't. — Karthik Ranganathan, Yugabyte
+# source: https://www.youtube.com/watch?v=9_oy4owGtPI
+# speaker: Karthik Ranganathan, Yugabyte
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T04:19:19Z
+# sha256: ae06cce9dd08c22fae078bdad73247caa1d510c54201c095b0b9c7a0812b6d0e
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:01] [music]
+[00:13] Good to meet you folks. Thanks for everyone who's here. Um, today we're
+[00:17] going to talk about sharing context, right? Everything in AI is about the
+[00:21] data you give it. Bad data, bad outputs, right? Agent memory is a solved problem,
+[00:27] but agent learning is not. And we're going to talk about not just like you
+[00:31] know what we're building etc. It's about how why we built it and how we're using
+[00:36] it for ourselves. Okay. So as we said agent memory works you know there's a
+[00:42] bunch of stuff you feed it conversations etc. And you're able to extract memories
+[00:46] from the conversation and agents are able to reuse them. It's per agent.
+[00:51] However learning is never done in isolation. It's when a group of agents
+[00:56] come together and need to work with each other, they have to now start learning
+[01:01] and sharing, right? And that is an unsolved problem because we're
+[01:06] infrastructure people and infrastructure built for a single agent to do memory is
+[01:11] often not the same infrastructure that is needed in order to learn, right?
+[01:16] We're going to talk a little bit more about that.
+[01:19] Okay, so by way of background, I'm Karthik, one of the co-founders and a
+[01:24] CEO of a database company, Yugabyte DB, right? So what the hell are we doing
+[01:28] here? Why are we building a aentic data infrastructure? What are we doing doing
+[01:33] that? Right? We actually found this the hard way. We run agents for ourselves.
+[01:37] We run two agents internal to the company. Hagen for customer support and
+[01:42] growth vector for a coordinated go to market between sales and marketing. And
+[01:47] we run two agents externally for our customers and users. The first one is
+[01:51] Perf Advisor, which is an agentic database admin, right? So it runs
+[01:55] databases for our customers as a database company. Pretty useful. And
+[01:59] Voyager, which helps them migrate and modernize from other databases to a
+[02:03] cloudnative one, right? So four agents. We failed to ship anything and make it
+[02:09] work at all. It was really hard. We've been trying for almost a year before we
+[02:13] realized we were failing at the data problem right and if a database company
+[02:19] is failing at a data problem be it for agentic it becomes personal right so yes
+[02:23] it became personal we're like what the hell's going on and when we then
+[02:27] realized that a lot of people were asking us like yes we can do scalable
+[02:30] vectors we can do scalable graph we can do scalable relational or people came to
+[02:34] us and said more scale more performance less cost we're like wait a minute at
+[02:38] some point this is ridiculous right it's breaking the laws physics. So what is
+[02:43] the real failure? Right? When you cut everything o apart and just go to the
+[02:47] core, it's because agent A, my agent is doing some work and I need to work with
+[02:53] say one of you guys, say maybe Heather, right? My who's going to be showing a
+[02:57] demo and I am not able to give that context. I'm only able to give the
+[03:02] output. The output being an MD file, a PDF, a document, a something. But I'm
+[03:09] not able to give the reasoning behind it. Right? So what does this lose? This
+[03:13] loses reasoning. This loses the deadends, the number of failures you've
+[03:17] had before you actually succeeded. And it loses the whole context. Right? That
+[03:22] means Heather's agent is going to be rederiving all of this stuff. And it's
+[03:26] not for free. You're burning tokens and paying somebody else for it.
+[03:30] This is the same as a group of humans working together. When a new person
+[03:34] joins the team, they're going to be told, "We're going to do X." And they
+[03:39] come up with 50 reasons why we should do something else. And each time, yes, we
+[03:43] considered that two weeks ago, two months ago. That's not how humans
+[03:47] operate. We actually bring the person in and says, "Okay, look, this is the
+[03:50] context. This is the history of the project. This is how it's done. Now,
+[03:54] let's go from here." That context is missing for agents.
+[03:58] So, five things, misconceptions. Okay, really quick. More memory. Agentic
+[04:04] memory is not learning. It's just more memory, right? Like it's more expensive.
+[04:08] Shared state is not shared knowledge. Just because you can share something
+[04:13] with somebody else, like an MD file or something, doesn't mean you have shared
+[04:16] knowledge. Rag transcripts, let me rag everything, is not equal to learning and
+[04:21] quality. It just means there's a whole bunch of garbage there and now LLMs get
+[04:25] to burn even more tokens to give you even worse results. Fine-tuning is not
+[04:31] scalable. You cannot, you know, save and persist lessons that agents have come up
+[04:36] with through fine-tuning and building custom infrastructure. And a bigger
+[04:40] context window is the shest way to quickest failure in an expensive manner,
+[04:44] right? Because it doesn't do anything. Your context rots. Every single one of
+[04:48] these is a architecture gap, right? So this is what we realized we needed to
+[04:54] plug for ourselves, right? Right. And we've been finding a lot of users are
+[04:58] are really enjoying and really liking this approach of thinking about context.
+[05:03] Firstly, if there's a context that agent A can share with agent B, it closes the
+[05:07] lost context problem. They're working on the same context. Second thing is this
+[05:13] context can degrade. That means not everybody can contribute to that
+[05:18] context. It's just like code. Not anyone can contribute. You need to go through a
+[05:22] process of supervised promotion. And only then does it make it durable. And
+[05:27] lastly, you need to be able to ask your the question, where the hell did this
+[05:30] piece of information come from? It makes no sense at all. And be able to trace it
+[05:35] back to something, a data source, a person, a conversation from which it was
+[05:39] extracted. And that's the first step to improving your context. So
+[05:45] we started building this by assuming how hard can it be. So the first thing we
+[05:50] did was it's just a knowledge base. We throw everything in the knowledge base.
+[05:53] is going to be great, right? And how wrong we were. We built a whole
+[05:57] distributed rag pipeline, extremely scalable, very elastic, amazing. It was
+[06:01] just amazing, right? And it didn't do anything good for us. And then we said,
+[06:05] you know what? This whole shared stuff doesn't work. We'll let every agent spin
+[06:08] up a tiny database. We're a database company. How hard can it be? Tiny
+[06:11] Postgress, make it efficient. Well, we realized that every repeatable workflow
+[06:16] was being reinvented on the fly. Didn't work at all. And then we said, "Okay,
+[06:21] fine. we'll just have some backend that does a whole bunch of processing and you
+[06:25] know we'll just you know not even bother with the UI cuz agents don't need UI and
+[06:29] then we realized we couldn't tell what was going on. No human in the loop
+[06:32] equals really bad results. Okay. And then we thought okay at least
+[06:37] we have the rag pipeline. Well, it turned out even that was shitty because,
+[06:40] you know, we took all the best components from the, you know, whatever
+[06:44] the academia academia says and we put it all in there and we got poor numbers.
+[06:49] 14% faithfulness using an MD benchmark, public benchmark, 20% on a PDF, 57%
+[06:56] context precision using all of this other stuff. And when we actually
+[07:00] started looking and tracing and doing our traces and tuning and experimenting,
+[07:04] we realized a lot of things were off. And as we improved them one variable at
+[07:09] a time, we were able to jump to 65 74 82. Right? And here's the kicker. Our
+[07:15] context chunks, which is the context size, went down from over 7,000 chunks
+[07:21] to about a,000 chunks. So 17th the context size, a lot higher precision and
+[07:28] a lot less money burned on tokens, right? So that's where Mako comes in.
+[07:34] What is Mako? It's a agentnative persistence layer that takes all the
+[07:38] mistakes we made and all the things we got right and puts it into one box.
+[07:41] Right? And the way Mako works, it exposes a data pack, right? As a
+[07:46] database company, we don't call it a database because it has multiple types
+[07:50] of databases. Vector, graph, relational, no SQL, whatever, right? And what it
+[07:54] does is stores aspects of the context, knowledge base, memory, conversations,
+[08:00] observability, a lot more, right? And what it enables is it enables agents to
+[08:06] come in and push pieces of their context into a private space and promote that to
+[08:12] a shared space, right? And then other agents or humans that come in can now go
+[08:18] against that promoted highquality context and quickly retrieve stuff and
+[08:23] you can now continue to add more people and more agents and do the handoff
+[08:27] efficiently. Right? Hopefully that makes sense. Um the idea is take the durable
+[08:33] repeatable workflows and make it infrastructure.
+[08:37] Okay, before we go into a demo, right, a confession. This slide deck that you're
+[08:43] looking at was built using Makeo as the context persistence layer, right? The
+[08:49] way it worked was Heather, who's going to give you show you the demo, actually
+[08:53] wrote up an outline and created a data pack in Mako and simply sh sent sent me
+[08:58] a share request, right? And she said, "I'm doing the demo. Here's the outline
+[09:02] of my demo. Here's the rough talk track that needs to lead up to it because
+[09:06] that's what makes sense." I took it and I'm I'm sure she used some agent
+[09:10] harness. I don't know what it is. I really don't know. I didn't ask her. I
+[09:13] didn't even have a meeting with her. She just sent me this. I plugged it into my
+[09:17] cloud desktop and said, "Take this outline and break it down for me." And
+[09:21] it gave me a few bullet points. This is what you're talking about. I'm like,
+[09:24] "Okay, great. I want to change a couple of things." Changed a couple of things
+[09:27] and said, "Here's the new outline. Can you build me my slide deck based on
+[09:31] this?" And it did. And that diagram on the left, it built a really crappy
+[09:35] diagram, right? It didn't look good at all. So, I said, like, you know what?
+[09:38] Everyone's saying this uh cloud design is the rage, so why don't I give that
+[09:42] thing a go? And it actually did a better job. So, you know, there you go. That
+[09:46] image came from cloud design. Everything else came from cloud desktop. Shot it
+[09:49] back to Heather and, you know, Heather took the final pass over it to get hook
+[09:53] it up with the demo and here we are. So, we barely talked, right? We didn't need
+[09:59] to. We just shared context and our agents did the work and uh you know, you
+[10:04] can go you can watch it. I think maybe I'll invite Heather to talk to this
+[10:07] slide and and the thing after. I hope the demo's good because I haven't seen
+[10:10] it myself. So, yeah.
+[10:20] The idea is to watch collective knowledge grow over time, right? What
+[10:25] Nico provides uh that I was able to use for this is a resumability. So
+[10:29] resumability I'm going to show you is being able to start a session and then
+[10:33] kill it and then start it again with the same agent. Right now if you do it with
+[10:38] something like cloud desktop, they have projects for this, right? Right? So if
+[10:42] you do a cloud project, everything's together or if you turn on memory. But
+[10:46] in this case, I guess like two months ago, I turned off all the memory on all
+[10:50] of my idees because it doesn't matter what if I use something while I'm on the
+[10:54] go, like a mobile app. Maybe I use chat EBT that isn't as sophisticated, right,
+[10:58] as some of my coding idees. And so maybe I want to continue working on that
+[11:03] topic. I can do that because all of the context is shared in our cloud now. And
+[11:08] by sharing I mean that obviously chatbt is a different um agent but it's still
+[11:14] my account so I should be able to get to it right but because we're security
+[11:18] focused and security minded we don't want like just any agent to get to it so
+[11:21] I have to promote the kind of memory that that agent can also retrieve in
+[11:25] like a collective pool and because you do this the cost itself goes down
+[11:30] tremendously because the first time I figure stuff out I'm going back and
+[11:34] forth with my LLM I'm burning lots of tokens to get to an end goal, whether
+[11:39] that is code or it's just a knowledge work. But the next time that I want to
+[11:44] retrieve it from another agent or another session, it doesn't need to burn
+[11:47] through that. It just calls to the Miko memory and then it brings it right back
+[11:52] with far less token. So, we're already saving a lot of token spend. The
+[11:57] alternative to this would be to just again keep things in empty files or keep
+[12:01] things where you have to constantly traverse with every single agent's LLM
+[12:05] and burn through tokens again and again in order to retrieve. Does that make
+[12:09] sense? The difference here is just an MCP tool call.
+[12:13] So to kind of prove that out because we have sensational internet here, I have
+[12:18] recorded this for you at a little bit of a faster speed hopefully.
+[12:23] All right. See this is resumability. So here I'm saying that I want to store um
+[12:29] the conversation in a certain data pack, right? Let's call it the early access
+[12:33] launch and I want to put a piece of information in it. In this case, um our
+[12:38] signup emails failed. True story because we actually only used the SCS's sandbox
+[12:43] instead of the prod. So uh we kind of went over the limit there when we were
+[12:46] testing things. And that's a good piece of information for maybe our our ops
+[12:52] team, right? So in this process, it's calling data pack create uh because I've
+[12:58] connected the MCP server to clot here and I've created a skill that will tell
+[13:04] it what to do. You can decide how often you want it to call or if you just want
+[13:08] to do it judiciously here. And so now it's storing the incident fact as a
+[13:12] searchable memory with memory add. And then it's done now. So the data pack has
+[13:17] been created. there's a conversation in there and it'll be retrievable in the in
+[13:22] the future sessions. That sounds great. Awesome. Now I've killed that session
+[13:27] and notice I'm not in projects. This is just a new chat window. Now I'm going to
+[13:31] ask the same question so I can resume. Before I had to again have to make sure
+[13:37] I turn on cloud memory or turn or put it inside of a project, but it's not in
+[13:41] either one of these. I could be logged in with the same account in like
+[13:45] claw.ai, which would be technically a different agent. So I'm trying to prove
+[13:48] that you can at least resume your sessions after maybe days with the same
+[13:52] agent. So the fail result there was actually that it tried to search first
+[13:59] instead of creating uh a conversation a new conversation here. We want to save
+[14:04] everyone that we do. So it's the MCP server instructing to create a new
+[14:09] conversation for it so we can store this. And see now they searched Mo and
+[14:14] it found that hey this is what happened back in May and it was able to pull
+[14:17] things back out.
+[14:22] All right for sharability. Let's go ahead and get this done. If you
+[14:26] notice this is a completely different IDE. In this case it's codeex. Um so
+[14:31] I've asked it questions like okay um do you have any known cause for the signup
+[14:36] emails that are failing? And so it's gonna look and it's gonna look and it
+[14:41] says, "Nope, I don't see anything. I don't see anything. I'm looking." Um, it
+[14:46] did say that it saw that there was a brand new uh data pack that it's
+[14:51] connected to, but it can't actually see anything. And why is that? Because I
+[14:56] actually haven't shared that private memory from my claw desktop yet uh into
+[15:00] a shared space. So right now, those memories are still private. If you
+[15:05] notice the early access data pack is seen because I have connected it but I
+[15:10] just haven't promoted it yet. So in that case I'm going to go to sign out. I'm
+[15:15] going to sign in with my other account here to show you that yes I do have
+[15:20] access to this data pack and I need to promote that piece of memory into a
+[15:25] shared knowledge space. Allow it to go ahead and and go through and then I it
+[15:30] says it doesn't see it but I said well same question. Let's try it again.
+[15:37] So, now that I've promoted it into that space,
+[15:41] sped up for your pleasure here [laughter] because we all know how
+[15:45] long-winded our LLMs can get. Um, now it can find that piece of memory. It can
+[15:51] find the piece of memory because I've allowed that one piece to go. It's very
+[15:54] fine grained. It doesn't have to be. You can open the whole data pack if you want
+[15:58] as a maintainer to it, but this is much more ideal if you're just trying to give
+[16:04] bespoke pieces of information, maybe best practices, maybe something that is
+[16:08] the ongoing process that you want to keep going.
+[16:14] And then like the last part of this is the cost. How do you even know that it
+[16:18] saves you tokens? If you go into your data pack, you can look at the
+[16:23] conversations that are stored in there and how they were done because we give
+[16:27] you embedded language traces for free in this. And you can actually look at the
+[16:32] decision trace all the way down to the tool call and prove whether or not it
+[16:36] called as much and burned as many tokens.
+[16:43] Right?
+[16:48] So, human promotions today kind of equal the training signal for self-improving
+[16:52] orchestration tomorrow. Every human that says this is worth keeping is kind of a
+[16:57] labelled example of what good promotion looks like. So, you can actually start
+[17:00] training maybe in the future an agent that's trained on your taste and your
+[17:05] preferences long term. But right now, we're keeping the human in the loop.
+[17:09] Those calls are just a signal, but this is actually how it starts to learn. The
+[17:14] biggest lift that I saw is that when something goes wrong, maybe in a support
+[17:19] situation, it's hard to constantly have calls call the same server that's down
+[17:25] all the time and then it's tails all this time. Hey, do you know if this is
+[17:30] down? Is that down? Slack starts blowing up. How do your agents handle that?
+[17:34] They're all also wasting tokens calling the same thing. If they had access to
+[17:38] the data pack, the first agent would hit it and then tell everybody that it
+[17:42] happened and all the other agents would know that it already happened.
+[17:52] Yeah. So, yeah. So, thank you, Heather. Like, I think you know, pretty awesome
+[17:58] demo. I think uh if you folks were following along what happened, Heather
+[18:01] was was in charge of the early access and launch of Mako, right? and obviously
+[18:07] used a data pack which is Mako to launch Mak Makeo right recursively and uh you
+[18:12] know the first few people had a lot of trouble accessing their data packs on
+[18:16] Mako and you know we you know she created a data pack for troubleshooting
+[18:20] issues with Mako a different data pack and so that's the thing that she was
+[18:24] talking about uh a lot of us in the company you know it's shared with us so
+[18:28] we're all able to look at it load it into our agents and able to iterate with
+[18:32] it the folks that are in engineering they load it straight into their you
+[18:36] know cloud cloud code or codeex or like you know whatever the coding agents are
+[18:39] like I I myself more of a cloud desktop kind of user I use it for other things
+[18:44] like you know some a user that wanted to get access couldn't get access apology
+[18:48] email like go through cloud help me design it have a I have a data pack
+[18:52] actually that is my voice of how I speak and same thing for posting on LinkedIn
+[18:57] that thing can get tiresome if you want to keep writing it in your voice you
+[19:00] know sometimes training a data pack for the context to do so will help so a lot
+[19:04] of these things get automated straight away and it gets you know makes it much
+[19:07] much quicker to assemble right and obviously if a new person comes into the
+[19:12] team very easy to share this context with them have them get up to speed have
+[19:16] them contribute to it either willingly or unwillingly right sometimes they're
+[19:19] just doing things they don't even know and you extract patterns out of it oh
+[19:22] this is really great we should make this a thing right so so like um yeah so I
+[19:26] think these are some of the things anyways I think the bottom line is we're
+[19:30] trying to get it closer and closer to how humans work which is how can you
+[19:33] capture tribal knowledge how can you share that How can you give controls
+[19:36] over sharing and how can you actually tell what's going on? Right.
+[19:40] >> Yeah. >> Um Yeah. So
+[19:41] >> you should you should try it for free. >> Yeah.
+[19:43] >> If you want. >> Yeah. Try it for free. Yeah. I think the
+[19:46] left side is you know the website makeata.ai which will take you to a
+[19:50] login. There's a free tier. You can sign up and just hook it up to one of your
+[19:54] agents and you know get your agents to start learning right right away. And the
+[19:58] right side is Discord. We'd love to hear from you if you do try it out. You know
+[20:01] do drop us a note. We're working on improvements. That's how we communicate
+[20:04] what we're building. So do join us on Discord, right? We'd love to see you
+[20:07] guys there. So I think that brings us Yeah. Thank you. Thanks. Yeah, if we
+[20:11] have Yeah, we're right on time actually. Yeah. So yeah, thank you. If you guys
+[20:15] have questions, please feel free to connect with us on the site. Thank you.
+[20:33] >> [music]

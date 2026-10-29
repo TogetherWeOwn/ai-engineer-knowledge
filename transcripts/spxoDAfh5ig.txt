@@ -1,0 +1,431 @@
+# title: Beyond RAG: Build a Relational Context Engine from Scratch — Peter Werry, Unblocked
+# source: https://www.youtube.com/watch?v=spxoDAfh5ig
+# speaker: Peter Werry, Unblocked
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T03:37:05Z
+# sha256: 02783a59ba4918a92a944bde214174d00b79880ed709fa09bf4dc669120ee3cc
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:12] Okay. So, I'm I'm Peter. I'm from Unblocked. Um, over here is my colleague
+[00:17] Brandon. And today, uh, well, first of all, I just want to talk a little bit
+[00:21] about what we do. So, uh, we build a context engine. Our company's name is
+[00:26] Unblocked. And uh we deliver organizational context
+[00:30] to humans and increasingly of course agents. Um so the session was originally
+[00:35] a couple hours. It's it's now one hour so it's quite condensed. U which means
+[00:39] that I'm going to step through the workshop pretty quickly. If you don't
+[00:43] get uh you know all the steps nailed down as we go don't worry about it
+[00:47] because the repos up online um and you can run through it at your leisure um
+[00:52] afterwards. Um, so the thesis here is that rag and I'm just going to say that
+[00:58] rag in our parlance today is going to be semantic similarity search or vector
+[01:04] retrieval. Okay, rag is only half of retrieval and today we're going to build
+[01:08] the other half which is turning na natural language into real database
+[01:12] queries. So here's the again the QR code for
+[01:16] setup um if people haven't already done so. I'm gonna now skip um on to the next
+[01:22] thing and I'm just going to briefly bring up hopefully that renders. No, it
+[01:26] won't. Of course. Give me one second to switch.
+[01:32] Whoops.
+[01:37] And hopefully people can see this. Uh this is the repo here. So setup steps
+[01:41] are pretty simple. Um there are a few sort of uh dependencies up here, prerexs
+[01:46] that that uh you'll need to run through. Um and the the course throughout the
+[01:52] course of the workshop, we're going to be running through a series of pull
+[01:57] requests uh and the network is basically gone
+[02:04] or at least isn't running properly. Let's try this one instead.
+[02:16] Well, the good thing is we don't need network for this talk. Um, so hopefully
+[02:21] you got everything before we started. Um, because this one's obviously not
+[02:25] going to work. But at any rate, uh, we're going to be following a series of
+[02:29] six pull requests and they stack on top of each other. So, I'll be There we go.
+[02:34] I'll be referencing these as we go. Um, and I'll just go back to here so that
+[02:38] everyone can see that. And back to the keynote. Now I'm gonna
+[02:44] have to extend it again. Sorry.
+[02:58] >> There we go. All right. Hopefully people can see
+[03:03] that. Great. So um our agents need context and context is scattered across
+[03:10] every tool that engineering teams live in. So you're going to find it in PRs,
+[03:14] review comments, um issues and tickets like in linear and jura docs
+[03:19] [clears throat] and wikis, notion confluence, and of course in
+[03:22] conversations and places like Slack and Teams.
+[03:26] And all of that is semantically queryable, but it's it also has
+[03:30] structure. It has authors, dates, uh, states, labels, relationships, etc. And
+[03:36] you know, the the instinct I I love to say this like even two years ago is
+[03:41] ancient history in the realm of AI, but the instinct even two years ago was
+[03:45] let's just dump this all in a vector store and retrieve it and rerank it and
+[03:49] hopefully we get the right thing. Um, but that's that's not going to work. So
+[03:54] I'm just going to step back and and kind of relate this to the larger discussion
+[03:58] about context. um in in the context of a context engine
+[04:02] that serves organizational context um this is this is made up of more than
+[04:08] just code as I said we're connecting everything together so the scattered
+[04:12] context uh on the left in all your code and PRs docs etc goes in and the idea is
+[04:18] to get you know grounded context that relates to each other out the other side
+[04:22] that's specifically tailored to the task at hand um and in that model uh we have
+[04:27] to care not just about the semantic relationships, but of course the
+[04:30] structural relationships that connect all the data.
+[04:35] So again, rag is about embedding the query, finding docs with similar
+[04:39] meaning, and then we take that stuff and we stuff it into the prompt, right?
+[04:43] Well, um, that shines for content questions like find the code, find the
+[04:50] PR that changed it, find the Slack thread that debated it, but
+[04:55] um, and if you wrap it in an agent loop, you can get pretty far with that. And
+[04:59] you can also wire this thing up to like um, you know, tools that can recurse
+[05:04] files and it acts as a good jump off point. you get a good semantic head
+[05:08] start and then from there your agent can recurse over the actual file system in
+[05:12] GitHub um and you can get pretty far with that. But in our experience um our
+[05:20] this is not really the way things go in practice. engineers often ask questions
+[05:24] like this PRs that I merged last week or my team merged last week. Um they're
+[05:30] they're basically, you know, hunting for something in particular and they know
+[05:33] where the starting point is, but they don't know where the destination is, but
+[05:37] they do know the relationships.
+[05:42] So, as an example, PRs I merged last week, let's think about this in a rag
+[05:46] context. you'd you'd you know embed that sentence, you'd find the nearest
+[05:50] vectors, you'd rerank it top K. Uh you get PRs that mention merging about a
+[05:56] talk last week, but uh you wouldn't get the actual relationships like the
+[06:02] author, the merge state, um and whether it was merged last week actually. So
+[06:08] what you could end up with is the wrong answer where you pull up PR that's
+[06:12] semantically related but it was merged three years ago. Um and so that doesn't
+[06:18] actually answer the question because there's a structural there's a temporal
+[06:21] aspect to that question. And so retrieval has two halves here
+[06:26] semantic and again today we're going to be talking about this structured
+[06:31] queries.
+[06:34] And here's the key. We're going to take uh the model doesn't actually answer the
+[06:37] question in this paradigm. It writes the query that accesses the database.
+[06:45] Okay. So, um it would be naive to say that generating the query is the only
+[06:51] thing that we have to do. Um in order to generate the query and to do it reliably
+[06:57] um and and to take care of maybe even some security concerns, we need to look
+[07:01] at all four of these points here. So that first of all the LM needs to be
+[07:06] aware of what the schema is before uh creating the query. It needs to
+[07:10] understand uh some of the relationships in the data. So for example, if you pass
+[07:15] a natural language query that says show me Peter's open PRs, um then it's not
+[07:21] going to know what to do because it'll synthesize a query that says Peter when
+[07:25] really the GitHub login name might be different. So it needs to be able to map
+[07:29] that across. Um, and of course you're going to have some uh untrusted queries
+[07:35] coming out the other end. Um, maybe using the function operator in the in
+[07:40] parlance which might execute JavaScript directly on the server and we
+[07:44] probably don't want that. Um, and then finally, if there are errors the first
+[07:48] time around, we want to be able to self-correct those things.
+[07:52] So here's here's what this looks like in one single shot. What we want is
+[07:56] something that looks like this. Um it it maps uh my colleagueu's name is Rashine.
+[08:02] His user login name is is Rashab. Um and then we want to be able to map things
+[08:07] like the state and get maybe uh operators like limit and sort.
+[08:16] So uh this is what we're going to build. We're going to start with a full UX, a
+[08:22] stubbed engine, um, that is not capable to start with, and we're going to
+[08:26] gradually build this up. And then at step three, the thing will come alive.
+[08:31] And so we'll actually be able to issue queries to it and see what it does.
+[08:36] And uh, if you hadn't seen that before, now is another good time to scan that
+[08:40] and get it in.
+[08:46] I'm here to help you.
+[09:00] >> Yeah.
+[09:03] >> Yes. Any repo is fine. Doesn't matter which one.
+[09:07] Um and if if you want to take a shortcut, you can just point an agent at
+[09:10] the thing and let it set everything up for you. That works.
+[09:16] Okay, let's move. So, this is what we're going to do to
+[09:21] start with. Um, by now you you probably should have run this ingestion thing.
+[09:25] Don't worry if you haven't. Um, again, like you can revisit this at the end.
+[09:29] I'm just going to quickly show what the the kind of barebones interface looks
+[09:33] like for this thing. So, now this thing is running. Now, if I
+[09:38] type anything in here, this is obviously not going to work. Um, and what you
+[09:41] should see is something like that. Um, there's also a tab for chat. This is a
+[09:46] fully implemented agent uh that can uh do work for you. So, we'll come back to
+[09:52] that in a sec.
+[09:58] And so, this this is the contract in the code if you wanted to read. Um, we're
+[10:02] going to don't worry about this. We're going to skip through this. Um, but
+[10:06] basically like that's the entry point and we're going to be building around
+[10:08] that. So the first thing we want to talk about is schema discovery. Um during
+[10:15] ingestion, if you if you look at the way that the ingestion script worked, it it
+[10:19] actually had to build out a schema in order to download the content and store
+[10:23] it. Um but you can imagine that you may not know the schema. So the ingestion
+[10:28] may be happening in a service elsewhere and you want to build like a fully
+[10:32] dynamic schema discovery engine. Um schemalis. So there's no schema to
+[10:37] read. um unlike you know PG or something where we could read the table
+[10:41] definitions. Um so what we'll do is we'll sample the documents to infer the
+[10:46] schema
+[10:51] and that's the whole trick. So the we're just going to reconstruct it. We're
+[10:54] going to take um all the nodes and merge them down. So this is going to sample
+[11:00] 300 documents, collapse it into a single tree. uh nulls are skipped because
+[11:05] missing fields won't be able to constrain the type. And then uh we're
+[11:09] going to do something kind of interesting here with enum types.
+[11:17] And so now uh with with enum types, we can do
+[11:21] an interesting sort of procedural trick. This is just one thing. I would suggest
+[11:26] using procedural tricks to to do this type of thing because you could pass it
+[11:31] through an LLM and do extraction and that works u but it's fairly
+[11:35] non-deterministic. So you always need some kind of structural
+[11:39] um harness around it that is running procedural code to either validate the
+[11:44] things that you pull out or to actually do the extraction itself. And in this
+[11:48] sample project um it's the procedural code that's doing the extraction.
+[11:55] And let's go and show that. So we'll do
+[12:05] and then run it again.
+[12:09] And now what we get is this thing here. So the schema ran uh the the discovery
+[12:15] process ran and it created a schema for us that outlines what the pull request
+[12:19] schema looks like in GitHub. It even created some indexes for us. Now, this
+[12:25] is like marked down on purpose because we're going to take this schema and pass
+[12:31] it to the LLM when we synthesize the actual uh query.
+[12:40] Now, the second step is the thing that I referred to a few slides ago about
+[12:44] identity resolution. And this is because like my lo GitHub login um is similar
+[12:50] but it's not quite the same. And so if I were to ask a question like um hey find
+[12:56] all the PRs by Peter um it if without doing some sort of identity mapping it
+[13:02] would just say you know it would just match across Peter and it's not going to
+[13:06] find anything. So we have to be able to solve that. [snorts]
+[13:11] And again, um, we're going to do this. At first blush, this seems like we're
+[13:16] coupling to the schema a little bit here. Um, but you know, it is absolutely
+[13:22] possible to determine this dynamically. And you can have uh your LLM essentially
+[13:26] synthesize the mappings for you.
+[13:32] So, but in in our case, we're just going to do these simple little tricks. Um
+[13:36] very simple sort of fuzzy matching. Um Levenstein distance is fine. You can
+[13:41] just like match across the names and uh there you go.
+[13:50] Oh, actually I want to show you one thing before we get on to that one.
+[13:54] So let's do the same thing again. We can pop up
+[14:01] >> Oh yeah, I'm sorry. Absolutely. Tell me when it's big. Good. Thanks.
+[14:08] Good call out. Okay. So, let's run our thing again. And
+[14:15] now, um Oh, actually, I have to I have to wait
+[14:20] till the next step. I apologize. That's not going to be wired up just yet. So,
+[14:24] we'll go on to the thing that will really give us the payoff here, which is
+[14:28] step three.
+[14:36] So this is the actual query plan step and it's it's it's arguably sort of the
+[14:41] simplest part. It's the LM part. Um and what we do here is we pass the
+[14:46] schema give it a tool and force it to call that tool for name extraction and
+[14:52] synthesis. Um and then it will execute the plan.
+[14:56] There's one other thing which is the temporal aspect.
+[15:00] uh LLMs are actually pretty good about generating temporal queries if you pass
+[15:06] them the current date and time. So that's another important thing to do in
+[15:11] the in the prompt.
+[15:18] And so here this is the name extraction part. We're going to force that tool
+[15:22] call to happen in this case.
+[15:28] And at this point I am going to show you the the payoff for this. So
+[15:46] there we go. So now I can do things like this.
+[15:52] open PRS by Peter
+[15:57] and bam. So what we'll see here is that it uh generated this um this match
+[16:05] clause and uh you can't see it from here but it it mapped Peter to my GitHub user
+[16:11] login puery and generated the query and that's the
+[16:15] outcome.
+[16:22] So that's cool, but um we need to get on to the next step because even though we
+[16:27] are able now to query the data, we have some safety concerns. Um it could be the
+[16:33] case that it produces untrusted output
+[16:39] and so you know it could use the wear or function clauses and literally run
+[16:43] JavaScript on the server which means that this is now a prompt injection
+[16:47] point. Um, you could also have hidden fields in
+[16:52] your schema like ID or metadata fields that leak internals. So, we need to
+[16:57] sanitize um, and we don't deny list these things.
+[17:01] We allow list them. So, it's deny by default. You want to create basically an
+[17:06] allow list of allowed operators and uh, you know, potentially an allow list of
+[17:11] allowed fields. In our case, this is dynamic schema discovery, so we're not
+[17:14] going to do that. Um, but we could have some fields that we know about like
+[17:19] metadata fields. And this is a a useful thing for like tenant uh tenant
+[17:25] isolation. So if you have a a uh collection that houses multiple tenants,
+[17:31] I don't recommend that. you should probably separate your collections by
+[17:34] tenant, but if you did, then you could have a metadata field that contains the
+[17:39] tenant ID and you would want to hide that no that
+[17:44] um information from the LLM, but also validate the output. So if it outputs
+[17:50] that metadata field, you need to wipe it out and then you need to inject your own
+[17:55] metadata field underneath.
+[18:05] And again, like technically this is it's not actually that difficult to do. You
+[18:08] just have to write the code. It's all procedural. Um I I wouldn't recommend
+[18:13] using LLMs for this part.
+[18:19] And so again, allow list, don't deny or deny everything, I should say.
+[18:33] Now the last part is um we're going to this kind of dovetales into the next
+[18:37] step. At the end of validation we're obviously going to return an error and
+[18:42] it's going to get dumped out. And right now that error is just it's just there.
+[18:46] We're not going to do anything with it just yet.
+[18:49] But I will show you now what this looks like. Um,
+[19:03] oops. Stay on that one and run our service.
+[19:10] So now I'm going to write run another query
+[19:14] that checks for authentication in the title and we've disallowed regular
+[19:19] expressions. So now what we can see is that it rejects the query.
+[19:35] And finally, this is the thing that kind of ties it all together is the retry
+[19:40] loop.
+[19:47] The plan can fail in a couple of different ways, right? Um, it can fail
+[19:51] validation. So maybe the uh the LM actually outputs things that are illegal
+[19:56] according to our validator. Or it could actually fail during execution. Um, so
+[20:03] for example, let's imagine that it it mixed an inclusion exclusion project.
+[20:09] Um, then that's obviously going to fail. And then but we can self-correct. We can
+[20:15] take that error and pass it back into the LLM and say hey that was wrong. Um
+[20:20] maybe you can do better up to some number of max attempts of
+[20:25] course.
+[20:30] So I'm going to show now what this looks like
+[20:34] back over to our project
+[20:39] so we can punch up a level. Whoops. Sorry.
+[20:45] You have to forgive me. I actually have to read this off of the screen out here.
+[20:56] Okay. So now if we run that same query.
+[21:09] Perfect. So, what we can see is that it took several attempts to get it right.
+[21:14] Um, by the third attempt though, there's a
+[21:17] bit of a problem here because we said no regular expressions, no FTS. Um, so now
+[21:23] it said we're going to just use match, but now
+[21:27] it's an exact match. So it tries to find authentication fails
+[21:33] which means there's one more thing that we can do
+[21:39] which is this. We'll add full text search.
+[21:49] It's pretty basic. Um we need to create an index obviously
+[21:54] and we'll combine it with author and state filters uh in the same match.
+[21:59] And so now we should be able to answer a question
+[22:04] like this. And let's see what happens. And see if
+[22:09] it is actually going to do what I said it's going to do.
+[22:29] Bam. There we go.
+[22:36] And so now the the final payoff here is if we go into the chat tab, we can ask
+[22:41] some sophistic more sophisticated questions that um you know an agent can
+[22:46] actually reason about behind the scenes. So you can say things like um did we
+[22:51] work on anything authentication
+[22:57] related last week.
+[23:10] So here we can see that it generated the query.
+[23:14] Now it's pulling the data and kind of reasoning about it.
+[23:18] There we go.
+[23:22] That's it.
+[23:35] So, just a quick summary of what we built.
+[23:38] We're basically like reaching the end. There's going to leave lots of time for
+[23:42] questions. So just to recap here, um there are questions that that rag can't
+[23:48] touch. All those structural questions around things like state or temporality.
+[23:54] Um you don't get the right data out when you ask those types of questions with
+[23:59] rag, traditional rag. So the same engine behind the query
+[24:03] playground and the chat agent, uh they're they're the same. So if you guys
+[24:06] want to play with that after, go ahead. Um it's it's the same backing thing. The
+[24:11] only difference is of course that uh the chat agent actually does reasoning
+[24:16] whereas the query interface is just for queries.
+[24:20] So just to to recount on this here are the reusable ideas here. Schema aware
+[24:26] prompting dynamic schema discovery identity resolution
+[24:32] validation and error retries. The error loop is actually one of the most
+[24:38] important things.
+[24:45] And so we built something that's capable of filtering,
+[24:50] providing aggregations, it's time scoped, has full text search. Um, it's
+[24:56] validated, it self-corrects, and it powers a full-blown chat agent. So you
+[25:00] could take this into your organization and just deploy. I I would recommend
+[25:04] maybe working a little bit more on the validation harnesses before deploying
+[25:08] this internally, but um yeah, it'll it'll answer all your questions about
+[25:12] your PRs. And that's it. So, we've left lots of
+[25:17] time for questions now. [laughter] Did Did everyone uh was everyone able to
+[25:21] actually set it up? Just curious. No. Okay. If if you want uh you can come and
+[25:28] fetch Brandon and I afterwards, we'll just kind of linger outside here.
+[25:33] Oh, at the and at the P16 booth as well. Yeah, but that that starts later today
+[25:37] at around four o'clock and we'll be there all week.
+[25:42] >> Cool. Any questions? >> Yes,
+[25:45] >> I have a question. I think you did a great job breaking down like basics.
+[25:49] >> Yeah, >> a lot of my mind goes like okay so at
+[25:52] scale how does for example you you generate the schema and you put it into
+[25:56] the system prompt how does that work at scale? It's like also depending on the
+[26:00] size of your company, how are you fitting all this data? How do you choose
+[26:03] what data and like how long does it take to process all this? What's the cost?
+[26:07] That's where my mind is. >> Yeah, it's a good question. So, you
+[26:09] know, um I'm just going to repeat the question so everyone can can hear it.
+[26:13] The demo showed obviously a fairly contrived example where you're just
+[26:17] focusing on pull requests. Um and so the question is how do you scale this? Like
+[26:21] how do you do this across multiple different collections, multiple
+[26:24] different tables, etc. Um, so you you can add uh another LM step on top where
+[26:31] uh this the schema collections have tiny little summaries and descriptions and
+[26:36] then uh depending on what the query is, you can load the right schema for that
+[26:41] query. LMS are surprisingly good at this. They weren't a year ago, but now
+[26:46] they're very good at it. Um, so that's kind of the way to shave the context
+[26:50] thing down. And that's to your question about scaling things out. Um, was there
+[26:54] another aspect of scaling that you were interested in?
+[26:57] >> Getting all the data in and I guess like part of that is like cost.
+[27:01] >> Yeah, it's livveness and stuff too. >> How long does it take to do like what is
+[27:04] what data should I pick to put into this?
+[27:08] >> Yeah, it's it's a good question. So unblocked um at unblocked like we're
+[27:12] continuously ingesting content. Uh we get web hook callbacks for all the
+[27:17] events for example in in PRs. And so every time there's a change, we get that
+[27:21] web hbook event, we ingest the content, we rem um and store it in the database.
+[27:27] Um that that's just really just like a distributed systems question about how
+[27:30] you scale that out from an ingestion level. Um you know, storage, same thing.
+[27:36] So yeah, >> so maybe this will make it more
+[27:39] concrete. So what if you would say like these are the top three data sources
+[27:43] like someone seems like GitHub maybe like something
+[27:49] >> um so Slack for sure a lot of the like why questions and and decision- making
+[27:55] happens in Slack um people uh in the context of this sort of like structural
+[28:00] query um people usually think about conversations that they've had in the
+[28:06] past um and they'll be able to query unblocked and say Oh yeah, you know,
+[28:10] roughly three weeks ago, I was having a conversation with so- and so. And so
+[28:14] that that's a perfect thing for structural query. Um yeah, like I would
+[28:19] say that um Slack is the most important for why questions. Um a lot of the why
+[28:24] decision-m is also embedded in PRs. PRs uh have all of that like organizational
+[28:31] history in the comments and that's just basically black hole, right? So uh you
+[28:37] can basically run over that data before you serve it and and kind of mine it for
+[28:43] interesting insights. So for example at unblocked we we create these things
+[28:47] called best practice memories which are distilled from PR comments in the past.
+[28:53] Does that make sense? >> Yeah. Yep. Any else? Yeah.
+[28:57] >> Question.
+[29:02] directly into how this
+[29:09] building.
+[29:25] [snorts] >> Yeah, I mean you you can definitely do
+[29:27] that. So if you have a structured if you have a structured query table, you could
+[29:32] express that through MCP. You can even do that dynamically by updating the tool
+[29:36] every time the schema changes behind the scenes. Um this this type of thing is
+[29:41] showing like what happens on the other end of that MCP call. So you you could
+[29:46] you know have an MCP interface that just takes natural language queries for
+[29:49] example and then translate that all on the back end or you could provide a
+[29:53] direct interface to the database. It depends on like what the customer
+[29:57] interface looks like, but yeah. Yeah. >> Yeah.
+[30:05] >> Yeah. >> Yeah.
+[30:21] Yep. Second part is
+[30:31] better. Thoughts around
+[30:40] >> uh how to mean how to combine it or let me just make sure I understand your last
+[30:46] question.
+[30:50] >> Yeah. feel like this is like >> No, not at all. No, no, they're
+[30:55] absolutely complimentary. Yeah. Yeah. I mean, you can have a full text search
+[30:59] that does this kind of um you know, like that's full text search, right? So,
+[31:04] it'll identify keywords. You still need some kind of mechanism to to do like the
+[31:10] actual semantic similarity search because there you all have ideas and
+[31:15] sentences that are encoded that aren't not ne necessarily textual matches. So
+[31:20] you want you want that like conceptual matching, right? So as I said um at the
+[31:25] beginning like there's similarity search is actually really powerful for jump off
+[31:30] points. So you can for example start with a vector search and then from there
+[31:35] give it access to tools like this because then it'll actually have like
+[31:40] some interesting starting data and help it form queries to go and and fetch the
+[31:46] data. So yeah that that's that's something that we do and so sorry the
+[31:50] first part of your question was
+[32:03] >> so you take um you take you know in in anyways like these are all
+[32:08] documents and they're they kind of like form into JSON so you can merge those
+[32:12] things down and look for certain tokens and then you you know, extract the
+[32:17] tokens and then that's how you distill the types. So you you can look through
+[32:21] the source code and you'll see that at least like this iteration of that
+[32:25] algorithm is pretty hacky, right? It'll do things like look to make sure that
+[32:28] the character count is between two and eight for uh for type information and
+[32:34] then for enumerations it's it's looking for particular patterns as well.
+[32:38] >> Yeah.
+[32:42] >> Yeah.
+[32:54] Yes. >> Yeah.
+[33:05] >> Now, that that's a very overloaded term, so I'll just make sure I understand
+[33:08] exactly what you're talking about. Do you mean hybrid search in terms of um a
+[33:12] provider that does semantic similarity and then also does a lexical search and
+[33:19] then does rank fusion?
+[33:34] Yeah. Oh, yeah. Yeah. No. So, so we we do that. Yes. The answer is yes. Yeah.
+[33:38] >> Yeah.
+[33:44] >> Yeah.
+[33:53] >> Uh just empiric empirical trial and error. And so I mean there's there's no
+[34:00] easy solution to this. Um be behind the scenes like at unblocks we're we're
+[34:05] using a lot of static schemas because we want to get the correctness absolutely
+[34:08] nailed down. This this was like a just a technique that I wanted to show because
+[34:13] um you know for exploration of data or experimental
+[34:17] um uh for experiments or either to wire up like arbitrary databases this is a
+[34:23] good technique. So we we got this through some trial and iteration with
+[34:28] customers and you know we we'd ingest a whole
+[34:31] bunch of contents from the document store and we'd get responses back from
+[34:37] customers that said oh you missed the thing that I was searching for and we'd
+[34:40] dig into it and we'd figure out why and we kind of got to the sample size that
+[34:43] made the most sense.
+[34:56] Yeah, >> it's absolutely true. Yeah, definitely.
+[35:01] You're always actually gonna you're going to miss something. There's always
+[35:03] going to be some document that has a little edgy thing. Yeah.
+[35:09] Anyone else? I thought I saw a question over there.
+[35:13] Oh, yep.
+[35:21] Sorry, can you say that first part again?
+[35:22] >> There's mention that you
+[35:27] understand the schema. >> Uh yeah, what we do is we force a tool
+[35:33] to be called for not for schema discovery because that happens at the
+[35:36] start. It's for name extraction.
+[35:48] we so we have a validator that watches what the agent's doing. So like if it
+[35:53] doesn't call the the first part which is name extraction. Um so there's there's
+[35:57] actually two techniques for this. One is you create a tool that does the the
+[36:01] query and as an argument to the tool you accept a username. So you can fail right
+[36:08] there if the username is not correct or malformed. Um, if you want to do name
+[36:15] extraction uh via tool call, then you have to watch what the agent does. And
+[36:20] then if it doesn't call it, you just basically insert a user message that
+[36:23] says you forgot to call the extraction tool. Do so now.
+[36:28] Yeah.
+[36:32] >> Yeah.
+[36:40] How do you handle the changes?
+[36:52] Yeah.
+[37:04] >> Yeah. So remember like for this particular example the schema is is
+[37:09] completely unknown and so as documents get added um that schema could update.
+[37:14] So you your your choice is either you know on a sampling interval you you
+[37:18] rerun the schema generation um in our case at unblock the schema is
+[37:24] is static and it's tied to our codebase and we control the schema actually. So
+[37:28] if the schema of if GitHub decides to change the schema um that of course
+[37:33] rarely happens because that would have serious implications for their customers
+[37:37] but if they did then we would just adopt whatever changes are made statically and
+[37:42] then obviously deploy that through CI. Yeah.
+[37:50] Anyone else?
+[37:55] >> Awesome. I think we can uh reclaim some time in that case. Thanks.
+[38:00] [applause]
+[38:16] >> [music]

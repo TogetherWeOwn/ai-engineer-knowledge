@@ -1,0 +1,227 @@
+# title: Judge a Transaction by the Company It Keeps — Somya Rai & MD Sharique, EXL
+# source: https://www.youtube.com/watch?v=SHvwutPSeZg
+# speaker: Somya Rai & MD Sharique, EXL
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T02:59:32Z
+# sha256: cf1d7804dd8ae7b792284a5442e247a6cf97f33f53792ee5d2bf286323ae7e2b
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:04] Hi, I'm Sam Ray, VP of AI engineering. What we see here are two score, same
+[00:11] transaction both the times. On the left, a single online purchase where we look
+[00:16] at the amount spent, who is the merchant, MCC code, device type or time
+[00:20] of the day and with 198 features by the time we are done engineering and it
+[00:25] scores 0.04. comfortably under any threshold we would alert on. As far as
+[00:30] we are concerned, this one looks clean on the right. Same transaction, same
+[00:35] feature vector. Not one bite of that row is different. The only thing that we
+[00:40] change is what model is allowed to look at the neighborhood it sits in. Three of
+[00:45] the four transactions, a user, a merchant, and two other transactions
+[00:49] were flat fraud within the last hour. Now the score is 0.91. So the signal was
+[00:54] never in the row, it was in the edges. Therefore, fraud isn't a property of a
+[00:59] transaction. It is a property of the neighborhood it sits in.
+[01:04] Let me describe the shape of the problem because it is two problems wearing one
+[01:08] name. Physical transaction at a merchant point of sale roughly has 0.05% natural
+[01:13] fraud rate. That is one in 2,000. These are tight low noise signal and fraud
+[01:19] largely resigns the card's own transaction velocity. Whereas online
+[01:23] transactions have 0.6% of the fraud 12 times higher with higher volume noisier
+[01:30] and far more of it of the signal sits in the merchant and the neighbor context.
+[01:34] These two portfolios have a different base rate and a different signal
+[01:37] geometry. Therefore in practice two models not one. And here is the
+[01:42] constraint that makes this as an engineering problem not and not just the
+[01:46] modeling one. The alert budget is fixed. Analysts review the top 0.5 to 1.5% of
+[01:52] the score transaction. That's it. So the area under the curve isn't just the
+[01:57] objective we care about, rather the precision at a fixed K. To be worth
+[02:03] anything, a model has to move a real fraud into that slice and do it at the
+[02:07] same latency. So the obvious question here is why not
+[02:12] just build a better HD boost model. We did physical point of sale. We went from
+[02:17] the 40 raw attributes to 87 engineered features. After selection and the
+[02:21] leakage checks, the two positive rates moves from 35.5 to 36.6. And for the
+[02:27] online transaction, same story. Nearly 200 engineered features and we pick up
+[02:32] about a point. So you know two to five times the
+[02:36] feature surface one point of DPR. Now that's not a tuning failure, right?
+[02:40] That's ceiling because every feature we engineered is just a function of the
+[02:44] same row and the safe card's own history. We are projecting the
+[02:48] information we already had. Tableau features answers one question. What does
+[02:53] this transaction look like? They cannot answer the second one. Who is it
+[02:57] connected to and what are they doing right now? Range sharing a device
+[03:02] velocity chains across cart. A merchant went that went bad 40 minutes ago. This
+[03:07] lives in edges between the rows and a model that sees one row at a time is
+[03:12] blind to it by design. No matter how many columns we add to it.
+[03:17] Okay, so here's the metal model for the rest of the talk. A graph neural network
+[03:22] does not learn a node from its own feature. It learns from its its
+[03:27] neighborhood. One layer, three operations. First, gather. We pull in
+[03:32] each neighbor's hidden states across the tie edges such as transaction to user,
+[03:36] transaction to merchant aggregate. We collapse that neighbor set which is you
+[03:41] know a different size for every node one into a fixed width vector and we do it
+[03:45] with a permutation in function. Which function we picked mattered way
+[03:50] more than we expected and charik is going to come back to that. Third
+[03:54] update. We concentrate that aggregate with the node's own state, push it
+[03:58] through learns and then we stack it twice. So every transaction knows about
+[04:03] its neighbors and its neighbors neighbor before the classifiers ever sees it. So
+[04:09] does these results work up? Yes, it does. And I want to be precise about
+[04:13] what's being compared. We did not replace XG post. We fed it. The genet
+[04:19] produces the embeddings. these embedding scores into the same gradient boosted
+[04:22] model and that's what can score. So XG boost alone versus XG boost plus the
+[04:28] curve is what we are comparing at. So the three numbers that we would like to
+[04:32] highlight first is 27 to 30% 33% related lift in the true positive rate over a
+[04:38] two leg baseline using the same alert rate same evaluation window and same
+[04:43] features available to both the models. Second, approximately $65 million
+[04:48] projected annualized incremental fraud capture across the two cardboard or
+[04:53] third the 3 millisecond P99 in barash. So this talk is just not about the
+[04:59] numbers, it's about how we got here four decisions and order matters.
+[05:06] First and the foremost sampling fraud is 1 in 2,000. So we cannot train a raw
+[05:11] distribution. We have to lift the thought rate but this is not a tablet
+[05:15] data set where the rows are independent. Every negative we drop takes its edges
+[05:19] with it. Down sample the easy way we keep the labels but lose the
+[05:24] neighborhood that makes them worth anything. So holding a soft target fraud
+[05:28] rate without really breaking the connectivity was the key. Second,
+[05:33] graphing features building at leakage state which is harder than it sounds
+[05:38] when your edges carry time stamps plus 32 derived features created to detect
+[05:43] fraud. The third explanability analyst won't action a number. This is a
+[05:49] regulated work where the score has to come with an evidence so or it does not
+[05:53] ship and serving at 3 milliseconds. Two thing got us here. The aggregation
+[05:58] method and the pivot from the node level prediction to edge level.
+[06:02] Then at the end one iteration that we validated after launch was creating and
+[06:07] training the training the model at a rolling window plus an edge himed DK
+[06:11] approach and this move the numbers again with this I would like to hand it over
+[06:16] to Shahi to get into the nuts and bolts of how did we create the graphs how did
+[06:20] we optimize the same and what were the engineering decisions that we have taken
+[06:23] in order to make this model more optimized.
+[06:27] >> Hi I am Mohammed Sarik principal AI architect. This is judge a transaction
+[06:32] by the company it gives. How a graph neural network bid exib boost by over
+[06:37] 30% on fraud capture and how we serve it in 3 milliseconds. I will walk through
+[06:42] the technical build, sampling, graph construction, serving and explanability.
+[06:48] So let's get into it. First decision most teams get wrong is
+[06:54] the data sampling. We hold a soft target fraud rate of.5% for card related
+[07:00] merchant transactions about 10 times the 0.05%
+[07:05] natural fraud rate and 6% for online transactions again about 10 times the
+[07:12] 0.6% natural fraud rate. Both far gentle than the aggressive over or under
+[07:18] sampling a tabular pipeline would use. Why? Because every selected user's
+[07:25] complete transactional history stays in the graph. If you trim a genuine user's
+[07:30] history to hit a class ratio, you break the connectivity their neighbors depend
+[07:34] on. And a fraud user's own genuine transactions stay in two. As hard
+[07:39] negatives, the most useful example for the decision boundary. If capping ever
+[07:44] triggers, only the genuine users word budget shrinks. Fraud users are never
+[07:49] capped. Class imbalance gets handled downstream instead with balanced batch
+[07:54] sampling inside the trainer. Here's the receipt. Average user degree
+[08:01] at training time 11 and a half to almost 14 for card related merchant
+[08:07] transactions matches what the model sees at inference. If training time
+[08:12] neighborhood don't match inference time neighborhood, the model learns the wrong
+[08:16] thing. It's stable across all 12 months we tested at natural rate of 0.05%
+[08:23] and 0.6%. No windage drift to correct for
+[08:29] second decision leakage control built into the graph itself not checked for
+[08:35] afterward. Each calendar month is its own disjoint graph. No edge overcrosses
+[08:42] the boundary. The transaction is the central node with types out to its user
+[08:47] and its merchant. Plus a five hop follows chain back to its own recent
+[08:53] history. Because months never connect, there's no path for information to leak
+[08:58] from one split into another. Four properties fall out of that
+[09:05] construction. No future leakage. A transaction only ever aggregates
+[09:10] neighbors with an earlier time stamp. No train val test leakage because of the
+[09:15] disjointed month. No label leakage. The fraud flag is the target, never a
+[09:20] feature or an edge. And no distribution leakage. Every scalar and vocabulary is
+[09:26] fit on training month only then frozen. Four for four verified by construction
+[09:32] not by post hawk audit. One more decision before the
+[09:38] architecture. 202 model features across three node types. 73 on the user, 109 on
+[09:47] the transaction, 20 on the merchant. 32 of the transactional features are
+[09:53] derived. Purpose-built for fraud added in three waves.
+[09:59] 10 entity history features. Past transaction count, days since last
+[10:04] activity, the mean standard deviation and max of the last five amounts, a
+[10:10] behavioral baseline per user and merchant.
+[10:15] Eight risk aggregates, an amount jet score against that history, a recent
+[10:21] versus past ratio, transactions per day. These flag deviation from the entity's
+[10:27] own baseline, not some global threshold. and 14 true rolling window velocity and
+[10:34] temporal features. 5 minute, 1 hour, and 24hour
+[10:39] transactional counts and amounts. Distinct counterparties in the last day,
+[10:45] seconds since the last transaction, even a country change rate for impossible
+[10:50] travel patterns. Why this matters? The graph tells the
+[10:54] model who a transaction is connected to. These derived features tell it how that
+[11:00] entity is behaving differently from its own normal complimentary signals not
+[11:06] redundant ones under the hood. This is graph says
+[11:12] architecture sample aggregate combine embed sampling a fixed recency bias set
+[11:21] of neighbors per hop. So, one enormous merchant node can't dominate every
+[11:26] message. Aggregate. And here's a detailed worth pausing on. We don't just
+[11:32] average. We concatenate three order invariant statistics. Mean, max, and
+[11:39] standard deviation. Combine that with the nodes own vector through learn
+[11:43] weights. Embed a fixed length vector to hops. It's inductive. We learned that
+[11:50] the aggregator waits not a fixed vector per node. So a brand new user or
+[11:56] merchant gets embedded on the fly. No retraining. Why three statistics instead
+[12:01] of one? Let me show you. Picture four neighbors of a transaction.
+[12:08] Three look completely normal. Scores around 0.1.
+[12:13] The fourth is tied to a fraud ring. 0.92.
+[12:18] Average those four together and you get 0.32.
+[12:23] That ring linked neighbor just got diluted into the crowd.
+[12:29] Take the max instead and it comes through untouched. 0.92.
+[12:34] That's why we don't rely on mean alone. A single dangerous neighbor among many
+[12:40] genuine ones is exactly the pattern fraud rings create. and mean pooling is
+[12:45] precisely the operation that would hide it. The standard deviation adds a third
+[12:51] view. How much the neighbor disagree with itself. A uniform boring
+[12:57] neighborhood looks nothing like one with a live outlier in it. And this cost us
+[13:04] nothing extra at serving time. No additional learned parameters. still a
+[13:09] fixed size output no matter how many neighbors a node has
+[13:16] one quick hyperparameter note 128 dimension is the sweet spot 64
+[13:24] dimension is close but slightly under fit 256 cost more GPU and gives you
+[13:31] nothing back validation performance flattens past 128 and then starts to
+[13:37] overfeit It's not a philosophical debate, just a
+[13:41] sweep. Now the actual numbers side by side. For
+[13:47] card related merchant transactions, best Exib Boost gets 36%
+[13:53] true positive rate at a fixed 0.5% alert rate. GNN plus Exiboost gets 48%.
+[14:02] A 33% relative lift, $5.6 6 million captured at an 83% capture rate. For
+[14:12] online transactions, 48% up to 61%. 27% relative lift, $35.4 million
+[14:22] captured at 71%. Online transaction is where most of that
+[14:28] $65 million savings lives since it runs at 12 times the fraud rate of card
+[14:35] related merchant transactions. Third decision explanability.
+[14:43] We ran subgraph attribution across 200 flag cases in each channel. Transaction
+[14:50] totaction velocity edges carry 0.94 mean importance in card related transactions
+[14:57] 0.62 in online transactions and they are the top piece of evidence in all 200
+[15:04] card present cases. Merchant edges matter more in online
+[15:10] transactions 0.19 versus 0.04 04 in card present where
+[15:18] fraud writes the card's own velocity rather than the acceptance point. That's
+[15:25] the difference between the model says 91 and the model says 91 because of these
+[15:32] three linked transaction in the last 40 minutes.
+[15:38] Why does this matter so much specifically in fraud? Four reasons.
+[15:45] One, regulatory and model risk management. Financial institutions
+[15:51] operate under frameworks that require documented rational for automated
+[15:55] decision. This isn't optional. Two, analyst trust and investigation speed
+[16:03] and unexplained high score gets rubber stamped or ignored. Edge level evidence
+[16:09] turns recomputee the case from scratch into verified three linked transactions.
+[16:15] Three, model debugging attribution patterns show us when the model leans on
+[16:21] a speurious or decaying signal before performance visibly drops in production.
+[16:27] And four, feedback loop quality. When explanation match what an analyst
+[16:33] already suspects, they trust the borderline calls enough to label them
+[16:38] correctly, improving the next round of training data. An accurate black box
+[16:43] simply doesn't get used. Now the real fight serving these
+[16:50] solution in 3 milliseconds. offline van memory bound GPU sarded layer wise graph
+[16:58] says forward pass over the entire graph bashed by destination node so it's
+[17:04] numerically identical to a full graph forward just bounded to a few gigabyte
+[17:09] at a time across multiple GPUs every user merchant and recent transaction
+[17:17] gets its per layer representation cast in a low latency embedding store. Each
+[17:23] user's last five transaction sit in a ring buffer
+[17:28] online at request time. A lightweight assembly step reconstructs the neighbor
+[17:34] states straight from that cast. No grab build, no sampling. Recense weighted by
+[17:41] an exponential decay that reproduces training exactly. Then the realtime
+[17:47] scoring services runs only the new transactions own two layer forward from
+[17:53] those cache states plus the exeost head. Nothing that scales with graph size runs
+[18:01] per request. Three small tricks make it fast in practice. We pin math library
+[18:08] thread pulls to one before the heavy libraries even load. That alone is the
+[18:14] difference between 30 milliseconds and one. We warm the model up at startup so
+[18:20] the first real request isn't slow. And today it's a single in-memory process.
+[18:26] The same interface maps directly into a distributed cache when we need to scale
+[18:32] out. Now there's a catch. That trick requires
+[18:38] caching a representation for every node including every transaction at
+[18:43] production scale. That's 60 GBTE and it needs expensive high memory serving with
+[18:50] a one day embedding lag in real time. True positive rate actually drops from
+[18:56] 48 to 44%. The fix predict on the edge not the
+[19:03] node. premputee embeddings for user and merchants only, never per transaction.
+[19:09] That collapses the footprint to two to three gigabytes, about 20 times smaller,
+[19:15] cheap enough to run on the same CPU class as the Exib Boost model it sits
+[19:20] beside. Nvidia independently recommended the same approach and expects it to
+[19:25] perform on par with the node model. Here's the actual request path.
+[19:32] pre-processing, cast lookup, and the exubost head are all fractions of a
+[19:38] millisecond. The GNN's own true two layer forward is the biggest single
+[19:44] piece at 1.61 millisecond. End to end 2.3 millisecond
+[19:50] at the median, 3.1 at P99, comfortably inside our 3 to 4 millisecond SLA. If we
+[20:00] ever need more headroom that GNN forward is the first thing we would recompile or
+[20:06] contise.
+[20:12] [music]
+[20:16] Thank you for watching. We are both happy to go deeper sampling, graph
+[20:21] construction, explanability or serving. Reach out anytime. Thank you.

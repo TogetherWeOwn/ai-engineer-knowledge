@@ -1,0 +1,225 @@
+# title: Why We Deleted Our MCP Server and Rebuilt It — Abhi Arya, Reducto
+# source: https://www.youtube.com/watch?v=jJQoVkd5yLg
+# speaker: Abhi Arya, Reducto
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T03:57:05Z
+# sha256: 67f6acd469f68cd05fc832b115bfc6efb7675ec19519b56cf3295ec50d434df2
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:01] [music]
+[00:12] >> So, I'm Avi, and I work on product here at Reducto. And before I dive in right
+[00:17] away, I wanted to give you guys some more context on what Reducto is.
+[00:22] Uh we're an agentic document platform, which basically means that we help teams
+[00:27] turn messy, unstructured documents into data that your tools and your AI agents
+[00:33] can understand. I'll jump into the agents themselves in a second, but I'd
+[00:38] like to talk about where we're at first really quick. In the last 3 years, we've
+[00:42] processed over 3 billion documents across customers like Harvey, Scale AI,
+[00:48] and top five global tech companies and hedge funds. Running at that scale means
+[00:53] that we've seen basically every way a document can break in production, and
+[00:58] we've iterated our product and our models to handle basically anything that
+[01:02] you can throw at them. And getting AI to work on a clean
+[01:07] document with a frontier model is not super hard anymore. We
+[01:12] basically like you can throw something in the cloud, and you might get like 60%
+[01:15] of the way there. But the hard part is production. Scanned documents, rotated
+[01:20] pages, etc. And the model starts hallucinating because a large majority
+[01:24] of enterprise data is unstructured. And so Reducto is a layer that sits between
+[01:30] your model and that data. We handle all the complex layouts and post-processing,
+[01:35] and that way we end up working with and building a lot of agents ourselves while
+[01:39] designing these pipelines. So, now that you know a little more about what we do,
+[01:44] I'm going to dive into our main topic with something seemingly unrelated. Um I
+[01:49] visited my girlfriend this past weekend, and she gave me a sticker from the movie
+[01:52] Mean Girls. And basically, it was an agentified
+[01:56] version of it. So, it says, "Get in, loser. We're building agent-first
+[01:59] software." And in true software engineer fashion, I had to put a sticker like
+[02:03] that on my laptop. And she got this from work, but she
+[02:06] asked me like, "What is agent-first software?" cuz she doesn't work in AI.
+[02:11] And as as I was like doing so or as I was thinking about it,
+[02:15] I realized I have a lot of different answers. Building a really good harness,
+[02:19] building a really good API, writing or iterating on prompts. All of these don't
+[02:25] really um land on the agent being put first.
+[02:28] They're more so just optimizing the model. Agent-first software is
+[02:32] inherently an architecture problem. And so, I think that structure, that
+[02:38] architecture, really comes down to one question, and that is who pays for the
+[02:43] agent being wrong. And to that, I think there are like three buckets that you
+[02:47] can put this into. So, you have auto mode to start, where you optimize for
+[02:51] autonomy, you write a prompt, and you let the agent do whatever it wants. And
+[02:56] when it messes up, which it will, you won't have any idea because it's really
+[02:59] confident about what it's doing, and you're the one that's paying for it
+[03:03] being wrong to your customers, your users, etc. Then you have user-first.
+[03:08] This is where you optimize the human interface, give the user all the knobs,
+[03:13] and then you build on an agent that can't really do much, which is basically
+[03:16] just a chatbot experience. You've both capped the user's understanding of the
+[03:21] product because now they can't prompt it, and the agent's capability within as
+[03:26] well. And lastly, the bucket that I think wins here is agent experience in
+[03:31] service of the user. This is where the agent's capabilities
+[03:35] are structured to give the model um rich and scoped capabilities where it can do
+[03:40] things that the user really wants, aiding and enabling them, and even where
+[03:44] the human can still verify the work that it's doing. This framing is what turns
+[03:49] agent experience into less of a question of the model and more of a question of
+[03:54] context, capability, and overall self-improvement.
+[03:58] And here's how I discovered these buckets and came to that last point. At
+[04:03] Reducto, we've been building tools that basically automate end-to-end document
+[04:08] work through pipelines. Think that we first parse a document, then we classify
+[04:12] it, or maybe split it into sections, and then extract from it. Um and that's in
+[04:17] use cases like invoicing, contract management, and all these things that
+[04:20] require human input. One thing that I noticed early on was that any of the
+[04:24] users, especially our sales team at Reducto, was spending all their time in
+[04:28] configuration instead of outcomes. And that's a larger problem across the board
+[04:34] because legacy interfaces were designed for kind of building that pipeline.
+[04:38] Meanwhile, in this kind of agentic work world, we're increasingly focused on the
+[04:44] final deliverable and how can we get the user to that point as fast as possible.
+[04:49] So, the clear move to get here for us was an MCP server. Let the agent do the
+[04:53] heavy lifting and only burden the user with thinking about their use case and
+[04:58] writing a prompt. To get some validation for the
+[05:01] direction, I threw together an MVP with Claude code, and every API endpoint that
+[05:06] drove our app was given an MCP tool in one massive file. I gave it a really
+[05:11] pointed prompt. I put it in the Slack, and honestly, it was pretty nice. Um to
+[05:15] some extent, it should have worked in that setting. I knew exactly what I was
+[05:19] doing. I was building a really curated demo, and that's why the standalone demo
+[05:24] told me nothing at all. The real test happened when I gave the
+[05:29] MCP to everyone on the team, and immediately it broke.
+[05:33] And here's how. Someone would feed it a half-baked
+[05:38] description from a customer call or maybe a Notion page, and the agent would
+[05:42] just start going. It'd build the entire workflow end-to-end, but very
+[05:47] confidently, it would tell the user that everything it did was right, but neither
+[05:51] the user nor the agent could explain what the workflow actually did.
+[05:55] And that is the root awakening of auto mode in production. The agent never
+[06:00] really said that it's not sure. It handled with every tool that it had, and
+[06:05] there was nowhere for a human to really validate or think about what was going
+[06:09] on. We built something that could communicate with our system, but we
+[06:13] hadn't built something that could actually work with it.
+[06:16] And you'd think that the fix here is more detail on the system prompt or more
+[06:20] model guidance, but realistically it's architecture. The whole file that we
+[06:26] used to talk to the MCP, I deleted the entire thing in one commit. And what
+[06:31] replaced it wasn't more tools. It was mostly fewer tools, but they carried the
+[06:36] structure of actual work. So for example, instead of one create
+[06:41] step of this workflow to uh call over and over, and just praying that the
+[06:46] agent assembled right in the pipeline, I built tools that understood how our
+[06:50] internal dashboard or our product works. For example, a common use case with
+[06:54] Reducto is to route our classify endpoint that classifies documents into
+[07:00] an extract node. And what that does is basically extract information
+[07:03] downstream. And
+[07:06] instead of basically letting the model guess this or figure it out through the
+[07:10] prompt, I turned it into a single classify to extract tool. And after each
+[07:15] step, the agent gets contextual guidance on what actually comes next, with
+[07:20] certain tools even chaining automatically like this one. Rather than
+[07:24] the agent having to guess or think about what is right versus being told what's
+[07:28] right. Now the agent doesn't get to freelance
+[07:31] the parts that we know are true. And since agents are stateless, we even
+[07:36] added a snapshot tool. So this is one call that basically hands
+[07:41] back the live state of our pipeline from the context of the entire flow to the
+[07:46] errors that were surfaced with like really specific error codes. And that
+[07:50] way they can reference what's actually there instead of guessing variable
+[07:53] names, hallucinating, etc. By moving context out of the prompt and into
+[07:59] structure, the agent stopped guessing and started referencing. And because the
+[08:05] tools only let pipelines take the shape that we as the engineers on the product
+[08:10] wanted, the human could follow exactly what happened and we could explain the
+[08:14] agent's outputs to downstream users of this MCP tool.
+[08:18] So, to avoid auto mode, you don't hand your agent an API, you hand it tools
+[08:24] that carry the overall expertise such as the right patterns, the state, and the
+[08:29] validators so the correct path also becomes the simplest path that the MCP
+[08:33] can take. So, we can build good pipelines now.
+[08:37] We're done, right? Not really. Thinking back to auto mode, the agent was
+[08:42] confidently wrong and no one could see it. Um that what we just talked about
+[08:47] fixed that for building. The tools made the structure really legible and the
+[08:51] human could follow what the agent did. But now the problem showed up at
+[08:55] runtime. When the outcome itself that the agent is trying to build goes wrong,
+[08:59] who can tell? For example, if we had a really bad schema or maybe the user
+[09:03] didn't really specify the actual use case, how can we tell that the agent did
+[09:08] something wrong? And with agents it goes wrong quietly.
+[09:12] So, instead of a seg fault or some actual error,
+[09:15] um the pipeline runs across 100 documents and maybe it misses scan on
+[09:19] page 30 or maybe the user didn't specify what types of documents were going into
+[09:24] the pipeline. And basically both of these things are
+[09:29] the same failure. The agent itself is very confidently wrong and the
+[09:34] uncertainty that the agent has is completely invisible. So, everything
+[09:39] that we did to fix this basically came down to one uh change, which was making
+[09:44] uncertainty really legible. In our system or with Reducto, uh
+[09:49] failures carry information. So, with Extract, we output confidence scores,
+[09:53] bounding boxes, all of this information about what went wrong, and we were able
+[09:58] to build tools that feed that information back into the model, which
+[10:02] actually helped optimize the extract schema over time, and get more accurate
+[10:06] document outputs. But, that's just the outcome
+[10:10] uncertainty. The agent also has to surface its own uncertainty. When it
+[10:15] hits something ambiguous, um two ways to read a field or a document type that it
+[10:19] hasn't seen, it shouldn't guess, and it shouldn't just pause exactly where it
+[10:24] is. And rather, it should ask, "I can read this two ways," and tell the user,
+[10:29] "What did you mean?" And so, basically in our evals, we started
+[10:33] failing the agent for building any shaky assumptions, and we gave our harness uh
+[10:38] prompt guidance to use the ask user question tools, etc., that Cloud Code
+[10:43] and other like frontier harnesses offer, instead of guessing. So, we rewarded
+[10:48] asking instead of guessing. And judgment doesn't live in the agent
+[10:52] alone. This entire pipeline is still overseen by the user, and the confidence
+[10:57] and the reasoning of the agent was then outputted as basically prompt guidance
+[11:02] in the MCP. So, now every time you make something new, it explains to the user
+[11:07] what it did and why, so the user can then review it, inherently acting in
+[11:11] service of the user. The agent basically satisfies what you
+[11:17] wrote, and not the um outcome that you wanted. So,
+[11:23] what happens if you make the uncertainty basically a bit more legible, and you
+[11:27] keep the final judgment where it can actually be accountable in the hands of
+[11:31] the human, then that one clarifying question does the work of all three,
+[11:35] giving the model context, capability, and also adding a human in the loop to
+[11:40] actually build that judgment and verify things as well.
+[11:44] So, going back to kind of all of these failure modes overall, we had initially
+[11:50] an auto mode that nothing nobody could inspect. We had wrong answers that
+[11:54] basically arrived in silence. And then an agent that passed the test by reward
+[11:59] hacking or hiding what it did. And underneath, they're basically one shape
+[12:04] where the agent had more autonomy and more access than the human could verify.
+[12:10] And that intelligence lives in the construction overall. So, building the
+[12:15] pipeline, generating the schema, and pulling in the right context is where
+[12:20] the agent is more most powerful and where a mistake is the
+[12:24] cheapest because the human is right there. By building for that interface,
+[12:28] we were able to also have user satisfaction go up with the MCP because
+[12:32] they could really see what was going on. And by using Reducto for the document
+[12:37] layer, we can guarantee accurate parses and extractions for parts of the
+[12:41] pipeline that we can't trust agents with. Where the agent operates, it earns
+[12:47] trust by being verifiable, correct, and building trust in service of the user.
+[12:53] And the whole conversation we had about legibility overall is what inherently
+[12:58] pays off. Agents are just intelligence in a box and the harness that you
+[13:03] surround them with is what provides them with the ability to deliver these
+[13:07] outcomes downstream. And so, once we reach this point, we
+[13:12] focus on instrumentation where every MCP session, the prompts that were sent from
+[13:16] the model were logged, and we even asked like our sales team and other people on
+[13:20] the team to basically export their cloud code sessions to understand how how was
+[13:25] behaving. Where humans overrode the agent, where
+[13:28] confidence of the model ran low, and where it asked questions. And because we
+[13:33] added all this instrumentation, um it flowed back into the long-term
+[13:38] guidance that the MCP had overall. So, the system got better at building
+[13:43] pipelines by building more pipelines without us rewriting by hand. This then
+[13:47] became a self-improving loop per org or per user that was building these
+[13:51] pipelines. The foundation became overall the same decision where we kept the
+[13:57] model very guided and very inspectable, and the information around it became
+[14:02] everything else that actually guided the model.
+[14:05] And so, one thing that kind of told me that we were doing something right with
+[14:09] these improvements is I never like explicitly told the sales team to use
+[14:15] the agent to build pipelines, but rather I just exposed it in our Cloud
+[14:19] Enterprise as product tools. And the sales team and various other people on
+[14:24] the team started basically wiring it into their workflows. So, before they
+[14:27] had a customer call, they would use CircleBack or Slack and basically learn
+[14:32] about the customer and then use the MCP to basically ask them questions about
+[14:36] the customer and then build a pipeline for that customer downstream.
+[14:41] So, when an agent's experience was built really in service of the users that were
+[14:45] using it, we weren't pushing people directly toward it and rather they
+[14:49] reached for it and actually started using it as a company-wide resource. And
+[14:54] that's where they also started to trust the output enough to put this in front
+[14:58] of high-value customers because the demo didn't just work, but the human actually
+[15:04] said, "Hey, I built this. Come check it out." And it actually paid off in these
+[15:08] sales calls. And I hope the Slack reactions can also help gauge that a
+[15:12] little bit. So,
+[15:15] overall, a few months ago I would have told you
+[15:18] that agent first is means that you have the best model, the best inference speed
+[15:23] or intelligence of the model. And with models getting better from closed source
+[15:27] to open source, from expensive to cheap, I think it now means almost the opposite
+[15:32] of what it sounds. To some extent, the agent doesn't go first. And to build for
+[15:37] agent experience means you have to consider the agent being in the loop
+[15:41] with the people who have to answer for the work downstream.
+[15:45] So, it's not just what does the agent connect to? Everyone's agent connects to
+[15:50] everything nowadays, and Claude can make a new connector for you immediately.
+[15:54] But, regard Beyond that, it's when your agent is really confidently wrong, who
+[15:59] finds out and how fast did they find out? If you build for that, then you can
+[16:04] build for something that people will actually trust with real work.
+[16:10] And yeah, that's about it. Thank you, guys. And also, we're at Reducto's at a
+[16:14] booth P8, and we are hiring for a lot of positions. So, please come check it out
+[16:19] at reductoai.notcurious. Thank you.
+[16:36] >> [music]

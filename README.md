@@ -7,8 +7,8 @@ talks, for people and AI readers.
 The generator reads the frozen catalog without changing it and publishes the
 corrected contract below under `kb/`. Legacy `video_id/techniques` inputs use
 an isolated compatibility adapter; real `vid/takeaways` inputs cannot fall back
-to it. The independent fixture suite passes, but does not establish real
-publication-date coverage. The publication workflow remains discovery-only;
+to it. The imported corpus passes the offline real-corpus checks described
+below. The publication workflow remains discovery-only;
 no caption ingestion, live refresh or site deployment is enabled by this change.
 
 ## First data deliverable: publish dates
@@ -39,9 +39,8 @@ is atomic per file, not transactional across the corpus; rerun `--check` after
 a filesystem failure. Use one writer per corpus snapshot.
 
 A free, repo-scoped `YOUTUBE_API_KEY` is required for live metadata lookup.
-No key is included in this repo. A live metadata backfill on a scratch copy
-of the import was verified on 2026-10-28 (see Develop); those data changes must
-be integrated separately before the checked-in corpus can claim coverage.
+No key is included in this repo. The checked-in import includes the metadata
+backfill verified on 2026-10-28; see Develop for offline coverage checks.
 
 ## Corrected bundle contract
 
@@ -74,7 +73,7 @@ refresh, site rendering and the downstream application routine.
 
 Full subtitles **are** published in this repo (owner decision D1). Each
 `transcripts/<vid>.txt` file carries a header with the source video URL,
-the speaker/channel credit, `retrieved_at`, the transcript SHA256, and the
+the speaker/channel credit, `retrieved_at`, the transcript SHA256, and
 exactly one provenance label: `# auto/author captions, unverified` for
 YouTube captions, or `# machine transcript (Whisper; no YouTube captions)`
 only when no YouTube caption track exists. Never include both labels or
@@ -124,8 +123,7 @@ metadata for **1398/1398** videos in a scratch copy using 28 `videos.list`
 requests. Only `published_at` changed in those analyses; all transcript and
 frozen-catalog bytes were preserved. Regeneration yielded 475/475 frozen claims
 and all six real-corpus tests passed, including OKF and transcript/hash joins.
-Generation replay changed zero files and offline `--check` passed. This is
-scratch-corpus evidence, not a claim that the unchanged import, remote CI,
-live refresh, caption canary or site publication is accepted. Integrate the
-genuine date backfill before re-running the gate on the imported branch;
-never substitute retrieval/analysis times.
+The dated analyses and regenerated bundle are now included in this import;
+the six opt-in checks and offline freshness check also pass against it. This
+is not a claim that remote CI, live refresh, caption canary or site publication
+is accepted. Never substitute retrieval/analysis times for publication dates.

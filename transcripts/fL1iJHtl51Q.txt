@@ -1,0 +1,235 @@
+# title: Building Cursor Composer – Lee Robinson, Cursor
+# source: https://www.youtube.com/watch?v=fL1iJHtl51Q
+# speaker: Lee Robinson, Cursor
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T10:28:55Z
+# sha256: 189a8a40a15de8a1c81fb8a4bc37bf6bfaf523feb5379fcf0d4950db697321c4
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:00] [Music]
+[00:13] [Music]
+[00:20] It's great to be back in New York and I'm very excited to be here and talk on
+[00:24] behalf of all of our engineering and research teams at Curser about building
+[00:28] Cursor Composer, our first agent model and my colleague Sasha actually gave a
+[00:32] version of this talk recently. So I'm excited to give my own uh my own take on
+[00:36] it. So cursor composer is a model designed for real world real world
+[00:41] software engineering and it tries to be both fast and smart. So as we've
+[00:46] measured it against our own benchmarks. It's better than the best open source
+[00:49] models. It's like up against recent Frontier models but kind of slightly
+[00:53] below the latest frontier with Sonnet 45 GPT 5.1 codecs. But where it really
+[00:58] shines is it's about four times more efficient at token generation than
+[01:03] models at a similar level of intelligence. So we're trying to mesh
+[01:06] speed as well as intelligence. So why did we build this model? I mean
+[01:12] obviously cursor has an IDE. Why are we getting into the model space? Why do we
+[01:15] care about this? Well, our research and product teams have been building a model
+[01:19] called tab which you can use for autocomplete. Maybe some of you use that
+[01:22] inside of cursor. and we wanted to take that same approach for a very low
+[01:26] latency model and apply it to coding with agents. But honestly, we weren't
+[01:31] really sure if it would work. So, we started prototyping some early versions
+[01:34] of what this model could look like, started to put it out and get some
+[01:37] feedback from users. And we were pretty surprised that this cheetah slug we
+[01:41] released for this model, people actually really liked it. Uh they really like the
+[01:45] speed, but the feedback we got was it's not really smart enough yet to be a
+[01:50] daily driver for a lot of their coding. So we needed it to be smart and fast.
+[01:55] Definitely needed to be smart. So we really worked on making this internal
+[01:58] benchmark that represented our usage on our own repos and how we actually built
+[02:02] software. Like if we had a model that was both fast and smart and a checkpoint
+[02:07] that our developers would use every single day to build the product and to
+[02:10] build all of our software, then we knew that we would be on to something. And
+[02:14] for example, one big change here that helped actually push this towards a
+[02:17] level where we had a checkpoint where people would use it was being able to
+[02:20] call tools in parallel and being able to very effectively use our semantic search
+[02:24] tool. And we'll talk about that a little bit more here later. So if you haven't
+[02:29] seen it, uh here's cursor in cursor 2.0 in our new view and we're going to use
+[02:34] the composer one model and you'll notice that it is doing a lot of things very
+[02:38] quickly. It's calling a bunch of tools in parallel like gp so reading a lot of
+[02:42] files. It's making shell commands. Uh it's making file edits. It's writing and
+[02:47] managing uh a list of to-dos. And you can kind of very quickly work through
+[02:52] tasks in the foreground here. Uh in this case, I'm investigating an issue in an
+[02:56] open source repo. And I don't know about y'all, but this has been a quite
+[03:00] different programming experience for me. Uh having working with coding agents for
+[03:04] a little bit of time now versus kind of firing off an agent and waiting, let's
+[03:08] call it 20 minutes for it to complete where you can kind of context switch
+[03:11] away. This really does help keep you in the flow and is a kind of a different
+[03:14] style of programming I think. So I want to talk about how we did this in a way
+[03:18] that's hopefully accessible for you all. I'm not a machine learning researcher
+[03:21] but I do really enjoy this stuff. Uh what we learned some of the
+[03:25] infrastructure challenges and then a little bit on where we're going uh
+[03:28] moving forward. So in cursor a user kind of submits a query to our backend. The
+[03:33] agent reads that query and then decides to make a series of tool calls. And our
+[03:37] agent has about 10 tools give or take, but we're going to focus on five here.
+[03:41] So reading files, editing files, searching your codebase, looking at
+[03:45] lints, and then also running terminal or shell commands. And the agent then is
+[03:49] able to autonomously decide, do we call these serially or do we run these in
+[03:53] parallel? And our goal with reinforcement learning here is to try to
+[03:57] mirror the cursor production environment as close as we possibly can. So this
+[04:02] data that we have in training, we want to kind of pretend like we're actually
+[04:05] calling real cursor queries. Uh so to do that, we are running a series of
+[04:09] rollouts. Um for example, in this roll out, we're calling a series of tools
+[04:13] like reading files and editing files. And when we run more rollouts, we can
+[04:18] start from that same initial starting point, but we might call a completely
+[04:21] different set of tools. So in this one, we're also doing codebase search. So we
+[04:26] score the output, we decide which one is better and then we update the parameters
+[04:31] of our model based on that change. So conceptually a pretty simple idea. The
+[04:36] challenges come from when you take the simple idea and then you try to scale it
+[04:39] up to a very large amount. So there's kind of three challenges. The first one
+[04:42] is trying to match the training and inference environment. So when the model
+[04:46] is actually being used in the product. Um, in this case with composer, we're
+[04:50] training a large mixture of experts model and it's being parallelized across
+[04:54] thousands of GPUs and if we don't speed that up, it's going to take forever to
+[04:58] train the thing. So, we want to make it really fast and match the training and
+[05:02] kind of sampling version to be as close as possible. The second challenge is
+[05:06] that the rollouts can get pretty complex when you start to look at real world
+[05:09] data here. So, models are going to use hundreds of thousands to millions of
+[05:13] tokens. They're going to make hundreds of different tool calls. And each of
+[05:16] these rollouts could take a, you know, a pretty different amount of time. One
+[05:20] might make a lot of tool calls, one might make not as many, and they'll
+[05:23] complete a different time. So, we have to figure out how to deal with that
+[05:26] challenge. And finally, there's this challenge of consistency. If we want to
+[05:30] mimic the production cursor environment as close as possible, we need to use
+[05:34] exactly the same tool format and the tool response. But in training, we have
+[05:39] this really bursty amount of compute. Basically, we're like doing all of this
+[05:42] training all at once, which is different than at production. So, it is really an
+[05:47] infrastructure challenge. We have these three machine learning challenges and
+[05:52] all of the solutions coincidentally are actually infrastructure problems. So,
+[05:56] let's talk through a few of these problems and how we solved it at the
+[05:59] infrastructure layer. So, our architecture is probably familiar for
+[06:03] some of you who have been involved in this space a little bit, but I still
+[06:06] think it's really interesting to talk about at kind of a high level. Uh, we
+[06:09] have three different servers. We have an inference server. We have kind of the
+[06:12] standard ML stack with PyTorch. We have an inference server. So the rollouts
+[06:17] that I just talked about, that's where we use Ray. And then we have environment
+[06:21] servers. And these are the ones where we're kind of simulating that cursor
+[06:23] environment that I talked about. And all these servers talk to each other. So for
+[06:28] example, the inference server can basically send these advantages back to
+[06:32] the trainer, which is like nudging it up or down uh based on the roll out and
+[06:36] then updating the model and getting new parameters.
+[06:40] So this this one is a bit more on the ML side, but we're we're trying to train a
+[06:44] model that's very very large and to do it as fast as possible. And one way that
+[06:48] our team was able to do this on the research side was to develop a library
+[06:52] of custom kernels that allowed for very low precision training. And basically
+[06:56] this allows us to just speed up the training process in a big way and also
+[06:59] make it much easier to ship to our inference server. So, if you're the type
+[07:03] of person who loves this, we wrote a blog post going way in depth on all of
+[07:07] this that talks about our custom kernels. Uh, if you're interested, the
+[07:10] TLDDR here is we found for the mixture of experts layer was about three and a
+[07:14] half times faster uh a speed up on Nvidia Blackwell chips. So, it made a
+[07:19] pretty significant uh impact on our training runs. So, once we update the
+[07:24] weights, we need to send them back over to the inference server uh during this
+[07:28] training process. and the inference server is the one that's doing all the
+[07:31] rollouts that I talked about calling the tools and kind of managing um what we
+[07:34] sent. The challenge here uh is that they all complete at different times. So kind
+[07:39] of a naive version of this there will be a lot of wasted time. So what we were
+[07:44] able to do is do load balancing across the different threads and processes to
+[07:48] basically shift the work around and and not have a bunch of idle time. So if one
+[07:52] roll out for example makes a ton of tool calls, maybe it installs some packages,
+[07:56] installs some library, we're not just sitting there waiting for all of the
+[07:59] other ones to finish. The inference server is spending all this time going
+[08:03] back and forth making the tool calls to the environment uh and getting the tool
+[08:07] results back. So again, communicating between these servers and we want that
+[08:11] environment to be as close as possible to the cursor product. One thing that's
+[08:15] nice about having both the coding agent, the IDE, as well as what we're doing
+[08:20] with the model research and training our own models is we can kind of co-design
+[08:23] these things together. So, as we were building out a lot of our RL work for
+[08:27] this model, we were also building our cloud agents product. Um, this is how
+[08:31] you can run a cursor agent kind of offline. You can run it from your phone
+[08:35] or on the web or kick it off from Slack, for example. And to do this, we spin up
+[08:39] virtual machines in the cloud. So each one of these VMs loads up the user's
+[08:43] code. It allows the agent to kind of like make file changes, run tools, and
+[08:48] edit code in a secure sandbox. And coincidentally, this is the perfect
+[08:52] Impra for RL and our use in training. So we have this like fleet of cloud VMs and
+[08:58] we have an environment that very closely matches the production cursor
+[09:02] environment and we can then use that for training. This does still have some
+[09:06] challenges though. I kind of talked about how the training workload is very
+[09:09] spiky and it's different than the kind of standard inference when you're
+[09:13] running the cloud agents product. So we needed to build infrastructure to
+[09:16] support all of these VMs and orchestrating between them. So you know
+[09:21] we have many different clusters, hundreds of thousands of VMs here and
+[09:25] you can see behind me one of the internal dashboards we built uh with
+[09:28] composer actually to visualize uh all of the different VMs in the fleet.
+[09:33] So why spend all this time trying to match the environment to be as close as
+[09:38] possible to cursor production. I've kind of mentioned that a few times. We could
+[09:42] mock it, we could simulate it out. Um, but one of the really nice benefits is
+[09:46] we get to give the model uh specific tools that we think are very valuable
+[09:50] inside of the agent. So, one of those is that we've trained our own embedding
+[09:54] model that allows you to do semantic search. So when you use cursor, we go
+[09:58] and index your codebase and then it allows the agent to make natural langu
+[10:03] natural language queries to find files that it might want to edit. And we did
+[10:08] some research on this recently. We found that semantic search not only helped
+[10:12] basically every single model inside of the cursor agent harness, but it was
+[10:15] particularly helpful with composer, which kind of makes sense when you think
+[10:19] about it. Like we trained composer in the exact same environment that we're
+[10:23] using at inference time. And so the model kind of becomes a power user of
+[10:27] this tool which is really effective. So let's talk about uh how the release
+[10:32] has been going and kind of where we're going next. Um as we were doing the
+[10:37] training process we kind of knew that RL was working when we were able to
+[10:42] continuously improve the model and start to see more and more improvements after
+[10:46] more and more rollouts. So we started about kind of the same performance as
+[10:50] the best open model and then as we trained and kind of threw more compute
+[10:54] at it the performance continued to increase and to a point today where
+[10:57] we're close to the frontier in terms of kind of the best coding agents that are
+[11:01] available and personally I think this is a great sign just for being able to take
+[11:05] and scale RL and apply it to these very hard specialized tasks like in our
+[11:10] example coding but it could be applied to other domains as well. uh RL also
+[11:15] allowed us to kind of change properties of the model in a way that was very
+[11:20] useful for the cursor product. We wanted the model to be both kind of fast at
+[11:24] generating tokens but also the end toend experience of getting a result that's
+[11:28] helpful. So for example, instead of reading a file one by one, you can read
+[11:32] 10 files in parallel with tool calling. And as you saw in the demo earlier, it
+[11:37] makes composer feel much faster when you have that. And we think this is kind of
+[11:40] just the start. there's a lot more we can do in this area to speed up the
+[11:43] model. Uh, and the second one is the model learned how to behave better as an
+[11:48] agent. So, in the beginning, the model was was kind of making too many edits.
+[11:52] Sometimes the edits were made unnecessarily, but as we trained more
+[11:56] and more, the model actually got surprisingly better at learning to
+[11:59] search and read files more. So, it would go and find the right thing before it
+[12:03] tried to make edits. Overall, just being, you know, a bit more effective.
+[12:08] So, we released composer last month in comp uh cursor 2.0 and so far seems like
+[12:13] people seem to like it. Has anyone here tried the model by chance? Okay, that's
+[12:18] pretty great. That's more than I expected. So, that's great to hear. I
+[12:20] think from my perspective using this model and using coding agents for some
+[12:24] time. I kind of describe this problem as like airplane Wi-Fi. So, when you're on
+[12:29] airplane Wi-Fi, uh it works, but it's kind of frustrating. you really want to
+[12:34] do whatever you're trying to do, but it's just it's a little slow almost to
+[12:36] where sometimes you wish that you just didn't have Wi-Fi at all. And I think
+[12:40] for some of us who adopted coding agents very early, it kind of feels like
+[12:44] airplane Wi-Fi sometimes cuz if it's taking 10 or 20 minutes, you're in this
+[12:48] weird I think Swiss called it semi async valley of death where you either want
+[12:52] something that's really fast or you want the most powerful most intelligent model
+[12:56] that can run for you know a significantly long amount of time maybe
+[13:00] in the background maybe you know 30 minutes days and I think when you're
+[13:04] stuck in the middle that's that's very very painful. So for me composer and I
+[13:08] think other people it's brought a lot of joy back to coding with agents that felt
+[13:12] more like when you were writing code by hand where you're very in the loop very
+[13:16] synchronous. So I'm excited to see more people exploring this space as well. For
+[13:20] me daily uh I'm writing a lot of plans with kind of the latest uh model like
+[13:25] the the highest frontier. So GPT 5.1 codec is is really great for plans. uh
+[13:29] and then I'm using composer to actually take that plan kind of like what Dex
+[13:32] talked about like take the context engineering work and then actually go
+[13:36] and build the thing with it. So uh a few reflections from our research and
+[13:41] products team on building composer. The first is that RL can work surprisingly
+[13:46] well for training very specific models and you know giving it this high quality
+[13:52] data and a decent amount of compute. You know at cursor we're not trying to build
+[13:57] general intelligence. We're not trying to build AGI. We're trying to build very
+[14:01] good coding models and RL RL has worked surprisingly well for that. The second
+[14:06] one is uh how much tools AI tools like cursor it doesn't have to be cursor but
+[14:11] like cursor really helps speed up research and development. You know of
+[14:15] course our entire team uses cursor to help them write code and debug code more
+[14:20] efficiently but that speed up that increase really compounds across all of
+[14:24] our engineering efforts. So we're able to try more ideas, ship product faster,
+[14:29] try new research. Um, so it's been really really helpful there. And the
+[14:32] last one that's, you know, personally pretty interesting for me is that
+[14:36] it was interesting to see how much of the ML work and the training process was
+[14:40] actually also an infrastructure problem. They were very correlated. And going
+[14:45] back to my time at Verscell, we saw a very similar thing where a lot of the
+[14:49] magic moments that you can have in working in frameworks in the JavaScript
+[14:52] or Python space, you also need to think a little bit about the infrastructure of
+[14:56] where they're actually deployed. So these things are are more related than
+[14:59] people might think. So those are some of our reflections. Uh sounds like some of
+[15:03] you have tried it out. If this is something that you're interested in and
+[15:05] working on, we're hiring pretty much across the board at Cursor right now. We
+[15:09] just opened up an office in New York if you're here based in New York. and we'd
+[15:12] love to talk to you about building the best coding models in the world. Thank
+[15:15] you.
+[15:18] [Music]

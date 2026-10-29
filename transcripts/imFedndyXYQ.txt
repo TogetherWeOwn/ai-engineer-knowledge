@@ -1,0 +1,305 @@
+# title: Using LLMs to Secure Source Code — Eugene Yan, Anthropic
+# source: https://www.youtube.com/watch?v=imFedndyXYQ
+# speaker: Eugene Yan, Anthropic
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T07:32:30Z
+# sha256: 3a5a82cbf434d0d07b6ad47c422726ae79a5fd134dc2571a198269b36ff29d8b
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:01] [music]
+[00:12] Hi, I'm Eugene U member of technical staff at Entropic. Um, I've spent the
+[00:16] last several months with working with security teams and claw to find and fix
+[00:20] vulnerabilities in codes and systems. So, I want to share with you what we've
+[00:23] learned as much as we can. Before I get started, quick show of hands. How many
+[00:26] of here here are security engineers in your day job?
+[00:31] Okay. Okay. How many of you here are engineers in your day job? Oh, sweet.
+[00:35] Okay, great. I have better understanding of how to give this talk now. Um,
+[00:39] security engineers in the room. Please don't boo me if I oversimplify things. I
+[00:42] want to get this message out to as many people as I can. So, first I want to
+[00:45] share with you three highle trends that we are seeing in terms of model
+[00:49] capabilities, right? Number of vulnerabilities found um and where the
+[00:52] bottleneck is shifting to. Then I want to distill the lessons we've learned
+[00:55] from working with dozens of uh organizations to improve their security
+[00:59] posture as well as the bottleneck that you might encounter and how you can try
+[01:02] to address it and prep for it. And finally, I want to share how you can get
+[01:05] started this week with links to resources.
+[01:09] So why do we care about so much about cyber security now? Um time horizon
+[01:13] benchmarks track the length of time an AI model can complete a task measured
+[01:20] against an actual human doing the task. Um so we all know about the meter eval
+[01:25] task. You know how how much knowledge what a engine can do. The UK AI security
+[01:29] institute has a cyber security version of this. You know these tasks require
+[01:33] identifying exploiting security weaknesses in target systems and you
+[01:37] know testing skills like reverse engineering and web exploitation. So in
+[01:40] this chart we see that models are able to increasingly do longer cyber security
+[01:44] task. Um but what's also interesting is that you kind of see a step jump against
+[01:49] the previous regression line. So these models are a step improvement in
+[01:54] capability. And what does this step improvement in capability buy us?
+[01:58] Recently Mosilla Firefox published a number of security bug fixes they made
+[02:02] each month. The average in 2025 was about 2020 20ish. And then you can see
+[02:09] in February and March it kind of 3xed to about 60 and 70. And then in April it
+[02:15] 7xed to 400. So what this means is that what's happened in April is 20x of last
+[02:22] year's average. Um they attributed about twothirds of
+[02:26] this to mess preview about 271 which shows that frontier models can help
+[02:32] defenders like yourself find and fix vulnerabilities at scale.
+[02:37] We also uh what are some notable vulnerabilities? Hands up. Who here
+[02:41] remembers lock for shell? Anyone? Anyone was here over the December holidays like
+[02:45] scrambling to patch this seu? So log for shell um is a bug in the Java logging
+[02:51] library. If an attacker sends a string, you log it, the attacker can run code on
+[02:56] your system. The Belgium defense ministry was breached within days and a
+[03:00] fintech platform uh leaked 2 million users data. And then before that we had
+[03:04] heartbleleed which is an a bug in open SSL. You know so much of the of the
+[03:08] internet runs on OpenSSL and we we all know what impact it had.
+[03:13] This is entropic sharing of our own work scanning more than a thousand open
+[03:18] source repos. Um from 23,000 candidates uh 6,200 of them were rated as high or
+[03:25] critical and at the time of the update 1,600 of them were reported to
+[03:28] maintainers and about 100 patch upstream. We shared our observation that
+[03:35] finding vulnerabilities now is quite straightforward.
+[03:39] The bottleneck has now shifted to verification, triage, and patching. And
+[03:43] I want to share with you everything we've learned about that so you can get
+[03:46] ahead of it. So how do we do this in our own systems
+[03:50] and code bases? Um, two words, agentic harnesses. I'm citing Mozilla again, and
+[03:56] this was even before they worked with me preview. I'm going to read off the
+[03:59] screen here. Early experiments showed that some promise, but the high rates of
+[04:04] false positives made it impractical to scale. But the introduction of agentic
+[04:10] harnesses that can reliably detect security issues has changed this. Right?
+[04:15] These models and harnesses together can find real bugs and dismiss
+[04:20] nonreproducible speculation.
+[04:23] So the harness and the model working together can get a lot of work done.
+[04:29] We found that most teams converge in approximately these six steps. And a big
+[04:34] chunk of my talk is going to be about these six steps. Right? Right. The first
+[04:37] two steps are set up, right? You do a bit of upfront investment per codebase.
+[04:41] How many of you here know what a threat model is?
+[04:44] Amazing. I love that. Uh a track model is some kind of like kind of a system
+[04:48] design, but for your codebase or system, what are threat vectors? So, this helps
+[04:52] you decide what are the vulnerabilities in your system that you care about. And
+[04:56] then also, we also want an isolated sandbox where you let your model run
+[05:00] possibly untrusted code or you let your model deliberately detonate proof of
+[05:05] concepts of exploits. I'm going to call them pox to confirm that they are true
+[05:10] positives. And then the next four are loop where you know we have discovery
+[05:13] that identifies vulnerabilities. Verification confirms that they are
+[05:17] real. We have triage. You know you can't give a developer 100 vulnerabilities.
+[05:21] You got to identify the top 10 or 20 critical and high so they can focus
+[05:25] their attention and then you can patch patch the bugs. So now I'm going to talk
+[05:28] about each step. Now to make things concrete I want to share with you how
+[05:33] they apply on a hypothetical system. So this is order service. Order service you
+[05:38] type in a ID and then you look up an order. So what kind of v vulnerabilities
+[05:42] might we find in this? Um the first step is the threat model. So why does this
+[05:48] matter? So several teams if you look at a code right finding have found that
+[05:52] having a well doumented thread model really increases your true positive rate
+[05:57] to 90%. 90% is outstanding if you ask me. I think anything above 75 is is
+[06:02] great. That's where you want to aim for. Now to put it another way, one CISO said
+[06:06] this, the model has great context of the code but poor context of the system. And
+[06:11] why does this why does this happen? It's the whatever the model can read, the
+[06:16] model will understand well. But there's so much information that the model
+[06:20] cannot read. Why did the senior designer design the system this way? What are all
+[06:24] the vulner vulnerabilities that on call has been fixing that has not been
+[06:28] written down? All of this is now implicit context in your head, but you
+[06:31] need to write it down somewhere, maybe in a threel to help the model be a
+[06:35] better security engineer. So we can work with models to build these thread
+[06:39] models. And the track model is really just a document, right? First, we can
+[06:42] bootstrap a trap model, give the model access to all your documents and code,
+[06:46] even past code commits, past patches that were made and what CVE they were
+[06:50] patching and you can ask the model to infer, hey, what possible what other CVs
+[06:55] have not been patched, right? So a model can do that. Then after the next step is
+[06:59] that you should ask the model to interview the expert on the system right
+[07:05] what are some things that could happen that we didn't plan for or what are some
+[07:08] things that we actually don't need to worry about for vulnerability because
+[07:13] maybe this is an internal VPN only app or there's a compensating control
+[07:16] elsewhere a lot of this is not in the code right if you look at your codebase
+[07:20] it's not there but it needs to be written down somewhere so the model can
+[07:23] benefit for it so here's an example thread model of order service right you
+[07:28] know the key asset is the data you know contains customer PII and the entry
+[07:32] point is the orders API we can also see that the model has suggested some
+[07:36] possible threat vectors like SQL injection and that the fact that you
+[07:39] could call this API without any form of authentication
+[07:42] then the second step is the sandbox so isolation and reproducibility
+[07:48] in some cases we may be running untrusted code in some cases we may be
+[07:52] asking the model to deliberately create exploits so we want some isolation ation
+[07:58] um to prevent the model from doing bad things. So this isolation doing bad
+[08:01] things could be data exfiltration or you know dropping things in production and
+[08:06] of course uh you you want all of this to be running in a VM without egress and of
+[08:11] of course without your cloud credentials. The second thing we want is
+[08:14] reproducibility. So a lot of times uh you may find that the model may find a
+[08:19] bug because you were using a old dependency or you want you want all of
+[08:24] your agents to be starting from the same baseline container so that your agents
+[08:28] can verif can can can run everything in a partners in the pipeline. So now
+[08:33] building a repro uh representative sandbox of your system is actually quite
+[08:36] difficult but the capability is quite useful. I think here's one team we
+[08:40] worked with. They quoted the biggest ef the biggest lever we had is having the
+[08:44] model test beds essentially sandboxes with live systems and where they can run
+[08:49] and detonate the pox to confirm that they are true positives. So how would a
+[08:53] sandbox for order service look like? Well this is a simple sandbox uh three
+[08:59] docker images connected together. One for the app, one for the posgress
+[09:03] database and one for the radius cache. And on the right we have the security
+[09:07] agent uh which sits outside the target boundary trying to probe the app via
+[09:11] HTTP. Now that we have the setup done we can
+[09:15] now move on to doing the work of discovery finding the vulnerabilities.
+[09:21] So the first is no so what are some there there are three things that matter
+[09:25] a lot and there's no surprises here. The first thing is really context
+[09:28] engineering. You're going to give the model all the context as much context as
+[09:32] you can. If the if it's written down and if you share with the model, the model
+[09:36] can find it. The model will be a better security engineer. You'll improve your
+[09:40] vulnerability coverage. You'll reduce your false positive rate. The second is
+[09:44] to have simple prop simpler props. Um, how many of here have found that as
+[09:49] models get better, you actually need to remove from your prompts.
+[09:54] That's what I found with every new model version of StepJum, I actually have to
+[09:57] cut my prompt size by maybe about 50%. Right? So as models get better your
+[10:02] prompts need to be less and less specific prescriptive even while you
+[10:06] know previous models you might ask the model to look out for specific category
+[10:09] classes but for newer models you can just probably say something like look
+[10:13] for where untrusted data hits the trust boundary and the model is very good at
+[10:18] inferring this. Finally give the model tools. So one example we had a
+[10:23] pentesting team. They give the model tools to check the response to to query
+[10:28] the API, check the response, read the logs, read the source code. Now this is
+[10:34] just like the tools that you give a regular security engineer, right? A lot
+[10:37] of times you expect the model to just read the code. That doesn't quite work.
+[10:40] Allow the model to be dynamic to read the tools uh to to run the tools. And
+[10:44] when they did this, their true positive rate was almost 100%. because the model
+[10:49] could actually verify in the loop. So here is the get API for the order
+[10:55] service and it's just five lines of code. Can anyone here spot the
+[10:59] vulnerability? You can shout it out
+[11:05] you guys. Exactly. So this is what the discovery agent flag right you know in
+[11:09] line four we built a SQL query via Python string interpolation. So the user
+[11:13] input input flows straight to the SQL query right and that means that someone
+[11:17] can inject a SQL query that excfiltrates data from your database. This is code
+[11:21] that I would have written right as me as a non security engineer it's just a very
+[11:25] I just write the simplest code possible and this is how it would look like
+[11:28] current models are very good at detect spotting simple stuff like this.
+[11:34] So after discovery so we have maybe a thousand let's say 100 vulnerabilities
+[11:39] we may have not been able to confirm them. The next step is verification. So
+[11:44] if you think about machine learning, discovery optimizes for recall. Find as
+[11:48] many vulnerabilities as possible. Verification optimizes for precision. Of
+[11:54] the 100 vulnerabilities we found, how many of them are truly optim uh truly
+[11:59] exploitable. So we have them both working separately. So we found that
+[12:03] it's helpful to have these two steps separately, right? Because when the
+[12:06] discovery agent is trying to verify its own work in the loop, trying to debate
+[12:10] against itself in the loop, it may actually self censor and this may
+[12:13] actually hurt recall. Um, and when building the verification agent, it's
+[12:17] helpful for the verification agent to be independent and adversarial. Independent
+[12:21] means that the verification agent doesn't see the reasoning traces,
+[12:25] doesn't see all the work that the discovery agent has done. All the
+[12:28] verification agent gets is the vulnerability and it approaches it from
+[12:32] an adversarial point of view. assume that this vulnerability is false, try to
+[12:36] confirm it's false or confirm it's true. So this sets the this sets a very high
+[12:40] bar for the vulnerability which reduces the false positive rate. And also if you
+[12:45] have invested the time in building building a representative sandbox
+[12:50] um have the verification agent build the p detonate the pock to confirm if the
+[12:56] ver the vulnerability is true. So in this case back to order service our
+[13:01] verification agent is confirming the SQL injection right in a fresh container and
+[13:05] this is why we have everything containers the verification agent is
+[13:09] only given line number four here's where a SQL injection could happen and the
+[13:13] verification agent actually tries just runs the corl command and the
+[13:16] verification agent can see all the customer pi that has been exfiltrated.
+[13:21] So now you have confirmation that a SQL injection can work.
+[13:26] So after discovery and verification, we've maximized recall, we've optimized
+[13:31] for precision, the next step is triage. So a lot of this may truly fire, but
+[13:36] some of these are bug correctness issues. They have very low business
+[13:39] impact. So across multiple teams, they shared that you can lose trust with
+[13:44] product engineers by sending them all the vulnerabilities that are true, even
+[13:49] those that are medium or low severity because those engineers can't cope. And
+[13:53] as we've seen so many times, the scars resource now is engineer attention. So
+[14:00] imagine you're a product engineer. What are the kinds of vulnerabilities you
+[14:03] want to actually receive and fix? So as part of this step, we can do
+[14:06] dduplication, you know, cheap heristic checks or we can get a model to help you
+[14:10] with clustering and dduplication. We should also consider the severity of the
+[14:14] exploit, right? Uh one thing to consider is the magnitude of the outcome of the
+[14:19] impact. What is the magnitude? Is it a ring zero magnitude or ring one
+[14:22] magnitude? Um, and also the likelihood of it occurring, right? How many hoops
+[14:27] does an attacker have to jump through to actually make that exploit? And this is
+[14:31] where the thread model is useful to all. You can think of the thread model as
+[14:34] just synonymous with context. Just give the model context about your business,
+[14:38] right? So for example, compensating controls. If you have a firewall,
+[14:43] something that was initially high severity could actually be low. On the
+[14:47] other hand, if you know that your database is mostly customer PI data or
+[14:51] healthcare data, a model might have have set that as medium severity, but it
+[14:56] actually could be high because the the contents of your data are so sensitive.
+[15:01] So in this case, we have on the left triage that the agent has done. The
+[15:07] agent has said that this is high severity for these reasons, right? High
+[15:10] impact, high likelihood. Now on the right after human review
+[15:16] the operator has confirmed that you know has downgraded this to low likelihood
+[15:20] and the reason why it's low likelihood is because we have an application
+[15:23] firewall that blocks SQL injections and also there's the fact that the service
+[15:27] is internal only it's only for internal I warehousing or internal logistics it's
+[15:32] not it's never internet facing therefore the likelihood is low now you can
+[15:35] imagine like how would the model know this this is not written in a codebase
+[15:39] it may be available in a system design it may be available in your
+[15:42] documentation, it may be available in your confluence etc. So this is the kind
+[15:46] of context you need to provide to the model so that the model can get better
+[15:49] at this. Now after that we close the loop
+[15:54] patching to validate the patch you know we can build a patch and then we want to
+[15:58] validate there's a ladder of sorts first the original PC has to stop working
+[16:03] that's basic second the existing test suite should stay green no regression
+[16:07] and then we can go further right we can have a fresh discovery agent try to
+[16:11] attack the patch code again is the patch comprehensive enough and teams have
+[16:15] found that by giving the patching agent such feedback um you can actually the
+[16:19] patch quality improves greatly right and you know This is the generative verifier
+[16:23] loop. Give your agents context, give your agents feedback, and they they can
+[16:26] do the do their work. And finally, a human confirms the patch before it's
+[16:30] been merged. So here's how the patch will look like. You know, in the first
+[16:33] div, we update the code, it's a oneline fix where we move the variable out of
+[16:37] Python uh and therefore we reduce the code of SQL injection. And in the second
+[16:42] div, not only do we update the code, not only do we fix the system, we close the
+[16:45] loop. We make sure that the next time we run this loop, we run this scan, these
+[16:50] issues don't happen again. And this is really important when you're building
+[16:53] the building harnesses, right? You're building loops. They're operational
+[16:56] expense, but when you close the loop, they now become capital expense. You get
+[17:00] better with each iteration you run. So you make clear the compensity controls.
+[17:04] We have the application firewall and the fact that it's internal only. Okay. So
+[17:09] the quick recap, these are the six steps and each step focuses on one thing.
+[17:14] Track model provides context. Sandbox provides isolation and reproducibility.
+[17:19] This is the baseline fundamentals that you need to have. This will carry
+[17:22] throughout every scan. You have context and reproducibility.
+[17:27] Then after that, the rest is really if you look at it, it's if you if you
+[17:30] squint, it actually looks like an ML pipeline. Recall, precision, ranking,
+[17:36] and closing the loop. It's a regular machine learning pipeline.
+[17:43] Now, that's the technical challenge we have. There's another technical
+[17:46] challenge we have. And as my previous director would say, non-technical
+[17:50] problems are an order of magnitude harder than technical problems. So what
+[17:54] are some other bottlenecks you might have? So imagine you have a process.
+[17:59] What happens when you have one or two orders of magnitude more input? What is
+[18:04] going to start to break? In the case of the harness, the scanning harness, you
+[18:08] just have more engineering. You spend more compute. You pay more money. Things
+[18:12] that can be solved with money are not really problems. But human attention
+[18:16] doesn't scale. Your deaf, your product engineers and
+[18:20] your security engineers, what if they don't agree on what high severity or uh
+[18:25] critical severity is? You need to put them in a room. You need to write down
+[18:28] all these rules so that everyone agrees. And you know your threat models, they're
+[18:33] all stuck in people's heads right now. Someone needs they need to be
+[18:36] interviewed maybe by a model or by someone else and write all that trap
+[18:40] model down so that now you can have agents help you. And finally, you know,
+[18:44] patching patch patch review. Um, I still don't know of many companies that gone
+[18:50] through fully automated patch review, especially when p uh patching security
+[18:53] issues. So, here are some organizational bottlenecks that you might hit and what
+[18:58] you can do. The first thing is vulnerability routing. So, if you maybe
+[19:02] get a dozen vulnerabilities a month, you can probably curate them. You know,
+[19:06] email them to specific teams, assign Jira tickets. When you have hundreds,
+[19:09] you can't do this. And this can really be as simple as you know sending it to
+[19:14] the code owner etc. um or or the service owner and it doesn't really need an LM
+[19:19] in the loop. Then second thing is severity calibration. The the one hard
+[19:23] thing we found is that product engineers and security engineers red team blue
+[19:27] team they may not agree on what high severity is and all this requires a lot
+[19:31] of your business context. I really think it helps to have everyone discuss and
+[19:36] write it all down once and for all agree upon that that you can send that to
+[19:39] agent and finally the patching bandwidth. Um I'm sure no one writes
+[19:44] very few of you here write code by hand now but it's also very challenging for
+[19:48] you to just be given the vulnerability and try to implement a patch even with
+[19:52] LM assistance. you definitely want to be moving towards AI generated patches and
+[19:58] then have the human loop verify and you know generate the patch reattack the
+[20:01] patch. Okay, if you only remember one thing well here
+[20:07] are the three things you want I want you to remember. I would like to you start
+[20:10] now please start with open source dependencies start with whatever you're
+[20:15] comfortable with. Two I want to teach you how to climb the
+[20:19] learning curve. Don't try to aim for automation immediately. Right? Start
+[20:24] interactively. Do it hands on the wheel with uh claw
+[20:27] code or your favorite ID. Doesn't matter. Learn where you get cut. Learn
+[20:31] what kind of context you're missing. Learn where precision is low. Then third
+[20:35] is don't just aim for scanning. Uh scanning is not the bottleneck.
+[20:41] Verification, triage, and patching. And then all your organizational processes.
+[20:44] Those are the bottleneck. Over there. I have a couple of resources. We have
+[20:47] cloud security to scan your codebase, validate findings such as patches. We
+[20:51] have a blog. We have open source repos for with that includes the interactive
+[20:56] skills and autonomous harnesses and all you have to do is to run this
+[21:00] few steps to very quickly get hands on the wheel and in it if you look at step
+[21:05] five you have the harness and you can just customize it.
+[21:08] That's all I had. Thank you.

@@ -1,0 +1,194 @@
+# title: Mission-Critical Evals at Scale (Learnings from 100k medical decisions)
+# source: https://www.youtube.com/watch?v=cZ5ZJy19KMo
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T13:33:57Z
+# sha256: 5f83179aa44418c576d8f78a2ef6614d50efc91f592392531fa8d2ea45937e9a
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:00] hi my name is Christopher ljy and I'm a medical doctor turned AI engineer and in
+[00:04] this talk I'm going to consider what it means to build an eval system that works
+[00:07] at scale and in particular one that supports Mission critical decisions like
+[00:11] in healthcare where there's no room for error now this is something we've had to
+[00:14] figure out at anterior as we've scaled to now serve insurance providers
+[00:18] covering 50 million American lives so I'll share what we've learned in the
+[00:21] last 18 months why real-time reference-free evals can be the special
+[00:25] source that enables customer trust and how you can build them for your company
+[00:30] so we've all seen that it's pretty easy to create an MVP product powered by llms
+[00:34] and it's getting even easier as models get more and more powerful but what
+[00:38] about going from MVP to serving customers at scale now there are a lot
+[00:41] of problems that you just won't see until you hit scale and as request
+[00:44] volume increases so does a number of edge cases that you've never seen
+[00:48] before so let's look at an example from the medical industry at anterior our
+[00:52] core product supports prior authorization decisions around whether a
+[00:55] treatment request should be approved or reviewed by a clinician we receive
+[01:00] medical records and guidelines which contain various questions so an example
+[01:04] question might be whether a patient has had a previous brain MRI suspicious for
+[01:08] multiple sclerosis and this is then being used to determine whether the
+[01:11] patient should receive an MRI of their cervical spine so our AI may show
+[01:15] something like this that the medical record shows a brain MRI from this date
+[01:19] that demonstrates hyperintensity in the infratentorial DRX theortical and per
+[01:24] ventricular white matter which is noted to be consistent with multiple sclerosis
+[01:28] and this confirms prior brain m findings suspicious for MS and on the surface
+[01:32] this looks pretty reasonable but the problem is that this is missing some key
+[01:36] medical Nuance now in a medical context if I as a doctor say that something is
+[01:41] suspicious I'm implying that the patient doesn't already have a confirmed
+[01:44] diagnosis but in this case the patient actually did have an existing diagnosis
+[01:48] and therefore this is not just suspicious it's confirmed which means
+[01:51] that this answer is actually wrong now this kind of mistake might happen every
+[01:55] thousand cases or even every 10,000 cases but if you're processing more than
+[01:59] 100 ,000 cases every day then that's a lot of mistakes that you need to pick up
+[02:04] and the problem is we just can't make mistakes like this there are many
+[02:07] organizations in US Healthcare that are being sued right now for using AI
+[02:10] automation inappropriately so how do you identify and handle failure cases well
+[02:16] the first thing you should consider is performing human reviews of AI outputs
+[02:21] and interior we've built out an internal clinical team and created internal
+[02:24] tooling to make this as easy and effective as possible so this is our
+[02:28] review dashboard which we've called scalp
+[02:30] and on the right hand side here we have all of the context that our reviewer
+[02:33] needs surfaced in an accessible way without any scrolling required so they
+[02:37] can see the medical record and they can also see the guideline and on the left
+[02:41] hand side we have the question that we're answering and the required context
+[02:46] and this empowers our reviewers to review a high number of questions very
+[02:49] quickly so continuing our example from before we can ask our reviewers to add a
+[02:53] critique saying why this is wrong and label it as Incorrect and then save that
+[02:58] into our system and one thing we can do with these critiques which are a
+[03:01] statement of what's wrong is we can generate ground truths which are a
+[03:05] statement a description of what the correct answer is so using that critique
+[03:09] and the original answer we can then generate these ground truths and we can
+[03:13] use those ground truths in offline evaluations which I'll talk about
+[03:17] shortly but there's a problem with human reviews and it's the following let's say
+[03:21] we've created an MVP we have our first customer and we're making around a th000
+[03:25] medical decisions per day well we want to know how we're doing so let's say
+[03:28] we'll review half of those cases to give us a good
+[03:32] estimat um now reviewing half of those means 500 human reviews per day and if
+[03:37] every clinician on our team can do about 100 reviews per day that means we need
+[03:40] five clinicians to do all of these reviews and that's okay that can work
+[03:46] but the problem is when we go beyond MVP and we you know we start doing 10,000
+[03:50] medical decisions a day to maintain the same percentage we would now have to do
+[03:53] 5,000 human reviews every day so maintaining the same ratio we now need
+[03:57] 50 clinicians and that's bigger than our entire companies at the moment okay so
+[04:02] what we might do is say well maybe let's you know review a smaller subset of
+[04:06] cases let's only review 5% that gets us back down to 500 human reviews a day
+[04:11] which can be done by five clinicians but the problem comes as we scale even
+[04:14] further let's say we now grow to 100,000 medical decisions per day which is still
+[04:18] a very conservative number again we're back at 5,000 human reviews and 50
+[04:23] clinicians so the problem here is clear this just doesn't scale and we're left
+[04:28] with these two questions which which is firstly which cases should we review and
+[04:33] secondly of all the cases that we didn't review what how did we
+[04:36] perform so another component of this is offline eval data sets and by offline
+[04:42] here I'm referring to data sets that we build that live outside of our product
+[04:46] and we can keep on running evals against them and getting scores so we can take
+[04:50] the ground truths that we generated from our human reviews to build these data
+[04:53] sets and this can be helpful we can Define some gold standard data sets we
+[04:57] can segment them by Enterprise by uh specific medical type medical conditions
+[05:03] you know tough questions complex cases ambiguous outcomes and we can plot those
+[05:06] performances over time we can use them for iterating our our AI pipelines
+[05:10] against and and it's helpful but the problem is that if you wait until New
+[05:14] edge cases are represented in this data set which You're Building kind of
+[05:17] Downstream of actually giving this to the customer it could be too late so
+[05:21] relying only on offline evals is playing with fire um and the input space of
+[05:27] medical records is huge there's very high heterogeneity so at scale you're
+[05:32] continually going to see new edge cases that you need to identify and respond
+[05:37] to and the solution for that for these two problems is realtime reference-free
+[05:42] evaluation system so reference free also known as label free means that you
+[05:47] evaluate before you know the true outcome I.E before you have done a human
+[05:51] review and that enables the system to be real time it enables you to respond to
+[05:55] issues immediately as they arise so we saw we had these two
+[06:00] questions which cases should we review and how do we do on the cases that we
+[06:04] couldn't do a human review on well a great starting point here is using an
+[06:08] llm as judge the way this works is the following so we have our inputs they go
+[06:12] into our llm pipeline that we're evaluating and it gives some kind of
+[06:15] outputs we then feed that output into an llm as judge along with a scoring system
+[06:21] and this scoring system can be many different things it could be uh how
+[06:25] helpful is the output how concise is the output is the tone of the output on
+[06:29] brand it could be how confident are we that the output is correct if our if our
+[06:33] output is a binary or multiclass classification we can give that
+[06:36] confidence level so in our case at anterior we do have a binary output our
+[06:41] generated output is either approval that we think this treatment should be
+[06:45] approved or it's an escalation for review and we can take that we can put
+[06:49] that into our reference free eval which could be an llm as judge but can also be
+[06:53] other methods such as confidence estimation using logic based methods and
+[06:58] using those methods either alone or in combination we can then give an output
+[07:02] and in our case we use it to give us a confidence grading how confident are we
+[07:05] that our llm outputs from our actual pipeline here is correct we can go all
+[07:10] the way from high confidence that it's correct down to such low confidence that
+[07:15] we actively think this is wrong and then we can use that score and use a
+[07:17] threshold to convert that into what the predicted correct output is so what do
+[07:21] we think the the right answer is and these are two pieces of information that
+[07:24] we can then use in different ways the first thing we can do is we can
+[07:29] predict the estimated performance on all of the cases real time as we're
+[07:33] processing them so we get our medical decisions coming in we put them through
+[07:37] our reference for evals and we get our predicted correct outputs we can then
+[07:40] see across all of these cases not just the ones that we're doing human reviews
+[07:43] on how do we think we performed and that's useful because we can then
+[07:46] respond to that and we can feed that back to customers we can then take our
+[07:50] cases where we did do human reviews as well as reference free evals and we can
+[07:54] compare those outputs based on that we can compute an alignment and see how
+[07:58] well is our system doing and how much can we trust
+[08:01] it and another thing that we can do is we can take our confidence grading
+[08:05] rather than our predicted outputs from our reference evals and we can combine
+[08:09] those with contextual factors things like the cost of procedure the risk of
+[08:12] bias the previous error rates and we can use those to dynamically prioritize the
+[08:16] order for cases so we can identify the most relevant cases with the highest
+[08:21] probability of error to then prioritize those for human
+[08:24] review and this creates this virtuous cycle where we can keep on using human
+[08:29] reviews to validate and improve our performance and then we can prioritize
+[08:33] cases dynamically and keep on feeding that back so our reference free evals
+[08:37] surface the cases and then our human review determines the accuracy and we
+[08:40] can keep on doing this in a process that's often described as validating the
+[08:43] validator and over time the number of edge cases that we've never seen before
+[08:47] get smaller and smaller and our ability to detect them improves and now we've
+[08:50] built something that's really hard to replicate so while a competitor may be
+[08:53] able to make a similar product you can only build this system by processing
+[08:57] High volumes of real data and going through a number number of datadriven
+[09:00] iterations and once we're confident in the performance of our system we can
+[09:03] then actually incorporate it into the pipeline itself so now it looks like the
+[09:06] following we have our inputs we pass it through our original Pipeline and we
+[09:10] generate our outputs and we then pass it into our reference free evals and
+[09:14] depending on what the reference free eval output is we can either give it
+[09:17] back to the customer because we're confident in the response that we're
+[09:19] giving or we can decide to take a further action and this further action
+[09:23] might be that we send it off to another llm pipeline perhaps with more expensive
+[09:26] models it might be that we want to do a human internally and give it to an on
+[09:31] call clinician to review it and then return it to the customer or it might be
+[09:34] that we want to actually surface it into the customer's review dashboard so that
+[09:37] their team can review it but Al together this becomes a powerful mechanism for us
+[09:40] to really ensure that our customer can trust the outputs that we're giving to
+[09:44] them so what's the impact been for us at anterior how has this helped us well the
+[09:49] first thing that's enabled us to not do is to hire out an ever expanding team of
+[09:52] expert contians to review these cases one of our biggest competitors has hired
+[09:56] over 800 nurses to perform reviews now we haven't needed to do this instead
+[10:01] we're able to review tens of thousands of cases with a review team of less than
+[10:06] 10 clinical experts we've been able to achieve very
+[10:10] strong alignment after several iterations between our Ai and human
+[10:13] reviews to a level that is comparable with the alignment we see between our
+[10:16] human reviewers and we're now able to quickly
+[10:20] identify and respond to errors so using this example from earlier we can quickly
+[10:24] go from this incorrect answer to a correct answer this means we're able to
+[10:28] respond quickly and still still meet customer slas around time expectations
+[10:32] and we can be confident in the results that we're returning to them and the
+[10:35] ultimate impact of this is that we now have provably industry-leading
+[10:38] performance at prior authorization with an F1 score of nearly 96% in a recent
+[10:43] study and this has enabled us to gain customer trust and Beyond even customer
+[10:48] trust this has led customers to love our product in a recent case study we saw
+[10:53] that one of the nurses after they were told they could keep on using Florence R
+[10:57] AI said Thank God with lucky
+[11:01] ones so the principles that we followed for building our system and what we
+[11:05] would recommend is firstly make sure you build a system you know think big don't
+[11:10] just use review data to to audit your performance use it to build audit and
+[11:15] improve your auditing system your evaluation system the second thing is
+[11:19] evaluating on live production data don't rely on offline evals identify problems
+[11:24] immediately so that you can respond to them quickly and thirdly get the best
+[11:28] reviewers and empowers them prioritize the quality of reviews over quantity and
+[11:32] build your own tooling if that helps you to move
+[11:35] faster this is how we built an evaluation system that gives real-time
+[11:39] performance estimates enabling us to respond is accurate that can scale to
+[11:44] meet demand while maintaining a low cost all powered by a small focused team of
+[11:49] experts and it's enabled us to go from our MVP to now serving customers and
+[11:54] maintaining their trust at scale and it's how we think you can too so thank
+[11:58] you for your attention um we' love to talk more about this if you have any
+[12:01] thoughts or ideas please reach out to me my email here is is Chris an.com and
+[12:05] we're also hiring at the moment so if you want to be The Cutting Edge of LM
+[12:08] application in healthcare then check out our open posts at ani.com
+[12:12] compan thank you

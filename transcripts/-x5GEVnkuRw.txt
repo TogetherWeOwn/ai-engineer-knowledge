@@ -1,0 +1,290 @@
+# title: Structuring the Unstructured - Cedric Clyburn, Red Hat
+# source: https://www.youtube.com/watch?v=-x5GEVnkuRw
+# speaker: Cedric Clyburn, Red Hat
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T08:17:01Z
+# sha256: 0f619e615467f6f2939eb31e6b0639febda1465620008b782663aff70a2b540e
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:00] Hey, hey, welcome. My name is Cedric Clyburn. I'm an open source engineer
+[00:03] here at Red Hat, and I think we can all agree that context is the most important
+[00:07] aspect to building an AI application or an agent, right? It's the reason that
+[00:11] harnesses have become so popular in order to manage the LLM's context. But,
+[00:16] the thing is, no matter what model or agent that you're using, there is so
+[00:20] much data that we're not able to use properly because it's in unstructured
+[00:24] formats. I'm talking everything from PDFs to presentations to contracts and
+[00:29] technical docs, even meeting notes, scanned documents, diagrams, tables,
+[00:33] images, and more. And uh sorry, I know that's a lot, but you understand what I
+[00:37] mean, right? All this data needs to be transformed into something that an LLM
+[00:42] can actually understand. And that's why by the end of this session, you'll
+[00:45] understand how to extract structure between raw enterprise documents and use
+[00:49] it to power better downstream AI systems like rag and agent. So, let's get
+[00:54] started. Now, I think Jensen from Nvidia made this point super clear at his
+[00:58] keynote that unstructured data is becoming this new context layer for AI.
+[01:02] And the reality though, for many teams, and I know this personally working at
+[01:06] Red Hat, that PDFs and data are spread across dozens of different systems. So,
+[01:12] we've got a lot to cover today. As you might know, a large majority of the
+[01:16] world's data is unstructured, and so no matter what model you're using, if
+[01:20] you're working with data like PDFs and unstructured types of formats, this is a
+[01:24] bit tricky to work with. Because there are solutions out there, but they might
+[01:28] be proprietary or require you to send your private data to someone else's
+[01:32] server. And for not just text, how do we take documents and their graphs or
+[01:36] tables and images to formats that LLMs can understand like markdown or JSON?
+[01:42] And I'm going to show you how in the session today because we're going to be
+[01:45] using an open source tool, part of the Linux Foundation, that is called
+[01:49] Docling, and learn about extraction, parsing, chunking, and much more. And
+[01:53] I've got some live demos for you, so we're going to have some fun.
+[01:56] And just in case you'd like it, we have the session slides here on the right and
+[02:00] a little overview of the specifics I'll be showing you in today's session. But,
+[02:04] without further ado, let's get started. So, why is there a need for advanced
+[02:08] document processing? As I briefly mentioned before, you might have a lot
+[02:12] of technical documentation or meeting minutes or different types of documents
+[02:16] and invoices that you need to use and maybe rag or different type of
+[02:21] applications where the uh context is provided to an LLM. So, whether it's rag
+[02:27] or retrieval augmented generation to answer questions based on this data, or
+[02:32] you're using this to fine-tune a new specialized model, well, data is this
+[02:36] key ingredient behind those applications. And it doesn't matter if
+[02:39] you're using, you know, NVIDIA acceleration or an open-source or
+[02:43] proprietary model, that data and the way you process it is the key determining
+[02:49] factor in whether your answer is going to be correct or incorrect for the user
+[02:53] or customer at the end of the day. And that's what's most important.
+[02:58] And how important is it? Well, I have this viral tweet from earlier where 20
+[03:03] scientific papers now feature a new nonsensical term that doesn't exist
+[03:07] because AI misinterpreted a very old article that was scanned and taken to a
+[03:12] PDF, merging two different words from two different columns in this PDF. And
+[03:17] because researchers are using these models in order to help them write, now
+[03:21] we have different types of scientific papers that all feature this word and
+[03:25] are even being cited by other people. And so, that's how important it is to
+[03:30] make sure that the data that we're processing is processed in a way that's
+[03:34] accurate and not hallucinated and able to be used confidently in our
+[03:38] applications that we're delivering to users and customers. So, it's quite
+[03:42] important. Now, if we were to use a tool like Docling that I can run on my own
+[03:47] machine, you could see that these two words are quite far away from each other
+[03:52] and shouldn't have been combined in the first place. But, that's how we're going
+[03:55] to learn about extracting this text here in a second. Now, if we were to try a
+[03:59] simple PDF parser for a PDF like this that includes um a table here, it has an
+[04:04] image, there's captions, and there's regular sections of text, well, we might
+[04:09] get an answer like this here on the right in markdown. You know, this might
+[04:12] be very fast and cheap to run even on CPU, but the issue is is that a lot of
+[04:18] this text has been truncated, has been merged, and isn't decipherable even by
+[04:24] me as a human. And if I sent this to a model, I don't think I could trust that
+[04:27] the model could extract specifics from, say for example, this table. Because the
+[04:32] table has been kind of just spit out linearly, and this information isn't fit
+[04:37] for most use cases where I need to ask questions or have an agent do validation
+[04:43] and extraction on this source data. So, this isn't going to cut it, right?
+[04:48] There's undesired page headers, we don't understand the table, and where's the
+[04:51] content from the image, right? It's not even there.
+[04:54] When we're using frontier models, this is um kind of not bad, right? But, it's
+[04:59] quite expensive. If I'm sending this to a model that's maybe $30 per million
+[05:04] output tokens, you can see how this can get quite expensive as I scale this up
+[05:08] to dozens or hundreds or, in a lot of cases, thousands of PDFs that
+[05:12] organizations have to work through to use an AI application. And the
+[05:16] difference is between maybe a 5.1 of a model that was depreciated in the 5.2
+[05:22] version of a model make it tricky to have structured output that's consistent
+[05:26] every single time. And so, while it might be good quality and I can see that
+[05:30] most of this looks accurate in the exported markdown, we might be
+[05:34] susceptible to hallucinations because models are non-deterministic, and this
+[05:38] is really tricky at scale. And so, what is the middle ground?
+[05:42] Well, that's where Docling comes in. It's a fast and cheap, and most
+[05:46] importantly, local CLI and library that I can use to take various types of input
+[05:51] sources and convert this to markdown, JSON, and a Pydantic data type that I
+[05:57] can use in my applications and that I can scale up if I have thousands of
+[06:02] different types of formats that need to be used or translated to something like
+[06:07] markdown. And so we rendered this as HTML, but you can see here we've got
+[06:11] this export of the specific table that we had here previously. Because as a
+[06:16] PDF, this data type is spread out and it's proprietary. So, it's hard to
+[06:22] extract this type of data from the source PDF here. And I'll show you how
+[06:27] Docling does it by using a combination of OCR and specific vision models that
+[06:33] extract the format and allow me to do things like structure output if I only,
+[06:38] say for example, want a specific column to be outputted from a content source.
+[06:42] So, it's really cool. And I've been using it at Red Hat. My team uses it
+[06:46] because we have thousands of PDFs that we need to work with, specifically from
+[06:50] product documentation. But also, we have content like images that we want to
+[06:54] extract using vision models. And what Docling does with a pip install Docling
+[06:58] is allow me to convert single documents or websites or anything else to markdown
+[07:04] or whatever file type I want and be able to work with the page layout so I don't
+[07:09] lose the consistency in the structure of the source document. And there's a lot
+[07:13] of other integrations and for situations where maybe you need to run this locally
+[07:19] or you don't want to pay for a service or you have an air-gapped environment.
+[07:23] So, you're able to do this using this open-source project that is part of the
+[07:27] Linux Foundation. So, before I show you the quick demo that I want to highlight
+[07:32] the project, I want to talk a little bit about scale and cost.
+[07:36] As I just mentioned it there earlier, but there is a public use case I want to
+[07:40] show you from Leandro at Hugging Face where he compared a source of common
+[07:45] crawl PDFs and where he did a little bit of pre-work on them and actually
+[07:49] extracted the structure using OCR and using DocLing in order to remove certain
+[07:54] parts and clean this up for the fine PDFs export which is thousands of tokens
+[08:00] from PDFs around the web that you could use for training a model etc. But the
+[08:04] two comparisons he did using GPU and using CPU for DocLing allowed him to do
+[08:11] this at 50 times of a cost savings compared to VLMs and OCR naively. And so
+[08:19] this is what's really cool is that you can really scale this up and he did this
+[08:23] on CPU and not needing GPU which is really cool. And it's not just document
+[08:28] conversion, right? This example was getting things ready from PDFs, but
+[08:32] let's say we have images, right? This image with vision language model was
+[08:37] able to be described and annotated, right? From this specific image right
+[08:42] here, now we have all of this really important context that can be used in a
+[08:46] rag application as an example, but also just for the end user to be able to
+[08:51] understand what's happening in this image. And say for example, the SME
+[08:55] doesn't work there anymore at the organization, now we have a way to
+[08:58] understand what this is with the help of an LLM whether proprietary or local. And
+[09:04] then finally, it's not just document conversion and annotation, but also
+[09:08] structured output. Say for example, I have this invoice and I need to extract
+[09:12] specifically the bill number, the total invoice price, the name of the sender,
+[09:17] we're able to get that in a format that is structured. So I don't have to
+[09:21] worry about, "Hey, it's going to pull in like the headings and titles." No, I
+[09:25] just want the, you know, total invoice price and the bill number and I can get
+[09:29] that in a format that's pydantic, but also just super simple if I'm just
+[09:34] trying to get a a things out of a huge document. So let's hop over to the demo.
+[09:38] Let me show you what I'm talking about. And by the way, we're going to be using
+[09:41] this Docling workshop repository for the demos today. So, feel free to check it
+[09:45] out. In this first example, we're going to be using Docling to convert a popular
+[09:48] file type like a PDF because remember that data is the foundation for all AI
+[09:52] systems. And in order to leverage that data, we have to properly ingest
+[09:56] different file formats with accuracy. And without doing that, we can lose
+[10:00] information or information can become unreadable from tables and diagrams and
+[10:04] images. So, with Docling, what we're able to do with a simple pip install
+[10:08] down here is start processing some of these different file types. So, I'll
+[10:12] show you how we do that. First off, we're going to be importing essential
+[10:15] components like the document converter as well as some other dependencies. And
+[10:20] I'll show you the simplest way, which is to just start out with a PDF that we
+[10:24] have online, which is Docling's own research paper. And here you can see we
+[10:28] have different titles and subtitles. We have components such as images and
+[10:33] captions that we have here. And at the bottom of this PDF, we also have
+[10:37] something like a table here that we need to extract as well as images that might
+[10:41] be helpful for our AI application or agent. So, let me come back to the
+[10:45] notebook here and I'll show you how we do this simple conversion by using the
+[10:49] Docling's document converter and exporting this to markdown. So, here you
+[10:54] can see is a rough example of how fast this can be for a eight-page PDF to be
+[11:00] able to export this in a way that an LLM can start using, right? But at the same
+[11:04] time, this is a Pydantic data type. So, you can see we can explore this PDF and
+[11:09] the number of pages and tables and see what is on which page of this PDF and
+[11:14] export this into a variety of different formats like markdown, HTML, dictionary,
+[11:19] and much more. But the real value here is not just with basic text and columns,
+[11:24] but working with tables. So, this PDF here has a variety of different tables
+[11:28] that we want to be able to extract. And so, by doing a converter for this
+[11:32] specific document, we can then extract these tables here and be able to export
+[11:38] this to a data frame so we can render this out in our Jupiter notebook here.
+[11:42] So as I run this cell, you can see that we've exported eight different tables
+[11:46] from that source PDF and we can list these but also be able to get these in a
+[11:50] format ready to use in a rag application or just to query with our LLM. So we've
+[11:55] taken a look at how to pull text and tables from a PDF, but what about
+[11:59] visualizing and extracting images from that source document as well? Now, for
+[12:04] this specific example, what we'll do is set up a PDF pipeline that will allow us
+[12:09] to scale up the images and push this into a document converter. So now when I
+[12:14] go to inspect the images and picture content in the cells, we can see this
+[12:18] nicely mapped out where we have the picture, so the source image, the
+[12:22] caption of that, and all of the embedded text elements that we could use in some
+[12:26] type of retrieval augmented generation application to ask questions about,
+[12:31] "Hey, what's happening in these different photos in our source PDF?" I
+[12:35] think what would help here is also to be able to visualize the document layout by
+[12:39] using the bounding boxes provided by the layout visualizer here. So here what
+[12:44] we're going to do is visualize all of the different elements and components
+[12:49] that can be extracted from, say for example, that source PDF. So section
+[12:53] headers or text or subtitles or different components such as that photo
+[12:58] that we just pulled and extracted from the PDF. So this is one of the models
+[13:02] that Doc Lee provides which can be used for situations where you might have
+[13:05] personal identifiable information from a customer that you want to remove from a
+[13:09] source document type before you extract that into your application. We can also
+[13:14] use vision language models in order to enrich the source images and diagrams
+[13:18] that might be in these document types using something like O llama or a
+[13:22] third-party LLM. So what we're going to do here is set up a PDF pipeline that's
+[13:26] going to use a local running Granite model and say, "Hey, give us a detailed
+[13:32] description of what's happening in this image." And with that document
+[13:35] converter, we're going to go ahead and display that enriched document by
+[13:39] calling the OpenAI endpoint with Ollama that we have running locally at the
+[13:44] completions endpoint. And so here we have an annotated caption of what's
+[13:47] happening with that DocQuery pipeline image that we were taking a look at
+[13:50] earlier. Where originally we were just pulling the caption, but now we can use
+[13:54] a vision language model to describe what's happening in these photos. And
+[13:57] with all this additional information, this can help us to build a really solid
+[14:02] RAG pipeline to where we can do questioning and answering over our
+[14:05] source data. And for this example, I want to show you what's known as
+[14:09] chunkless RAG or agentic RAG using DocQuery. And now by starting off with
+[14:14] our document outline, so processing a PDF with DocQuery like we just did, we
+[14:19] can allow an LLM to be able to pick the most relevant part of the document that
+[14:25] is related to the user's question and pull that full text from the DocQuery
+[14:30] document itself to try to answer that question for the user. And this can run
+[14:34] in a agentic loop. And what's really important here is that we're doing RAG
+[14:38] but without having to use a chunker or embedding model or vector database,
+[14:42] etc., etc. So the index ends up being the markdown outline of the document.
+[14:48] Now when the user asks a question, the entire retrieval index typically would
+[14:51] be thousands of vectors in a database where we would do semantic similarity to
+[14:55] make sure, "Hey, these sections are similar to the user's question." But for
+[14:59] us, what we're going to do is be able to see a markdown outline of the document
+[15:04] with each section summary outline. So if the LLM is looking for something about
+[15:08] getting started with DocQuery, well it can just pull from this reference of
+[15:12] text to say that DocQuery can be installed from PyPI. And that's the
+[15:16] entire retrieval index. So let's say we have a query, "What are the main AI
+[15:20] models used in DocQuery?" Well we're setting up a rag agent here to be able
+[15:25] to iterate on that specific question about five times. So, we see that there
+[15:29] are 20 sections available when the user is asked the question, and we're going
+[15:34] to search for that specific part of text that talks about the AI models and be
+[15:39] able to determine, "Hey, is this relevant to answering the question?" And
+[15:43] you can see here the final answer in one iteration was pulled from that source
+[15:47] material without having to go in the vector database but instead search that
+[15:51] docling document structure for the specific text. So, it's a quite
+[15:56] interesting way to be able to answer users' questions through this chunklist
+[15:59] retrieval augmented generation pattern. And while this first example might have
+[16:04] been simple, what we can do is also pull the IBM 2025 annual report into the
+[16:09] context here, which has 418 sections, so it's much larger, and ask the question
+[16:15] like, "Hey, what was Red Hat's revenue growth in 2025, and how did
+[16:20] to an overall software segment?" And so, here we're going to be iterating
+[16:24] multiple times to figure out, "Hey, is this section relevant to the user's
+[16:28] question?" And if not, we need to pull in more information. And so, that is how
+[16:33] chunkless rag can work in a situation where you're using a tool like docling.
+[16:37] But what happens when we have hundreds or hundreds of thousands of PDFs that we
+[16:41] want to have processed? Well, this is where we can deploy docling as a REST
+[16:45] API service using something that's known as docling serve. This allows us to
+[16:50] scale things up and to run this as a microservice as a container or through
+[16:54] Kubernetes. So, when we set things up here, we're going to do a pip install
+[16:58] docling serve, and we're going to be able to serve this from a CLI with
+[17:03] docling serve on a specific port, or once we have that server started, be
+[17:07] able to send things to that specific endpoint with different types of options
+[17:12] and arguments like, "Hey, do we want OCR? Do we want a specific back end? Or
+[17:16] do we want images annotated? And so, that's how we can scale things up and
+[17:20] allow this API endpoint to be able to handle hundreds or thousands of
+[17:25] different document types at a time. And let's say, for example, that you're
+[17:28] trying to build an AI agent, you can also use the Docling MCP server. So,
+[17:33] this allows us to automate things with our AI agent and give it the
+[17:37] capabilities that Docling has through that model context protocol and allow us
+[17:42] to standardize the communication between, say, for example, Claude Coder
+[17:46] Continue in our developer CLI to the MCP server, which can handle the document
+[17:51] processing for us without us having to know all of those different arguments
+[17:54] and commands. So, it makes it quite easy. And the example I show here is by
+[17:58] using one of the Claude models on my own Mac itself and connecting this to my VS
+[18:04] Code instance. So, let's understand the tools that are available. For the MCP
+[18:08] server, we have conversion tools, generation tools, say, for example, if I
+[18:12] want to process a specific part of a PDF, and manipulation tools. And this is
+[18:17] all provided to the LLM and the agent that we're going to be using with the
+[18:22] MCP server. So, here I'm just checking that my local MLX server to run an LLM
+[18:27] that's running, and it looks like we've got Quinn 3.6 here. And we're going to
+[18:31] verify that the Docling MCP server is also running, which would be done using
+[18:36] UVX here. And so, we'll do that in this cell here to make sure that the MCP
+[18:40] server is available. Now, in Claude Coder or Codex or another type of AI
+[18:46] application, we're going to install the extension. So, for us, this means adding
+[18:51] an MCP server in the config.yaml. And now, at this point, we can use a
+[18:56] model and an MCP server to do things such as, "Hey, convert this document and
+[19:01] give me a summary." Or, create a document with a section of action items
+[19:06] and pull in a list from another PDF and export that as markdown. So, we can use
+[19:11] all of those Docling components through the MCP server in order to agentically
+[19:16] process and parse these documents using an AI agent like Cursor or Claude Code
+[19:23] or one of the many open-source options that are out there. Now, let's head back
+[19:27] to the slides and wrap things up. So, let's put it all together. With Docling,
+[19:30] we've seen that we can take a PDF into format like Markdown or JSON with a
+[19:35] fully local operation from our own machine without even needing a GPU. It's
+[19:40] fast, it's cheap, and most importantly, it's open-source. So, I encourage you to
+[19:44] check it all out. Behind the scenes, there's different pipelines that use a
+[19:47] combination of OCR and layout analysis to structure everything together, put it
+[19:52] together as a Pydantic Docling document that then you can use to export to
+[19:57] different types of formats, create data sets, chunk that using the Hybrid
+[20:01] Chunkier, and do so much more. It integrates with a lot of different rag
+[20:05] frameworks and agentic systems and harnesses. So, feel free to try it out.
+[20:08] And I want to give a big thank you to the AI engineering team for having me
+[20:12] on. This is something that I'm really passionate about with processing
+[20:15] documents, but also doing this in an open-source way because, you know, we're
+[20:19] here at Red Hat and we love open-source. So, feel free to check out the slides,
+[20:24] connect with me on LinkedIn. I appreciate the opportunity, enjoy the
+[20:27] conference, and keep up with the AI engineering ecosystem. Things are
+[20:31] looking super bright right now for the open-source world and for AI engineers
+[20:36] in general. So, see you next time and thanks for watching.

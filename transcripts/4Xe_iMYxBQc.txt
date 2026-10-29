@@ -1,0 +1,1200 @@
+# title: Information Retrieval from the Ground Up - Philipp Krenn, Elastic
+# source: https://www.youtube.com/watch?v=4Xe_iMYxBQc
+# speaker: Philipp Krenn, Elastic
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T11:11:24Z
+# sha256: c75e3a0182417309b2ebb0f721af41f87e04d33e2bdfa7fb09c62af8ac26d3de
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:00] [Music]
+[00:14] Let's get going. Audio is okay for everybody. I have some slight feedback,
+[00:19] but I'll try to manage. I hope it's okay for you. Um, hi, I'm Phillip. Uh, let's
+[00:25] talk a bit about retrieval. I'll show you some retrieval from the ground up.
+[00:29] We'll keep it pretty hands-on. Um, you will have a chance to follow along and
+[00:33] do everything that I show you as well. I have like a demo instance that you can
+[00:37] use. Um, or you can just watch me. Um, if you have any questions, ask at any
+[00:43] moment. If anything is too small to reach, shout and we'll try to make it
+[00:46] larger. Uh, we'll try to adjust as we go along. So
+[00:51] I guess we're not over rag yet, but uh rag is a thing and we'll focus on the R
+[00:58] in rag, the retrieval augmented generation. We'll just focus on the
+[01:01] retrieval. Um just let's see where we are with retrieval. Um quick show of
+[01:08] hands, who has done rag before? Okay, that's about half or so. Um who
+[01:13] has done anything with vector search and rag?
+[01:18] Do I need vector search for rag or can I do do anything else?
+[01:24] Yeah. Yeah. So you can do anything. Um retrieval is actually a very old thing.
+[01:30] Um depending on how you define it, it might be 50, 70, whatever years old.
+[01:34] Retrieval is just getting the right context to the generation. I'll ignore
+[01:39] all the generation for today. We'll keep it very simple. We'll just focus on the
+[01:42] retrieval part of getting the right information in um partially from the old
+[01:47] stuff like the classics. Uh but we'll get to some new things as well as we go
+[01:51] along. Um who has done keyword search before just that is fewer than vector
+[01:58] search I feel like. um which is um which almost reminds me of like 15 years ago
+[02:03] or so when no SQL came up like more people had done MongoDB radius whatever
+[02:07] else um rather than SQL that has changed again um I think it will be kind of
+[02:12] similar for retrieval um the way I would vector search um is a feature of
+[02:19] retrieval only one of multiple features or many features that you want in
+[02:24] retrieval and we'll see a bit why and how and we'll we'll dive into those
+[02:27] details um So, I work for Elastic, the company behind Elastic Search. We're the
+[02:32] most downloaded, deployed, whatever else search engine. We do vector search, we
+[02:37] do keyword search, we do hybrid search. Um, we'll dive into various examples.
+[02:41] Everything that I will show you um works well, the query language is elastic
+[02:46] search, but if you use anything built on Apache Lucine, everything behaves very
+[02:51] similarly. If you use something that is a clone or close uh to lucine like
+[02:56] anything built on uh tent TV or anything like that it will be very similar the
+[03:01] found keyword search and vector search will apply broadly everywhere. Um so
+[03:08] let's get going. U we'll keep this pretty hands-on. Um who remembers in
+[03:11] Star Wars when he's making that hand gesture. Um what is the quote?
+[03:18] These are not the droids you're looking for. Um, we'll keep this relatively Star
+[03:23] Wars uh based. Um, feel free to come in and filter on the sides. So, whatever.
+[03:28] Um, I'm afraid we have I think one chair over there otherwise and one down there
+[03:34] otherwise it's getting a bit full. Um, okay. Let's look at this uh of
+[03:41] what these are not the droids you're looking for uh does for search. And I
+[03:44] will start kind of like with the classic approach. Keyword search or lexical
+[03:48] search is like you search for the words that you have stored and we want to find
+[03:53] what is relevant in our examples. Um if you want to follow along um there is a
+[04:00] gist which has all the code that I'm showing you. It's at elastai.engineer.
+[04:06] Um there is one important thing. It's I
+[04:10] have one shared instance basically for everybody. So you can all just use this
+[04:14] without signing up for any accounts or anything. So this is just a cloud
+[04:17] instance um that you can use. There is my handle um is in the index name. If
+[04:24] you don't want to fight and overwrite each other's data, reply replace that
+[04:28] with your unique handle or something that is specific to you because
+[04:31] otherwise you will all work on the same index and kind of like overwrite each
+[04:35] other's data. You can also just watch me if you don't have a computer handy
+[04:39] that's fine. Um but if you want to follow along elasti.engineer
+[04:44] there will be a gist. And it will have the connection string like there's a URL
+[04:48] and then the credentials are workshop workshop if you go in to login it will
+[04:52] say login with elastic search that's where you use workshop workshop then
+[04:56] you'll be able to login and you can just run all the queries that I'm showing you
+[05:01] can try out stuff um if you have any questions shout I have a couple of
+[05:05] colleagues dispersed in the room so um if we have too many questions we'll
+[05:09] somehow divide and conquer um so let's get going and see what we have here Um,
+[05:16] and I'll show you most of the stuff live. Um,
+[05:20] I think this is large enough in the back row. If it's not large enough for
+[05:23] anybody, shout and we'll see how much larger I can make this. Um,
+[05:29] and let me turn off the Wi-Fi and hope that my wired connection is good enough.
+[05:39] Let's refresh to see.
+[05:43] Maybe we'll use my phone after all.
+[05:59] Okay,
+[06:06] let's try this again.
+[06:20] Okay, this is no good. Out you go.
+[06:29] Okay, hardest problem of the day solved. We have network. Um, okay. So, we have
+[06:35] the sentence, these are not the droids you're looking for. And we'll start with
+[06:38] the classic keyword or lexical search like what happens behind the scenes. So
+[06:42] what you generally want to do is you basically want to extract the individual
+[06:46] words and then make them searchable. Um so here I'm not storing anything. I'm
+[06:51] just looking at like how would that look like if I stored something. I'm using
+[06:54] this underscore analyze endpoint uh to sh to see um what I will actually store
+[07:01] in the background to make then searchable. So if these are not the
+[07:04] droids you're looking for and you see these are m not m the droids you are
+[07:12] looking for in western languages the first step that
+[07:17] hap or every time or everywhere the first step that h happens is the
+[07:21] tokenization in western languages it's pretty simple it's normally any white
+[07:25] spaces and punctuation marks where you just break out the individual tokens um
+[07:29] especially Asian languages are a bit more complicated around that but we'll
+[07:33] gloss over that for today. And we have a couple of interesting pieces of
+[07:38] information here. So we have the token. So these um is the first token. We have
+[07:42] the start offset and the end offset. Um why would I need a start and an end
+[07:47] offset? Why would extract and then store that potentially?
+[07:51] Any guesses? Yeah. Yes. Especially if you have a longer
+[07:57] text, you would want to have that highlighting feature that you want to
+[08:00] say um this is where my hit actually was. So if I'm searching for these,
+[08:04] which is maybe not a great word, uh but you would very easily be able to
+[08:07] highlight where you had actually the match. And the trick that you're doing
+[08:11] in search generally what differentiates it from a database is a database just
+[08:15] stores what you give it and then does basically almost everything at query or
+[08:20] search time. versus a search engine does a lot of the work at ingestion or when
+[08:24] you store the data. So we break out the individual tokens. Um we calculate these
+[08:29] offsets and store them. So whenever we have a match afterwards we never need to
+[08:33] reanalyze the actual text which could potentially be multiple pages long. Um
+[08:37] but we could just highlight where we have that match because we have
+[08:40] extracted those positions. Um we have a position. Why would I want to store the
+[08:45] position with the text that I have?
+[08:49] Yeah. uh yeah annotation. So the the main use
+[08:54] case uh that you have is if you have these positions and later on we'll
+[08:58] briefly look at if you want to look for a phrase if you want to look for this
+[09:01] word followed by that word. Um so you could then just look for all the text
+[09:06] that contain these words but then you could also just compare the positions
+[09:09] and basically look for n plus1 etc. And you never need to look at the string
+[09:14] again, but you can just look at the positions to figure out like this was
+[09:17] one continuous phrase even if you have broken it out into the individual
+[09:21] tokens. Um, most of the things that we see here is alpha num for alpha numeric.
+[09:28] An alternative would be synonyms. We'll skip over synonym definition because
+[09:31] it's not fun to define tons of synonyms. Uh, but this is all the things that we
+[09:36] are storing here in the background. You can also customize this analysis and
+[09:40] that is one of the the features again of full text search and lexical searches
+[09:45] that you pre-process a lot of the information to make that search
+[09:48] afterwards faster. So here you can see I'm stripping out the HTML because
+[09:52] nobody's going to search for this emphasis tag. Um I use a standard
+[09:56] tokenizer um that breaks up for example on dashes. You will see that
+[10:02] alternatives would be whites space that you only break up on white spaces. Um, I
+[10:07] lowerase everything, which is most of the times what you want because nobody
+[10:12] searches in Google um with proper casing or at least maybe my parents, but nobody
+[10:17] else searches uh with proper casing in in Google. Um, we remove stop words.
+[10:22] We'll get to stop words in a moment. Um, and we do stemming with the snowball
+[10:27] stemmer. What stemming is, it basically reduces a word down to the root. So you
+[10:31] don't care about singular plural or like the flection of a verb anymore, but you
+[10:35] really care more about the concept. So if I run through that analysis, does
+[10:42] anybody want to guess what will remain of this phrase or which tokens will be
+[10:45] extracted and what in what form?
+[10:53] Not a lot will remain. Um, two.
+[10:59] Yeah, close. Um, so we'll actually have three. So we have droid, you and look.
+[11:07] And you can see all the others were stop words which were removed. Um, the
+[11:13] stemming reduced looking down to look because we don't care if it looks
+[11:17] looking uh look. We just reduce it to the word stem. So we do this when we
+[11:22] store the data. And by the way, when you search afterwards, um your text would
+[11:26] run through the same analysis that you would have exact matches. So you don't
+[11:30] need to do anything like a like search anymore in the future. So this will be
+[11:33] much more performant uh than anything that you would do in a relational
+[11:36] database because you have direct matches. And we'll look at the data
+[11:40] structure behind it in a moment. But we what we get is uh droid u look um with
+[11:46] the right positions. So, for example, if we searched for droid U, we could easily
+[11:50] retrieve that because we have the positions. Um, even though that is a
+[11:54] weird phrase. Um, do we start indexing at zero or one?
+[12:01] Zero. Yes, it's the only right way. Um, there discussion here. Um, so we we are
+[12:08] the positions are based uh starting at zero and these are the tokens that are
+[12:12] remaining. Um if you do this for a different language like you might hear
+[12:17] I'm a native German speaker. Um this is the text in in German and you would uh
+[12:22] if you use a German analyzer it would know the rules for German and then would
+[12:26] analyze the text in the right way. So then you would have remaining droid s um
+[12:34] anybody wants wants to guess what happens if I have the wrong language for
+[12:37] a text.
+[12:42] it will go very poorly because the so how how this works is basically you have
+[12:47] rules for every single language is like what is the stop word how does stemming
+[12:51] work if you apply the wrong rules you basically just get wrong stuff out so it
+[12:56] will not um do what you want so what you get here is um like that this is an
+[13:02] article um but well in the in English the rule is an s at the end just gets
+[13:06] stemmed away even though this doesn't make any sense so you apply the wrong
+[13:09] rules um and you just produce pretty much garbage. Um, so don't do
+[13:14] that. Um, just to give you another example, um,
+[13:18] French, this is the same phrase in French. Um, and then you see, uh,
+[13:25] and as are the words that are remaining in these examples. Otherwise, it works
+[13:30] the same, but you need to have the right analysis for what you're doing.
+[13:33] Otherwise, you'll just produce garbage. Um,
+[13:38] a couple of things as we're going along. The stop word list by default which you
+[13:42] could overwrite is relatively short. This is linguists have spent many years
+[13:47] figuring out what are the right lists of stop words and you don't want to have
+[13:50] too many or too few. Uh in English it's I always forget I think it's 33 or so.
+[13:55] Um this is where you can find it in the source code. It's I don't want to say
+[13:58] well hidden but it's not easy to find either. Um so every language has like a
+[14:02] list of stop words that are defined uh that will be automatically removed for.
+[14:06] These are not the droids you are looking for. By accident, more or less we had a
+[14:11] lot of stops and why not a lot remained here in the phrase. And then for all
+[14:14] other languages, you will have a similar list um of stop words. Um
+[14:20] should you always remove stop words?
+[14:25] Yes. No.
+[14:32] Yes. That is by the way another not is a very good So I'm not sure if everybody
+[14:35] heard that. Um the the comment was about not one important thing here. We're
+[14:40] talking about lexical or keyword search which is dumb but scalable. Um it
+[14:46] doesn't know understand if there is a droid or there's no droid. It's just
+[14:49] defined as a stopard. It does just keyword matching. um that is in in
+[14:54] vector search or anything with a machine learning model behind it will be a bit
+[14:58] of a different story afterwards uh where these things might make a difference but
+[15:02] this is very simple because it just matches on similar strings basically um
+[15:07] it doesn't understand the context it doesn't know what's going on that's why
+[15:10] the linguist decided not this a good stop word um you could override that if
+[15:15] for your specific use case this is not a good idea um
+[15:20] always removing stops yes no maybe. So our favorite phrase is it depends
+[15:28] and then you have to explain like what it depends on. So what it depends on is
+[15:33] there are scenarios uh where removing all stop words does not give you the
+[15:37] desired result and maybe you want to have like a text with and without stops.
+[15:41] Like sometimes stop words are just like a lot of noise that blow up the index
+[15:45] size and don't really add a lot of value. That's why we have defined them
+[15:48] and try to remove them by default. Um but if you had for example to be or not
+[15:52] to be these are all stop words. This would all be gone uh when you run it
+[15:58] through analysis. Um so you it is tricky to figure out like what is the right
+[16:03] balance for stop words or what works for your use case but you might have
+[16:07] unexpected surprises in all of this. Um okay we've seen the German examples. Um
+[16:14] let's do some more queries. Um or let's actually store something. Um, so far we
+[16:20] only pretended or we only looked at what would happen if we would store
+[16:23] something. Now I'm actually creating an index. Again, if you're running this
+[16:28] yourself, um, please use a different name than me. Um, just, uh, replace all
+[16:35] my handle instances with your handle or whatever you want. Uh, since this is a
+[16:38] shared instance, if we have too many collisions, I might jump to another
+[16:42] instance that I have as a backup in the background. Uh but what I'm doing here
+[16:45] is I'm creating my this analysis pipeline that I've looked at before like
+[16:49] I'm throwing out the HTML. I use a standard tokenizer lowering stopwatch
+[16:54] removal and stemming and then I I call this my analyzer and then I'm basically
+[17:00] applying this my analyzer on a field called uh quote. This we call this a
+[17:06] mapping. It's kind of like the equivalent a schema in a relational
+[17:09] database, but this defines how different fields behave. Um,
+[17:15] okay. And somebody did not replace um
+[17:20] the the query. Um, by the way, you need to keep user
+[17:26] underscore. Um, let me let me quickly do this um
+[17:32] myself. Oops.
+[17:38] I should have seen this coming. Um,
+[17:44] We want to replace
+[17:48] and we'll use Oops.
+[18:01] Please don't copy that. Um, and I want to
+[18:13] Okay, looks like it worked.
+[18:19] Let's try that again. Um, so we're creating our own index. Um, and
+[18:28] now I just to double check I'll just again run this underscore analyze
+[18:34] against this field that I've set up to just double check that I've set it up
+[18:38] correctly. And now I'm actually starting to store documents. Um, bless you. Um,
+[18:43] so we'll store these are not the droids you're looking for. Um, I have two
+[18:47] others um that I'll index just so we have a bit more to search. Um, no, I am
+[18:53] your father. Any guesses what will remain here.
+[18:58] Father. Father. Yeah. Okay. Let's let's try this out. Let me
+[19:05] copy my This one actually has way fewer stoppers
+[19:10] than you would expect. Uh let's quickly do this. Um
+[19:19] since I didn't do the HTML removal, let's take these out manually. So what
+[19:24] you get is no, I am your father. And this was stupid because this was not
+[19:30] what I wanted. We need to run this against the right analysis.
+[19:34] Um,
+[19:44] this happens when you copy paste. Okay. Um,
+[19:48] uh,
+[19:58] sorry. And we'll do text.
+[20:08] No, I think I've patched this back together. Okay, I am your father. So, no
+[20:13] is the only stopper in this list. Actually, no was on the stop list. All
+[20:17] the others are not. Um, okay. Let's try another one. Obi never told you what
+[20:24] happened to your father. How many tokens will Obi-Wan be?
+[20:30] Two. one.
+[20:35] No, OB1 will will be two like OB1 because we used a default tokenizer or
+[20:40] standard tokenizer. That one breaks up at dashes. If you had used another
+[20:44] tokenizer like whitespace that would keep it together because that breaks up
+[20:48] at white spaces. So there are various reasons why you want or would not want
+[20:52] to do that. I don't want to go into all the details, but there are a lot of
+[20:55] things to do right or wrong when you ingest the data which will then allow
+[20:58] you to query the data in specific ways. So for example, if you would have an
+[21:03] email address,
+[21:07] that one is also weirdly broken up. Like you might use like there's a dedicated
+[21:12] tokenizer for URL email addresses. So depending on what type of data you have,
+[21:17] you will need to process the data the right way because pretty much all the
+[21:20] the smart pieces are kind of like adding here to make the search afterwards
+[21:25] easier. Um so you can easily do that. Um, let's see. Let's index all my three
+[21:32] documents so that we can actually search for them. Now, if I start searching
+[21:37] droid, it should match. These are not the
+[21:40] droids you're looking for. Yes or no? Because this one is singular and
+[21:45] uppercase. And the droid that we stored was plural and lowerase. Will it match?
+[21:49] Yes or no? Yes. Why?
+[21:55] Uh, yes. We had the stemming. we have the lower casing and when we search so
+[22:00] we store the text it runs through this pipeline or the analysis um and for the
+[22:05] search it does the same thing so it will lowerase the droid um it has stemmed
+[22:10] down the droids in the text to droid and then we have an exact match um so what
+[22:16] the the data structure behind the scene actually looks like
+[22:20] the magic is kind of like in this so-called inverted index what the
+[22:24] inverted index is is these are all the tokens that remained
+[22:29] that I have extracted. I have alphabetically sorted them and they
+[22:33] basically have a pointer and say in this document like with the ids one two three
+[22:37] that I have stored we have how many occurrences like zero one um yeah
+[22:44] nothing had two um and then we also know at which position they appeared. So
+[22:51] search for droid. Now this is what I have stored. Um I will
+[22:56] lowerase the droid to droid. I have an exact match here. Then I go through that
+[22:59] list and see retrieve this document, skip this one, skip this one. Um and at
+[23:04] position four um you have that hit and then you could easily highlight that. So
+[23:08] you have almost done all the hard work at ingestion and this retrieval
+[23:11] afterwards will be very fast and efficient. That's the classic data
+[23:16] structure for search. the inverted index where you have this alphabetic list uh
+[23:20] of all the tokens that you've extracted to do that. Um and this will just be
+[23:24] built in the background for you and that's how you can retrieve all of this.
+[23:27] Um let's look at a few other um uh queries and how they behave. Um
+[23:36] if I search for robot will I find anything?
+[23:43] No, because there was no robot. Um there was a droid. Um we could now define a
+[23:50] synonym and say like all uh droids are robots for example. Um
+[23:56] who likes creating synonym lists? Nobody anymore. Okay. No, normally I
+[24:02] would have said that's the Stockholm syndrome because there's sometimes
+[24:04] somebody who likes creating synonym lists because they've done that for so
+[24:08] many years. Um but it got easier nowadays. Now you can use LLMs to
+[24:12] generate your synonyms. So it can get a bit easier to create them, but they're
+[24:16] still limited because you have always this mapping. Um, so with synonyms, you
+[24:20] can expand the right way where it gets trickier if you have homonyms. Uh, if a
+[24:24] word has multiple um, meanings like a bat could be the animal or it could be
+[24:29] the thing you hit a ball with. Um, there it just gets trickier because there is
+[24:33] there is no meaning behind the word or no context. So you just match strings.
+[24:37] Um, and that is inherently limited. But like I said, it's dumb, but it scales
+[24:43] very well and that's why it has been around for a long time and it does
+[24:47] surprisingly well for many things because there's not a lot of things that
+[24:50] are unexpected or that can go totally wrong. Um, now other things that you can
+[24:55] do, you could do a a phrase search where you say, "I am your father." Um, will
+[25:01] this find anything? Yes. Yes. Because we had no I am your
+[25:08] father. Um what happens if I say for example I am
+[25:17] let's say I am not your father. Yes. No.
+[25:23] No. Why? So you're right
+[25:31] but not as a stop word.
+[25:36] But you're right because the positions still don't match. Um, so the stop word
+[25:40] not would be filtered out. Um, but it still doesn't match because the
+[25:44] positions are off. Um, that is one of the things that sometimes
+[25:49] can be confusing. So even if something is a stop and will be filtered out, uh,
+[25:52] it doesn't work like that. Um one thing that you can do is though that the
+[25:57] factor is called slop where you basically say if there is something
+[26:01] missing um it would still work. So I am your father and I am father with slop
+[26:08] zero that's kind of like the implicit one um will not find anything. But if I
+[26:12] say one then I basically say like there can be a one off in there like one word
+[26:16] can be missing. Um uh
+[26:24] however I am his father here. His would not match. So this still will not work.
+[26:29] Um the slop is really just to skip a word. Yeah. What about your father?
+[26:35] I am your father.
+[26:42] That will not work. How do uh there you might need to do something
+[26:46] like a synonym where you say slash um m gets replaced by m uh or we will need to
+[26:54] have some more machine learning capabilities behind the scenes to to do
+[26:57] stuff like that. Are there any libraries
+[27:02] like that? So what what is built in is generally a very simple set of rules. Um
+[27:10] what you will need to do for things like this is normally you need a dictionary.
+[27:14] Um the problem around these is they're normally not available for free or open
+[27:17] source. Um funnily enough they're often coming out of uh university the
+[27:23] dictionaries um because they have a lot of free labor the students. That's why
+[27:29] the universities have been creating a lot of dictionaries but they often come
+[27:32] out under the weirdest licenses that why they're not very widely available. But
+[27:36] yes, there is a smarter or more powerful approach if you have a dictionary and
+[27:41] you can do these things. Um, for example, um, one thing to to show is
+[27:46] like, but maybe that's a good thing to to also mention. Um,
+[27:53] you don't always get words out of the stemming. It's not a dictionary. It
+[27:57] doesn't really get what you're doing. It just applies some rules. So for example
+[28:01] uh blackberry
+[28:05] blackberry um h sorry blackberries I think that this will be stemmed down
+[28:11] differently. Ah sorry I need English without English this will not work.
+[28:19] So this will stem down to this weird word blackberry. Um and it will also
+[28:26] stem down the singular to blackberry. So there's a rule that applies this uh but
+[28:31] it's just a rule. It's not dictionary based. It's not very smart. Um and it
+[28:34] only has some rules built in um that work for this, but you will definitely
+[28:38] hit limits. Um the other thing, by the way, and why I
+[28:43] picked Blackberry as an example, um you have some annoying languages like
+[28:47] German, Korean, and others that compound nouns like Blackberry. Um where you have
+[28:53] basically two words. um black would never find Blackberry in the simplest
+[28:57] form because it's not a complete string. There are various ways to work around
+[29:02] that um that all come with their own downsides. Um and either you have a
+[29:06] dictionary or you extract the so-called engrams. It's like group of words and
+[29:10] then you mention group of words. Um but all of those are one of the many tools
+[29:15] how we try to make this a bit better or smarter. But it all has limitations.
+[29:20] I hope that answers the question and makes sense. Um so there are
+[29:24] dictionaries but they're generally not free or not under an easy license
+[29:28] available for some languages by the way. Um even the the stemmers are not freely
+[29:33] available. I think there is a stemmer or analyzer for Hebrew. I think that has
+[29:39] also like some commercial license or at least the you can't use it for free in
+[29:43] commercial products. Um though licensing with machine learning
+[29:48] models is also its own dark secret. Um yeah
+[30:09] yes and that is what an engram is doing. Let me let me see if I can um
+[30:18] an engram is normally a a word group normally a tri group. This is way too
+[30:23] small. Um somehow I have weirdly overwritten my
+[30:29] command plus so I can't use that. Let me make this slightly larger.
+[30:37] Okay. Um here um we basically use one or two letters as word groups which which
+[30:45] is way too small but uh just to um show the example and this is very hard to
+[30:50] read. Let let me copy that over to my console that there you can um
+[30:57] there you can oops there you can see this but this is a great question. Um so
+[31:03] we'll use engram for quickf fox and then you can see the tokens that I extract
+[31:08] here are the first letter the first two um the second the second and third etc.
+[31:14] And you end up with a ton of tokens. The the downside is a you have to do more
+[31:19] work when you store this. Um, B, it creates a lot of storage on disk because
+[31:24] you extract so many different tokens and then your search will also be pretty
+[31:27] expensive because normally you would at least do three like triagrams. Um, but
+[31:34] even that creates a tons of tokens and the tons of matches and then you need to
+[31:37] find the ones with the most matches and it works but a it is pretty expensive in
+[31:43] disk but also query time. Um, and it might also create undesired results or
+[31:48] results that are a bit unexpected for the end user. It is I would call it a
+[31:52] it's it's again it's a very dumb tool that works reasonably well for some
+[31:57] scenarios. Um, but it's only one of many potential factors. Um, what you could
+[32:02] potentially do is, and I I don't have a full example for that, but we could
+[32:06] build it quickly. Um, what you would do in reality probably um you might store a
+[32:11] text more than one ways. So you might store it like with stop words and
+[32:15] without stop words and maybe with engrams and then you give a lower weight
+[32:20] to the engrams and say like if I have an exact match then I want this first but
+[32:24] if I don't have anything in the exact matches then I want to look into my
+[32:27] engram list and then I want to kind of like take whatever is coming up next. Um
+[32:33] so even keyword based search will be more
+[32:37] complex if you combine different methods. Um,
+[32:40] engrams are interesting, but again, they're a dumb but pretty heavy hammer.
+[32:45] Use them with the right at the right scenario.
+[32:50] This is by default one or two. Yes, but you you could redefine that. So, we can
+[32:56] uh we can let me go back to the docs. The the engram you can uh say min and
+[33:03] max gram. If you set both to three, you would have triagrams. So it's always
+[33:07] groups of three like 1 2 3 2 3 4 etc. Um you could also have
+[33:12] something called edge engram where you expect that somebody types the first few
+[33:16] letters right h and then you only start from the beginning but not in the middle
+[33:19] of the word which sometimes avoids unexpected results and of course reduces
+[33:25] the number of tokens um quite a bit. Um so somewhere in here um
+[33:33] edge engram
+[33:38] let's just copy that over so I won't type and
+[33:43] so here we have edge engram with quick and you can see it only does
+[33:49] first and the first two letters but nothing else and in reality you would
+[33:53] probably define this like 225 or more whatever else you want. Uh but here we
+[33:58] only do from the start and nothing else. Uh which reduces the tokens
+[34:02] tremendously. But of course if you have black berry
+[34:06] and you want to match the berry, you're out of luck.
+[34:11] Make sense?
+[34:15] Anybody else? Anything else? Sure.
+[34:26] Yeah. So if you have multiple languages, um do not mix them up. That will just
+[34:31] create chaos. Uh because we'll get to that in a moment. But how keyword search
+[34:35] works is basically word frequencies and it if you mix languages, it screws up
+[34:39] all frequencies and statistics. Um so what you would do is either you would
+[34:44] have um you could do two things uh to do um
+[34:52] if you have English and Hebrew. Uh you could either do field English and then
+[34:59] you would have
+[35:03] field uh whatever the abbreviation for Hebrew is. um Hebrew uh oops
+[35:12] and then you would have that and then you would need to define the right
+[35:15] analyzer for that specific field but so you break it out either into different
+[35:19] fields or you could even do different indices um and ideally we even have that
+[35:26] built in um we have a language analyzer even if you just provide a couple of
+[35:29] words it will guess or not guess it will infer the language um with a very high
+[35:36] uh degree of certainty. Um especially Hebrew will be very easy to identify. If
+[35:42] you have your own diiorits, it's easy. Um but even if you just throw random
+[35:45] languages at it, it will have a very good chance like just with a few words
+[35:49] to know this is this language and then you can treat it the right way.
+[35:56] Um
+[36:00] good. Let's continue. Um so we have done all of these searches. Uh we have done
+[36:08] slope. Uh one more thing before we get into the the relevance. One other very
+[36:14] heavy hammer um that people often overuse is fuzziness. Uh so bless you.
+[36:21] If you have a misspelling so I misspelled oban Kinoi. Uh we already
+[36:27] know that this is broken out into two different words or tokens. um it will
+[36:31] still match your oban because we have this fuzziness uh which uh allows edits.
+[36:37] It's like a it's a Levenstein distance. So you can have one by default here. You
+[36:43] could either give it an absolute value like you can have one edit which could
+[36:47] be one character too much, too little or one character different. Uh you could
+[36:52] set it to two or three. You can't do more because otherwise uh you match
+[36:57] almost anything. Um, and auto will auto is kind of smart because auto depending
+[37:03] on how long the token that you're searching for is uh will set a specific
+[37:07] value. Um, if you have zero to two characters, autofuzzness I think is one
+[37:12] from um two to no zero to two characters is zero. Uh three to five characters is
+[37:19] one and after that it's two. Um so you can match these. Um,
+[37:27] will this one match?
+[37:31] Yes. No. And why?
+[37:40] Yes. So, we have we have both of those are misspelled.
+[37:46] It still matches. Why?
+[37:53] Yes, that is a bit of a gotcha. Um, so yes, you need to know the tokenizer. So
+[37:58] we tokenize with standard. So it's two tokens and then the fitness applies per
+[38:01] token, which is another slightly surprising
+[38:05] thing. Uh, but yes, that's how you end up here. Um, okay. Now,
+[38:12] we could look at like the how the Levenstein distance works behind the
+[38:15] scenes, but it's it's basically a Levenstein automaton. um which looks
+[38:21] something like this. If you search for food and you have two edits, this is how
+[38:24] the automaton would work in the background to figure out like what are
+[38:27] all the possible permutations. Um it's a fancy algorithm uh that was I think
+[38:31] pretty hard to implement. Uh but uh it's in uh lucine nowadays. Um okay, now
+[38:38] let's talk about scoring. Uh one thing that you have seen that you don't have
+[38:41] anywhere or in a non-arch engine or just in a database is like we have the scores
+[38:46] like how well does this match? Um how does a score work here? Um
+[38:53] let's look at the the details of that one.
+[38:58] Um so the the basic algorithm which is also most of us or pretty much all of us
+[39:02] here um term frequency inverse document frequency or TF um it has been slightly
+[39:09] tweaked like the new implementation is called BM25 which stands for best match
+[39:14] and it's the 25th iteration of the best match algorithm. Um, so what they look
+[39:18] like is, um, you have the term frequency. If I search for droid, how
+[39:23] many times does Droid appear in the text that I'm looking for? Um, and it's
+[39:28] basically the square root of that. So the assumption is, um, if a text
+[39:32] contains droid once, this is the relevancy. If I have a text that
+[39:36] contains droid 10 times, um, this is the relevancy. The tweak between TF, that
+[39:42] one just keeps growing. uh BM25 says like once you hit like five droids in a
+[39:47] text it doesn't really get much more relevant anymore. Um so it kind of like
+[39:51] flattens out the curve. Um that is the idea of term frequency. Um the next
+[39:56] thing is the inverse document frequency um which is almost the inverse curve.
+[40:02] The assumption here is over my entire text body. This is how often the term
+[40:09] droid appears. So if a term is rare, it is much more relevant than if a term is
+[40:15] uh very common. Then it's kind of like less relevant. Basically the assumption
+[40:18] is rare is relevant and interesting. Very common is not very interesting
+[40:22] anymore. Uh and then it's kind of like just uh works its curve out like that.
+[40:28] Um and the final thing is uh the field length norm is like the shorter a field
+[40:34] is and you have a match the more relevant it is which assumes like if you
+[40:39] have a short title and your keyword appears there it's much more relevant
+[40:42] than if there's a very long text body and your keyword or and you have a match
+[40:45] there. Um and these are the three main components of uh TF. So let's take a
+[40:51] look at how this looks like. Um you can make this a bit more
+[40:55] complicated. um
+[41:01] you why something matches. Don't be confused by the or let me take that out
+[41:05] for the first try. So I'm looking for father and I am uh no I am your father
+[41:10] and Obi-Wan never told you what happened to your father. Um
+[41:15] one is more relevant than the other. Why is the first one more relevant than the
+[41:19] second one? Yeah. Term frequency is the same. both
+[41:24] contain contain uh father ones. The uh inverse documentary frequency is also
+[41:30] the same because we're looking for the same term. Uh the only difference is
+[41:33] that the second one is longer than the first one. Um and that's why it's um
+[41:39] more relevant here. Um so this is very simple and you can then if you're unsure
+[41:46] why something is calculated in a specific way, you can add this explained
+[41:49] true. Uh and then it will tell you all the the details of like okay we have
+[41:54] father um and it then calculates basically all the different pieces of
+[41:58] the formula for you and shows you how it did the calculation. So you can debug
+[42:02] that if you need to um but it's probably a bit too much output for the everyday
+[42:07] use case. Um and then you can customize the score if
+[42:13] you want to. Here I'm doing a a random score. So my two fathers this is a bit
+[42:18] hard to show. um they will just be in random order because their score is here
+[42:22] um randomly assigned. Um but you could do this more intelligently that you
+[42:27] combine like the score and like if you have I don't know the margin that on a
+[42:32] product that you sell or the rating that you include that in the rating somehow
+[42:35] and you can build a custom score for things like that. Um so you can
+[42:39] influence that any way you want. Um, one thing that I see every now and then
+[42:46] that is a very bad idea and we'll skip this one because it's probably a bit too
+[42:50] much. Um, this one, by the way, is the is the total formula that you can do or
+[42:55] maybe I'll show you this parts that I skipped. What happens if you search for
+[42:58] two terms and they're not the same? They don't have the same relevancy. So, what
+[43:03] the calculation behind the scenes basically looks like is let's say we
+[43:07] search for um father. Father is very rare. That's why it's much more relevant
+[43:12] than your your is pretty common. And then we have a document that contains
+[43:16] your father. It's kind of like this exis. This is like the this will be the
+[43:20] best match. But will a word will a document that only contains father be
+[43:24] more relevant or only your intuitively the one with just father will be more
+[43:30] relevant. But how does it calculate that? Um it basically calculates like
+[43:35] this is the relevancy of father. um this is the ideal document and this is your
+[43:39] and then it can looks like which one has the shorter angle and this is the one
+[43:43] that is more relevant. Um so if you have a multi-term search um you can figure
+[43:49] out which term is more relevant and how they are combined. Um and then you can
+[43:52] also have the coordination factor which basically rewards documents containing
+[43:57] more of the terms that you're searching for. So if you I'm searching for three
+[44:00] time terms like um you I am father whatever um if a document
+[44:08] contains all three this will be the the formula that combines the scores of all
+[44:12] three and multiplies it by three divided by three. If it only contains two of
+[44:16] them it would only have the relevancy of 2/3 and with one one/3 and then you put
+[44:22] it all together and this is the formula that happens behind the scenes and you
+[44:25] don't have to do that in your head luckily.
+[44:28] Cool. We have seen these um one thing that I or we see every now and then is
+[44:34] that people try to translate the score into percentages.
+[44:38] Um like you say this is a 100% score and
+[44:43] this is only like a 50% match. Who wants to do that?
+[44:49] Hopefully nobody. Uh because the lucine documentation is pretty explicit about
+[44:53] that. um should not think about the problem in
+[44:57] that way because it doesn't work. Um and I'll show you why it doesn't work or how
+[45:02] this breaks. Um let's take another example. Uh
+[45:12] let's say we take this short text. These are my father's machines. I I think of a
+[45:17] good Star Wars quote to use here, but bear with me. Um so what remains if I
+[45:21] run this through my analyzer? my father machine. These are the three tokens that
+[45:26] remain. Now I will store that you remember with the three tokens that we
+[45:30] have stored. Um and if I search for my father machine um you might be inclined
+[45:37] uh to say um this is um the perfect score.
+[45:44] This is like a 100%. Agreed?
+[45:48] because all the three tokens that I have stored in these are my father's machines
+[45:52] um are there. So this must be like my perfect match. So it's 3.2 that would be
+[45:56] 100%. The problem now is every time you add or remove a document the statistics
+[46:02] will change and your score will change. So if I delete that document um and I
+[46:06] search the same thing again um I don't know what percentage this is now. Is
+[46:11] this now the new 100% the best document or is this a 0 point or I don't know
+[46:16] 20%. um how does this compare? Um and then you can play play funny tricks
+[46:23] where these droids are my father's father's machines. Um and you can see I
+[46:27] have a turn frequency of two for father here. So if I store that one then and
+[46:33] then search it. Um is this now 100%? Is this now 110%. Um
+[46:41] so don't try to translate uh scores into percentages.
+[46:46] They're only relevant within one query. They're also not comparable across
+[46:49] queries. They're really just sorting within one query. Um, to do that, um,
+[46:54] okay, let me get rid of this one again. Now,
+[46:59] we've seen the limitations uh of keyword search. We don't want to define um our
+[47:05] our synonyms. We might want to extract a bit more meaning. So, we'll we'll do
+[47:09] some simple examples uh to extend. Um I will add uh from OpenAI text embedding
+[47:18] small I'm basically connecting that inference
+[47:23] API for text embeddings here in my instance um I have removed the API key
+[47:28] you will need to use your own API key um if you want to use that but it is
+[47:31] already configured um so let me pull up the inference services that we have here
+[47:37] I have done or I have added two uh different models. Uh, one sparse, one
+[47:46] dense. Let's go to these. Uh, by the way, if you try to do this, um, with
+[47:51] 100% score, don't do this. Um, because it will just not work. Um, okay.
+[48:00] Not everybody has worked with dense vectors, right? Uh, so I have a couple
+[48:04] of graphics coming back to our Star Wars theme, uh, just to look at how that
+[48:07] works. So what you do with dense vectors is um we'll keep this very simple um
+[48:14] this one just has a single uh dimension um and it has like the axis is pretty
+[48:19] much like realistic Star Wars characters and cartoonish Star Wars characters and
+[48:24] this one falls on the realistic side and that other one is just cartoonish and
+[48:29] you have model behind the scenes that can rate those images and will figure
+[48:32] out like where they fall. Um now in reality you will have more dimensions
+[48:38] than one. Um and you will also have floating point precision. So it's not
+[48:42] just like um minus one zero or one um but
+[48:49] you will have more dimensions. So for example here I'm adding human and
+[48:53] machine and in a realistic model you don't have like the dimensions are not
+[48:56] labeled as nicely and clearly understandable. the machine has learned
+[49:00] what they represent but they're not representing an actual thing that you
+[49:03] can extract like that. Um but in our simple example here now we can say this
+[49:08] layer character um is realistic and a human versus um I don't
+[49:16] know the dove waiter um is cartoonish and I don't know somewhere between human
+[49:21] and machine um so this is the representation in the vector space and
+[49:26] then you could have like I said you could have floatingoint values and then
+[49:28] you can have different characters um and similar characters like both of those
+[49:33] are human um without the hand, he's only like not quite as human anymore. So he's
+[49:38] a bit lower down here. Um uh so he's a bit closer to the machines.
+[49:44] Um so you can have all of your entities in this vector space and then if you
+[49:49] search for something you could figure out like which characters are the
+[49:53] closest uh to this one. And again in reality you will have hundreds of
+[49:58] dimensions. uh it will be much harder to say like uh these are the explicit
+[50:02] things and this is why it works like that. Um it will depend on how good your
+[50:06] model is uh in interpreting your data and extracting the right meaning from
+[50:10] it. Um but that is the general idea of dense vector representation. You have
+[50:17] your documents or sometimes it's like chunks of documents um that are
+[50:21] represented in this vector space and then you try to find something that is
+[50:25] close to it. uh for that. Um does that make sense for everybody or
+[50:31] any specific questions?
+[50:35] So it's a bit more opaque. I want to say it's not quite as easy because you say
+[50:39] like these five characters match these other five characters here. Um but you
+[50:44] need to trust or evaluate that you have the right model to figure out how these
+[50:48] things connect. So let's um see how that looks like.
+[50:54] Um I have one dense vector model down here. We
+[51:01] have openAI embedding. Um this one is a very small model. It only has 128
+[51:07] dimensions. Um the results will not be great but it's
+[51:11] actually for demonstrating uh it actually helpful. Uh so we'll see that
+[51:16] the other model that we have and let me show you the output of that. So if I
+[51:21] take my text, these are not the droids you're looking for. This is the
+[51:25] representation. It's basically an array of floatingoint values uh that will be
+[51:30] stored. And then you just look for similar floatingoint values. And then
+[51:33] you have these are not the droids you're looking for here on the previous one.
+[51:40] Dense text embedding. Um this one here does sparse embedding. Sparse is the the
+[51:46] main model used for that is called splade. Um our input of splade is we
+[51:52] call it uh it's kind of like a slightly improved uh split but the concept is
+[51:57] still the same. What you get is um you take your
+[52:02] you take your words and this is not just a TF. This is a learned representation
+[52:08] where I take all of my tokens and then expand them and say like for this text
+[52:14] um these are all the tokens that I think are relevant and this number here
+[52:18] basically tells me how relevant they are. Um again not all of these make
+[52:24] sense intuitively. Um and you might get some funky results for example with
+[52:30] foreign languages. This currently only supports English. Um but these are all
+[52:35] the terms that uh we have extracted normally. Um yeah you get like 100
+[52:41] something or so. Um so the the idea is that this text is represented by all of
+[52:47] these tokens and the higher the score here the more uh important it is. And
+[52:52] what you will do is you store that behind the scenes. when you search for
+[52:56] something um you will generate a similar list and then you look for the ones that
+[53:00] have an overlap and you basically multiply the scores together and the
+[53:04] ones with the highest values will then find the most relevant document.
+[53:09] This is in so far interesting or nice because it's a bit easier to interpret.
+[53:14] It's not just like long array of floatingoint values. Um sometimes these
+[53:20] don't make sense. The main downside of this though is that it gets pretty
+[53:25] expensive at query time because you store like a ton of different tokens
+[53:28] here for this u when you retrieve it um the search query will generate a similar
+[53:34] long list of terms and at if you have a large enough text body um a query might
+[53:41] hit a very large percentage of your entire stored documents to with these
+[53:45] ore matches because basically these are just a lot of ores that you combine
+[53:50] calculate uh the score and then return the most or the the highest ranking
+[53:54] results. Um so it's an interesting approach. It didn't gain as much
+[53:59] traction as dense vector models, but it can be as a first step or an easy and
+[54:03] interpretable step. It can be a good starting point u to dive into the
+[54:07] details here. Um
+[54:15] uh so this these are not the droids looking for is basically represented by
+[54:21] this embedding here. So it's like this entire list of of
+[54:27] terms with these um yeah with this relevancy basically this is the
+[54:32] representation of this string and then when I search for something I will
+[54:37] generate a similar list and then I basically try to match the two together
+[54:41] like for what is has the most or the highest matches here.
+[54:47] Make sense?
+[54:54] Yes, we'll do that in a second. Um it it's a bit because um with the
+[55:02] um back it doesn't tell you exactly this is
+[55:06] what matched. Uh but yes um so I will need to create a new index. Um this one
+[55:12] keeps the configuration from before but I'm adding this semantic text for the
+[55:17] the sparse model and the dense model. So I've created this one. U and now I'll
+[55:23] just put three documents. I have my other index. Um as you can see here it
+[55:28] says three documents were moved over. Um so we can then start searching here. And
+[55:34] um if I look at that the first document is still these are not the droids you're
+[55:37] looking for. You don't see like for the for keyword search you don't see the
+[55:42] extracted tokens here. We also don't show you the the dense vector
+[55:46] representation or the sparse vector representation. Those are just stored
+[55:49] behind the scenes. um for querying, but there's no real point in retrieving them
+[55:54] because you you're not going to do anything with that huge array of of
+[55:57] dense vectors. Um it will just slow down your searches. Um you can look at the
+[56:03] the mapping and you can see um I'm basically copying my existing quote
+[56:08] field to these other two that I can also search those. Okay. So if I look for
+[56:14] machine on my original quote, will it find anything?
+[56:20] No,
+[56:25] no, because it only had these are not the droids you're looking for. And this
+[56:28] is still the keyword search.
+[56:32] So, this is just a query from before just to show you that yes, we're not
+[56:35] matching anything because it only had these are not the droids you're looking
+[56:38] for. But here, we're looking for machine. Um, it was still the keyword
+[56:41] matching. Doesn't work, shouldn't work. That's exactly the result that we want
+[56:45] out of this here. Um, now if I say else and I say machine,
+[56:52] then it will match here. These are not the droids you're looking for. And you
+[56:55] can see this one matches pretty well. I don't know at 0.9, but it also has some
+[57:01] overlap with no, I am your father. I mean, it is much lower in terms of
+[57:05] relevance. Uh, but something had an overlap here. And only the the third
+[57:10] document, um, Obi-Wan never told you what happened to your father. only that
+[57:15] one is not in our results list at all. But there was something here. I don't
+[57:19] know the expansion. We would need to basically run
+[57:25] where was it? We would need to run uh this one here for all the strings and
+[57:30] look then for the expansion of the query and then there would be some overlap and
+[57:34] that's how we retrieve that one. Um threshold. You could define a threshold.
+[57:41] Um, it will though depend. Um, let's see. Uh, these are not the droids
+[57:48] you're looking for. Let's say if I
+[57:53] say I'm not sure this will change anything.
+[58:02] I mean, the relevance here is still it's still 10x or so. Um, but yeah, this one
+[58:08] still
+[58:11] will just have a very low
+[58:16] terms you look for um the score just totally jumps around. So it's a bit hard
+[58:20] to define that threshold because here you can see in my previous
+[58:25] query we might have said 0.2 is the cutoff point but now it's actually 0.4
+[58:30] even though it's not super relevant. So it might be a bit tricky uh or you might
+[58:34] need to have a more dynamic threshold depending on how many terms you're
+[58:37] looking for and uh what is a relevant result in the in a bigger picture. The
+[58:42] assumption would be if you have hundreds of thousands or even millions of
+[58:47] documents um you will probably not have that problem that anything that is so
+[58:52] remotely connected will actually be in the top 10 or 20 or whatever list that
+[58:56] you want to retrieve. Um so for large or proper data sets this should be less of
+[59:01] an issue. With my hello world example of three documents um it can be a bit
+[59:06] misleading but yes you can have a cut off point if you figure out what for
+[59:10] your data set and your queries is a good cutff point. You could define a cutff
+[59:14] point. Sorry you have three documents only show.
+[59:19] So the query gets expanded into I don't
+[59:22] know those 100 tokens or whatever and then for those two there is some overlap
+[59:26] but the third one just didn't have any overlap
+[59:30] but I so we what okay we can we can do that it's just a bit tricky to figure
+[59:35] out that the terms that has the overlook uh uh the overlap so we will need to
+[59:39] take this one machine uh no I am your father let's take this one
+[59:46] what you need to do is um to figure that one about I know actually we
+[59:51] should be able Let me see. Um
+[59:58] let's see.
+[1:00:13] It's a pretty long output somewhere. I was actually hoping that it
+[1:00:18] will show me the term that has matched here. Okay, I see something.
+[1:00:25] Okay, there's something puppet that seems to be the overlap.
+[1:00:30] How much sense that term expansion for the the store text and the query text
+[1:00:34] makes is a bit of a different discussion. Uh but in here with that
+[1:00:38] explained true, you can actually see how it matched and what happened behind the
+[1:00:42] scenes. if you have any really hard or weird curious or something that is hard
+[1:00:46] to explain to debug that. But the third one didn't match. Um now if I take the
+[1:00:52] dense vector model with OpenAI and I search for machine, how many results do
+[1:00:56] you expect to get back from this one?
+[1:01:04] 0 one two three. Yes. Three. Y three.
+[1:01:10] Yes. because there's always some match that is the other or let me run the
+[1:01:14] query first. Um here these are not the droids you're
+[1:01:20] looking for. This one is the first one. Um I don't think that this model is
+[1:01:24] generally great because here the results are super close. It is I mean the the
+[1:01:28] droids with the machines that is the first one but the score is super close
+[1:01:33] to the second one which is no I am your father which feels pretty unrelated and
+[1:01:37] uh Obi-Wan never told you what happened to your father. Even that one is still
+[1:01:41] with a reasonably close score. Uh but why do we have those? Um
+[1:01:47] because if we say what is the relevance uh I mean it's further away but it's
+[1:01:54] always like there's always kind of like some angle to it even if the kind of
+[1:01:58] like the angle here or depending on the the similarity calculation that you do
+[1:02:02] but it's still always related. There is no easy way to say something is totally
+[1:02:06] unrelated. Um, that is by the way one good thing about keyword search where it
+[1:02:13] was relatively easy to have a cut off point of things that are totally not
+[1:02:16] relevant where you're not going to confuse your users versus here if you
+[1:02:20] don't have great matches you might get almost it's not random but it's
+[1:02:25] potentially it looks very unrelated to your end users what you might return
+[1:02:29] just because it's very hard to show. Yes. Is it fair to say that the
+[1:02:35] search for
+[1:02:42] I I'm careful with worse because it's really a hello world example. So I don't
+[1:02:46] take this as a quality measurement in any way. Um I I I'm yeah I mean the the
+[1:02:52] OpenAI model with 128 dimensions is very few dimensions. I think it will probably
+[1:02:56] be cheap but not give you great results necessarily. But don't use this as a
+[1:03:00] benchmark. I think it's just a a good way to see um that you this is now much
+[1:03:06] harder because now you need to pick the right machine learning model uh to
+[1:03:10] actually figure out what is a good match with keyword based search it was a bit
+[1:03:14] of a different story there you need to pay more attention to like how do I
+[1:03:17] tokenize and do I have the right language and do I do stemming or not
+[1:03:21] stemming but most of that work is relatively I want to say almost
+[1:03:25] algorithmic um and then you can figure that out and you configure it and then
+[1:03:29] it's very predictable able at query time. Um versus with the dense vector
+[1:03:34] representation, you really need to evaluate for the
+[1:03:37] queries that you run and the data that you have like is that relevant and is an
+[1:03:41] improvement or not. Um it's very easy to get going and just throw a dense vector
+[1:03:46] model together. Um and you will match you will always match something that
+[1:03:51] might be an advantage over the the lexical search where you don't have any
+[1:03:54] matches which sometimes is there the problem that nothing comes back and you
+[1:03:57] would want to have at least some results. Um here it might just be
+[1:04:02] unrelated. So that that can be tricky. Um the you
+[1:04:08] want to have some results is by the way um a funny story that European
+[1:04:12] e-commerce store once told me. They said they accidentally deleted I think
+[1:04:17] twothirds of their data that they had for the products that you could buy. And
+[1:04:21] then I asked them like okay so how much revenue did you lose because of that?
+[1:04:26] And they said basically nothing because as long as you showed some somewhat
+[1:04:31] relevant results quickly enough people would still buy that. So only if you
+[1:04:35] have no results that's probably the worst. So, for an e-commerce store, you
+[1:04:39] might want to show stuff a bit further out because people might still buy it.
+[1:04:43] Uh, but it really depends on the I'm I'm coming to you in a moment. Uh, it really
+[1:04:47] depends on your use case. E-commerce is kind of like one extreme where you want
+[1:04:51] to show always something for people to buy. Um, if you have a database of legal
+[1:04:57] cases or something like that, you probably don't want that approach. Uh,
+[1:05:00] because that will go horribly wrong. So, it is very domain specific. Um
+[1:05:05] that's I think also the good thing about search because it keeps a lot of people
+[1:05:09] employed because it's not an easy problem. It's it's almost job security
+[1:05:13] because it depends much on the this is the data that you have and this is the
+[1:05:17] query that people run and this is the expectation of what will happen and this
+[1:05:20] is for this domain the right behavior. Um so there's no easy right or wrong
+[1:05:26] with the checkbox. And the other thing is you might make if you tune it you
+[1:05:30] might make it better for one case but worse for 20 others. That's why a robust
+[1:05:34] abbreviation set is normally very important though very rare. Uh a lot of
+[1:05:39] people yolo it. Um and you will see that in the results and for the e-commerce
+[1:05:43] store it probably works well enough. Uh, sorry, you had a question.
+[1:05:53] I have a very large customer.
+[1:06:07] Yeah. So the the way we would do it in our product um is that you would
+[1:06:12] probably have two different indices with different mappings. Yeah. But then it's
+[1:06:17] not so upgrades.
+[1:06:23] Uh Dave, please. Yeah.
+[1:06:33] So there's no penalty for having a field that's not
+[1:06:42] Yeah, that's how we do it.
+[1:06:48] No, that the problem is the data structure like if the field is there. So
+[1:06:51] the data structure that we build in the background is called H. And either we
+[1:06:55] build the data structure or we don't build it.
+[1:06:59] Yeah. So if you had 10 billion entries in your vector
+[1:07:18] It's just going to be
+[1:07:30] what does not
+[1:07:35] processor
+[1:07:45] You have to manage that complex technology.
+[1:07:57] One more question.
+[1:08:02] We found that it was extremely slow.
+[1:08:12] force match or
+[1:08:21] I mean yes
+[1:08:33] update
+[1:08:43] Facebook
+[1:08:59] upgrade upgrade.
+[1:09:04] So the the reason the the reason why that is uh it's like
+[1:09:10] merging so because you have the immutable segment structure in elastic
+[1:09:14] search uh in HNSW you cannot easily merge you basically need to rebuild
+[1:09:19] them. the one trick I forgot which version it was uh I'm not sure Dave if
+[1:09:23] you remember I think it was even before 811 but basically if we do a merge we
+[1:09:27] would take the the largest segment with not deleted documents and basically plop
+[1:09:31] the new documents on top of them rather than starting from scratch from two HNSW
+[1:09:36] data structures there's another optimization somewhere now in 9.0 zero
+[1:09:41] that will make that a lot faster. So it really depends on the the version that
+[1:09:44] you have and there are a couple of tricks that you can play. Uh but yeah
+[1:09:48] that is one of the downsides of like the way immutable segments work and HNSW is
+[1:09:54] built that you can't easily just merge it as easily together as other data
+[1:09:58] structures. Uh because you really need to rebuild the HNSW data structure or
+[1:10:02] like take the largest one and then plop the other one in.
+[1:10:20] might have been a while ago. Uh, yeah.
+[1:10:36] Right.
+[1:10:41] Yeah.
+[1:10:51] Yeah. I feel like rag has been very heavily abused is or like the mental
+[1:10:56] model I think started off as like you do retrieval and then you do the generation
+[1:10:59] but you could do the generation earlier on as well that you do the query
+[1:11:02] rewriting and expanded query. Um, so I my favorite example for that is um
+[1:11:10] you're looking for a recipe. You don't need to have the the LLM regenerate the
+[1:11:16] recipe. You just want to find the recipe. But maybe you have a scenario
+[1:11:19] where you forgot what the thing is called that you want to cook. And then
+[1:11:22] you could use the LLM, for example, to tell you what you're looking for. Um,
+[1:11:26] like you say like, oh, I'm looking for this Italian dish uh that has like these
+[1:11:31] layers of pasta and then some meat in between. And then the LLM says like,
+[1:11:34] "Oh, you're looking for lasagna." And then you basically do the generation
+[1:11:37] first or a query rewriting um and then search and then get the results. As a
+[1:11:43] very let's you explicit example here. Your example will look very different
+[1:11:47] than probably smarter than my example. Uh but query writing is one um thing.
+[1:11:55] There's also that this concept of hy where you your documents and your
+[1:11:59] queries often look very different and that you use an LLM to generate
+[1:12:03] something from the query that looks more close like the do the documents that you
+[1:12:07] have and then you match the documents together because they're more similar in
+[1:12:10] structure. Um so there are all kinds of interesting things that you can do. Um
+[1:12:15] like I said earlier that it depends is becoming a bigger and bigger factor. Uh
+[1:12:19] but yeah, your use case is probably might be
+[1:12:24] yeah maybe a multi retrieval where you figure out like oh you look I don't know
+[1:12:29] I know the example from an e-commerce store where it's like I'm going to a
+[1:12:34] theme party from the 1920s and give me some suggestions and then the LLM will
+[1:12:39] need to figure out like what am I searching for and then it can retrieve
+[1:12:41] the right items and rewrite the query and then actually give you proper
+[1:12:45] suggestions. Uh but it's it's not just running a query anymore.
+[1:12:50] Uh yeah.
+[1:13:12] We're not talking
+[1:13:37] Yeah.
+[1:13:46] Uh, definitely not necessarily. It's It's an interesting question. It's that
+[1:13:51] feels almost like a blast from the past. I remember like two or three years ago
+[1:13:55] there was this big debate of like how many dimensions does each data store
+[1:13:59] support and like how many dimensions should you have and at first it looked
+[1:14:02] like oh more dimensions is always better but then it turned out more dimensions
+[1:14:05] are very expensive. Um so it really depends on the model and what you're
+[1:14:09] trying to solve. Like if you can get away with fewer dimensions it's
+[1:14:12] potentially much cheaper and faster. Um but it I don't think there is a a hard
+[1:14:17] rule like maybe the model with more dimensions can express more uh in
+[1:14:23] because it just has more data and then it will come in handy. Uh but maybe it's
+[1:14:27] not necessary for your specific use case and then you're just wasting a lot of
+[1:14:30] resources. I don't think there is a an easy answer to say like yes for this use
+[1:14:34] case you need at least 4,000 dimensions. Um
+[1:14:39] it will depend but it depends on the model um how many dimensions it will
+[1:14:43] output and then maybe you have some quantization in the background to reduce
+[1:14:46] that again or reduce the either the number of dimensions or the fidelity per
+[1:14:50] dimension. Um so there are a lot of different
+[1:14:54] trade-offs in that performance consideration but it will mostly rely on
+[1:14:57] like how good does the model work for the use case that you're trying to do.
+[1:15:19] it's not.
+[1:15:24] Yeah. So the that is one area. So I want to say historically what you would do is
+[1:15:30] um you would have a golden data set um and then you would know what people are
+[1:15:34] searching for and then you would have human experts who rate your queries and
+[1:15:38] then you run different queries against it and then you see like is it getting
+[1:15:41] better or is it getting worse. Um now LLMs open a new opportunity where you
+[1:15:47] might have with human experts in the loop uh to help them out a bit but they
+[1:15:51] might be actually good at evaluating the results. Um so you almost nobody has
+[1:15:56] like the golden data set and test against that. Um but you can either use
+[1:16:01] it look at the behavior of your end users and try to infer something from
+[1:16:05] that. Um or you have an LLM that evaluates like what you have or you have
+[1:16:10] a human together with an LLM evaluate uh the results. Uh so you you have various
+[1:16:16] tools. Uh but again it's and it depends and it really not an easy
+[1:16:22] question of saying like this is the right thing. Maybe you can get away with
+[1:16:26] something simple. So the the classic approach I want to say is like you
+[1:16:30] looked at the click stream of how your users behaved and then you saw like they
+[1:16:33] clicked on the first or up to the third result. The result was potentially good
+[1:16:37] and they didn't just go back and then click on something else but they they
+[1:16:40] stuck on the page. Um if they don't click on anything and just leave it
+[1:16:44] might be very bad. if they go to the second or third page, it might also not
+[1:16:48] be great. So there are some quality signals that you can infer from that or
+[1:16:51] you really look into the the quality aspect and try to evaluate like what
+[1:16:55] people were doing and how how it behaves. Uh but you can make this from
+[1:16:59] relatively simple to pretty complicated.
+[1:17:12] Um what else? What else?
+[1:17:20] Okay, obviously if I search for dad with extension, uh it will find my father
+[1:17:26] example. Um and this one here um will still again match my my droids um pretty
+[1:17:33] much like the the opening AI example. One thing that I I wanted to to show you
+[1:17:38] what is also happening behind the scenes here. This is a very long segment like
+[1:17:42] it's it's a lot of information with different speakers. Um what I have
+[1:17:48] created here though is we have um created multiple chunks behind the
+[1:17:54] scenes. And if I search for that um I think looking for murder in the
+[1:18:00] Skywalk uh saga works pretty well here. It finds the document that I've
+[1:18:06] retrieved, but it can also highlight. Um, so here I say, "Show me the fragment
+[1:18:10] that actually matched best here." Um, and I if I search here for murder, it
+[1:18:17] didn't find anything, but I think the term that it found was in this
+[1:18:22] highlighted segment here, it found kill. And it was that one that was uh expanded
+[1:18:27] here. Um so here I've broken up my long text field into multiple chunks and
+[1:18:32] there are multiple strategies you do that by page, by paragraph, by sentence.
+[1:18:37] Um you could do it overlapping or not overlapping. Um many strategies it will
+[1:18:44] depend on how you want to retrieve what works best for your use case, but you
+[1:18:48] want to kind of like reduce the context per element that you're matching because
+[1:18:53] there's only so much context that a dense vector representation can hold.
+[1:18:56] Um, so you want to chunk that up, especially if you have like a full book,
+[1:19:00] you want to break up those individual at least pages. Um, and then find the
+[1:19:04] relevant part where the match is and then you can actually link back to that.
+[1:19:08] Um, the point in this query here is also to show you I didn't define any chunks.
+[1:19:14] Um, I didn't say like okay send this representation of a dense vector there
+[1:19:19] and then when it comes back interpret again. Um, this is all happening behind
+[1:19:23] the scenes just to make this easier. So the entire behavior here is still very
+[1:19:28] similar to the keyword matching even though there's a lot more magic
+[1:19:31] happening behind the scenes. Um just to keep that very simple. Um
+[1:19:39] okay
+[1:19:43] how does everybody feel about longer JSON queries?
+[1:19:47] Um we'll see about alternatives and maybe we can make this a bit simpler
+[1:19:50] again. Uh but let me show you one one more way of of looking at um we call
+[1:19:56] them retriever. They're a more powerful mechanism to actually combine different
+[1:20:02] types of searches. Um combining different types of searches, let me get
+[1:20:07] from my slides actually when we talk about combining searches and how this
+[1:20:11] all plays together. Um, this is kind of my my little interactive map of what you
+[1:20:18] do when you do retrieval or what you what your searches do. So, we started
+[1:20:23] here in the the lexical keyword search and then we run a match query and we're
+[1:20:27] matching these strings. Um, this often combined with some rank features um are
+[1:20:35] often what we call full text search. The rank features could be either you
+[1:20:39] extract a specific signal or it could also be something um however you
+[1:20:43] influence that ranking. It could be like the margin on a product like how many
+[1:20:47] people bought something, what the rating is. There are many different signals
+[1:20:51] that you could ex in include like not just with the the match of the the text
+[1:20:55] but any other signals that you want to combine uh for retrieving that. And then
+[1:20:59] you have like full text search as a whole. On top of that, I kept it kind of
+[1:21:05] like to the side here. You might have a boolean filter where you have like a
+[1:21:10] hard include or exclude of certain attributes. Um this does not contribute
+[1:21:15] to the score. This is just like black and white. This is included or excluded.
+[1:21:20] Whereas this here calculates the score for you how you match. And
+[1:21:26] then this was kind of like the the algorithmic side. And then we have this
+[1:21:30] machine learning the learn side or the semantic search uh where you have a
+[1:21:34] model behind the scenes uh split into the dense vector um embeddings and the
+[1:21:40] sparse vector embeddings um for vector search or learn sparse retrieval. I
+[1:21:46] think those are the two common terms. Um,
+[1:21:49] and the the interesting thing is all of these including the the sparse one,
+[1:21:55] these are the the sparse vector representation in the background and
+[1:21:58] only this one here is the dense vector representation. Um, and then when you
+[1:22:05] combine any any grouping down here to combine
+[1:22:10] for one search, this is then what we would call hybrid search. Um even though
+[1:22:15] there can be big discussions of like what is exactly hybrid search or not, I
+[1:22:19] will definitely stick to the definition that as soon as you combine uh more than
+[1:22:23] one type of search, it could be sparse and dense or it could be dense and
+[1:22:27] keyword or maybe if you combine two dense vector uh searches. Um then search
+[1:22:34] because you have multiple approaches and then you can either boost them together,
+[1:22:38] you could do re-ranking which is becoming more and more popular. Um, one
+[1:22:42] thing that we lean heavily into is RRF, which is reciprocal rank fusion. Uh,
+[1:22:47] that doesn't rely on the score, but it relies on the position of each search
+[1:22:52] mechanism. So, it basically says like the the lexical search had this document
+[1:22:57] at position four and the dense vector search had it at position two. And then
+[1:23:02] it kind of like evens out the position and gives you an overall position by
+[1:23:05] blending them together rather than looking at the individual scores because
+[1:23:09] they might be totally different. So this is kind of like the the
+[1:23:14] information retrieval map overall and we have okay we didn't do a lot of filters
+[1:23:19] but I think filters are intuitively relatively clear that you just say like
+[1:23:23] I'm only interested in users with this ID or whatever other criteria. It could
+[1:23:27] be a geo based filter like only things within 10 kilometers or only products
+[1:23:31] that came out in the last year. Um like a hard yes or no. um all the others will
+[1:23:38] give you um uh a value for the relevance and then you can blend that potentially
+[1:23:43] together to give you the overall results. That is kind of like the the
+[1:23:47] total map of search.
+[1:23:54] Uh yeah, for for signal um so we have our own data structure for for these
+[1:23:59] rank features. It could be for example the I don't know the the rating of a
+[1:24:04] book and then you combine um the the keyword match for I don't know
+[1:24:12] you you search for um murder mysteries uh but then another feature would be um
+[1:24:19] how well they are ranked and then you would see that or it could be your
+[1:24:23] margin on the product or the stock you have available and you would want to
+[1:24:27] show the products where you have more in Uh there can be or it might even be a
+[1:24:32] simple like a click stream like what have people clicked before. There are a
+[1:24:35] lot of different signals that you could include in all of this searching. Then
+[1:24:45] any other questions or everybody good for now? Yeah.
+[1:24:53] RF does a blended approach. Yes.
+[1:25:03] Yeah. So they are you would have to normalize them. They will be so
+[1:25:07] depending on like if you have depending on the the comparison that you do for
+[1:25:12] dense vectors it might be between uh zero and one but you saw that for the
+[1:25:16] keyword search uh also depending on how many words I was searching for it might
+[1:25:20] be much higher value. There is there's no really real ceiling for that. Um or
+[1:25:25] you could add a boost and say like this field is 20 times more important than
+[1:25:30] this other field. Um there is no real max value that you would have here. You
+[1:25:34] could normalize the score and then basically say like I'll take like the
+[1:25:38] highest value in this sub query as 100% and then reduce everything down by that
+[1:25:43] factor and then I combine them. Maybe that works well. RF is a it's a very
+[1:25:49] simple paper. I think it's like two pages. Um and it really just takes the
+[1:25:53] different positions. I think it's 1 divided by 60, which is like a factor
+[1:25:57] they figured out made sense, plus the position. Uh, and then you add the
+[1:26:01] scores or like the positions for each document together. And then that value
+[1:26:06] gives you the overall position. Um, it's really just it doesn't look at the score
+[1:26:11] anymore, but it blends the different positions together and like how they are
+[1:26:14] interle and what should be first or second. And
+[1:26:18] um, yeah.
+[1:26:32] What do you guys want?
+[1:26:59] I mean feature vector will always be there
+[1:27:02] because like if you are already using postgress it's very easy to add um I
+[1:27:06] think then the question is like does it have all the features uh that you need
+[1:27:09] for example postress doesn't even do BM25
+[1:27:13] um it has some matching but it's not the full BM25 algorithm because I don't
+[1:27:17] think it keeps all the statistics um it will be a question of like scaling out
+[1:27:21] postgress can be a problem and then just like the breadth of all the search
+[1:27:25] features um if you only need vector search um I think my or our default
+[1:27:32] question back to that is like do you really only need vector search um maybe
+[1:27:36] for your use case but for many use cases you probably need hybrid search uh one
+[1:27:41] area for example where vector search will not do great is like if somebody
+[1:27:46] searches for like a brand because there is no easy representation in most models
+[1:27:52] uh for the specific brand and it will be very hard to beat keyword search. So
+[1:27:55] there will be very and also your users very angry they know you have this word
+[1:28:00] somewhere in your documents uh or in your data set but you don't give me the
+[1:28:03] result back. Um so there are many scenarios where you probably want hybrid
+[1:28:08] search or I feel like that's the we started two years ago we started with
+[1:28:12] just vector search but I feel like the overall trend is coming more to hybrid
+[1:28:16] search because you probably some sort of key um and then you want to have that
+[1:28:22] combined probably with some model uh for the added benefit and extra text. Um but
+[1:28:29] you often want the combination. It might also depend a bit on like the types of
+[1:28:33] queries that your users run. So if your users run single word queries like I've
+[1:28:37] done in my examples, that's often not really ideal for vector search because
+[1:28:42] you live off like any machine learn because you live off extra context. Um
+[1:28:47] so depending on that I've seen some people build searches where it's like if
+[1:28:52] you search for one or two words they do keyword search but if you search for
+[1:28:55] more they might fall over to vector search. So it depends a bit on the
+[1:28:58] context what works. Um if you really only need vector search um and PG vector
+[1:29:04] is small enough uh to do all of that um and postquest is your primary data store
+[1:29:10] then that's probably where you will do well uh but there are plenty of
+[1:29:13] scenarios where that will or not all of those necessary boxes will be ticked.
+[1:29:39] option.
+[1:29:57] Have you seen
+[1:30:22] But so you would create so it's one data set basically with thousands of files
+[1:30:28] that all are chunked together and so one change would invalidate all of them or
+[1:30:42] It didn't change.
+[1:31:10] Uh so
+[1:31:14] maybe so I think the way we might solve it is
+[1:31:20] that if you create the hash of the file and use that as the ID and you only use
+[1:31:25] the operation create and it would reject any any duplicate rights, you would at
+[1:31:31] least not ingest and and then create the vector representation again. Um it will
+[1:31:36] still send it over again and it would need to get rejected. ID.
+[1:31:42] Yes. If you if you have that doc ID and then you need to set the operation to
+[1:31:46] just create and not uh update or upsert uh then it would just be rejected and
+[1:31:51] you would only write it once. I'm not sure if that is a great use case
+[1:31:56] or if you might want to keep like a I don't know an outside cache of like all
+[1:31:59] the hashes that you've already had and dduplicate it there. But that would be
+[1:32:03] the elastic search solution of like using the the hash as the ID and then
+[1:32:07] just writing to that.
+[1:32:12] Okay. And although with create on the Yeah, that that is I think the intuitive
+[1:32:17] or most native approach that we could offer for that. Yeah, I think there was
+[1:32:21] some other question somewhere. Uh yeah.
+[1:32:48] But uh from what I remember the default post full text search does not do full
+[1:32:53] BM25. five, but it only does it doesn't have all the statistics, I think, from
+[1:32:56] what I remember. Yeah.
+[1:33:02] Any other questions? Uh Joe, please go ahead.
+[1:33:13] To to show now. Yeah. I mean, how much chase do you want to see?
+[1:33:18] Um
+[1:33:45] Mhm.
+[1:33:49] Yes. Um May maybe for before we dive into that
+[1:33:55] be for everybody else like rescoring is like let's say we have a million
+[1:33:59] documents and then we have one cheaper way of retrieving them and we retrieve
+[1:34:03] the top I don't know a thousand candidates and then we have a more
+[1:34:06] expensive way but higher quality way of actually rescoring them then we will run
+[1:34:11] this more expensive rescoring on just the top thousand uh to get our ultimate
+[1:34:16] result list of of results but the the rescoring algorithm would be too
+[1:34:21] expensive uh to run it across like the million documents that why you don't
+[1:34:25] want to do that that's why you twostep process and that's why you might want to
+[1:34:30] have the the rescoring so yes we have a you can in elastic search now you can do
+[1:34:34] rescoring because it becomes more and more popular um I don't have a full
+[1:34:40] example there but we do have like we do have a rescoring model built in by
+[1:34:45] default now let me pull that up um not this one. So we have currently it's
+[1:34:53] the the version one re-ranking but we have a built-in re-ranking uh model now
+[1:34:58] as well. So for one of the tasks uh that we can do um you can see here we have
+[1:35:04] the other tasks like for example the dense text embedding now we have a
+[1:35:09] reranking task that you can also call your question how do you express that
+[1:35:15] okay
+[1:35:27] reranking is good. Let me uh somehow my keyboard binding is broken. This is very
+[1:35:34] annoying.
+[1:35:40] Okay. Um we rerank results. Let me see. Somewhere here there should be so
+[1:35:46] there's learn to rank. Um but it should not be the only one.
+[1:35:55] This is what we want. Okay. We have our re-ranking model. Um,
+[1:36:04] unless Dave, you know from the top of your head where we have the right docs
+[1:36:06] for this.
+[1:36:12] Yeah, retrievers could find them. Starting in 8.16
+[1:36:18] API
+[1:36:22] retificance
+[1:36:42] task
+[1:36:52] target level text field
+[1:37:30] Yeah. So I think this is a simple example like we have a standard match
+[1:37:34] like this is will be very cheap and then we have the text simulated rarity
+[1:37:39] reranker which uses our elastic reranker um that falls back to that model behind
+[1:37:44] the scenes. Think about it. I was a function
+[1:37:57] inside
+[1:38:11] of those results. structure.
+[1:38:32] Search
+[1:38:44] customers.
+[1:39:06] There's a lot of black stuff out there.
+[1:39:11] Don't be scared.
+[1:39:28] Yeah,
+[1:39:32] my wish list is
+[1:39:51] Yeah. So the just to give you the example of like I
+[1:39:55] don't think I have a re-ranking example here but this one um
+[1:40:00] uses a classic keyword match uh for retriever and then we have we normalize
+[1:40:06] here the score I think somebody else asked about the normal or we had a
+[1:40:10] discussion about the normal normalizing we do a minmax normalizing we this with
+[1:40:14] two um and then I use the openi embeddings with a again normalized with
+[1:40:20] a weight of 1.5 5 and then they will get blended together and you you get the
+[1:40:25] results that won't surprise you that these are not the droids you're looking
+[1:40:27] for. If you search for uh droid and robot um will be by far the highest
+[1:40:32] ranking document. You had a question somewhere. Yes.
+[1:40:46] different steps.
+[1:40:50] So like
+[1:41:14] I mean I I mean so in the first so we would retrieve like X candidates and you
+[1:41:18] could define the number of candidates and then we would run the reranking on
+[1:41:21] top of those. So that it will be a trade-off for you like the larger the
+[1:41:26] window is the the slower it will be but the potentially higher quality your
+[1:41:30] overall results will be because you will just have everything in your data data
+[1:41:35] data set that you can then rerank at the end of the day.
+[1:41:39] Is that what you meant or you want something
+[1:41:43] per node or Yeah.
+[1:42:07] Yeah, I don't think that's how we do it. So what what you can control here is
+[1:42:12] like this is a window of like what you might retrieve and then we have the
+[1:42:16] minimum score like a cut off point uh to throw out what might not be relevant
+[1:42:21] anyway to to keep that a bit cheaper. That's what we have here.
+[1:42:26] Um
+[1:42:30] those are the retrievers. Uh and then you could do the RF that I've explained
+[1:42:33] where you blend results together. All of that is easy. Um, one final note, if you
+[1:42:40] if you got tired of all the JSON, um, we have a new way of defining those
+[1:42:45] queries as well. Um, where here we have a match operator like the one we've used
+[1:42:51] all the time, uh, that you can use either on a keyword field, but it could
+[1:42:54] also be either a dense or a sparse vector embedding and then you can just
+[1:42:58] run a query on that and then just get the the scores from that. So it is a
+[1:43:03] pipe query language. It's a bit more like I don't know like a shell. Um but
+[1:43:06] if you don't want to type all the JSON anymore, uh this is how you can do that.
+[1:43:10] And here my screen size is a bit off. Uh but yeah, you get the the quote that we
+[1:43:15] retrieved the speaker and the the score. Maybe maybe I'll take out the speaker to
+[1:43:21] make this slightly more readable.
+[1:43:28] Now it broke.
+[1:43:35] Oh. Um, this is you could write queries with a
+[1:43:41] fraction of the JSON. Uh, this will also support funny things like joints. It
+[1:43:46] doesn't have every single search feature yet. Uh, but it's getting pretty close.
+[1:43:50] So, this is more like a closing out at the end. If you're tired of all the JSON
+[1:43:54] queries, you don't have to write JSON queries anymore. Um
+[1:43:58] this is nice both for like observability use cases where you have like just like
+[1:44:03] aggregations and things like that but it's also very helpful for full text
+[1:44:07] search. Now um if you want to write different queries I think the main
+[1:44:10] downside is that the language support in the different languages like Java etc is
+[1:44:15] not very strong yet. You basically give it strings and then it gives you a
+[1:44:18] result back that you need to parse out again. Uh so it is not as strongly typed
+[1:44:23] on the client side yet as the other languages. Um
+[1:44:28] any final questions? Yes.
+[1:44:53] But like
+[1:45:14] I mean, we can make your life easier. It's it's just all behind one single uh
+[1:45:19] query endpoint. So, you you could use the two different methods to retrieve.
+[1:45:23] Um and then you could still rerank but all from one single query. So, you don't
+[1:45:28] have to do it yourself. I mean, it's not like we want to stop you, but you don't
+[1:45:31] have to and we can make your life a bit easier. Like, I'm just curious instead
+[1:45:35] of just like
+[1:45:42] I mean it's only one single query that you need to run and like one single
+[1:45:46] round trip to the server that you need to do.
+[1:45:56] I mean if you still need to do the retrieval like you you do the retrie
+[1:45:59] like all the individual pieces are still there. If you have two parts of the
+[1:46:02] query, you will still retrieve those if that is the main cost and then you have
+[1:46:06] the reranking. Um, so you're not getting out of those completely, but you can
+[1:46:10] just do it in one single request that you send. We take care of all of that
+[1:46:14] for you and then send you one result set back rather than sending more back to
+[1:46:17] your application. So it it will potentially be a little less
+[1:46:22] work on the elastic search, but it will mostly be less work on your application
+[1:46:25] side.
+[1:46:35] proposes
+[1:46:52] results.
+[1:46:55] So
+[1:46:58] performance
+[1:47:18] not
+[1:47:23] starting steal.
+[1:47:38] Perfect. Thank you so much. I hope everybody learned something. I will let
+[1:47:42] the instance running for today or so so you can still play around with the
+[1:47:46] queries if you feel like it. Uh thanks a lot for joining. If you want stickers,
+[1:47:50] we have stickers up there. We also have a booth the next few days. come join and
+[1:47:54] uh get some proper swag from us there. Um thank you. Uh see you around.
+[1:48:00] [Music]

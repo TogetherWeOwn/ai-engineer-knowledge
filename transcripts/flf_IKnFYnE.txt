@@ -1,0 +1,317 @@
+# title: From Stateless Nightmares to Durable Agents — Samuel Colvin, Pydantic
+# source: https://www.youtube.com/watch?v=flf_IKnFYnE
+# speaker: Samuel Colvin, Pydantic
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T10:33:04Z
+# sha256: 8985ca185bc73e8b539aa8d445c0e90cb3720d6e1a872c018db2505e2e39487d
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:00] Hi, I'm Samuel from Pantic and today I'm going to give a demo of Pyantic AI
+[00:05] temporal and Pantic logfire. I'll also cover Pyantic evals. So we have in
+[00:12] Pantic AI support for temporal and deboss to durable execution frameworks.
+[00:16] We're actually adding a bunch more. I think we've had something like five pull
+[00:19] requests to add other durable execution or like workflow orchestration backends.
+[00:25] But at the moment it's it's these two. And I think it's fair to say temporal
+[00:27] are like the big incumbent in this space and they're they're kind of I guess
+[00:32] leaders leaders in how you do this to to demonstrate this a simple example of
+[00:36] like I go ask an LLM question it replies mostly just works and we don't need the
+[00:41] durable execution component. So, but once we get into longer running
+[00:45] workflows, that's where it really becomes a problem. In particular, where
+[00:49] we've done enough compute that we don't want to lose it or we've spent enough
+[00:53] time on that compute that we really don't want to have to start again for
+[00:55] the user. That's what for example I think OpenAI it's I think it's public
+[01:00] that OpenAI use temporal for their um deep research and I think some of the
+[01:04] other LLM deep research do the same thing. So, I'll I'll start with a kind
+[01:08] of toy example and then I'll move on to a more deep research type example. in
+[01:12] fact a deep research example. But before we get into that, let me let me run this
+[01:15] example without. So this is a uh two agents that play um 20 questions. Um so
+[01:22] instead of just a yes no answer, they get to give a little bit more detail
+[01:25] like yes, kind of not really, no, completely wrong. Um that was because I
+[01:29] was getting bored of waiting for them to take ages to succeed on the with the
+[01:32] just the yes no. So, we have an answer agent which is runs a relatively small
+[01:37] model Hiku 3.5 because I didn't know 4.5 came out until about an hour ago. And
+[01:41] and this basically takes a question and answers yes well with with one of these
+[01:45] answers and it it gets added into its context the the like secret object that
+[01:49] you're looking for um which in this example is a potato. So, and then we
+[01:54] have the um questioner agent or the player agent has a bit more context on
+[02:00] what it's going to go and do. You don't need to read read through all of this
+[02:02] stuff. This code is is public now. It's a pull request, but I'll I'll merge that
+[02:06] afterwards, but you should get the idea. Um, and the way that the questioner
+[02:12] agent gets to ask its questions is by calling a tool, ask a question. Inside
+[02:17] that tool, we run the other agent, the answer agent to basically decide the
+[02:22] answer to this question, and then we respond. And it takes a little bit of
+[02:26] time to run. You can see in this case, it succeeded pretty quickly. Sometimes
+[02:30] it it's amazing how even these very simple questions, even very intelligent
+[02:34] LLMs get themselves completely confused and go down some weird track and and
+[02:38] like get very confused. But you can see in the last run that it asked a bunch of
+[02:42] questions, got down to like is this a fruit or vegetable? Is it a fruit? No.
+[02:47] So it knew it was a vegetable, is it orange? And it worked out the answer was
+[02:51] was potato. But obviously and here it is running again. I don't know how many
+[02:55] steps it's going to take. Sometimes it can take up to like 50 steps to get this
+[02:59] question right. And obviously the problem is if this dies either because
+[03:03] we have some unreliable uh endpoint within our system or because we're
+[03:09] running in the cloud and Kubernetes decides it wants to scale or whatever it
+[03:13] might be. If we run this again, we obviously have to start from scratch.
+[03:17] That is problematic in this case. Um but you can imagine as the tasks get longer
+[03:22] and longer just restarting it gets more and more problematic. So um I think the
+[03:27] other thing to say about this this like um 20 questions example is although it's
+[03:32] pretty simple to understand and it feels like a toy, it is actually directly
+[03:36] equivalent to a deep research case where effectively the agent is is like going
+[03:41] off on a quest to go and find an answer to a question where it needs to ask the
+[03:45] like you know troll at the bottom of the garden the other the like question to
+[03:50] the next riddle to get to the next endpoint, right? like deep research is
+[03:53] effectively this 20 questions just with like web like web search or rag or
+[03:59] whatever it might be is your intermediate steps. So let's turn that
+[04:03] 20 questions into a durable agent. Um so this is mostly the same code for
+[04:09] simplicity. I've actually copied it here but you see we have our answer agent. We
+[04:13] need to wrap it in this temporal agent which gives us another thing that
+[04:16] behaves like an agent like a pantic AI agent. So it's also a subclass of
+[04:20] abstract agent. We do the same with our questionnaire agent. To keep things
+[04:25] simple, we aren't doing the same um stuff about passing around the answer in
+[04:30] context. We've just hardcoded the answer into the system prompt here for the for
+[04:34] the answer agent. But apart from these like adding the temporal wrappers, you
+[04:39] can as I will show later just um apply durable execution later. But here's
+[04:44] where the the temporal bit comes in. And I'm not a salesperson for temporal. And
+[04:48] although the underlying stuff they do is amazing, I do think some of their Python
+[04:52] abstractions are kind of ugly. But anyway, the the principle of temporal is
+[04:56] that you have workflows and activities. And workflows need to be entirely
+[05:02] deterministic and activities then need to do anything that is non-deterministic
+[05:08] like IO in particular. So you can basically do anything inside a workflow
+[05:11] other than IO and calling random. And if you're if if that's the case, then you
+[05:15] have a deterministic system. And what you can think of what temporal is doing
+[05:20] in the background as it's running that workflow and it's basically recording
+[05:25] the every activity that runs and both the the inputs to that and the outputs.
+[05:30] And so if you want to rerun it from like from the beginning to a certain point,
+[05:34] it can basically plug in those answers. And I'll show what that looks like. So
+[05:38] this is how we define our workflow. The activities here are implicit. The point
+[05:42] is that this temporal agent takes care of turning all of the IO that you need
+[05:48] to do to call an LLM into activities in the background, including tool calls.
+[05:52] So, OpenAI claim to have temporal support, but they don't support tool
+[05:56] calls as activities, which to me makes it slightly a chocolate teapot. Like,
+[06:00] there's actually no point in having any of these things without without tool
+[06:03] calling or little little point. But we define our workflow like this. I think
+[06:08] you can for the most part just copy paste their their definitions of how to
+[06:11] do it. Here we have our play mechanism. The point here is we're going to we're
+[06:15] going to connect to the temporal server which is what's going to record the
+[06:19] state of our task or our agent as it's executing and be able to resume and
+[06:23] stuff. I have temporal running locally here. This is just the open source
+[06:27] version of temporal which runs as a separate process and I can restart that
+[06:31] to kind of kill the state and that's why we're connecting to local host. In
+[06:35] production you use temporal's cloud. that's why they make so much money. Um,
+[06:39] and here we we run the worker. This is where we're actually going to kick off
+[06:43] our workflow. In general, we just kick off our workflow with execute workflow.
+[06:48] We pl pass in the the workflow that we want to run. We pass the inputs. There
+[06:53] aren't any inputs in this case because we just start. So, there aren't any
+[06:56] here. And it will then go and run. And so, if I run this, we will you will see
+[07:03] it start to to execute. You'll see it running. The only couple
+[07:08] of things to note, there's a couple of log messages. Ah, and we immediately
+[07:12] have this exception broken. And that was because to simulate some system that's
+[07:17] unreliable inside the tool I added 20% of the time it's going to it's going to
+[07:21] break. What you will see is that temporal has immediately taken care of
+[07:25] continuing after that. So even though this broke, it will continue to run. And
+[07:31] I may have set 20% to be too high um because it's now failing all the time,
+[07:35] but it's actually going to continue and deal with those runtime errors and just
+[07:38] continue to operate absolutely fine. Let me However, I think I dialed up 20% too
+[07:43] high just before. So, I'm going to actually see if this is going to
+[07:47] continue to operate. Obviously, when you give a demo,
+[07:50] everything suddenly grinds to a halt. Someone recently said they hate demos
+[07:53] where everything goes to plan, and I said you'll never need to worry about
+[07:56] that with me. Um, I don't know why that has actually ground to a complete halt.
+[08:00] I don't know whether that's it just repeatedly failing.
+[08:06] Let me I'm going to kill temporal server here and restart it so that we don't
+[08:10] have the state stored. And I will clear this and run it again. And you should
+[08:16] now see it succeeding most of the time and failing 10% of the time. So yeah,
+[08:19] you see it now asking questions and occasionally breaking. Good timing, but
+[08:24] continuing. Um, so that's one of the things Temporal does. It just does the
+[08:28] like retry logic that is like you could implement without temporal, but they do
+[08:32] it very nicely. But there are more powerful things. So let's say this
+[08:35] process that's in the middle of running gets killed by Kubernetes. Now, so we go
+[08:40] across here and we we just like kill it. Process gets killed. Now, what I didn't
+[08:44] show you is I also instrumented this with logfire. So if we look at our our
+[08:49] workflow, we can see exactly what was going on here. Um, and we we can see
+[08:53] what's going on here. So we have the different calls to claude and then
+[08:56] inside that we have we're running the activity which is then running the um
+[09:01] other agent. But in particular if we come to the top level start for the
+[09:04] workflow I can take the the workflow ID if we come back over to code here you'll
+[09:10] see I had some some code in here to basically allow me to continue with a
+[09:13] given uh resume ID and to continue a workflow. Now for the most part you
+[09:18] wouldn't have to do this. This is just for the sake of the demo. If I just
+[09:21] reran the script again, it would kick off this workflow again and it would run
+[09:24] the two in parallel. That would look really confusing. So instead of doing
+[09:28] that, I'm I'm specifically hanging on a particular workflow to finish. So you
+[09:32] can see what's going on. So if I if I run my script again, but I give it the
+[09:37] workflow that was ongoing. Now you see it's already whizzed forward to question
+[09:42] six and it's continuing to operate. So, we've got it to basically resume without
+[09:46] having to add any resume code anywhere in our actual agent code. We just set up
+[09:51] temporal and it works. And you can see exactly what's happened if you um look
+[09:56] at logfire. What you will see is that that whole that first bunch of um calls
+[10:02] to the LLM responded in like 5 milliseconds. So, these were not
+[10:06] actually sent to the LLM. Temporal just returned the result, the kind of cached
+[10:10] result that it already had for each of these cases. So we're able to
+[10:13] effectively zoom forward to the point where it then continues to to call the
+[10:18] LLM. It's it's as if you've gone through everywhere that you're doing IO and
+[10:22] you've set up uh caching on each individual call so that you can run your
+[10:26] code. Uh I see some people nodding which is making me feel a bit better about
+[10:29] explaining this. But we don't have to do the inference. We don't have to wait the
+[10:32] time. We can basically run our workflow code that's generally very fast because
+[10:36] it's no IO. It's just procedural. and it will just keep getting results instantly
+[10:40] until it gets to the point where it needs to needs to continue. And you see
+[10:44] in this case, it's got itself completely confused and it's off um wondering about
+[10:48] whether this thing is a salad bowl. So, you see how sometimes the LLM does well,
+[10:52] sometimes it does does terribly. Um I'm going to actually I'll leave that
+[10:57] running to see whether it you see it's it knows it's related to food, but it's
+[11:00] got itself really confused. Um I will just say as as it might interest you
+[11:05] just before this I was wondering how the different models would perform and so I
+[11:10] I ran some evals with padantic evals on these different cases and you can see
+[11:14] here we have it's a bit hard to read on the screen but uh GPT 4.1 Gemini and
+[11:20] Claude Sonnet 4.5 and you can see the different assertions for each case
+[11:27] whether they passed or failed here and you can see the the average cost. You
+[11:32] can see Gemini was way way cheaper, way way faster. And somewhere we should
+[11:37] have, if we look at an individual case, we have a a metric for how many steps it
+[11:42] took to succeed. I think maybe we have to scroll over. Yeah. Question count.
+[11:45] You can see here Gemini was way quicker each time. I discovered subsequently
+[11:50] having having checked the results that actually the reason Gemini is way faster
+[11:54] and answers much more quickly is it just invents an answer that's wrong and I
+[11:57] wasn't checking it. So, this is not perfect yet, but like it's uh the the EV
+[12:02] this is definitely an interesting case for evals and seeing and like working
+[12:05] out which model is actually better because they're definitely not
+[12:07] particularly good at it by default. But yeah, in my naive case, Gemini did way
+[12:11] better, but that's not representative. Anyway, I'm going to leave that because
+[12:15] it's got 46 steps in and it's still failing to work out that that thing's a
+[12:18] potato. I I can show the evals case if you want, but I think it might be more
+[12:22] interesting to look at a deep research case, which is a kind of more meaningful
+[12:27] example of where you would run durable execution. Um, and also doing stuff in
+[12:31] parallel, which is also one of the things that like just works out of the
+[12:34] box with temporal without you having to write any any code. So, this is my very
+[12:39] quick last night hours attempt at building deep research. I honestly think
+[12:43] it's as good as lots of the actual deep research systems. So we have we define
+[12:48] our plan for deep research and this is this is effectively our deep research
+[12:54] plan. So it has an executive summary what you would effectively pump out to
+[12:57] the user about what I'm going to go and do. Then we have a list of web search
+[13:02] steps. We maximum we have a maximum of five here so it doesn't take forever and
+[13:06] then we have analysis instructions. And the point is that like I think this is
+[13:11] one of the big change in AI this year answering a bit the question I had on
+[13:14] the other zoom. I think we've moved from thinking that like agents in the sense
+[13:18] of so there are three definitions of agents. There is the like AI definition
+[13:22] which is LLM's calling tools in a loop. There is the tech definition which is a
+[13:28] micros service and then there is the business definition which is something
+[13:32] that can replace a human. Um ignoring the business definition for a minute. If
+[13:36] you think about the AI and the like engineering definitions, we thought at
+[13:40] the beginning of this year you would have one AI agent, one LLM calling tools
+[13:45] in the loop within each microser. I think we've moved more and more to think
+[13:48] that the agents are actually the kind of quantum of development. They are the the
+[13:53] micro tasks that are doing that you build up to to form a like what most
+[13:58] people would think of as an agent, something that actually goes and
+[14:00] autonomously completes a task. And so our deep research agent is actually made
+[14:04] up of multiple agents. So we have this plan agent which goes off with a prompt
+[14:09] and it returns an instance structured data extraction gives you an instance of
+[14:13] this pyantic model which is your plan to run it. Then you have the search agent
+[14:17] which has access in this case to search tool or I'll show using tavilli in the
+[14:21] other case um which is using a a faster model gemini flash uh in this case and
+[14:26] then you're using in this case I'm using claude son 4.5 for the final analysis
+[14:32] stage. So I suppose this is a bit what people talk about when they're leaning
+[14:35] towards graphs. I haven't built this in a graph although I could because it
+[14:38] doesn't need a graph. It's not complex enough to need a graph. And durable
+[14:42] execution is a way better way of getting snapshotting, but like much more
+[14:46] granular support for for durable execution. We added a tool that allowed
+[14:50] the analysis agent to do a bit more web search if it really wanted to. I don't
+[14:53] think it uses it, but this is the actual deep research code. So you can see how
+[14:58] concise it is. We run the plan agent. We get back our plan. We run in parallel
+[15:04] all of the search agents. So, we're just using a task group from Python to run
+[15:09] all of these. We get those results, which will all be the text results of
+[15:13] the different bits of search. We use format as XML to basically smash all of
+[15:17] that into a massive lump of reasonably readable data for the analysis agent.
+[15:21] Then we go off and run the agent. And we run the kind of question that I'm asking
+[15:25] AI relatively regularly for sales, which is find me a list of hedge funds that
+[15:29] write Python in London. And if I go and run this uh UV run deep research,
+[15:39] we'll see it starting to churn away. We can see it in the terminal with logfire.
+[15:45] But we can also come over here to log fire. Let me clear
+[15:52] that. Um go to the bottom here and we can see this this run here as it's going
+[15:58] on. It's it's run the plan step in nine seconds and you can see all of the
+[16:02] search steps going on in parallel. Once they've finished, it will start. You can
+[16:06] see the analysis agent has just started. We can look at the individual searches.
+[16:11] So, you get a pretty good idea of what happened, the question it got asked, uh
+[16:15] the queries it decided to run, bunch of data from medium, different sites,
+[16:21] structured data, and then like the agent also bangs in quite a lot of context,
+[16:26] right? So this is each individual one of our like 10 parallel searches. And now
+[16:31] the analysis is going to go and run with all of that input. You can see so far
+[16:36] we've sent spent 8 cents on this particular run. We'll see what it gets
+[16:41] to by the time it finishes. But obviously the problem with this is if I
+[16:44] kill this now, it's just going to die and I'd have to restart from the
+[16:47] beginning if I wanted to to run it again. So, while that churns away, let
+[16:53] me start introducing you to the durable execution example, spoiler, it's going
+[16:58] to be pretty similar. I discovered last night that there's a bug with the Vertex
+[17:03] SDK. That means that you can't use it with temporal right now. So, I've
+[17:06] swapped out uh I think we should fix that, or at least I'll be winging at uh
+[17:11] Deep Mind today to go and fix that. So, I've switched it out to OpenAI responses
+[17:16] here and I'm using Tavilli instead of the built-in search. Yeah, but other
+[17:21] than that, this is all pretty similar code. I could have probably imported the
+[17:25] code from the other module. I just decided to duplicate it just to keep
+[17:29] things easy. But you see again, we do the same thing. We wrap uh our agents in
+[17:33] temporal agent. This analysis one can take more than I think whatever the
+[17:37] default activity duration is because it's a long basically build up a a
+[17:42] summary. And so I give it I think it was taking longer than 2 minutes or whatever
+[17:46] the default is. So I just gave it an hour so it's not going to fail. Um and
+[17:49] then the the for me the most powerful bit is everything here inside my
+[17:54] workflow looks exactly the same. I don't have to do any crazy stuff to do
+[17:57] parallelism. I just use uh task group exactly the same. I could use async.io
+[18:04] gather. It's all just imperative Python code as you would be used to. I could
+[18:08] have a if I wanted to run this periodically, I could sleep for seven
+[18:12] days in here. Temporal would take care of pausing everything. Again, I'm not
+[18:15] here to be a temporal salesperson. I don't love everything about what they
+[18:18] do, but it's a pretty powerful way of thinking about code. We don't have to do
+[18:22] all the infra stuff. And then ultimately, again, smash all my context
+[18:27] into the last agent and run it. And again, there's a bit of plug-in stuff. I
+[18:32] have to plug in log add some plugins, add the agents as plugins. But again, my
+[18:36] code to actually go and kick it off is just execute workflow. Simple as that.
+[18:40] And I asked it here slightly more controversial question of what's the
+[18:44] best Python agent framework to use for durable execution and type safety. And
+[18:48] we will pray to God it gives the right answer when we run it in front of
+[18:52] everyone. If I go and kick that off and run this
+[18:56] again, we should see it. If we come over here, we should see it running in
+[19:00] Logfire. You can see we have the stuff related to kicking off the agent. It's
+[19:05] kicking off the workflow, excuse me, here. And we have the searches beginning
+[19:09] to happen happen. But the the powerful bit here is again imagine that we're
+[19:15] halfway through running all these searches. We're about to start the final
+[19:17] step and something comes along and kills the process. And by in general, you'd
+[19:23] have to go and completely restart this process and run your deep deep research
+[19:27] all over again with temporal it will just go and rerun that workflow
+[19:32] automatically. In this case, I'm restarting it and just running that one
+[19:35] workflow. But in general, it would just automatically go and be restarted and on
+[19:41] the the next time that Kubernetes comes up, the workflow will run as it would
+[19:45] have done before, but it will get answers to each individual question
+[19:49] basically instantly. And so if it's not going to fail for me, which
+[19:55] it seems to be, there we are. It started again. You see a plan took 24
+[20:00] milliseconds. Search all took no time at all in the grand scheme of things
+[20:04] because it just got the result back from temporal immediately. And then the
+[20:08] analysis that was the the task we needed to that we hadn't run yet. Obviously
+[20:13] that needs to go and start again because that's an activity and you can't
+[20:16] activities obviously have to run again from scratch. And so once that finishes
+[20:21] I think it does take quite a long time. Maybe I can show the previous output. Or
+[20:26] did we not get to displaying the previous output? Did it ironically
+[20:29] actually fail the time before? But hopefully once this finishes, we should
+[20:33] be able to see uh its analysis, which you know, I think is on a par with what
+[20:38] I see from the other deep research things. Obviously, there will be some
+[20:41] there's some UI work to do to display this in a nice deep deep research
+[20:44] interface. There we are. It's completed and it has primary recommendation is
+[20:49] pantic AI with temporal. So, it it it did what I hoped it would do. And you
+[20:53] see it's given a reasonable report here of like the relative trade-offs of the
+[20:58] other inferior agent frameworks and it should have done an executive summary at
+[21:02] the beginning with with links. Yeah. So it said podantic AI langraph obviously
+[21:07] if you love snapshotting or writing unsafe code type unsafe code temporal on
+[21:11] its own which makes sense. Yeah. So there's a there's the summary. That is
+[21:16] the main stuff I had to show. I will merge the the durable execution stuff in
+[21:20] here. So go here. I just other thing I want to just say quickly while I have I
+[21:24] can't work out how to post a comment but like you'll find it on Pantic if you if
+[21:28] you if you look for it. Um oh I have I can do that if anyone wants to take a
+[21:32] picture of that QR code. The other thing I just wanted to mention we're about to
+[21:36] announce uh Pantic AI gateway. So if anyone wants to try it early let us
+[21:41] know. Um but yeah that platform will be landing soon. You'll be able to use
+[21:45] panic gateway directly to buy inference from any of the big models or most of
+[21:50] the open source models and self-hosting for enterprise all the observability
+[21:54] stuff. But I I'll I'll save you the full spiel, but that's coming soon. I think
+[21:57] some of you will find it interesting. That's it. Thanks so much for watching.
+[22:01] If you want to learn more about Padantic AI, Padantic AI gateway or padantic
+[22:05] logfire, please scan these QR codes. If you have any feedback, uh please come
+[22:09] and talk to us. Thanks so much for listening.

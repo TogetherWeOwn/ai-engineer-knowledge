@@ -1,0 +1,260 @@
+# title: Operating Distributed Inference Systems at Scale — Nishant Gupta & Naman Ahuja, Meta
+# source: https://www.youtube.com/watch?v=7c9FSUVcXR0
+# speaker: Nishant Gupta & Naman Ahuja, Meta
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T05:01:12Z
+# sha256: d9ebcbed0e50e03b4bfc5d69b15dbfb64a9fecd7e6bca6f28815f09974d3fb7d
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:12] Good morning everyone. Welcome to the first infants talk on the last day of AI
+[00:16] engineer world fair. My name is Nishan Gupta and I'm joined today by my
+[00:21] co-speaker Naman Auja. We work on building the efficiency training and
+[00:25] inference infrastructure at Meta. Today we're going to be talking about how do
+[00:29] you operate distributed infence systems at scale. As we all know, inference is
+[00:34] no longer just a research artifact boiled to a product. It's a foundational
+[00:39] hypers scale infrastructure workload which is growing at a tremendous rate.
+[00:43] The infence traffic already outpaces the largest microservices in the world and
+[00:48] the rate of growth is fastest of any workload we have ever seen.
+[00:54] Let's rewind back to around 2008 and try to compare the AI era with the cloud
+[00:59] era. In around 2008, the cloud started as virtual machine offerings. The
+[01:05] interesting injuring was virtualization. Then over time, the value moved up to
+[01:09] the stack to the scheduulers. Think bog, kubernetes, msos, then to service
+[01:15] meshes, then to autoscalers, and then to various platforms that were built on top
+[01:18] of it. The orchestation layer is what actually captured the value and the
+[01:23] complexity. AI is on the exact same trajectory but just compressed into a
+[01:28] last few years instead of a decade. We started with simple models running on
+[01:32] GPUs. Then we saw the evolution of model serving frameworks like VLM to serve
+[01:38] Triton and now we are watching the orchestration layer emerging in real
+[01:42] time addressing the complex challenges of routing KV cache management prefield
+[01:47] decode disagregation and multimodel multiplexing.
+[01:51] In this next phase of AI era, it's not just about the best models or the
+[01:55] kernels or the optimizations. It's about the whole ecosystem. It's about the
+[01:59] control plane and the orchestration. And this is what we're going to be focusing
+[02:02] in this today's talk.
+[02:06] So let's talk a little bit about agentic demand explosion. In the classical web
+[02:10] serving before the AI inference workloads kicked off the capacity scaled
+[02:14] roughly linearly with users depending upon the workload type double the users
+[02:19] mostly double the QPS double the infrastructure fleet if there are no
+[02:24] optimizations and capacity planning was mostly a spreadsheet exercise. In this
+[02:28] new agentic serving capacity is scaling with number of users time number of
+[02:32] calls per users times number of tokens which varies depending on the model the
+[02:37] optimizations the hardware SKU you have a chatbot can have one model call per
+[02:43] turn which is evolving now with 10 to 20 for co-pilots and 50 for research agents
+[02:49] and now it's thousands of such calls for autonomous workflows with no human in
+[02:54] the loop. The key to take away that you cannot plan capacity for the agents the
+[02:58] same way we did for microservices. We need to think about elasticity and
+[03:03] implement workload aware scheduling and admission control.
+[03:09] Now let's try to dive a little bit deep into the differences pros and cons
+[03:13] differences between the traditional microser in serving versus the modern
+[03:16] infence serving across these key dimensions.
+[03:19] The request shape microservices assumes short uniform request wherever the LLM
+[03:24] requests we are seeing in our workloads they can vary from 50 tokens to 100,000
+[03:28] tokens with vastly different compute profiles between prefill and decode
+[03:32] stage for batching classical stacks for microservices was doing stacking
+[03:37] batching mostly at the load balance layer if at all however LLM serving
+[03:41] requires continuous inflight batching how otherwise the throughput collapses
+[03:46] by an order of magnitude or state most of the classical
+[03:50] microservices were stateless when we not talking about storage layer however LLM
+[03:55] serving does require a huge per request state the KV cache which require which
+[03:59] is very expensive to build and even more expensive to throw away
+[04:03] scaling units when we think about traditional microservices we could run
+[04:08] them in cheap CPUs in pods however for model inferencing we require to run on
+[04:14] GPUs which are 100 times more expensive which are 10 times slower to acquire and
+[04:18] we cannot overprovision them casually otherwise it will lead to a huge
+[04:22] wastage. failure mode. When you think about
+[04:26] traditional microservices like most of us have built over the last couple of
+[04:29] years, we could even if a micro even if a host crashed or a bot crash, we could
+[04:34] restart it. We could rebuild the state if needed be. However, for the model
+[04:38] inferencing, it takes a huge amount of time to go from cold to hot startup and
+[04:42] these if and if a GPU is mid decode, it can drop thousands of in-flight tokens
+[04:47] and it can lead to a queue buildup. The takeaway is that the bottleneck is not
+[04:52] just the model, it's the orchestration itself.
+[04:58] Now, as we can see in these hidden decisions behind a prompt, when we go to
+[05:02] any gentic application, it requires a bunch of steps which are behind the
+[05:06] scenes. We have to authenticate. We have to choose a model depending on the
+[05:09] request type. We have to select a region where it goes, we have to do admission
+[05:12] control. We have to do caching lookup. We have to do the we have to run it on
+[05:16] the GPU. We have to do batching. And there's a bunch of other steps involved.
+[05:19] And as we can see out of all these steps only one step requires the model which
+[05:24] is the pre-filled decode. If it's disagreed inference or just if it's not
+[05:28] disagreed inference other steps require infrastructure. The intelligence might
+[05:32] lie in the model but the economics the reliability and the user experience are
+[05:36] all in the infrastructure. And this is why a lot of platform teams across a lot
+[05:41] of companies are having much more impact on the product quality and the success
+[05:44] ra much more than before.
+[05:50] Now most of us in this room have a deep expertise across one or two or three
+[05:54] layers. We might own kernels or kernel optimizations. We might own routing or
+[05:58] the product itself or we might be operating the GPU infrastructure or the
+[06:02] cluster itself. But very few of us have operated the whole stack or seen thought
+[06:06] about it end to end. As you can see in these layers, these layers are not new.
+[06:11] They have been around for 20 years or more. What is new is the combination and
+[06:16] the coupling between them. A decision at the routing layer can change the cache
+[06:21] hit rate at the model layer which can change the batch composition which can
+[06:26] change the GP utilization which can change the autoscaling decision because
+[06:30] of the change in GPUs simplization. So everything is entangled when we have any
+[06:35] regressions in our inference workloads. It's not just about understanding what
+[06:38] happened at the caching layer admission control. We need to think about the
+[06:42] stack top to bottom. And when we see any bottleneck, it's
+[06:45] very very important to understand at which layer is that bottleneck so that
+[06:49] we can invest properly.
+[06:54] Now diving a little bit deep into a how a prompt works when we have a prompt for
+[06:58] any application be it just if you want to generate an image or if you have a
+[07:02] research task or if you have complex multi-agent orchestration more or less
+[07:06] it involves a bunch of these steps. The prompt goes to the gateway. Then it goes
+[07:11] to the router after which it does the cache lookup if the request was already
+[07:16] seen before. Then it goes to the scheduulers which decides on which GPU
+[07:20] cluster it should run on which hardware it can be on Nvidia or AMD or your
+[07:24] in-house silicon chip which then goes to the appropriate serving runtime VLM SD
+[07:28] lang or whatever we have we are working on and then we stream the response back
+[07:32] to the user according to the SLO profiles of time to first token and time
+[07:36] between each token and while making sure the throughput is what the users
+[07:39] desired. Now as we can see this inference behaves like a distributed
+[07:44] transaction. Each arrow in this diagram is a network hop. Every of every one of
+[07:49] these hops can retry. It can time out. It can fall back. It can even fail. And
+[07:54] each of these hop will have an SLOs's and it will it it is streaming back to
+[07:59] the user. So if it fails, the partial fail is mantics are much more harder to
+[08:03] deal with than if for a regular RPC call. Think about what happens if we
+[08:08] have already streamed 200 tokens back to the user and suddenly a GPU host is
+[08:12] preempted due to a scheduled or a planned or unplanned maintenance event.
+[08:16] We cannot just retry. We have to think about it holistically. This is where
+[08:20] this is why reliability we cannot build reliability at the edge. It has to be a
+[08:23] property of the control plane because the control plane is the one which sees
+[08:27] the whole workflow.
+[08:31] Now let's talk about scheduulers and some of the optimizations uh and how we
+[08:36] can think about it. So for the traditional microservices we used to
+[08:39] think about bin packing of traditional microservices across three four
+[08:42] dimensions could be across resource utilization CPU memory or could be
+[08:46] across all domains depending upon if you're using AWS if you're using your
+[08:50] own in-house cloud providers but for inference the schedule needs to be aware
+[08:54] AC of across at least seven access when we schedule a particular request it has
+[08:59] to be aware of the GPU type there can be any number of heterogeneous hardwarees
+[09:03] in your cluster H00 versus E00 versus B200 with different network topologies.
+[09:09] It has to be aware of the HPM headroom, KV cache state, the model weights,
+[09:14] whether they are already loaded, whether they're cold or we have to whether they
+[09:17] have already warmed up, we have to cold start it. It has to be aware of the
+[09:21] tenant priority. There can be any number of tenants running on that multi-tenant
+[09:24] cluster with different SLO profiles. We have to also be aware of the workflow
+[09:29] context. Are we in the third step of reasoning that has already spent X
+[09:33] dollar or are we at the initial stages and we can terminate the workflow if it
+[09:37] if we are overprovision. We have to also think about latency budget depending
+[09:41] upon the type of agentic application we are building. So this brings us to the
+[09:45] idea that we have to make sure that we implement agentic aware scheduling. We
+[09:50] have to make sure that we place the work which will which will finish the in the
+[09:54] fastest and the cheapest time as opposed to just placing it on a random GPU.
+[09:59] A concrete example might be that the skiller needs to be aware that request R
+[10:02] is at step three of a five in a workflow and it has already and step one and two
+[10:07] has already spent X plus Y dollar. So if a step three fails the whole workflow
+[10:12] will be terminated and we have wasted all that compute resources. That's why
+[10:15] workflow aware orchestration is very very important because it it will change
+[10:19] the admission decisions the priority and how we retry.
+[10:25] Now let's talk about optimizations. I will not go too deep into a lot of
+[10:29] optimizations. There's a lot of research which has already been done outside. But
+[10:33] I would like to share a framework which at least I like to use when it comes to
+[10:36] it. And uh we can place it into four quadrants. First, can we avoid the work?
+[10:42] Meaning can we skip it entirely through caching through techniques like prefix
+[10:46] caching, response caching, semantic caching. The second can we share the
+[10:50] work? Can multiple requests share compute through batching? Think
+[10:55] continuous patching, prefill decode, chunk prefill, specular decoding. Third,
+[11:00] can we move away the work? Can we send it somewhere to a cheaper model or
+[11:04] closer to the user through mostly routing? Can we route it to a smaller
+[11:08] model or a cheaper region or some other techniques? And lastly, can we delay the
+[11:13] work? Can we wait for a better moment through admission control and queueing
+[11:19] which requires us to understand the priority classes of these requests and
+[11:22] implement deadline aware scheduling. Now this framework is very powerful because
+[11:27] it transfers to various stacks. You might be using VLM or SDG lang or tensor
+[11:32] RT but every technique fits into one of these quadrants. So whenever we think
+[11:36] about any optimization to our model we have to apply we have to do a comparison
+[11:40] and contrast with the previous techniques and see how all these stack
+[11:43] with each other.
+[11:47] Now whenever we think about scale it's not just important to think about the
+[11:50] performance of the model. We have to think about the cost economics as well.
+[11:54] This is where it's important to understand what metric we're trying to
+[11:57] optimize because the cost is not just the cost of the GPU or the model. It is
+[12:02] the cost of all these parameters retries, storage, failures, network and
+[12:06] of course the operational cost of development and all that stuff. What is
+[12:10] important is to understand what is the key key performance indicator for your
+[12:15] product which will add value to the users. So it's not important to optimize
+[12:19] just cost per token or cost per request. We have to optimize cost per successful
+[12:24] task because this is what actually users care about. And if you're able to
+[12:27] optimize that, the cost for the overall product decreases and the users are much
+[12:30] more happier.
+[12:36] Now let's talk about reliability a little bit about reliability and uh what
+[12:40] it means to prevent cascading failures. Now the failure story is never a GPU is
+[12:44] preempted or GPU has died. The interesting stories is the feedback loop
+[12:48] that follows. So a GPU can degrade, the latency can rise, the client retries,
+[12:54] the Q depth increases, the healthy GPUs will saturate which will follow more
+[12:59] retries, much more more full regional failures. This is the classic cascading
+[13:05] failures. But for with a twist for agentic application, the KV cache, we
+[13:09] cannot just casually restart or reroute to a different cluster. A cold pool has
+[13:14] to warm up before it can absorb traffic during which the hot pool has to take on
+[13:18] all that all those requests. This is why it's important to design the loop
+[13:22] breakers very deliberately the circuit breakers at the routing layer the
+[13:26] admission control which rejects rather than just queuing the load shedding tied
+[13:31] to QEP not just CPU or memory utilization and we have to also think
+[13:34] about retry budgets because if you don't think about all these things the cost
+[13:38] can scale much much more quickly.
+[13:43] Now we'll hand it over to my co-speaker Naman to talk about the remaining talk.
+[14:56] Okay, this works I guess. Sorry for so once inference reach a production scale
+[15:00] it starts looking much more like a distributed system. We are not longer
+[15:05] just calling a model. It's more like a classic distributed uh system problem.
+[15:09] So in distributed system we talk about cues, scheduuling, autoscaling, fault
+[15:14] isolation. These are some of the dimensions. Inference has all these
+[15:18] problems. But there are new constraints. Now instead of CPU, memory alone, we
+[15:22] have CPU, HVM, KV cache and course per successful task. So the operating
+[15:28] question becomes how the platform know what to do next. And that's where
+[15:32] observability comes into play. It's not just about dashboards. It's about uh how
+[15:37] to provide input signal to the control loop telemetry fields analysis analysis
+[15:42] drive decisions is change of shoulduling and routing and finally we just rinse
+[15:46] and repeat um I'll just give an overview what are some important metrics first
+[15:51] one is time to first token which tells me about uh how much time does it really
+[15:56] take to get the first response then we have utilization ratio which tell me
+[16:01] whether memory or compute is the bottleneck we have success per dollar
+[16:06] that tests us whether platform is actually delivering and working
+[16:09] efficiently. And finally, we have end to end race latency that tells us what's
+[16:14] the time being spent across the full request path.
+[16:19] There's a core trader between latency, cost, and throughput. You cannot just
+[16:23] get all of them. It's pretty analogous to cap theorem. If I increase the batch
+[16:27] size, um I improve the throughput and cost efficiency, but I may hurt tail
+[16:32] latency. If I use speculative decoding, I may improve latency, but there are
+[16:37] some extra compute. Ultimately, you know, we increase the cost per token.
+[16:42] And finally, I can use a simple model, smaller model. I can reduce the latency
+[16:45] and cost, but the response will be of low quality. Ultimately, I'll do failure
+[16:49] analysis, do retries, which brings the cost back up. So, every serving decision
+[16:54] moves system somewhere in this triangle. And our job is to find the perfect
+[16:57] setting. It's just an optimization problem. Now
+[17:03] this is where the industry is heading right now. Inference needs its own
+[17:06] control plane. Everything we discussed routing, batching, caching, scheduuling,
+[17:11] reliability, they cannot be a separate knob. Now they're converging into a
+[17:16] logical layer. Let's call it inference control plane. We used to manage VMs
+[17:20] before in distributed system. We have autoscaling scheduulers and we had
+[17:24] Kubernetes which turned these into control plane. Inference is going
+[17:28] through the same transition now. uh models are becoming resources. GPU,
+[17:32] KV cache, token, latency, cost are now scheduled around. The control plane
+[17:37] decides which models serve which request and how it is batched. So whether we
+[17:43] build this layer internally, use open source or from a vendor, the key design
+[17:47] is to assume layer will exist. Now let's discuss about where are some
+[17:52] of the operating lessons we have experienced in a infra and how they are
+[17:56] applicable here. The first lesson is that infrastructure bottlenecks usually
+[18:00] show up before model bottlenecks in production. Many failures can come but
+[18:05] there can be just aboutuling and routing or capacity breakdown. So these are not
+[18:09] related to inference. It's about infrastructure problems. Then we have
+[18:13] elasticity. We need elasticity in a system. We can have more GPUs but this
+[18:17] will not really solve the problem. We are just hiding the problem. Then our
+[18:22] solution to schedule the decision overpowered the efficiency. The same
+[18:27] fleet can deliver very optimally depending on how you're shoulduling it
+[18:30] or how you're batching it. Then we have control loops which beats the manual
+[18:34] process. The platform has to sense, detect and automatically adapt to the
+[18:39] system. So main takeaway is do not optimize for tokens. Optimize for
+[18:44] successful task.
+[18:49] So this is a broader shift I want to leave you with. The first phase of a
+[18:52] infrastructure was about better model. We invest a lot of time in improving our
+[18:56] models, smarting, making the model smarter and coming with better
+[18:59] benchmarks. The current phase right now is faster inference, lower latency,
+[19:05] better batching and better GP utilization. But the next phase is about
+[19:09] orchestration. That means GPU, memory, cache and everything. These are just
+[19:14] resources and they need to be scheduled and controlled. The teams that
+[19:18] understand this early on will build infrastructure for the future. So the
+[19:22] closing idea is infrastructure is no longer a server problem. It's an
+[19:26] orchestration problem. Thank you.
+[19:31] [applause]

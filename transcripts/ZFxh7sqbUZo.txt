@@ -1,0 +1,413 @@
+# title: Teaching AI to Find Real Vulnerabilities — Prof. David Brumley, Bugcrowd
+# source: https://www.youtube.com/watch?v=ZFxh7sqbUZo
+# speaker: Prof. David Brumley, Bugcrowd
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T06:34:03Z
+# sha256: a9ae14c7ab93a9b241f1d1341f72f3822efee33abac1f20cf1cf2e47ff8c9d0a
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:12] All right, everybody. We're going to talk about hacking.
+[00:15] I love hacking. We have a very small audience here, so I assume everyone here
+[00:19] loves hacking as well. So, I want to talk about designing
+[00:22] reinforcement learning environments for cybersecurity tasks. Essentially, we all
+[00:25] want to teach computers to hack because well, we're pushing out programs faster
+[00:30] than other ever and so we need to be able to check them at machine speeds in
+[00:35] scale. And this has been my research project for well over two decades. My
+[00:39] name is David Brumley. I am a full professor at Carnegie Mellon University
+[00:43] where I work on AI and cybersecurity. And I'm also chief AI and science
+[00:47] officer at Bugcrowd where I work on data partnerships.
+[00:51] So, before I talk about what we do and how we do it and why it's important to
+[00:56] design cybersecurity tasks correctly for reinforcement learning environment, I
+[00:59] want to start off with how humans learn because I mean, I love teaching people
+[01:03] to hack. And I remember in particular a case
+[01:07] where we run a hacking contest called picoCTF.
+[01:10] picoCTF has about a million high school kids every year play in this contest. Um
+[01:16] and so it's a a really fun way for people to get an intro to cybersecurity.
+[01:19] So, in 2016, a young uh person showed up on our
+[01:23] scoreboard who was going by the hacker name fluorescence.
+[01:26] And typically, we know who is doing well in the contest. It's kind of the typical
+[01:30] suspects like a Palo Alto High School or uh some of the Washington D.C. high
+[01:36] schools. We know who's going to win the contest. And so, this kind of
+[01:39] independent starts showing up uh scoring on our scoreboard and we had no idea who
+[01:43] it was. So, we reach out. It's actually a 17-year-old kid who found out about
+[01:48] cybersecurity trying to get into it from math competitions. He got bored with the
+[01:52] math competitions and started doing them. And very quickly, he ended up
+[01:56] actually scoring second in picoCTF competing against all these high school
+[02:00] kids. And we asked actually "How did you learn this?" And what he
+[02:04] said really was uh germane to this task. What I did is I
+[02:07] looked at the cybersecurity task, and then I started Googling
+[02:12] "What is the information I needed?" I would read about it, I'd look at
+[02:15] write-ups, and then I'd start emulating that. And this kid actually ended up
+[02:19] coming in second. I recruited him to CMU, and he followed this methodology of
+[02:24] studying write-ups and practicing cybersecurity on a graduated scale, easy
+[02:28] problems first, and then slowly getting more difficult.
+[02:31] And he actually turned into what's called a Pwn2Own winner. So, Pwn2Own, if
+[02:35] you've never heard of it, is one of the more elite cybersecurity competitions.
+[02:40] This kid, just 2 years after he first learned cybersecurity, enters. And uh if
+[02:45] you read about it at the time, he was the first one to hack a Tesla.
+[02:49] So, he walked out of this contest with $375,000
+[02:52] in cash and a brand new Tesla. The reason I tell this story is actually
+[02:56] the way we teach AI
+[02:59] uh frontier models to hack is the same way that we've been successful teaching
+[03:03] high school students, such as Richard Zhu, to become Pwn2Own winners. My other
+[03:08] students include people like George Hotz, who did the first iPhone
+[03:11] jailbreak, and current Pwn2Own winners like Sang Heon Lee.
+[03:16] And so, what I want to talk about is how we teach reinforcement learning, and do
+[03:21] it the same way that we've been teaching hacking for a while. And it really
+[03:24] breaks down into two different axes. The first thing when designing these
+[03:29] sorts of tasks for people is to look at target difficulty.
+[03:34] There's a spectrum of different challenges that you can look at from toy
+[03:37] problems through CTF and synthetic problems, all the way up to hardened
+[03:42] targets. The second axis for teaching machines to
+[03:45] hack is really looking at exploitation difficulty. For example, when we look at
+[03:50] a toy program, we may start looking at the sort of skills it needs to acquire
+[03:55] to be able to hack that. For example, if you have a toy program and it has a bug,
+[03:59] can the LLM figure out where the bug is? Can it then prove that it knows where it
+[04:05] is by triggering a crash or some other fault in the program?
+[04:09] But of course, hacking is not just crashing a program. We want to take
+[04:12] control of that program. That's the beautiful thing about hacking. It's
+[04:15] bending computers to our will. It's what makes it unique in the sciences.
+[04:21] So you look at things like, "Hey, there's a flaw in that program. Can I
+[04:24] use that to do arbitrary read writes in memory? Or even to do a full arbitrary
+[04:29] code execution exploit?" And so if you remember nothing else from this talk,
+[04:33] it's really the way that we teach LLMs, whether it be frontier models like
+[04:37] Anthropic or private models that you're tuning in
+[04:41] your house, you follow these two axes where you're
+[04:44] trying to come up with a set of tasks that increase in target difficulty along
+[04:48] one, and then you're teaching specific cybersecurity skills on the second.
+[04:55] In other words, hacking is really a ladder.
+[04:57] And this is what actually matches cybersecurity so well to reinforcement
+[05:02] learning. We have a ladder of tasks and we typically end up with a good oracle
+[05:07] for whether they can achieve that task. And so you can start to measure whether
+[05:11] your model is learning the right set of capabilities. So this talk is really
+[05:15] divided into three parts.
+[05:22] The first one is to talk about vulnerability discovery.
+[05:25] And when we talk about vulnerability discovery, what we're talking about is
+[05:29] in the variety of different programs that you encounter in real life,
+[05:33] how do you design oracles that are correct for determining whether or not a
+[05:37] model has successfully been able to detect that vulnerability? And what's
+[05:41] interesting is several of the cybersecurity benchmarks out there were
+[05:45] amazing first-generation pieces of work, but they have a critical flaw where the
+[05:50] model will actually stop learning after it finds the easiest vulnerability. And
+[05:55] that can prevent them from getting smarter.
+[05:58] The second is I want to talk about how we are designing benchmarks to measure
+[06:01] this ability to do weaponization. And this is really where we get into
+[06:06] where does security differentiate from bug finding. And we'll talk about how
+[06:09] well LLMs do against what I would call hard targets.
+[06:13] A hard target one easy way to to look at it is how much would you pay for an
+[06:18] exploit that a model could produce. We know Richard Zhu fluorescence was paid
+[06:22] $375,000 and got a brand new Tesla for one exploit. Can models achieve that
+[06:28] capabilities today? And then I'm going to just summarize
+[06:31] ways that if you're interested in this environment, we can connect and do more
+[06:34] work together. So, very simple talk. So, let's talk
+[06:37] about the first axis of discovery and where you really want to um learn what
+[06:43] you're going to be measuring. This is a key part in reinforcement learning where
+[06:47] if you set up the wrong task objective, the LLM will learn it, but it'll learn
+[06:51] the wrong thing. So, some definitions to begin with.
+[06:55] Let's start defining the problem. When we think about reinforcement
+[06:59] learning or we talk about gyms, there's some key components in that. There's of
+[07:03] course other things, but the key components are you need a vulnerable
+[07:05] application. And we like to enclose these inside container environments so
+[07:09] that they're reproducible. We make sure that they run and that you don't have
+[07:13] variations between for example, if I run a program
+[07:16] on this version of Linux versus a different version of Linux, it actually
+[07:20] may behave differently. And so, you want to standardize that
+[07:23] with a vulnerable program. You need a grading oracle. Now, one of the things I
+[07:27] think the previous talk was talking about was LLM as a judge is a reasonable
+[07:31] thing. What we found in cybersecurity is that is flawed. The LLMs will always say
+[07:36] they were successful hacking. And so, what you want to come up with is a
+[07:39] deterministic grading oracle for each of the different levels you're getting at.
+[07:44] For example, if you're trying to teach it to just find a bugs, maybe this
+[07:47] grading Oracle is was it able to trigger a crash.
+[07:51] We'll talk about that more in a second. So, you have this reinforcement learning
+[07:54] environment or this gym environment and of course you have your LLM and an
+[07:57] orchestrator that's going to talk to it. The way we set up our task is very
+[08:01] simply, we expose through MCP a few key functions, a setup function. So, the LLM
+[08:06] will call setup, it returns the problem definition. We give it standard tool
+[08:10] calls such as read and write inside the container inside a sandbox inside the
+[08:14] container, and then a grading Oracle at the very end.
+[08:19] And so, you end up with this vulnerable program in here,
+[08:22] a grading Oracle, and I'm going to assume that you've already verified that
+[08:25] there is at least one flaw in this program. Maybe you yourself have figured
+[08:29] out that it can crash. Maybe you have downloaded it from a bug report and
+[08:34] you've been able to reproduce that vulnerability. We won't get into that,
+[08:37] that's part of our sauce that we do at Bugcrowd.
+[08:40] But, once you do that, you have this package environment and then your task
+[08:42] prompt is going to be something very simple like, "Dear LLM, can you find and
+[08:46] exploit the vulnerability?" Now, you don't want to just ask, "Can you find
+[08:50] the vulnerability?" because then you won't be able to distinguish between an
+[08:54] LLM hallucination and a real vulnerability. So, you almost always ask
+[08:59] it to actually exploit the vulnerability. And that exploit is going
+[09:03] to be key to how we do reinforcement learning.
+[09:07] So, the LLM does some thinking and it comes up with an exploit. For example,
+[09:10] this very, very simple program, if you just give it enough A's, you'll trigger
+[09:15] a crash. So, that's the LLM's witness, the proof of vulnerability that it was
+[09:19] able to find something. You run that input through your grading Oracle.
+[09:25] The Oracle that determines did the program misbehave or not. In this case,
+[09:29] the program would simply crash and you farm out your rewards.
+[09:35] This is a very elegant way and actually this is the way we teach people to hack.
+[09:39] We set up a deterministic auto grader. For example, in CTFs, it's cuz you
+[09:43] capture the flag. Within a cybersecurity environment like this, the level one
+[09:48] maybe can it crash, all the way up to control flow hijack, where for example,
+[09:51] you may ask the LLM, "Can you do something like launch a calculator, some
+[09:56] external program you shouldn't be able to run, or do a reverse shell?"
+[10:00] So, that's the basic setup. But, there's a problem with this. This
+[10:03] is the way if you go look at the existing benchmarks like uh Cybex or uh
+[10:09] CyberGym, they set up the task. But, there's actually a problem here. And
+[10:12] that's because there's an assumption that the program only has one
+[10:15] vulnerability. I don't know about you,
+[10:19] but it's very rare to find a program for which you know there's only one
+[10:23] vulnerability. So, what happens if you have two vulnerabilities here?
+[10:30] This actually breaks a lot of assumptions in current evaluation
+[10:33] environments. You ask the same question, "Dear LLM, can you find and exploit the
+[10:37] vulnerability?" But, now the LLM has a lot of freedom to reward hack. For
+[10:42] example, which vulnerability should it find? If
+[10:46] you came in only knowing about the first vulnerability, but there's a second one
+[10:50] you didn't know about, what do you do if the LLM thinks it found a second one? Or
+[10:55] suppose you know two. What we found is on existing benchmarks
+[11:00] with multiple pro- with a real OSS benchmarks, there are multiple
+[11:03] vulnerabilities, the LLM will just continue to find the easiest
+[11:07] vulnerability, and that really limits its trajectory as far as what it can
+[11:11] learn. And then you have a question, if it does
+[11:14] find a vulnerability you did not know about,
+[11:17] well, how do you score it, right? You certainly don't want to give tasks that
+[11:21] have no vulnerabilities because then you don't know if you're wasting your time.
+[11:24] But, what if the LLM finds an unknown vulnerability?
+[11:28] Here's where you can run into a catch-22.
+[11:31] What existing benchmarks do is they tell the LLM which bug.
+[11:36] For example, in many of the benchmarks out there like side bench, they will
+[11:39] give a backtrace that says for example, I know the vulnerability is in this
+[11:45] backtrace which identifies the vulnerable function.
+[11:48] But at that point, you're teaching the LLM,
+[11:53] but you're pointing at it exactly the problem. So the LLM no longer has to
+[11:56] reason about the program and that will stunt its reasoning capability.
+[12:00] Essentially, if you're nudging it and saying here's the vulnerability, it's in
+[12:03] this function, it doesn't have to do a lot. In fact, it
+[12:07] can often fit that entire function in its context window and it doesn't have
+[12:10] to reason much. The second problem though is if you
+[12:14] don't tell the LLM which one and there's multiple vulnerabilities, it can always
+[12:18] just then reward hack the easiest problem. And we see this in every
+[12:22] foundational LLM out there and we see it in as far as
+[12:27] I can tell most of the benchmarks out there. There will be multiple
+[12:30] vulnerabilities, it will be graded, but because the grading is just checking for
+[12:34] for example, a crash, it's not exploring the full state space and the LLM will
+[12:38] just keep returning the same one. This is also a problem in some of the
+[12:42] public competitions. For example, we won something called the Cyber Grand
+[12:46] Challenge from DARPA. It was the first challenge from DARPA to show that fully
+[12:49] autonomous cyber is capable. 50% of the hand curated challenges had
+[12:54] unknown vulnerabilities. This was DARPA spent $60 million
+[12:59] designing a contest trying to come up with problems that were well defined and
+[13:03] well scoped and they accidentally added additional bugs and 50% of those were
+[13:08] ones that were actually exploited. So this idea that we're just going to
+[13:12] create synthetic problems with one bug doesn't work. People have tried it,
+[13:16] spent a lot of money, you always introduce new ones.
+[13:19] Second problem is second example I'd show is the AIxCC. I designed the
+[13:24] scoring algorithm for this. This is again a very large DARPA program that
+[13:27] ran last year in DEF CON where 18 of the bugs found were unintended ones.
+[13:31] And so the TLDR on here is you can't just say, "Well, we're going to hand
+[13:35] curate an environment with just one vulnerability." Experts have tried, it
+[13:38] doesn't work. You have to change the problem definition.
+[13:42] So we've been thinking about this and what we developed is a new way to test
+[13:44] is called the audit task. Again, suppose you have two different bugs,
+[13:49] but you flip the question from just find a bug to find all vulnerabilities
+[13:53] discovered. At this point, the LLM has the freedom
+[13:57] to find multiple bugs and submit multiple proofs of vulnerabilities. And
+[14:01] it may be full proofs of vulnerabilities for bugs you know about and bugs you
+[14:04] don't. You run all vulnerabilities
+[14:09] through your oracle. And this is where it's very important to have a
+[14:11] deterministic grader. So for here, for example, there's two vulnerabilities, it
+[14:15] gives us two inputs that crash both vulnerabilities.
+[14:17] And part of this grader now have to uniquify them to show that two different
+[14:20] vulnerabilities are triggered. Now if we didn't know about vuln two,
+[14:23] this also gives us the opportunity to increase our ground truth. We haven't
+[14:27] told the vuln the LLM that we don't know about something that it found. It just
+[14:31] gave us proof that it was able to find it. So we can normalize the set of known
+[14:35] vulnerabilities at that point to be something like D star and calculate the
+[14:39] the precision and recall for the model across multiple vulnerabilities.
+[14:43] For example, recall is the number of known that it found
+[14:47] over the total set and precision is the number of found over the submitted. What
+[14:51] this prevents the model from doing and it essentially balances is the ability
+[14:55] for it to go find unknown vulnerabilities, but also prevents you
+[14:58] from prevents the model from just spamming.
+[15:01] You don't want it to give you a bunch of things that aren't vulnerabilities, like
+[15:05] for example, giving us POV in four that doesn't trigger anything. You need
+[15:09] to disc you need to prevent that. And we found that this precision versus recall
+[15:15] is the way to balance those two competing goals.
+[15:19] So when you do this this way, you have an open world grading. Instead of trying
+[15:22] to define one problem that's perfect, you can give it a real open-source task
+[15:26] that can have multiple vulnerabilities, even though those that you don't know
+[15:29] about. You post-hoc, since you're asking for a proof of vulnerability,
+[15:34] you can then go say what is the total set found of those known and unknown,
+[15:38] and you can score precision and recall and normalize both, so they're
+[15:41] multiplicative. It won't just keep finding the same easy bug.
+[15:47] You add as I said, it's open world, so you can find
+[15:51] unknown bugs and use it on real open-source, and it also gives a clean
+[15:55] trajectory. Now, the key to doing this, the one thing that you do have to add to
+[15:58] the grader is the ability to distinguish between multiple bugs if it gives you a
+[16:02] POV. The way we do this is the same way everyone in industry
+[16:07] does it. We look at the stack backtrace. If you've ever had your program crash on
+[16:10] Windows or Mac, and it's like submit to Microsoft or Apple, what it's doing is
+[16:15] it's submitting the backtrace, and they're uniquifying those into
+[16:18] independent bugs, and then they're scoring the results given based on that.
+[16:21] So, we built that into the grader. It also means that there's no LLM as a
+[16:25] judge, because let's face it, you can't judge trust the LLM that you're teaching
+[16:29] to be a judge. And it also, what we found, it limits or removes bias
+[16:34] completely. The model actually never knows how many vulnerabilities. When you
+[16:38] say go find a bug, you've actually then given it a piece of information that
+[16:42] there is a bug, right? And in fact,
+[16:46] what we find is that models will then find tune on that and only try to find
+[16:49] one. Here we open the possibility that
+[16:52] there's no bugs, which provides a little bit cleaner trajectory for that learning
+[16:55] signal. So, the key TLDR for this is don't
+[16:59] define the task by a single bed, let the program define the task. We see people
+[17:03] trying to create artificial benchmarks or synthetic benchmarks, and they'll go
+[17:07] out and say, "Hey, let's just go find one crash, and then we'll turn that into
+[17:09] an RL." What invariably ends up happening is the
+[17:13] model will then reward hack, and then it'll stunt its growth.
+[17:17] Or worse, you'll have an incorrect benchmark.
+[17:21] So, the audit task is one way to continue that climb. The second access,
+[17:25] if you look at going from as I said, toy programs, CTFs, all the way up to open
+[17:30] source where you have multiple types of bugs, is what are the capabilities that
+[17:33] our model is able to do? And this is some of our latest work where we
+[17:36] collaborated with the foundational models, OpenAI, Anthropic, and we're
+[17:40] able to check how well they can exploit high-value targets.
+[17:46] This hadn't been done before. If we go look at public experiments out there,
+[17:49] and we look at, for example, DARPA, they had looked at this question of
+[17:52] fully autonomous where they said, "Hey, for synthetic problems that we can
+[17:56] create, can AI do arbitrary code execution?" What we would consider a
+[18:00] real hack. But when you go and you look at AIxCC or Cyber Gym or Bounty Bench,
+[18:06] all they really checked is whether the AI could crash the program. Crashing a
+[18:11] program is different than hacking it. You can't go steal someone's IP by
+[18:14] simply crashing a program. So, this question of whether models could exploit
+[18:18] high-value targets was actually open. So, what high-value target should we
+[18:24] look at? We picked Chrome. And in particular, we picked the
+[18:27] JavaScript Wasm interpreter called V8. Now, V8 is one of the things that maybe
+[18:34] is foreign to you, but actually powers the internet.
+[18:37] V8 is how Chrome executes JavaScript, and JavaScript is what's under the
+[18:41] attacker's control. Put up a malicious website, it runs
+[18:44] JavaScript, you can then exploit V8. It also runs Edge, it runs Node.js, it runs
+[18:49] Cloudflare Edge Workers. If you've ever used an Edge Worker, it's actually
+[18:52] running V8 where each tenant is a separate thread.
+[18:57] It's crazy. And if you can find a vulnerability in V8, you can exploit all
+[19:01] these systems.
+[19:05] V8 is difficult to do because it goes beyond typical programs as far as
+[19:10] security measures to try to keep it safe. For example, when you start
+[19:14] looking at V8 and you look at the internals of this,
+[19:17] there is a sandbox. And so, inside this sandbox is where you run your untrusted
+[19:21] code, things like media, images, and so on. And inside the
+[19:25] sandbox, we expect there to be vulnerabilities.
+[19:28] In other words, if you can crash a in-sandbox object, it doesn't mean
+[19:33] anything. That's expected behavior. What makes V8 a high-value target and what
+[19:38] makes rewards start at 10,000 and go up to 100,000, or if you sell them on the
+[19:42] black market, millions. Let's be frank here, people do that.
+[19:45] is whether you can do an out-of-sandbox exploit. And that typically requires
+[19:49] chaining multiple vulnerabilities together.
+[19:53] So, TLDR, if you could give Chrome to an LLM and it could come up with a
+[19:58] zero-day, you would essentially be able to hack nation-states at that point.
+[20:02] It's a very worthwhile task to see how far we have to climb.
+[20:07] But, we also want to be able to measure where LLMs get stuck. It's such a hard
+[20:12] target that when it fails, you end up with very little signal. And
+[20:16] so, we designed an experiment on X-plane, where we bucketized 16
+[20:21] different capabilities in a ladder. First, can you trigger a crap Can you
+[20:25] trigger the vulnerability? Do you just show a deviation when you hit the the
+[20:29] vulnerable line of code? Can you crash an in-sandbox object?
+[20:34] That's interesting, but that's just the first vulnerability that you find.
+[20:38] Then, can you get in-sandbox primitives? Can you inside the sandbox get arbitrary
+[20:41] read and write? What that allows you to do is inside the sandbox, the way
+[20:45] exploitation works is you first exploit inside the sandbox and then you have a
+[20:49] Turing-complete program if you have arbitrary read write.
+[20:52] You then try looking for that second vulnerability and chaining it together.
+[20:56] Can you get out-of-sandbox primitives? And then finally, can you do arbitrary
+[21:00] code execution? What this allows us to do is it allows
+[21:04] us to measure how far models get in this ladder on a really hard target. And the
+[21:09] results were actually very interesting in this.
+[21:12] So, we ran this on 41 V8 vulnerabilities. We went and hand
+[21:15] vulnerified verified that they were all exploitable. We took actually the leader
+[21:19] for the current Chrome security, his name is Sung Hin Lee, verify these for
+[21:24] us. And what we found is that if you're purely looking at old benchmarks where
+[21:27] our triggering a crash is what you want to do, it's really not a distinguisher
+[21:32] among models. GPT and GPT 5.5 and Mythos both achieved
+[21:38] 95%. They were able to trigger a vulnerability 39 out of 41 times.
+[21:43] Essentially, all the tasks are side. And then if you started to look at lower
+[21:47] powered models, things like Gemini, Kimmy,
+[21:50] Minimax, GLM, they were still able to succeed about 50% of the time. So, think
+[21:56] about this. If you were looking at the old benchmarks, the message would be 50%
+[22:01] of the time Kimmy succeeds in hacking, but that's because their definition of
+[22:04] hacking was broken. It was simply crashing it. The real question is can
+[22:09] they do a full sandbox escape? And this is where we see a distinguishing
+[22:12] characteristics. So, if we look at what I'd call
+[22:16] arbitrary code execution is really what the elite would do, Mythos was a
+[22:21] quite surprising able to do this 73% of the time.
+[22:25] So, 30 out of the 41 examples, Mythos was able to do this sort of full control
+[22:30] flow hijack. GPT, sorry, the little bar here is
+[22:33] wrong. This was 68% of the time, and Gemini and Kimmy were 0% of the time.
+[22:39] So, we're starting to see a signal between these models on what they can
+[22:41] do. Little bars here are wrong, but the actual numbers are correct.
+[22:47] So, there's some cool evidence actually that these aren't memorized, that people
+[22:51] like Mythos and GPT just didn't have access to zero days out there. So, this
+[22:55] is where I get a geek out on security. For example, in CVE-2023-670T,
+[22:59] this was something that the experts in Chrome, it's a very small community,
+[23:03] they knew that it was exploitable and they came up with a POC, but what
+[23:06] happened inside Mythos was Mythos took a route that everyone thought would be too
+[23:11] hard to do in practice. One of the things that Mythos was able
+[23:15] to do was reverse JavaScript's math.random and use that to forge a
+[23:19] pointer for a return-oriented program out of the Uber cage exploit. It was
+[23:23] very creative. So, this wasn't a publicly known exploit. There is a
+[23:26] public one, but what it came up with was very different for which experts
+[23:30] actually thought would be too difficult in practice.
+[23:33] CVE-2024-76 7965, it found a new WASM path past
+[23:39] where all the public work had stop had stopped. In fact, it was unclear that
+[23:44] there was a public exploit that worked for this. We were able, again through a
+[23:47] lot of manual effort, to create one after the fact,
+[23:50] but we know that that wasn't public to the best of our knowledge.
+[23:55] 2024-0519, again, public vulnerability, no public exploit,
+[24:01] Mythos was able to succeed.
+[24:04] At the end of this, the work was on par with a human elite researcher. I
+[24:08] actually want to say a few more words about 2024-7965
+[24:11] cuz that one was actually pretty interesting. This is one for which we
+[24:14] knew of a public we knew that it we could exploit it on an arm, but actually
+[24:18] even our internal expert didn't think that you could do it on x86 and Mythos
+[24:21] succeeded. So,
+[24:24] fairly significant proof that this wasn't just memorization. These are hard
+[24:27] tasks against uh hardened targets.
+[24:31] So, you can download this entire set at exploitbench.ai.
+[24:34] We provide all the uh
+[24:37] all the uh all the environments. These are Docker images that you can just pull
+[24:41] from GitHub. They have an MCP interface. It's really cool. You can just say like
+[24:45] Claude pointed at the MCP interface and see if it can hack it.
+[24:49] We provided all the data in the transcripts with the exception of
+[24:52] Mythos. And the reason that we withheld Mythos was twofold. First is we had an
+[24:57] NDA that we couldn't release me those transcripts cuz it's not public. But
+[25:00] second, actually me those was able to come up with weaponized exploits that
+[25:04] weren't public. And so we kind of hit this quandary out
+[25:07] there. If we're going to publish these benchmarks and we believe in open
+[25:09] science, but the models are creating actually interesting exploits for
+[25:14] high-value targets. What do you do
+[25:17] as far as the open science part of this? We don't have an answer. Kind of fun to
+[25:21] think about.
+[25:24] So for the next steps, I mean we only have a 20-minute talk here.
+[25:30] One of the things that we are doing is we're taking these as really benchmarks
+[25:33] to see where the frontier models stop, and then we're building reinforcement
+[25:36] learning environments to help get models past that. The way that we go about this
+[25:40] is we've done a a fairly curated approach where we take open-source
+[25:44] software and we built a very extensive vulnerability mining machine based upon
+[25:48] our work with DARPA over the last decade for novel vulnerability discovery. We
+[25:53] find unique proofs of vulnerability. These are zero days no one else use and
+[25:57] we use these to then build reinforcement learning environments.
+[26:01] Why are we finding zero days? Well, we want to make sure that the models aren't
+[26:04] simply memorizing and we know if it's a vulnerability they've never seen before
+[26:08] that it can't at least be just memorizing that.
+[26:12] We're able to do this at scale where some of our the companies that we work
+[26:15] with we're providing up to 10,000 reinforcement learning environments per
+[26:18] month to really accelerate their uh learning.
+[26:21] We of course can't take credit for how far these models have come, but we like
+[26:26] the fact that we've had in some way uh some impact on how well they do at
+[26:29] cybersecurity. So the TLDR in the entire talk is
+[26:33] training cybersecurity is really not mysterious. What it takes is an actual
+[26:36] expert that builds the right oracles that when you go back and look at the
+[26:40] transcripts goes and tries to figure out was the was the machine just memorizing?
+[26:45] Was it doing reward hacking? And most importantly, how do you handle the case
+[26:49] where the machines are finding vulnerabilities
+[26:51] that you didn't know about before. If you're interested in this, please
+[26:55] reach out. Happy to answer questions.

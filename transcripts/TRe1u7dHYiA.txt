@@ -1,0 +1,293 @@
+# title: What Makes Open Models Fast in Production — Sujee Maniyam, Nebius
+# source: https://www.youtube.com/watch?v=TRe1u7dHYiA
+# speaker: Sujee Maniyam, Nebius
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T04:24:34Z
+# sha256: b31e345132619660ca2c1f8b17674f9c5b348f76e211212c4aec2db109316357
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:01] [music]
+[00:12] Thank you for joining us today. Um I'm Dylan. I'm here today with my colleague
+[00:16] Suji. So I lead the product marketing for Nibbius token factory and I'm here
+[00:20] with Suji as a developer advocate and we're going to talk a bit about
+[00:24] engineering um open NLMs for production. So before we jump right in, um I want to
+[00:30] give a few words about what we're going to cover today. We only have 20 minutes,
+[00:33] so we'll try to keep this brief. Uh but we're going to give you a quick intro on
+[00:36] who we are, what we do. Uh then talk about what it takes to build the infra
+[00:40] for inference. Um a few words on model shaping optimizations, which are
+[00:45] extremely important in what we do. And then we'll talk about model serving
+[00:49] optimizations.
+[00:52] But before we jump right in, I just want to give a few words uh about who we are
+[00:56] and what we do. So we work for Nibbius. Uh so specifically Nibbius token factory
+[01:01] but Nibbius is a like a full stack AI cloud infrastructure. Um so this means
+[01:06] we actually not only exposing model APIs we run the actual physical uh AI layer
+[01:11] and infrastructure underneath it. Um we have our own data centers and video
+[01:15] systems uh bare metal capacity manage cloud and optimizing the serving and the
+[01:20] inference through Nibius token factory. Um top top row here is really about
+[01:25] scale and trust. So we're a publicly traded company on the NASDAQ um
+[01:29] headquartered in Amsterdam. Uh we're very close with Nvidia who made a 2
+[01:33] billion uh investment in Nebus a couple months ago and we're targeting a 5 gawit
+[01:38] of Nvidia systems by the end of 2030. Uh bottom row is really more about the
+[01:44] control of the stack. This is a quite a a good edge we have. We operate own data
+[01:48] centers across the EU and the US uh bare metal rather than shared cloud. We're a
+[01:53] very early adopter of Nvidia Rubin um CP like uh and bluefield storage and we
+[01:59] were amongst the first European clouds to run both Blackwell Ultra AGXP300 and
+[02:03] GB300 in production. Uh we also have um like strong contracts from Microsoft and
+[02:10] Meta agreements that kind of show that the largest AR builders are already
+[02:13] building this kind of capacity from us. Um and the last time is quite important.
+[02:18] It's the uh like really the important bridge to this talk is the vertical
+[02:22] integration from silicon to serve that we um rely on.
+[02:28] So today we're talking about NEA token factory. So the idea here is to like
+[02:31] really uh engineer AI for product. So we're managed inference company uh
+[02:36] meaning we deploy these models and optimize them for our customers.
+[02:41] So we noticed a few things today in the market of serving open source LLNs. Um,
+[02:45] usually most AI teams are stuck between choosing two bad options. Um, closed
+[02:50] APIs are really easy to start with, but you often hit a ceiling really fast and
+[02:54] you can't really tune the model to your specific use case. Uh, you share the
+[02:57] infra with everyone else. So, it kind of operates as a black box black box and
+[03:02] the costs grow in a straight line with no way to really optimize things. The
+[03:06] other option here is self-hosting. Obviously, it's quite fun. Uh, gives you
+[03:10] full control on the model, but it's a massive engineering project. Um so you
+[03:14] really need a dedicated team to actually keep it running. Um and you're usually
+[03:18] month away from production before you even start your actual product. So token
+[03:22] factory is kind of the shift uh this third path we identified uh before you
+[03:26] even start like on your um actual product. You get the control and the
+[03:29] performance of self-hosting with the simplicity of a manage inference
+[03:33] service. So we do the heavy lifting, the hard infrastructure work and then
+[03:37] customers stay focused on their product. This really unlocks uh three main things
+[03:41] performance, cost and behavior of the models. Um as we've seen the gap between
+[03:45] proprietary and open source models has been closing a lot and so this is where
+[03:49] we kind of operate and we feel comfortable um operating is really not
+[03:53] only relying on the fact that this bridge and this gap is closing down but
+[03:57] also figuring out how you actually make it work in your own production uh use
+[04:01] cases. So this is really the core of token
+[04:06] factory. uh we've built a full stack JI platform. Um most platform we've seen on
+[04:10] the market either give you inference training uh data tooling but here we
+[04:14] decided to connect everything under one loop. So we have a bunch of tools to
+[04:18] that kind of unlock this on the inference side um we allow you to run
+[04:22] models in production. So we have 60 plus models on the platform JLM Kimmy DC you
+[04:28] name them. Um we have dedicated endpoints we have different flavors on
+[04:32] the models depending if you want to run them fast. uh we have different tooling
+[04:35] like structured outputs, function calling and batch API. Second layer here
+[04:39] is the data lab. So this allows you to really capture and structure the
+[04:42] production logs. So we see a lot of customers actually running these models
+[04:45] in production importing the completions and wanted a way to kind of slice and
+[04:48] dice through these completions and this is really what we allow with the data
+[04:52] lab. So uh inference log imports SQL data like uh data set filtering, data
+[04:57] set versioning, um exporting and then batching. These uh third layer is post
+[05:02] training. So we allow you to kind of fine-tune distill optimize these models.
+[05:06] So this is a natural follow-up with the data lab is once you have your logs and
+[05:10] your inference and you can generate synthetic data sets you can bring them
+[05:13] all to post training and use that to kind of either through Laura or full
+[05:17] fine tuning make the models much more adapted to the behavior you're expecting
+[05:20] from. Uh we also allow model distillation. We do custom spec decoding
+[05:24] for customers who need really advanced um custo custom spec decoding tooling.
+[05:30] uh we do like on demand and like specific quantization and calibration of
+[05:34] the model depending on your preferences and we do our our GPO
+[05:38] and the fourth layer here is the deployment. So once you like run these
+[05:42] models once you like train these models you need a way to deploy them. So these
+[05:46] this is what allows us to push the models into production on our own um
+[05:50] owned infra. So for most teams this is kind of
+[05:53] usually a choice of different tools that you stitch together. But that's creates
+[05:57] kind of a lot of friction and need for iteration. It slows the need for like
+[06:01] the the ability to iterate here. And so what we allow is really to make the data
+[06:05] flow from u the inference to the training and the training flows directly
+[06:08] into production. So that allows you to keep like a virtuous loop of your
+[06:12] product. And that's really what I think is the main difference between uh
+[06:15] running a model and running an actual production uh AI system.
+[06:22] Um so here is a little slide about what we handle so you don't have to. Um so
+[06:27] running models in production is actually quite complicated. It takes a lot of
+[06:29] work and so I think uh the way we approach it the value here is in three
+[06:33] main layers. The first one is the optimization. So we actively tune how
+[06:38] models run so the customers get much better speed and lower co and lower
+[06:41] costs without having to figure out um all of that themselves. Like we really
+[06:45] do the heavy lifting around the model deployment and optimization and really
+[06:48] allow you to kind of uh come in and just play with them.
+[06:52] This is like all around optimizing latency, throughput and cost at the
+[06:56] actual engine level because you could be running the same open source model on
+[06:59] different providers and have completely different um results in terms of costs.
+[07:03] So there's a lot of technical stuff that goes on under the hood uh to make this
+[07:06] work and Suji will cover that in a few minutes. Uh second layer is the
+[07:10] infrastructure. So the fact that we actually own the hardware uh we keep it
+[07:14] running. We own this like kind of vertical stack um gives us an edge that
+[07:18] uh most providers don't have. So it's it's it's the control like we really
+[07:23] control what the model does. Uh we handle like everything underneath and so
+[07:27] we just give the the customers um the full control of the behavior and we take
+[07:31] care of the infrastructure. Third layer is the enterprise readiness. I think
+[07:35] this is really important here because like running open source seems kind of
+[07:39] obvious but you need a bunch of ways to like secure like make it make sure it
+[07:43] works in a secure environment. So there's a bunch of things here. Um
+[07:46] security, compliance, reliability, they all requirements that all these large
+[07:50] companies usually have. Um and they kind of need those before they can ship
+[07:54] anything into production. And so a lot of AI providers make you figure out all
+[07:58] of these yourself. And uh our mission here is to really handle all of these so
+[08:03] you don't have to.
+[08:08] Um something that comes up a lot with AI teams is that they start with inference.
+[08:12] um they just get a model up and running and then they realize that pretty
+[08:17] quickly quickly that running it is not just as easy as it seems and it's only
+[08:22] the beginning of your path through running open source models at scale. So
+[08:25] they really need to understand how it's actually performing in the real world
+[08:28] and this is kind of where we come in. They want to improve it over time. Um
+[08:32] they need to redeploy updates without breaking things. Um, and and that full
+[08:37] cycle from running to observing to capturing and to redeploying the model
+[08:40] is really what separates team from that ship like great AI products from team
+[08:44] that ship demos. And I think that's really important to hear especially when
+[08:47] talking about open source. Um, and so token factory covers that full loop uh
+[08:52] inference to run the models. So as I said, Kimmy, Deepseek, all the all the
+[08:56] main ones uh through real-time inference or batch inference through structured
+[09:00] outputs and function calling um and on dedicated end points when it's
+[09:04] necessary. Um and then moving on to the datab to collect and analyze the real
+[09:09] world signal uh the completions, moving over to post training to improve and
+[09:12] customize the model and finally moving to the last step and probably the most
+[09:16] important one which is the deployment to push uh updates with full control over
+[09:19] the model. And you actually really it's it's really important for most our
+[09:23] customers to know where how it's running and what chips it's running on uh the
+[09:27] level of quantization and all that stuff and that's really where we kind of
+[09:30] operate uh and are comfortable. Most teams today we figured have to
+[09:34] stitch different tools together to get this and we actually built uh one
+[09:38] platform that tries and covers it end to end. So we really see this as a
+[09:42] continuous improvement loop. Every cycle makes your AR more specific uh way
+[09:47] faster and much cheaper. And now we'll dive into scaling open
+[09:52] models to production. And I'll invite Suji on stage to take it over.
+[10:01] All right. Thank you, Dylan. All right, everyone. So, um I'll zip
+[10:06] through a few of these, but um I'm happy to um have a discussion afterwards. So,
+[10:10] come and find us if you have any questions. So, we believe great
+[10:15] inference starts with great models, but that's not enough. you need great
+[10:19] infrastructure behind the scene to get the best performance and I believe
+[10:23] that's what uh Nebio token fighter provides. Uh I get a lot of times I get
+[10:28] asked like so this is great you guys host open models but how good are the
+[10:33] open models really and I like to show you this benchmark here. Uh this is from
+[10:38] artificial analysis. The black ones are proprietary models and the blue ones are
+[10:43] open models. And the cool thing you can see here is how um the open models are
+[10:49] actually very competitive sometimes even better than a lot of the proprietary
+[10:53] models. So the gap between uh proprietary and open models is very
+[10:58] narrow. Uh so we don't really have to chase proprietary models all the time
+[11:02] for the intelligence. You can just just as well choose an open model that's just
+[11:07] as smart and also ends up being much cheaper in most cases which is pretty
+[11:12] cool. So what does it mean for customers? You get choice, right? You
+[11:15] can run these open models in any provider, hopefully token factory, but
+[11:20] so there's no vendor lock in and also you end up saving a lot of money on
+[11:23] tokconomics. And here's a a few examples of models we
+[11:28] host. Uh the top the top table is like the large models. We call them sort of
+[11:33] the teacher models, right? They are very capable uh very smart but also kind of
+[11:37] large. You can also use a large teacher models to train the smaller student
+[11:41] models. So you sort of see the both large models and small models posted. So
+[11:46] I want to sort of structure the talk a little bit um sort of the from the
+[11:49] hardware layer, the serving layer and the optimizing layer. Uh so Dylan talked
+[11:55] a little bit about hardware, we have we work very closely with Nvidia, we get
+[11:59] the latest chipsets and uh not not just um the latest we also optimize uh
+[12:04] kernels and runtimes. So the models run really uh really well. For example,
+[12:09] something like the Nvidia floating point.
+[12:12] standard we embraced it. It gives us a really good model performance on latest
+[12:15] Nvidia chips. And if you think about model serving that kind of takes us to
+[12:20] the middle layer and there are few optimization I'll talk about uh starting
+[12:26] with the engines because you need an engine to serve the model. Uh we utilize
+[12:30] a lot of the open source engines. Uh we have our own internal folk uh that we
+[12:35] continuously tweak and optimize and we will deploy the model on the best engine
+[12:39] possible. uh you know not all the models run equally well on all the engines. So
+[12:43] we figure out which engines run well and we'll deploy the models accordingly. So
+[12:48] as a customer you can just use an API not having to worry about you know which
+[12:52] kind of GPU which engine because we take care of all that work behind the scene
+[12:58] and uh when you have like hundreds of thousands of GPUs uh running models load
+[13:02] balancing and routing becomes an issue. So a lot of the time people say oh
+[13:07] that's easy right we just you know put a put a load balancer in front um send
+[13:10] traffic randomly to different GPUs uh that's not how it works in LLMs because
+[13:15] the workloads are slightly different for example just to kind of give you an idea
+[13:19] uh in the early days of LLM the inputs were small I could just say write like a
+[13:23] oneliner and the output is also small but now we are seeing your input could
+[13:28] be pretty large like we are sending like large code bases uh as using coding
+[13:33] agents to do like refactor or summarize or analyze right so the output as you
+[13:38] can see can vary from like you know large to small large to large and
+[13:42] routing them accordingly will give you um you know it's not it's not trivial so
+[13:46] what we employ is we employ um routers that actually are cache aware what I
+[13:52] mean by that is like if you look at the left side here you will see that my
+[13:55] cache like different colors it's kind of fragmented all over so our cache rate is
+[14:01] isn't all that great because my request landing randomly at different GPU use
+[14:05] that may or may not have the cache. But if you look at the the one on the right,
+[14:08] you can see that now the cache is much more coherent. See the colors are kind
+[14:12] of together and the router knows where the caches are stored and it'll route
+[14:16] them accordingly. So when we actually do the inference, you get pretty good cache
+[14:20] and very good speed. Um another thing and this is something
+[14:25] we are really excited about. Um it's called spec decoding. So the challenge
+[14:30] is uh LLMs they generate tokens one by one one two three four right and then
+[14:37] large models take a long time to generate these tokens. So the idea for
+[14:41] spec decoding is how about we employ a smaller model which is a lot of the time
+[14:46] faster and cheaper to generate the tokens but then have the large model
+[14:51] verify at the end. So it's kind of like if you're like a senior engineer, you're
+[14:55] kind of farming out the work to a junior engineer. So they're kind of doing the
+[14:58] heavy lifting and then you are verifying the work. And this actually surprisingly
+[15:02] scales really well. So the smaller models can generate tokens very quickly
+[15:06] and the large model can verify and the and if it's good, we are done. If the
+[15:11] large model doesn't like the the answer, it will actually regenerate the tokens
+[15:15] for you. So that's kind of the worst case scenario. But most of the time you
+[15:18] will get pretty good performance out of this by mixing small models and large
+[15:23] models. And this actually a feature we actually baked into token factory. Uh
+[15:26] that gives you pretty pretty good optimization um speed.
+[15:30] So one of the things we experimented we sort of trained graph models. Uh you can
+[15:35] train them using synthetic data. Even if you train them using like you know
+[15:38] generic data you get like you know we seeing like up to 30% improvement. But
+[15:42] it it gets even better if you can train the smaller model using your own data.
+[15:46] Right? So we do a lot of experiments here and u we are launching a feature
+[15:51] feature. You can actually train these draft models almost like with one click
+[15:55] and you know we will capture your production data and train the draft
+[15:57] models for you which is pretty cool. Uh another optimization uh behind the scene
+[16:02] is KV cache. Um this is probably one of the biggest ROI in doing inference
+[16:07] because uh creating tokens expensive especially when you're doing one at a
+[16:11] time and the common sense is once you generate a token it it doesn't change.
+[16:17] So there's no need to keep keep regenerating the same token over and
+[16:21] over again. So the idea is we cache the tokens. So just to kind of give you an
+[16:25] example here, let's say this is my prompt the cat sat on, right? Let's say
+[16:29] the those are my prompts and I'm creating the next word and as soon as we
+[16:33] create the next token, we cash it and the next time we need to look up, we
+[16:37] don't have to regenerate regenerative, we just look up the cache very easy and
+[16:41] this actually speeds up quite a bit. So just to kind of give you some ideas, we
+[16:46] have seen uh speed ups anywhere from 5 to 10x, not just 5 to 10 percentage,
+[16:50] actually 10x, right? because caching really works well. Um the thing about
+[16:54] caching is it takes a lot of memory right because you know especially with
+[16:58] our large inputs large token windows and one thing we we we've been implementing
+[17:02] in token factory is when we do caching we can actually uh because GPU memory is
+[17:09] very precious. So we can offload caching out of GPU memory automatically save it
+[17:14] in a regular memory and then bring it back. So we don't like throw away the
+[17:18] cache we spend a lot of time building. we actually offload it and bring it back
+[17:22] and all of this is done automatically. So you don't have to worry about
+[17:24] managing cache. This is done for you behind the scenes. So and this is one of
+[17:30] the um um one of the important optimization we have done to speed up
+[17:34] inference. Uh another one is called decoding. Um so the way you think about
+[17:38] this is like there are two stages to LLM. So one of them is like sort of fill
+[17:42] in the context that is very CPU intensive and then other one is actually
+[17:46] decoding that is very memory intensive. And a lot of the time if you do them in
+[17:50] the same GPU they're kind of computing for resources. So what we have done we
+[17:54] sort of separate this two phases out. So one GPU set does prefill they are very
+[17:59] you know uh compute efficient and the other one does uh boding that's very
+[18:03] memory efficient and then they sort of transfer the KV cache in between and we
+[18:07] have seen this is actually working working out pretty well.
+[18:12] And another thing we do and and this is already you know already baked into our
+[18:17] platform we also quantize the models uh and when we do quantizing you know we
+[18:21] are reducing the precision. So if but we don't want to go too far right because
+[18:25] then your model starts you know quality starts getting degrading. So what we do
+[18:29] is we do a lot of experiments to figure out like what's the kind of the sweet
+[18:32] spot of a quantization. So you can run the models efficiently but not not
+[18:36] degrade the performance too much. So, so all of these things are already
+[18:42] built in and and there's a there's a few more and interest of time I'll sort of
+[18:46] wrap this up here and these are some of the things we kind of covered uh spec
+[18:50] decoding KV cache and when you do caching doing um routing that is
+[18:55] actually cache aware and also pre-fill uh you know uh separating prefill and
+[19:00] decoding cases and if you're using an API you may not realize all these works
+[19:04] going behind the scene but they are right and this is what make up you know
+[19:07] make a a inference platform really great to serve especially the large large
+[19:12] models we are seeing like the one trillion models we are seeing and
+[19:16] finally I want to quickly um give this out so we um probably this is the most
+[19:22] important slide of the presentation so we can take the take a quick picture or
+[19:26] scan the code uh this will give you some credit on token factory platform so we
+[19:30] allow you for allow for you guys to try it out and we have all the uh latest
+[19:34] open source models uh GLM52 kit K27s. Uh try them out. I've been using them them
+[19:41] a lot a lot for coding lately and they work really really well. So if you're
+[19:45] using a cursor or open code um you can very easily incorporate our models to um
+[19:50] for coding work. Try them out. Let us know. And there's a discord channel um
+[19:54] at the bottom. If you have any questions you can post them there or you can um
+[19:58] you know um message me or Dylan. We will happy to um answer your questions. Uh so
+[20:03] I'll stop here. We have like 10 seconds. >> [laughter]
+[20:07] >> right on time, but uh we'll be around. Please come and talk to us if you have
+[20:10] any questions. We'll happy to um chat more and then take any take your
+[20:14] questions. Thank you all.

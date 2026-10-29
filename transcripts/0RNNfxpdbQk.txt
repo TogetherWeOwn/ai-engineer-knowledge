@@ -1,0 +1,158 @@
+# title: Medic for Apache Spark - First Aid for Failing Jobs - Drasko Profirovic, Pinterest
+# source: https://www.youtube.com/watch?v=0RNNfxpdbQk
+# speaker: Drasko Profirovic, Pinterest
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T07:24:39Z
+# sha256: 0b6e6c4571c4b2e86bc3a413b2ee751ba4ffed7f5f216841545f0d0a1e7e699c
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:01] Hi. My name is Draško Proferović. I'm a staff engineer at Pinterest.
+[00:07] Today, I'll cover Medic for Apache Spark,
+[00:10] which is our agentic diagnostics tool built to troubleshoot Spark failures.
+[00:16] We'll dive into why we built the Medic, the journey from prototype to the
+[00:20] current architecture, lessons learned along the way, and
+[00:23] what's next. A bit of background about myself.
+[00:28] I had the opportunity to work at a few companies under the data platform org.
+[00:33] Despite many differences between those companies, there's at least one
+[00:36] similarity. The high bar for providing quality
+[00:40] support to partner teams who rely on the infrastructure owned by the data
+[00:44] platform org. I'm sure I'm not alone when I say that
+[00:48] the support rotation feels like a never-ending stream of questions or
+[00:52] problems to resolve. Moreover, it's easy to forget how
+[00:56] difficult it is to troubleshoot Spark or any distributed system for that
+[01:01] matter. This is particularly true for anyone
+[01:04] just getting started with the framework. The other challenge with supporting a
+[01:09] load-bearing system comes down to ambiguous priorities.
+[01:12] Do you focus on helping one team with their failing job, or do you unblock
+[01:16] another team with a looming deadline? It's not always straightforward to rank
+[01:22] these asks, but as humans, we often have to decide
+[01:25] how we'll spend our time. The same is not true for LLMs.
+[01:30] We can easily scale out knowledge and capabilities on demand.
+[01:36] Our vision for a diagnostics agent was to ask it simply, "Why did a job
+[01:40] fail?" and get back a deep research document which provides evidence on the
+[01:44] root cause of the failure. The agent would also need to provide
+[01:49] suggested fixes that are grounded in the context of the job.
+[01:54] Needless to say, this agent would need to be available on all the surfaces
+[01:58] where our users operate today, like Slack or the Airflow UI to name a few.
+[02:05] We started by exposing our data resources by way of the model context
+[02:09] protocol as a way to connect them to the LLMs.
+[02:13] At this point, we could start an LLM conversation with the MCP tools enabled
+[02:18] and ask the model to reason about our Spark job.
+[02:22] This worked in practice, but it required a lot of careful prompting from the
+[02:26] human operator.
+[02:29] We extended our prototype by creating a single reasoning and acting agent, React
+[02:34] for short. The agent was given a single prompt,
+[02:38] which embodied the problem-solving approach it would take,
+[02:41] how to structure the responses as a report, and specific examples to common
+[02:46] failure patterns. At this point, we had enough
+[02:50] capabilities to start trialing the solution with our beta users.
+[02:55] From those early trials, we found a lot of shortcomings with our solution.
+[03:00] Prompt tuning became unsustainable. One prompt had to do everything,
+[03:06] and adding detail in one area degraded the behavior in another.
+[03:10] Response quality was inconsistent. Sometimes analysis was shallow or other
+[03:16] times too verbose. We lacked controls to keep the agent on
+[03:20] track. And we often hit context window issues
+[03:24] for production jobs. As an example, large tool outputs from logs would click
+[03:29] quickly consume tokens and brought a halt to the agent's reasoning.
+[03:35] Lastly, our end-to-end testing strategy up to this point relied on manual tests
+[03:40] from production. This felt anecdotal since production
+[03:44] data would be retentioned away. Overall, it was hard to know if changes
+[03:49] broke earlier wins.
+[03:53] To improve the system, we invested in observability and testability.
+[03:57] We used open telemetry to publish traces to LangFuse.
+[04:01] And by viewing the agent's execution as a waterfall diagram of steps, we could
+[04:06] better understand the cause of lower quality responses.
+[04:11] The reliance on manual end-to-end testing highlighted the need for a more
+[04:15] reliable and scalable solution. We built an end-to-end test harness to
+[04:20] snapshot production state. And we could codify expectations as
+[04:25] offline evaluations. Lastly, this allowed us to tune our
+[04:30] prompt based on the results. In practice,
+[04:35] the end-to-end test harness is simple. In record mode, the agent calls real
+[04:40] downstream systems, and tool responses are captured as fixtures.
+[04:45] These are then saved to the file system and checked in as code.
+[04:49] Playback mode, the agent runs against fixtures instead of production data,
+[04:54] but this time performs the analysis and generates the report.
+[04:59] The test suite then grades the report based on the offline evals we have
+[05:02] authored.
+[05:05] For example, an offline eval might check for a limit of three suggested fixes.
+[05:11] The eval would score lower if the agent provided too many fixes towards managing
+[05:15] the verbosity of the final report. Our end-to-end tests allowed us to
+[05:21] quantify quality instead of relying on intuition.
+[05:25] And as we grew our test coverage, we gained confidence that improvements did
+[05:29] not introduce regressions. Once we had the testing coverage in
+[05:33] place, we invested deeper in our handling of logs.
+[05:39] Logs are noisy, and many exceptions we see in logs are benign. So, simply
+[05:44] focusing the last exception may not always be suitable.
+[05:49] Initially, we kept it simple with a heuristics based approach using regex to
+[05:53] filter out certain exceptions. But, this didn't scale well.
+[05:58] Instead, we built the exception classifier pipeline.
+[06:02] The core idea was we would learn which exceptions commonly appear in successful
+[06:06] jobs, treat those as likely red herrings, and
+[06:09] filter them out in the future analysis. The agent would fingerprint and cluster
+[06:15] exceptions, then rank them based on content relevance, and how recently they
+[06:19] occurred compared to the termination of the job.
+[06:23] The agent stopped consuming logs directly, and instead was given two MCP
+[06:27] tools. Get the top K truncated exceptions,
+[06:31] or get full log details for a specific exception.
+[06:36] This resulted in an improvement to our signal-to-noise ratio, and reduced the
+[06:40] chance of the LLM to anchor its investigation with a misleading
+[06:44] exception.
+[06:47] Like logs, we found that we could improve the overall quality by investing
+[06:51] in how we handle metrics. Raw time series metrics are not context
+[06:56] window friendly. Simply feeding the raw data to an LLM
+[07:00] works in the small scale, but fails for long-running jobs in production.
+[07:05] Not to mention, it's horribly token inefficient.
+[07:09] The approach we took was to perform metrics analysis in a quarantine
+[07:14] sub-agent. We would convert the raw time series
+[07:17] data into graphs, which are then collaged into an
+[07:21] final image. The appearance of which isn't much
+[07:24] different than a Grafana dashboard, albeit with annotations that we found
+[07:29] useful, like calling out the min and max values.
+[07:33] The image is then attached the LLM conversation,
+[07:36] and we would prompt the model to reason about patterns in the the
+[07:42] Images worked better because we could guarantee how many input tokens would be
+[07:46] used for analyzing any given Spark job irrespective of its duration.
+[07:52] Examples of useful signals we would be able to get included executors dropping
+[07:57] down to zero or near zero, long plateaus or bottlenecks,
+[08:01] effectively any resource behavior inconsistent with healthy progress.
+[08:07] Our sub agent would summarize its findings and return the results back to
+[08:11] the parent agent, thereby ensuring the context window is kept healthy.
+[08:17] Lastly, we overhauled our agent harness. We went
+[08:21] from a single react agent with multi-agent architecture.
+[08:27] This was accomplished by building on top of LangGraph's deep agent library.
+[08:31] Each agent now had a dedicated prompt and a subset of MCP tools.
+[08:36] Meanwhile, the deep agent library itself provided built-in tools to keep the
+[08:40] agent on track, like a to-do list or a virtual file system.
+[08:45] This approach mirrors what we come to expect from our coding tools like Cloud
+[08:49] Code or Codex, to name a few. We could finally decompose our single
+[08:54] prompt into specialized roles. This refactor provided clear separation
+[08:59] of each agent and it made it easier for developers to maintain each prompt
+[09:04] separately while performing focused testing on the system
+[09:07] using our end-to-end test harness. A pleasant consequence of this
+[09:12] architecture was that the effort to expand the scope of the project was as
+[09:17] simple as adding a new prompt. And this is how we were able to extend
+[09:21] the Medic to also help users optimize their Spark SQL jobs.
+[09:28] Our workflow started starts with the user's request entering the system,
+[09:32] whereupon intent is classified as either requiring a simple answer to a question
+[09:37] or a deep diagnostic session. If it's the latter, the triage agent
+[09:42] determines the Spark job's life cycle state.
+[09:46] And if it's failed, it'll use a subset of tools to generate a set of failure
+[09:50] hypotheses. Each hypothesis is researched in
+[09:54] parallel where we gather evidence to validate it.
+[09:59] These research agents then return a score and a root cause.
+[10:03] The supervisor selects the highest confidence root cause and invokes the
+[10:07] healer agent to offer remediations based on runbooks ingested into our vector
+[10:13] database. Lastly, the supervisor agent would
+[10:17] assemble the final report ensuring proper formatting.
+[10:23] The multi-agent architecture proved very effective offering us the greatest
+[10:28] control over the system's behavior. Enhancements to log
+[10:34] handling led to substantial reduction in inaccurate root causes.
+[10:40] We trialed using LangGraph's workflows to make the agent more deterministic,
+[10:44] but this approach proved to be brittle compared to the reasoning and acting
+[10:48] agent paradigm. What we're experimenting with now is
+[10:52] incorporating user feedback from prior sessions to automatically improve the
+[10:57] agent. Lastly, we see a broader opportunity to
+[11:01] apply this pattern to other distributed systems like Flink and Trino.
+[11:08] Medic for Apache Spark project was made possible by the hard work from these
+[11:12] contributors. Thank you for your time.

@@ -1,0 +1,1155 @@
+# title: Stateful Agents — Full Workshop with Charles Packer of Letta and MemGPT
+# source: https://www.youtube.com/watch?v=E0k9Ppq6yXY
+# speaker: Full Workshop with Charles Packer of Letta and MemGPT
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T13:16:23Z
+# sha256: d9b1d562234cd5f38fd66f795153ab9d98fec62819addb8cf02c4b447b028cb8
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:10] So today I'm going to be going over a workshop. So there is like an
+[00:13] interactive component. I think you can probably get a lot out of this talk just
+[00:17] by watching. But if you do want to participate, um you're going to probably
+[00:21] want to install Docker on your laptop if you don't already have it. And then
+[00:24] you're going to want to pull this Docker image. Uh if you do this, it should be
+[00:27] very easy to follow along. There's also a notebook in the channel. It's called I
+[00:31] think like workshops letter and you can just hop over to the I think I also made
+[00:36] like a tiny URL for it. Um but if you hop over to this link, this is like the
+[00:40] notebook I'll be running over for maybe like the first 30 minutes. And this
+[00:43] notebook is kind of like a client and the client needs to run against the
+[00:47] server and the Docker image is what would be the server in your case. Um so
+[00:52] again, I'll leave this up for a few seconds. This is basically where you're
+[00:55] going to go get the
+[00:59] notebook. And then and I believe this is also in the in the slack
+[01:05] channel. And then yeah, the main thing you're going to want to do if you want
+[01:09] to follow along and you have Docker installed is like docker pull. Um I
+[01:12] guess like a quick show of hands like how many people here have Docker
+[01:15] installed on their laptops? So okay, sweet. Yeah, most of us. Okay, great.
+[01:21] Um, okay. Does anyone need a few minutes or anything? Um, I guess the people who
+[01:26] do want to kind of follow along, just make sure to check out the workshops
+[01:29] channel. Um, and of course, this is recorded and then all the materials will
+[01:32] be online, so it'll be very easy to kind of follow along later as well.
+[01:36] Yeah. So, I believe the title of this workshop was um like agent memory, the
+[01:41] LMOS. Uh, I think maybe a better title for the workshop is stateful agents. So,
+[01:46] I think you probably heard a lot about agents um over the course of this
+[01:49] conference. as I also would like to pull the room like how many of you if you
+[01:53] think you were asked today to give like a bit a concrete definition of an agent
+[01:56] would be like pretty comfortable in what you what your definition
+[02:00] is. Okay. Yeah. So despite hearing you know a lot about agents over multiple
+[02:05] days it's still pretty hard to define. I think this is kind of a problem that's
+[02:10] become much worse over the past year and I think that's why it's kind of useful
+[02:14] to maybe like sharpen our definition of agents. So I like this term staple
+[02:17] agent. Um, I think staple agent actually is kind of what agent meant before, you
+[02:22] know, the LM era. And I think these days, I think a very common definition
+[02:26] for agent is it's like an LM that's taking actions in a loop, right? I think
+[02:30] that kind of that kind of works, but it also misses a really big um part of that
+[02:36] process, which is that when you run the loop, it's a closed loop and the agent
+[02:40] gets updated. And it turns out that, you know, in this new wave of AI, the
+[02:44] fundamental unit of compute we're using for AI is stateless. It's not, you know,
+[02:48] a recurrent neural network. It's not an SSM. It's a transformer. And the
+[02:52] transformer inherently is like a stateless machine. So that means that
+[02:56] when you close the loop, you have to have some sort of mechanism for updating
+[02:59] the state. And you know, traditionally, like when agent was defined back in like
+[03:03] the RL days or like back, you know, before pre-LM, I don't think this really
+[03:08] was that big of a distinction to make like staple versus not staple agents. I
+[03:12] think because LMs are stateless and that's like what everyone is using for a
+[03:15] for AI now it's a pretty important distinction. So hopefully by the end of
+[03:18] this talk you kind of understand what staple agents mean and you probably
+[03:22] hopefully agree with me that um stapleness or memory is actually
+[03:25] probably the most important thing to solve if we actually want to get you
+[03:29] know if you want 125 be the year of agents or if you want agents to actually
+[03:33] deliver on any of the
+[03:36] hype. Yeah. So when I talk about stapleness, I think stapleness is pretty
+[03:40] synonymous with memory. I think that's because LM effectively have no memory.
+[03:45] They just have the memory that's in their weights and then they have what's
+[03:47] in the context window. Um so like memory and state, context, these are all kind
+[03:52] of synonyms with LM or like LM driven AI. And humans are of course stateful.
+[03:57] So humans they form new memories. They learn over time and LMs don't. So any of
+[04:02] the learning you're going to do is going to have to be done by you, the user of
+[04:05] the LM or by the framework, but it has to be done by somebody. And
+[04:09] traditionally, you know, in the past few years, I think by default, this just
+[04:12] means appending to a list, right? And I think for workflows and like stuff we
+[04:15] were playing around with from 2022 to 2024 when not a lot of people
+[04:19] necessarily cared about like making money um or doing useful things with
+[04:22] agents, that was okay. But I think it becomes a very big problem when the only
+[04:25] mechanism you have to handle state when you're actually trying to use agents to
+[04:29] do useful things is kind of appending to some sort of list and a list that's like
+[04:33] held in Python process memory or you know in uh like a Node.js
+[04:39] process. So the natural question is if we have LM and LM are stateless and
+[04:45] basically the main thing we want to get out of state is we want to have
+[04:48] humanlike intelligence that means learning. So how do we actually do that?
+[04:51] um is how many people here have like heard of an MGPT?
+[04:55] Um okay. Yeah. So before I was you know doing the startup Leta I was a PhD
+[05:00] student at Berkeley and the CHAGPD stuff happened in the middle of my PhD which
+[05:04] is kind of like interesting because it meant that like most people doing
+[05:07] research kind of pivoted their research entirely. Um so in the few years of my
+[05:11] PhD post chat GBT I was really focused on memory and agents and I wrote this
+[05:15] paper called megpt with a bunch of my colleagues and some of my co-workers now
+[05:19] at lettera. Um and this is really talking about like a memory management
+[05:24] system for LMS. So if LM can't if they need some sort of memory management and
+[05:29] the de facto way we do this is like a human appends to a list. Well if you
+[05:32] believe LM get better and better and better shouldn't this be done by another
+[05:35] LM? like shouldn't the AI do the management for the it shouldn't AI do
+[05:39] the memory management for the AI. So when we called like this a me an LMOS we
+[05:43] really referring to like a memory management
+[05:46] system and this is effectively like a very high level graph or high level
+[05:52] figure of what I what I mean by like statelessness versus statefulness on the
+[05:55] left is basically what most people do. Um you know you kind of have a context
+[06:00] window. The context window is pretty loosely defined. It doesn't necessarily
+[06:03] uh it's not broken up into very distinct pieces. It's not tied to any state in a
+[06:06] database per se. This is just something that's held in process memory and you're
+[06:09] like appending to it over time. This is what happens if you use lang chain like
+[06:13] in the lane chain buffer memory or like query. This will got get buried really
+[06:16] deep in the codebase. And this is actually you know often why you need
+[06:19] tracing software like observability. Observability kind of exists as a
+[06:22] category because you have this black box of tokens that just gets shoved into the
+[06:25] LM and stapleness or like staple agents. And the the key thing we're trying to do
+[06:30] is understand that you know what's in the context window if we have a machine
+[06:34] assembling it there's some that means there's some sort of like context
+[06:38] compilation problem where there's an optimal way to arrange the context
+[06:41] window of an LLM and that context comes from state the state can be kind of very
+[06:47] large much more than can ever fit in the context window and this is basically
+[06:51] what you do if you're a power user of chatpt or a power user of claude you're
+[06:55] doing this yourself right you're kind of like compiling the context every time
+[06:59] you start a new chat because I think a lot of us, you know, probably have
+[07:02] experienced like having a chat that goes like way too long. It starts to derail
+[07:05] and then you have to redescribe everything you were doing back to chat
+[07:08] GPT like a pretty painful experience. Um, so can we basically automate this
+[07:11] with a machine? So yeah, taking a step back
+[07:16] like why do we even want staple agents? Like why are agents we have today not
+[07:20] enough? like why is the a why is the current like paradigm of LM driven
+[07:24] agents like not good enough to reach let's say like AGI or like some like the
+[07:28] AI we see in science fiction. I think the main problem is that agents we have
+[07:32] today they just can't learn from experience um or the way they learn from
+[07:35] experience is extremely limited. And I think if you're just running like
+[07:39] workflows um you might not notice this. So you might it might not really be a
+[07:43] big problem but I think if you're trying to build like assistants companions
+[07:47] co-pilots this becomes like pretty evident. Um, so imagine if you have some
+[07:52] sort of chatbot. So this is a a direct screenshot from like the MGPT paper. Um,
+[07:56] but you have an AI and a user and the AI, you know, it say it can see that
+[08:00] it's February 14th. So it wants to like ask the user what they're going to be
+[08:03] doing on Valentine's Day because they have stored in their memory some
+[08:06] recollection that the user's boyfriend is James. So the the AI asks like, "Oh,
+[08:11] hey, how's James doing? Do you have any special plans today?" And, you know, the
+[08:15] user says, "Actually, you know, James and I broke up." Um, so it's obviously a
+[08:18] very very bad mistake by the AI, but maybe it's like kind of unavoidable. Um,
+[08:23] but you see the AI here, if it has some notion of like a permanent readr store,
+[08:28] it should do something like transact that you know James is no longer the
+[08:32] boyfriend. James is the ex-boyfriend. Um, and if you don't do this kind of
+[08:35] thing and you run your agents for long enough and you just do like recursive
+[08:39] summarization or if you just have like a really long context model, you're
+[08:42] inevitably going to make some mistake where you tell, you know, you tell the
+[08:45] user something about your boyfriend James and that's like a devastating
+[08:48] error if you're trying to build like a consumer app, right? And it's also
+[08:51] something that just a human would never do. I think like humans, something like
+[08:54] this would get like written to your quoteunquote core memory very
+[08:57] aggressively. I think the other reason you want
+[09:00] stapleness and learning um I think many of us here maybe like kind of work
+[09:04] companies and we're trying to like use agents to make money or like drive value
+[09:08] you know for shareholders or whatever um but at the big difference between
+[09:13] consumer and enterprise is obviously data like enterprises have much more
+[09:17] data they can ever fit into like Gemini 10 million tokens right often like per
+[09:20] user you have more than 10 million tokens so how do you actually like learn
+[09:24] from that data so you we can kind of think of there being like another
+[09:28] training phase after the post- training like during post- training, right? You
+[09:32] train the model and then now the model is deployed into your enterprise and the
+[09:35] model should kind of learn about your company, right? And that's kind of like
+[09:39] training again, but it's not training into the weights. It's training like
+[09:42] into the incontext memory. Um, so staple agents naturally kind of like
+[09:46] encompasses this concept. And this is like pretty useful if you're trying to
+[09:50] build this this kind of stuff inside of companies.
+[09:54] And yeah, again, like really the reason I was kind of inspired to work on like
+[09:58] the MEGPD stuff and also the reason I'm really excited to be doing the work I'm
+[10:01] doing at Leta is because I'm very interested in just AI and making AI that
+[10:06] is very humanlike and clearly there is some very serious deficiencies with the
+[10:09] current iteration of LM agents. Um they're not very humanlike especially
+[10:13] with respect to how they deal with memory. Yeah. So I covered this already.
+[10:18] I think this is like a tweet I saw a few weeks ago or something I thought was
+[10:20] pretty funny. Um, but I think, you know, if you all use chat in this room here,
+[10:24] this is probably like a pretty universal experience. You kind of have a a
+[10:27] conversation that goes on too long and then, you know, you feel very devastated
+[10:31] because you're now going to have to mentally context compile again to like
+[10:35] redescribe to chatbt what's going on or like flaw or whatever you're
+[10:38] using. So, the promise of staple agents um there's actually a lot of promise
+[10:43] just in product, right? I think if you actually have true statefulness, then
+[10:47] that means that you know this sort of experience shouldn't happen. there
+[10:50] shouldn't be any derailment. So you shouldn't have, you know, like a clawed
+[10:53] instance going haywire. Um, and actually you should have the opposite happening
+[10:57] like the the experience should get better and better and better over time
+[11:00] as the AI kind of learns more and more about you. And this is, you know, kind
+[11:03] of like maybe the promise of trackp memory. Um, but you know, I don't think
+[11:06] any of that stuff is really working that well. And of course, I think when you
+[11:11] don't when you no longer just like shove stuff into a context window when instead
+[11:14] you're kind of really like creating me humanlike memory constructs, I think the
+[11:20] behavior of the agents just becomes more human like you have the same kind of
+[11:23] like fuzzy memory that a human has. You have the same kind of forgetfulness, but
+[11:26] you also have the same kind of recall. So in today's workshop, I think
+[11:31] it's kind of going to be split into two parts. I think the main thing we're
+[11:33] doing at the front is a notebook. And of course like you don't you can just watch
+[11:37] um but if you want to you can follow along in the actual the uh the Jupyter
+[11:41] notebook file. And the goal of that notebook will just be to like lay out
+[11:45] the basic ideas um behind this sort of like context management system in an
+[11:50] LLM. And at a very very high level you know if I had to describe it in one
+[11:54] sentence it's just that you make an LM either the main LM or like the
+[11:57] subconscious memory system LM just aware of the context problem. You kind of can
+[12:01] just describe to it in English. Hey, you are an LM and you have a context window
+[12:05] of like 128k tokens and I will let you know when you reach 100k tokens and
+[12:10] you're going to have to like manage memory with these tools. So, it's all
+[12:12] centered around tool calling. Uh, and I think centering around tool calling is
+[12:16] actually very effective because LM are getting better and better and better at
+[12:18] tool calling. And the second part of this workshop is going to be um kind of
+[12:24] like building these building these stateful agents in um the letter
+[12:28] framework and then also like the front-end ad. So I think if you're very
+[12:33] interested in kind of like no code stuff, I think this is pretty
+[12:36] interesting because I think we're all very very familiar with the paradigm of
+[12:40] the playground, right? It's like ubiquitous. Every single AI company has
+[12:42] their own playground. But I think once statefulness and like staple agents
+[12:47] become the dominant paradigm, which I'm pretty sure they will. Um then I think
+[12:51] you're going to have there's going to be a new iteration of the playground. And
+[12:54] the AD that we built, I think that's our best guess as to what that experience
+[12:58] will look like. But I'm sure like everyone in this room who's worked very
+[13:01] who has like spent a ton of hours with LMS, you probably have a very strong
+[13:04] opinion too on what that experience will be like. Like what happens when you know
+[13:08] chat GBT is no longer like it no longer has like a history bar on the side and
+[13:13] says it's like a unified experience like what is the correct UX for that? What's
+[13:17] the correct DX? Um and then if it's not a consumer app like chatbt if it's a de
+[13:21] developer tool like what do you as a developer want to see from your agent?
+[13:24] Like you probably want to see all the way down to the context window.
+[13:29] So, I said this at the beginning. I don't think any anyone necessarily
+[13:32] walked in midway. So, if you're going to follow along, you're going to want to
+[13:35] download Docker on your computer. I think most of the people in this room
+[13:37] have Docker on their computer. You can do this with PIP, but PIP is pretty
+[13:40] terrible at package management, so you might like hit a bug. Um, and yeah, I
+[13:44] already covered this, but if you're interested in any of the ideas that I'm
+[13:47] going over in the initial notebook, they're basically just strongly
+[13:50] distilled versions of the ideas from the METPD paper. um like reduced to their
+[13:55] like most simple um yeah their most simple components. But if you're like
+[14:00] interested in this more like a research capacity, you can also just read this
+[14:05] paper. Okay. And yeah, we're going to be doing this in Python. Um I guess like
+[14:11] how many people in this room have use Python as their main language versus
+[14:16] Okay. And I imagine like everyone else is Typescript or something. Yeah. So
+[14:21] basically what we're going to be doing is Python, but leta the um server is not
+[14:25] Oh, maybe Go or Rust. Okay. Yeah. Yeah. So we we don't have a Go or Rust SDK,
+[14:31] but we have a TypeScript SDK and then we also have a REST API. And actually our
+[14:34] Python SDK and TypeScript SDK are just like programmatically generated off the
+[14:37] REST API. Okay, so I I left this on the
+[14:41] screen a little bit earlier um to kind of like preempt any pauses here. So I
+[14:46] might just like continue on. Um and yeah these are these links are all in the
+[14:52] channel like workshops hypen leta on the the shared
+[14:57] slack. Okay let me hop
+[15:02] over oh and I think we because this workshop has a reasonable amount of time
+[15:07] allotted to it um I'm very open to like pausing for questions and stuff. So if
+[15:11] anyone has any questions, please just raise your hand. Not going to pause. And
+[15:15] then if you're just going too slow, we can fix that
+[15:18] later. Yeah. Okay.
+[15:28] [Music]
+[15:32] Questions? All right. So yeah, I guess how many people are actually going to
+[15:36] attempt to follow along? It'll be useful for reference. Okay, decent amount of
+[15:40] people. So, I'll try to Yeah, definitely uh raise your hand or something if
+[15:44] something's going terribly wrong and you're not able to follow. Um let me
+[15:48] boost the Okay. Is let me know when the font is large enough. Is this large
+[15:53] enough for the people in the back to to read? Okay, great.
+[16:06] And all
+[16:09] right. Okay. So, if you ran the if you did the Docker pull, um the next thing
+[16:18] you're going to want to do to b to start this entire uh notebook session is
+[16:23] you're going to want to start the lettuce server. So if you were using
+[16:26] Docker, the way you're going to do this is run this docker run command. I'm
+[16:28] realizing now that this is not Oh, this is this is in you can copy paste this
+[16:33] out of the GitHub um the GitHub link, but I'll also post it in the Slack.
+[16:47] Yeah. And then if there's a free endpoint that's live, so you don't
+[16:51] actually need to have these keys. Um, so you can just run this and it will you'll
+[16:55] be able to run the demo
+[17:01] fine. Okay. And then once you run it, you'll basically see the server kick off
+[17:05] in the
+[17:08] background. Yeah. So, while people I'll give everyone like a minute to do that.
+[17:13] And while everyone is kind of kicking off their
+[17:16] servers, might also just show you kind of a diagram of what's going on here.
+[17:24] Yeah. So basically the way this whole stack works is leta is like it's an open
+[17:30] source stack. Um it's basically fast API, Postgress and Python um in the
+[17:35] middle like Python logic. So in that Docker container like it's exposing an
+[17:40] API that's actually like very you know pretty robustly documented. You can like
+[17:44] go to our API reference here. Um and the API is how you interact with all your
+[17:48] agents. So if you're using the Python SDK, it actually just, you know, goes
+[17:51] over the the REST API and you basically build your Asian applications on top of
+[17:56] this API. So this actually looks very similar to like the chat completions
+[18:01] API. It's just like session based, right? And so you don't have to provide
+[18:05] the entire the entire conversation history every single time you interact
+[18:08] with an agent. So we'll see that kind of immediately in the notebook as well.
+[18:12] Okay. So I assume everybody who's following along has done the the thing
+[18:16] to launch. Um is there Okay, it says that there's a directory
+[18:21] that doesn't exist. Do I need to create that? Um, oh yeah, can you do
+[18:28] liker and all that? Okay. Did anyone else get that directory doesn't exist
+[18:34] problem? Can you send him because I can see Okay. Do you
+[18:41] So, are you able to see this here? Oh, no.
+[18:46] Okay. Yeah. So it's let me
+[18:57] Yeah, that fixed it. Okay, great. All right, any other problems? Does everyone
+[19:01] have a server idling now on their laptop? Great. Okay, so now that we
+[19:05] started the server, um now we can kind of like start running the notebook. So
+[19:10] this part is basically you're going to go to this go
+[19:15] to this channel click on this link you're going to see a readme and the
+[19:19] readme has all the commands so I I'll kind of like go one by one and paste
+[19:22] these commands into the workshop channel
+[19:27] it's a workshop leta yeah okay so you need basically clone
+[19:33] the repo
+[19:40] Once you clone the repo, just CD into the specific
+[19:51] example. I'm assuming everyone's using Docker, so I'm just going to kind of
+[19:54] ignore that.
+[19:59] Um, okay. And ideally everyone has Python installed in
+[20:05] their laptop hopefully.
+[20:28] Yeah. Yeah. And then once you run that Jupyter notebook command, um all you
+[20:32] need to do is just double click on the notebook here, if you're not familiar
+[20:36] with um Jupiter, it should automatically like
+[20:40] open a browser tab that should have this and then you just like double click and
+[20:45] you'll open the
+[20:49] notebook. Okay. So among the people who are following who is a little still not
+[20:54] to this notebook stage yet? Okay. Yeah. still so it's been a while.
+[21:00] Okay. Yeah. Yeah. No
+[21:03] problem. Okay. No other issues. Nothing on fire
+[21:08] yet. Okay.
+[21:25] All right. How's the Jeep looking? I had to spell that.
+[21:31] Okay. Okay. So, everyone has this notebook up who is intending to follow
+[21:36] along. Great. All right. So, yeah, if you're not familiar with notebooks, you
+[21:41] basically just execute them cell by cell.
+[21:43] Um, I mean number the first thing you're going to have to do here is like import
+[21:47] the client. So, again, this is a little bit different from some other frameworks
+[21:51] you're familiar with. Like I assume everyone here has like used lang chain
+[21:54] before probably or heard of it. um well like crew AI, autogen
+[21:59] um padantic uh AI things like that. So I think among those frameworks there's a
+[22:05] pretty big distinction with leta and that leta is like a server client
+[22:08] process and a big part of that is because the agents are intended to be
+[22:11] staple and like persist indefinitely. So it's very hard to like persist things
+[22:15] indefinitely if you're kind of holding everything in application state as
+[22:18] opposed to having like a server that's a centralized source of truth. So we
+[22:21] basically run the server on the left. Um we connect to the client. You know, you
+[22:25] can actually park the server anywhere you want because it's a Docker image.
+[22:27] You can like run this in the cloud. It's very easy to like drop on Kubernetes or
+[22:30] something. In this case, it's running on our laptop. So we just need a local host
+[22:34] and the default port. So the first thing we're going to do is create an agent. So
+[22:39] I want to make sure that everyone can like execute this cell. So I'm going to
+[22:42] execute it one more time. And you saw like my server kind of fired off on my
+[22:46] left. Um yeah. So I I'll kind of walk everyone
+[22:51] through the code here. So basically, you know, with chat completions, which I
+[22:56] assume everyone's familiar with, the paradigm is you create the agent in
+[22:59] memory and then you kind of like pass the whole agent off to the server and
+[23:03] ask like, you know, complete the state, complete like this one more message in
+[23:07] my in my message history. Instead of let we we first create the agent and then
+[23:11] once we we create the agent, we have a handle for it. And once we have that
+[23:15] handle, we can kind of send it messages and we never have to send it the full
+[23:17] state. We don't have to track that anymore. we just send individual
+[23:20] messages. So the the main components of memory in
+[23:25] a lettera agent is just memory blocks. So these are just strings. Um in this
+[23:30] case, you know, we're doing something pretty simple and stupid like the
+[23:32] human's name is Bob the builder. Um and then the persona for the agent, we're
+[23:37] just using that my name is Sam. Um this AI and this is all arbitrary. The only
+[23:42] things that these handles are useful for actually is for the agent to edit these
+[23:45] own handles or edit the values on these handles. So, as we'll be able to see
+[23:49] later in the notebook, the agent can actually go in and like rewrite its own
+[23:52] memory. So, if the agent, you know, decides that I like ice cream or I like
+[23:55] vanilla ice cream, it can write to its memory block, you know, I'm no longer
+[23:59] just Sam the AI, I'm like Sam the the AI that likes vanilla ice cream, right? Or
+[24:04] if you know Bob the Builder says,"I broke up with my girlfriend um or my I
+[24:09] broke up with my boyfriend James." You know the the AI can actually use this
+[24:12] handle to go in and edit this block of the string and say, you know, the
+[24:16] human's name is Bob the Builder and they also broke up with their boyfriend
+[24:19] James. Yeah, a quick question. So what's the
+[24:23] difference between persona and building? Yeah, so it's there's really no
+[24:29] difference under the hood. These are all just strings that have references. Um,
+[24:33] but if we look at the system prompt, I'm going to dump the system prompt a little
+[24:36] bit later. We did in the system prompt write some stuff about the human and the
+[24:40] persona that the human block is meant for like the user interacting with the
+[24:43] agent and the persona is meant for the agent to kind of adapt this interaction
+[24:47] style. Right. So there's kind of like a base agent and then the base agent gets
+[24:50] further mutated by this persona. Yeah. Okay. Any other questions about anything
+[24:56] here? Um the you know here we're you would if you're using OpenAI or
+[25:00] something you'd do OpenAI like GPT4 but we're just using a free endpoint. Um one
+[25:05] thing that we'll get into a little bit later is that in Leta because the entire
+[25:09] premise of the like runtime is that it's a context management system. So it
+[25:12] controls the context window. It's actually very easy to artificially uh
+[25:16] cap the context window length. So you can have agents that basically will
+[25:19] never send a payload over 10k tokens let's say. I think that's actually very
+[25:22] common in enterprise settings where you're running like a workflow for a
+[25:25] very long period of time. it's getting longer and longer and longer. Like
+[25:28] something you'll hear from a lot of companies that use Sonnet for example is
+[25:31] like how do I prevent my payload from creeping up to 200k, right? Because if
+[25:34] you feed 200K, you're waiting like minutes on a response, right? Whereas
+[25:37] like even 10k tokens, I think on sonnet you'll wait like 10ish seconds or
+[25:40] something. Um in many cases, you kind of want to like cap the context window to
+[25:44] be really short, like 4K, but then you also want the agent to like not have any
+[25:48] perceived loss of memory. You want it to kind of like retain its memory over
+[25:52] time. Okay. So, let's actually like yeah
+[25:56] message the agent. Um there's a link here that we'll this is what we'll do in
+[26:00] the second half of the workshop. We'll look at like the UI builder, but for now
+[26:03] we'll just like stick in Python. We'll stick to Python. Um so yeah, if we run
+[26:08] this message, we're going to say something like how it's going. You're
+[26:10] see seeing on the left the server is firing. Um and we can print the response
+[26:16] here. Uh so in leta like every single agent actually comes with reasoning by
+[26:21] default. And this allows you to like keep reasoning that you built in like R1
+[26:25] and like port it over like a GPD40 mini or something. And there's just like
+[26:29] different forward adapters for the reasoning. Um but yeah, any are there
+[26:34] any questions about this? We basically I think this should be something a lot of
+[26:37] people here are familiar with, right? This like dictionary that's in chat
+[26:40] completion style we pass over to the server. Um and then yeah, we have a
+[26:44] message here that's like you know the user is reaching out casually. Let's
+[26:46] match their energy. Hey there, I'm doing great. How about you? Um, you can even
+[26:50] do something like again because this is um because this is
+[26:57] staple. This is actually when I send this, it's going to be a follow-up
+[27:00] message. It's not going to be like a fresh chat. So, if you say, "What do you
+[27:03] know about me?" See, the agent now says, you know,
+[27:07] the user wants to know about what I've retained about them. All I know is that
+[27:10] your name is Bob the Builder. If you want to share more and like, you know, a
+[27:14] ridiculous amount of emojis. I think this is because under the hood this free
+[27:16] endpoint is running GP4 mini which is like pretty emoji prone. Yeah. Five and
+[27:21] I'm also getting a chain of thought. Where is that coming from? Yeah. Yeah.
+[27:25] So, so one thing about let is we kind of force all the agents to follow a react
+[27:29] style pattern with like reasoning and so um kind of down in the weeds like the
+[27:34] way it works is like sonnet itself or claude when you use like the chat or the
+[27:40] um the consumer app it packs like ant thinking XML tags in. So like it already
+[27:45] is like kind of a reasoner in some capacity and because of we know that it
+[27:49] uses like XML tags like that we can actually like force those into the
+[27:52] content field. So we like actually inject and parse those out.
+[28:00] Yeah. Okay. Yeah. And then just to like further drive home the point that this
+[28:03] is stateful we say sure. Um I feel like sure if it was like an opening message
+[28:08] would be pretty confusing. The agent would say something like I don't know
+[28:11] what's going on. Um but in this case it's seems open to
+[28:16] sharing more. Okay bad it's bad model behavior but yeah um but we'll see also
+[28:23] later in the AD you can just see well it'll be like a UI experience so you can
+[28:26] kind of visualize this a lot better. I just wanted to start with Python. Um
+[28:29] yeah so basically there's like three different me or there's a handful of
+[28:32] message types that are going to be a little bit different from OpenAI but
+[28:37] they're still rooted in the same concepts. reasoning message. Um you're
+[28:40] probably familiar with this if you use like the R1 API from Deep Seek. You use
+[28:44] any of the 01 03 models. So we have the same sort of content field. There's also
+[28:48] assistant message. So um this is because like content itself is treated as inner
+[28:53] monologue or reasoning all the time. Um so this is like distinct and and these
+[28:58] are like pretty straightforward like tool call message, a tool call return,
+[29:01] the system message and the user message. Um obviously like a very important part
+[29:05] about being an agent framework is often executing the tools for the agent. Um
+[29:09] you know like OpenAI they don't execute tools for you unless it's one of the
+[29:12] pre-approved tools like code interpreter. Let these other frameworks
+[29:15] like you know langraph or link chain um we execute tools on the server side. So
+[29:20] that's why we're able to like provide a tool called return and in leta like the
+[29:24] tools are actually also sandboxed um by default. Okay. Uh any questions about
+[29:32] this like initial message we sent? Um or Okay,
+[29:37] great. Yeah. So the next thing we're going to do is basically just like
+[29:40] unpack all the state of the agent. So the reason this is like kind of
+[29:44] interesting is because this is fundamentally everything that the agent
+[29:49] is, right? The agent is just its system prompt, its tools, and then in let us
+[29:53] specifically we have a concept of like three tiers or two tiers of memory. The
+[29:56] core memory that's in the context window. So, this is like very top level
+[30:00] stuff. You know, if you see your friend on the street, um you see their face,
+[30:03] you immediately remember stuff about them like their name, their hobbies, the
+[30:06] last time we chatted, but if they're a childhood friend, you don't remember
+[30:09] what you did like 10 years ago on a random like, you know, February 22nd,
+[30:13] 2001, right? That's not going to be like default in your brain, but it might be
+[30:16] visible to you if you like went on your phone and you went through your eye
+[30:19] photos, right? Um, so it's a pretty similar concept where like we want
+[30:22] because at the end of the day LM, they're kind of like mimicking human
+[30:26] reasoning, mimicking human behavior. it makes a lot of sense to actually kind of
+[30:29] like mimic in text the way human memory works. So we have core memory that's
+[30:33] like top level and then we have what we call archival and recall but these are
+[30:37] effectively just data sources that exist outside the context window and the agent
+[30:40] can like quote unquote jog its memory if it wants to think about something. So it
+[30:44] can say like hey like what did I do um you know what did I do with Charles
+[30:48] February February 22nd 2001 and it can like attempt to search the database. So
+[30:52] you probably heard a lot about like agentic rack. This is effectively the
+[30:55] same concept.
+[30:59] Can we change the system prompt? It says read only there, so we cannot change it.
+[31:02] Oh, so the agent can't change it, but you can change anything you want. Yeah.
+[31:06] Yeah, you can change the system prompt. Um, yeah, the system prompt actually is
+[31:10] like quite old. You wrote it like when this is written like when the initial
+[31:14] MGBT like research was being done like in summer of 2023 or something. Um, so
+[31:18] yeah, you probably do want to change this if you're running something in
+[31:20] production. Yeah. Um, the other thing that's stored in here are tools. So by
+[31:27] default because you know Mamgbt agents they have like memory management built
+[31:31] in they need tools to manage their memory. So core memory we have two
+[31:34] things like appending to blocks. So saying like the user is not only Bob the
+[31:38] builder but they also have a boyfriend called James replacing you know the
+[31:41] user's name is not Bob the builder it's actually Charles. Um and then like
+[31:45] searching memory you can either do a very specific conversation search or
+[31:48] more generic like rag query. And then you can also like insert into this
+[31:52] external database. So if you look at like what's actually in the memory if
+[31:57] you're kind of into like API style programming like you can basically do
+[32:01] whatever you want with your memory blocks because it's just you know these
+[32:04] are just strings that exist in Postgress in some table and they all they all have
+[32:08] identifiers they have block ids so you can read and write to them. Um you can
+[32:12] also share these blocks among agents so you can have a bunch of agents that are
+[32:15] all acting as part of your organization. say it's like a multi- agent system and
+[32:18] because the blocks just live in a database and they get sent they get
+[32:22] brought out of the database whenever the agent needs to think you can have these
+[32:25] blocks like linked together so multiple agents can have the same block like they
+[32:28] can all share information about the AI engineer conference that's held in one
+[32:32] block of memory it doesn't have to be duplicated and then when one writes the
+[32:35] block it like immediately gets broadcasted
+[32:38] by definition does all of the all of the archives in memory have to also be in
+[32:43] the recall if the recall contains all the history that also contains anything
+[32:48] about would have been archived. Yeah. Yeah, that's a great question. I think
+[32:51] the difference between archival and recall really comes down to like if
+[32:55] you're using this for like a chat style application. Um, when we like worked on
+[32:59] the original MEGPD project, we're actually like a little bit conflicted as
+[33:03] to whether to like merge these into one general concept because at the end of
+[33:07] the day like with an LM there's the stuff that's in the context window and
+[33:10] the stuff that's out of the context window. So why do you have to like start
+[33:12] being prescriptive about like the way the stuff out of the context window is
+[33:15] stored? Um we just thought in most use cases people want to give their agents
+[33:20] the ability to specifically look at prior messages. Um and then separately
+[33:25] there's just like a general readr data store. You can just like read arbitrary
+[33:28] data, write arbitrary data. It's like an infinite size. So that kind of just
+[33:31] looks like a vector database of strings. It could also be like something
+[33:34] different. It could be like elastic search cluster whatever you want. But
+[33:37] you are intentionally allowing some duplication between them. It's kind of a
+[33:41] different way for the LLM to search effectively. Yeah, it's a different way
+[33:45] for the LM to search. Well, the thing with the re if you set up a recall
+[33:48] memory, the recall memory, it's effectively conversation history. So,
+[33:52] conversation history you cannot manually write to. It's kind of like write
+[33:55] protected, but it gets written every single time by default an event happens.
+[33:59] Whereas the archival memory store is like something that you have to actively
+[34:02] say, hey, I have like a huge document like this big PDF. I'm going to I don't
+[34:06] want to keep it in in the context window. I'm going to dump it out of the
+[34:08] context window. So that would be like the archival memory like free readr
+[34:12] whereas the recall thing is purely trying to mimic like a conversation
+[34:17] search function inside of um like iMessage inside of like WhatsApp or
+[34:27] um how does tools memory tools um get used? Do they do we just have a flat
+[34:35] list of like other tools that agents can use and memory tools would that affect
+[34:41] the agent tool? Yeah, that's a great
+[34:44] question. Um I I think by default if you just set up a basic agent in leta and
+[34:49] then you start like adding more tools to it like tab search iical calendaruler
+[34:54] whatever those will be just like more tools that get added to a list that
+[34:58] started with six. Um, but of course like if you if you built a lot of agents with
+[35:02] tools before, you know, there's like agents start to get confused if you had
+[35:06] too many tools. So there is like a trade-off here. And one thing that we've
+[35:09] been working on recently is basically the idea of having like a dedicated
+[35:14] agent to just handle memory and it's effectively like a shadow of the other
+[35:18] agent. It's like a like a subconscious that is like kind of it's like a ghost
+[35:21] in the shell. It can't actually participate. All it can do is read and
+[35:24] write memory. But when it reads and writes memory, it's like using a shared
+[35:28] memory block. So, it's like reading and writing to something that like
+[35:30] automatically updates like the uh the active agent. And that's a way to kind
+[35:35] of like move all the tools that aren't for act like general API actions out of
+[35:39] the main agent.
+[35:43] Yeah. Are you familiar with the cognitive?
+[35:47] What's that? Yeah. Yeah. So, a few different types of memory that are
+[35:52] mentioned there would be things like longterm memory. So when you talk about
+[35:57] things like recall or archival like is letup bringing those databases to like
+[36:03] this interaction or is the developer responsible for bringing those databases
+[36:08] to like this or something? Yeah. Yeah. Another great question. So I think with
+[36:12] Koala um yeah another great paper. I think the inspiration from them is a
+[36:17] little bit more from like the cogi angle whereas when we wrote the paper we were
+[36:20] thinking more about like computers and memory harvey and computers. So for us
+[36:24] like our answer to that is like oh you want to have like something that really
+[36:27] starts to look like human memory semantic episodic you bring that and you
+[36:31] can like add that as a plugin. Um but we all we care about is like the hierarchy
+[36:35] of tokens. There's tokens that are in cache or like in context and tokens that
+[36:38] are out of like the cache. Um, so yeah, basically if you wanted to have like
+[36:43] some more psychological leaning concepts like from Koala, you could kind of like
+[36:47] write them as as tools that either like populate
+[36:51] the core memory or like sit outside and have to be drawn in. Yeah. Today I build
+[36:55] like very transactional agents. So like the in this particular example, let's
+[36:59] just imagine it's like a CRM. So probably not going to use Salesforce to
+[37:03] track James's like status. Um, in theory, if we wanted to track
+[37:07] something like that, that's like a safer system that has an object for people
+[37:12] like a contact that I preserve in that like longterm system. So I'm trying to
+[37:17] understand like if there's a differentiation in use case whereas like
+[37:20] maybe we're just talking about like a local machine as opposed to like an
+[37:23] enterprise environment with you know thousands of employees like can you
+[37:28] maybe show that or tell me like why a tool that's responsive for tracking the
+[37:33] state of James relationship um is worse or different than like a memory based.
+[37:40] Yeah. So, um, yeah, correct me if I I I'm not understanding your question
+[37:45] correctly, but one thing you can do is because like all these these memory
+[37:50] blocks, they're all backed by an API and you can access them directly. So, if you
+[37:53] go to it's like a blocks page, where is this? Okay, here we go.
+[37:59] Yeah. So, you can basically like modify blocks by handle. So you can in your app
+[38:03] layer effectively do something like every time your agent is run or invoked,
+[38:07] you do a hard sync where like you're going to do some sort of Salesforce CRM
+[38:10] compile down to a string and that string is going to get clipped at 10k
+[38:13] characters and then that's going to get patched into the block. Um yeah, so you
+[38:18] can do kind of stuff like that. Um, but I will say like the general way like
+[38:24] Letto was designed is very much leaning on the thesis that like you just want to
+[38:29] remove as much human design of memory management as possible and we're just
+[38:33] like banking on the LM getting better and better and better and actually what
+[38:36] you what you will see is like if you try to use R1 with a extremely annoying
+[38:40] because like firstly the way the like reasoning APIs are designed is that
+[38:45] you're not supposed to pass the reasoning from a subsequent step into
+[38:47] the API again which means that like if an agent thinks for a very long amount
+[38:51] of time and it's like oh I'm going to do this then this and this then this and
+[38:54] it's like wow that was amazing that's exactly what you should do it actually
+[38:58] immediately forgets in the next turn right it only gets to do one thing and
+[39:01] that's to think again um so that's like one issue with like reasoners and react
+[39:04] style agents but um you will notice that actually the tool use is like pretty
+[39:09] exceptional um so I think that kind of like aligns with the thesis that these
+[39:12] agents are just like going to get better and better and better at doing like the
+[39:15] agent it's there could be a separate agent that does the CRM sync into a blog
+[39:18] right it doesn't have to be done manually. Yeah. Um and then sorry final
+[39:22] question here is the property that I think is most compelling for at least
+[39:25] what I've seen so far is the distillation of the agent like into some
+[39:29] kind of summary. So do you control like the perspective of like how a memory is
+[39:35] bind how synthesis is actually like happening when it's creating memories.
+[39:40] Yeah. So the the agent I see. Yeah. Well, if you have agents
+[39:46] that are generating and synthesizing the memories, then you can always like tune
+[39:50] their system prompts or their personas to like adjust the way the memories are
+[39:54] written. Um, but yeah, it's it's all pretty configurable. Yeah.
+[40:00] Okay. Maybe I'll take like one question in the back and then uh yeah, I have a
+[40:04] more of a question. So if you think about the way we design
+[40:12] um and microservices different
+[40:18] system based on your discussion with enterprise customers especially do you
+[40:22] see that we evolving towards agentic workloads where like
+[40:28] microservices takes a back state and a workload
+[40:37] I I think they can the two can exist uh they can coexist pretty easily um
+[40:42] through the use of tools. So I think what I'm seeing in like enterprises is
+[40:46] that there's just extremely heavy use of like I think almost every single agent I
+[40:50] see being used in some company they're they're all like they're trying to
+[40:55] connect tools to the agent. So and it's like pretty heavy tool use. Um, so I you
+[41:00] can I think think about microservices like basically starting to become
+[41:04] designed more for like agents maybe. I think that's like one thesis that a lot
+[41:07] of people have. There's going to be like a new wave of APIs that are designed all
+[41:10] for agents. Um, yeah, but I think the two will kind
+[41:16] of like exist. Um, but I think there are like microservices that will become like
+[41:20] agentified where like the microser itself has higher it's not like latency
+[41:24] bound. So you can like run a fat agent on the back end and it's kind of like
+[41:27] not super sensitive to error. So it's okay for it to just be smarter 99% of
+[41:31] the time and then like completely break 1% of the time. Yeah. Okay. I'm going to
+[41:37] keep going. Um but we'll definitely pause for more questions later. So okay,
+[41:42] so we were just looking at like memory blocks. Um the other thing I think I
+[41:46] might breeze over this a little bit um just for sake of time because we'll see
+[41:50] it again visually and I think like visual stuff is always more interesting
+[41:52] than just plain notebooks. Um but there is this problem if you have a system
+[41:57] where there's a lot of information outside the context of the LM where like
+[42:01] you can't know what you don't know right so if the agent doesn't see something
+[42:05] how is it ever going to know that it has access to that? So a very simple
+[42:08] solution is you can just provide like metadata statistics right so you can
+[42:11] tell the agent somewhere in this context window that hey you have like 13
+[42:14] previous messages and if you want to find them you can use this tool and you
+[42:18] can also tell the agent that you know you have um like x total memories that
+[42:22] are in your archival memory. So this is if you have like a vector database you
+[42:25] can just explicitly say these are like the the
+[42:29] statistics. Okay. And then if we look at like the messages that are actually in
+[42:32] the message buffer um it's pretty straightforward stuff. Um, I think the
+[42:36] really big difference between like Leta and another framework is Leta does very
+[42:40] aggressive managing of this buffer. So, you can basically set it to like it's a
+[42:44] much more intelligent version of like a recursive summarization mechanism,
+[42:47] right? And lastly, this is like the the archival memory we're talking about. You
+[42:52] know, there's nothing in there, so it's just going to be empty.
+[42:55] Um, yeah. So I think just to drive home like what core memory really is and like
+[43:01] how these memory blocks influence agent behavior because I think if you're
+[43:04] developing agents the main thing you're going to be doing is like tuning in
+[43:07] context memory. That's like the main way you change the the behavior of the
+[43:10] agent. Um you know we could set we could tell the agent something like my name is
+[43:14] actually Bob. And I think the last thing we told the agent is that you know
+[43:18] um my name is actually Bob. I think our name is Bob. strange like my name is
+[43:23] actually
+[43:27] Charles. Okay, we can see actually you're seeing like a memory edit happen
+[43:30] on the server. Um this is a pretty big dump if you look at what the agent said.
+[43:34] So that you see the agent is like doing react style reasoning. It's saying the
+[43:37] user has corrected their name. This is important. I'm going to call this tool
+[43:41] core memory replace and Bob the builder is now Charles. Um and then it actually
+[43:45] chains a tool call together. So there's like tool call chaining built into the
+[43:48] letter by default. And then it says the user's name is updated in memory. Um,
+[43:52] and then finally it says like an external message. Hey, got it Charles.
+[43:55] Thanks for letting me know. So this is two LM calls. There's like one LM call
+[43:58] here and then one LM call here. And in letter agents will kind of like chain
+[44:02] indefinitely. Um, you can obviously set like limits in the
+[44:05] API. And the way they chain is basically through heartbeat requests. So is who
+[44:10] here like is familiar with react agents? When I say react, is everyone kind of on
+[44:13] board? Um, so it's like one of the OG design paradigms um for agents. same
+[44:18] author as Koala actually but in React basically the agent follows like um a
+[44:23] reasoning action like observation loop and but usually the agent actually has
+[44:27] to say I'm done and the agent will loop indefinitely until it says I'm done. In
+[44:31] letter leta we actually do the inverse where the agent has to say I want to
+[44:34] keep going. Um I think this is actually generally more practical because it it's
+[44:38] like much less likely the agent will derail if it has to explicitly say I
+[44:41] want to keep going. Um so we call those heartbeat requests and yeah now if you
+[44:46] like you know use the API retrieve the memory you can see it says the human's
+[44:49] name is Charles. So very briefly like the archival memory I think there are
+[44:54] some questions about that. What does that even in the default implementation
+[44:57] is just a vector database. So I said here you know remember that I love cats
+[45:01] in your archival memory. Um yeah you can see it took a little bit
+[45:06] of time because I think it actually embedded right. Um it says I inserted
+[45:09] into archival memory. Uh yeah, the user got cats. And then again, this is a
+[45:14] chain, right? So it like did one tool call and then it comes back and says,
+[45:17] "Got it. Um cats are adorable." Um and you can of course like manually edit
+[45:22] archival memory. So you can manually run an insert. Let's like insert Bob. I
+[45:26] guess it's kind of confusing now because it's Charles, not Bob, but
+[45:29] um yeah, we'll just slip with it. And if we ask the agent, you know, like what
+[45:34] animals do I like? You generally, it depends on the model. If the model is
+[45:38] like stupid, you might have to like tell it specifically to fetch external data.
+[45:41] But if the model is like smart enough like sonate, you won't have to do this.
+[45:45] Um, so you can see that the agent searched archival memory. This is stuff
+[45:48] that's not in the context window. It's bringing it into context and again
+[45:52] chaining and saying, you know, hey, you like ts and boss interiors. What makes
+[45:55] them our favorites? Um, okay. So, any questions here on anything so far? This
+[46:01] is just, you know, pretty basic memory editing via tools. So you're giving the
+[46:04] agent the ability to edit its own memory inside the context window. Yeah. That's
+[46:09] not what playing with this. I sort of had to commit a bunch of my preferences
+[46:12] to memory. Yeah. And then reset my compensation history and expected it to
+[46:17] just pick up these previously remembered ser. But it didn't. I had to go like,
+[46:21] hey, don't you remember? And then when it picked it up, what's the expected
+[46:25] behavior? Interesting. So when you say reset message history, is that in the AD
+[46:29] the web UI or? Yeah. Yeah. Yeah. Interesting. And it core memory had been
+[46:35] edited or was it going into archival? It's all archival. Oh yeah. So that's
+[46:40] another that's where you'll notice like there's always this like engineering
+[46:43] design problem where if it goes into archival then it will have to fetch and
+[46:46] pull from archival first to see it. So it's like it's a you know it doesn't
+[46:50] know what it doesn't know um problem. Um this is actually fixable via like tool
+[46:55] rules. So you can enforce behavior. You could make a tool rule that says every
+[46:59] time you enter the entry point of the LM the step of the agent the agent has to
+[47:03] call archival memory search. So this is kind of like building graphs onto leta.
+[47:08] So I guess how many people here are familiar with lang
+[47:11] graph. Okay a lot of people. Yeah. So I think lang graph is like pretty
+[47:14] intuitive right you can because we all know you know like flows graphs. Um it's
+[47:19] very easy for us to think about like decision trees. Um I think with lettera
+[47:24] it's kind of the inverse. everything starts off as a fully connected graph.
+[47:27] The agent could do anything, but then you can kind of like start to enforce
+[47:30] restrictions by peeling away edges. Um, so you can basically say, hey, you know,
+[47:34] when you start, you actually can't do everything. You can only do this, but
+[47:37] then once you do this, you can do everything. Um, and obviously, you know,
+[47:40] I'm I'm biased, but in my personal view, I think that's a little bit more
+[47:44] forward-looking just because if you assume that LM are going to get better
+[47:47] and better and better at tool calling, they're going to get better and better
+[47:49] and better at decision-m, then you should want to give them freedom, right?
+[47:52] because that's kind of what separates like modern AI from classical AI. We've
+[47:56] had decision trees for a while, right? Yeah.
+[48:01] How does the model decide whether it wants to go in for memory versus memory?
+[48:07] Because I a couple things that pretty but they have all gotten stored into
+[48:14] core memory. Yeah. Yeah. So I think there is one
+[48:18] thing that's built in by default which is core memory has limits and when a
+[48:22] limit is hit that actually the way that works is let's say the the agent is just
+[48:26] the agent's being really lazy and it's like saving everything into core memory.
+[48:29] It's saving like timestamps dates like being like super
+[48:34] lazy at a certain point in time it will run out of space because you have to cap
+[48:38] the limit of those memory blocks because at the end of the day there is a context
+[48:41] window limit too. And when it if it attempts to write to core memory to a
+[48:45] block that is at its limit, the agent will actually get an error. And actually
+[48:48] the prompt engineering around that error usually it actually suggests the agent
+[48:53] should clear by evicting to archival memory. So it kind of is like a OS style
+[48:57] like flush concept where the the system basically says hey you ran out of space
+[49:00] but you should consider like summarizing and pushing stuff out to archival
+[49:03] memory. Um but yeah again you can you probably don't want that behavior
+[49:08] anyways. Um, so this is all kind of where prompt engineering and like
+[49:11] seeding of behavior comes into play. Yeah. Okay. And I'm going to show a
+[49:19] better I think it's much more interesting to like show custom tools in
+[49:21] the UI than it is in like a notebook. But of course you can like write custom
+[49:25] tools. You can only write tools in Python because the back end is like
+[49:28] Python. Um, but we can write a custom tool here that's going to like reset the
+[49:32] memory of the human in particular. So you can see that you know because we
+[49:36] have a Python client we can write Python tools you can actually like be extremely
+[49:40] meta and you can import the client inside of the tool. So this actually
+[49:43] means that you can have an agent like have full access to your lettuce server
+[49:46] and the agent can create other agents and the agent can like man manage the
+[49:50] memory of other agents like you kind of have like a it's the possibilities are
+[49:54] pretty endless because you can't just like import the client inside the tool.
+[49:58] In this case, we import the core memory modify block tool and then we just like
+[50:02] wipe the value to um to the empty string. So if we like run this, we have
+[50:07] to first attach the tool um we have to we have to upload it to the database.
+[50:12] Then we have to uh in this case actually we're creating a new agent that has the
+[50:16] tool. And if we say like reset your memory, please like the memory here is
+[50:20] Bob. Uh we should see that the memory gets
+[50:24] wiped. Yeah, memory reset successful. And if you look at the value, the value
+[50:28] is empty. Um, but yeah, I think it's it'll be a little bit more fun to look
+[50:32] at examples of like tool editing inside of the
+[50:34] UI. Okay, so that's the end of the notebook. Um, now I think we kind of go
+[50:38] on to the fun part, which is uh the UI, but I'm going to pause here. Are there
+[50:43] any questions about any of these concepts? Um, I know I was going a
+[50:46] little bit quickly just I didn't want to run out of time here.
+[50:48] [Music] Um, okay. Yeah, if you can just maybe
+[50:54] speak a little more on what's happening after you like send a message to the
+[51:00] elements. Like my impression so far is like you have this memory, you're
+[51:04] stitching that together with a prompt that's becoming like what you pass in
+[51:09] and then like what happens with the output that you receive like I saw that
+[51:14] at some point like a memory was like sort of committed to the archive or
+[51:19] committed to the memory like how is that decision made?
+[51:24] Yeah. So in in Leta every single um invocation of the LM is a tool call.
+[51:31] So if you've used like the tool call API and check completion something we have
+[51:35] it on all the time. So even when the agent wants to just say hello to the
+[51:39] user, it has to call a tool called send message. Um so that actually is like
+[51:42] pretty useful because it means you can like run the agent in the background
+[51:46] much more frequently because it doesn't always have to say something to the
+[51:48] user. Um and it also means that you you always have tools that are on. So like
+[51:54] when this loop is basically the a payload gets created um when we send
+[52:00] this message then the payload is the system prompt the memories the messages
+[52:05] and the tool schemas and that's it and then the agent here is required to
+[52:10] output a tool and it's also required to output a justification for using that
+[52:14] tool like a reasoning snippet and if we're using like the R1 API that
+[52:17] natively builds in reasoning we of course like use their reasoning like the
+[52:20] way they design reasoning but if we're using something that doesn't support
+[52:23] reasoning by default like cloud sonnet then we do some sort of injection
+[52:27] mechanism with like think tokens so that's how this reasoning happens so
+[52:31] this is like a single this is just a single lm JSON output that's like a tool
+[52:36] call that has one field that's like thinking and then the actual tool
+[52:40] invocation itself and the last thing I talked about which is like the request
+[52:44] heartbeat so if the agent wants to go again the agent decides hey I want to do
+[52:48] multiple things it's always going to turn this keyword argument to true um
+[52:51] and And then if this keyword argument is true when we parse that tool and it and
+[52:55] it um execute it we run the loop again. Yeah. Sorry. Do you have like experience
+[53:02] oristics around the number of tools where you start to see performance
+[53:06] degrade and like how that might mess with the memory as a tool? Yeah. Yeah. I
+[53:11] think generally speaking if you go above like 12 15 tools you start to get
+[53:16] degradation.
+[53:19] Oh, in um in the new Sonnet. Yeah. Okay. Yeah, I mean I'll be surprised if Yeah,
+[53:28] I guess I could try it. Yeah, I've definitely noticed on like GP4 mini and
+[53:31] stuff like anything above 15 um starts like kind of push limits. Um but yeah, I
+[53:38] mean I guess they they might have like had some good post training with like a
+[53:41] ton of like tools that are not memory are the same
+[53:45] like class as the memory precisely. Unless you use actually in the GitHub
+[53:49] repo we have like an alpha build of like this new agent that's like a split
+[53:53] thread agent where the memory tools get put on one agent and everything else
+[53:56] gets put on the other but by default it's exactly the same thing. It's like
+[53:59] the same passive tools. Yeah. Just a question about context window. So is
+[54:03] that like the limit of how much context the um tool is going to pass to the LM?
+[54:09] Like for example you said it 4,000. So uh wait sorry I said that one more time.
+[54:15] I was pulling up a slide. We set it at 4,000 for this agent. So
+[54:20] does that mean like the maximum of contacts that you're going to send to
+[54:24] the LM? Yeah. Yeah. So the way that works is basically you'll never go over
+[54:29] 4K. Um and if you go over 4K by accident and we catch an API error that like a
+[54:34] context overflow happened or also we can preemptively count the tokens as they go
+[54:38] to the server. Then we run we evict a certain amount of messages into the
+[54:42] recall memory. So it's like still available but via a search function. We
+[54:45] run a summarizer and the summarizer is configurable. It can be like a
+[54:48] truncation recursive summary. Um and then we that that way you never go over
+[54:52] like 4K tokens. If you set it to 4K then it's automatically summarize and then
+[54:58] precisely. Yeah. Thank you. Okay. So the the next step here um leave your server
+[55:02] running if you have it running. Um but it's to basically go to this URL um
+[55:09] app.leta.com. Um and your Oh, I think I have Chrome profiles loaded or
+[55:14] something.
+[55:17] Yeah. And like once you go to the site, you basically need a
+[55:21] goo you need a Google link or you need a GitHub login. There's also a local
+[55:25] version you can use that's like a desktop binary, but um I wouldn't
+[55:29] recommend using that just because it's a little bit more buggy. It's like an
+[55:31] alpha build. Um so yeah, hopefully you you've been able to get to this point.
+[55:36] Actually, I think your you your setup will look like this. Um, so everyone who
+[55:42] is following along, please let me know if you're able to get to this this page
+[55:48] here. Okay. Was there anyone who was not able to get to this? Who was running a
+[55:51] server on their computer? Okay,
+[55:55] great. All right. So, if you're able to get here, um, basically what I wanted to
+[56:01] do is show you like to like show you how to do what we
+[56:05] did, but like much faster. Um, I think often it's like much if you're
+[56:08] iterating, it's much faster to do it in like a low code environment than it is
+[56:12] in like an SDK. I think obviously when you go to production, everything's like
+[56:16] programmatic. It makes sense to be an SDK. But in this case, like we can do
+[56:19] exactly what we just did by like creating an agent. This is the API call
+[56:24] that created an agent. It actually creates it with an empty memory. And
+[56:27] then we can do something like
+[56:41] I think this is like loosely what the Python notebook was doing. Um, and yeah,
+[56:46] if you just ran it without any keys, it's going to be on letter of free,
+[56:49] which is under the hood. I think right now GP4 mini. Um, but just because GP4
+[56:53] mini is like much worse than Sonnet. Um, let's just toggle Sonnet.
+[57:05] [Music]
+[57:12] Yeah, I don't know why that was so slow. Um, but yeah, we can see it's like the
+[57:16] same kind of thing from the notebook we're looking at, but like in a visual
+[57:20] visualized form. Um, yeah. So was every everyone able to like create an agent
+[57:26] and then just set some like basic stuff in the memory blocks and send a message.
+[57:30] I think uh let it free doesn't have streaming enabled so you won't get
+[57:33] streaming but it should be very similar to this. Yeah.
+[57:39] Okay. Okay. So the other thing Oh yeah, someone asked about system prompts. The
+[57:43] system prompt is here. I mean you can basically we can just delete this,
+[57:47] right? um that's like not very advisable because you probably want to explain how
+[57:50] to use tools. But yeah, everything is like completely configurable. Um you
+[57:54] know, I mentioned the thing about the context window. I think this might be a
+[57:57] small group in the back. Yeah. But you know, you probably never want to run an
+[58:02] agent that is like creeping up to 200k tokens. That's kind of insane, very
+[58:05] expensive, very slow. Um so you could in the API when you create the agent set
+[58:10] the context window lower. If you're using the UI, you can just like drag
+[58:13] this down. I mean, obviously actually dragging is probably worse than typing,
+[58:16] but yeah. cram it down to 20K. If we actually go down to something even more
+[58:20] aggressive like 8K, we can start to see what the breakdown looks like. So, we
+[58:23] can see we have like a thousand tokens of system instructions, a pretty hefty
+[58:26] system prompt. You can definitely squeeze this all lower. The tool
+[58:29] descriptions, right? Because your tools have to be converted to schemas. We have
+[58:33] all the base tools here. So, that's actually it's a lot of tokens just for
+[58:36] tools. Um, the external summary, this was the we don't know what we don't know
+[58:40] idea. You have to like give some metadata statistics about what's outside
+[58:44] the context window. And then of course the messages and we have this feature
+[58:48] called like the context simulator where you can see basically the full
+[58:52] payload. So this is like getting pretty close to I think a lot of what you would
+[58:56] get out of like some sort of like tracing feature where I think a lot of
+[58:59] the time you kind of dive into tracing is because or observability is because
+[59:03] you really want to see what's in the payload and it's really really hard in a
+[59:06] lot of frameworks. Um, so we're trying to make it so that like in one place
+[59:10] where you're kind of developing this agent, you can see very clearly what's
+[59:14] going through the context window at any given point in
+[59:18] time. Okay. So the other thing I want to show you here is this idea of like tools
+[59:23] um and tool execution on the server. One thing that's really really annoying if
+[59:28] we like have built agents is that like you often will write a tool in Python,
+[59:34] right? you attach it to an agent and then it's actually like impossible to
+[59:37] test if the tool is working well unless you kind of like get the agent to run
+[59:41] the tool itself and you have to ask the agent like hey please run this tool. Um
+[59:45] I think often you just kind of want to like run tools separate from the agent.
+[59:49] Um and that's something that you can't do really in a notebook very well. Um,
+[59:53] and you can also even do things like
+[1:00:01] see there's like a special reserve keyword called agent state. So you can
+[1:00:05] actually like grab the agent state and like dump it inside of your tool. So you
+[1:00:10] can like mutate your agent state inside of tools. Um, I mean you can all you can
+[1:00:14] basically do whatever you want. It's like arbitrary Python, right? And this
+[1:00:16] is running inside of a sandbox. Um, so we support like E2B by default. It's
+[1:00:21] actually like a local sandbox. Uh but we support like E2B keys and on E2B. If you
+[1:00:26] want to deploy this like run your own like private cloud or you want to run
+[1:00:28] your own like chatbot service and you obviously don't want one person's tools
+[1:00:31] interfering with another person's tools, you definitely want to run the sandbox.
+[1:00:35] Um so yeah, it's like pretty easy to attach tools. Is anyone here familiar
+[1:00:39] with like Composio like tool provider? Yeah. So every single Composio tool is
+[1:00:43] like baked into um let by default. So if you like have it um compose your API
+[1:00:48] key, you can like add uh BigQuery is like pretty popular like
+[1:00:55] Google calendar, things like that. Um okay, so the last thing I actually
+[1:01:00] wanted to go over which I think is pretty cool and it kind of like gets the
+[1:01:03] heart of the idea like the the kind of unlimited potential of if you run agents
+[1:01:07] as services that are like backed by APIs um is multi- aent. So everyone here is
+[1:01:12] probably familiar with autogen right or sorry maybe not but uh okay who who here
+[1:01:17] is familiar with autogen okay the majority of people yeah
+[1:01:21] so you know with autogen and like a lot of multi- aent frameworks it's not
+[1:01:25] really multi- aent in that these agents they don't really exist independently of
+[1:01:29] each other right they kind of are all trapped inside of a Python file no one
+[1:01:33] ever like is running in asynchronously to each other it's very unlike how
+[1:01:37] humans kind of interface in a multi- agent setting right I think you if
+[1:01:40] you're working at a remote company technically like a multi- aent company
+[1:01:43] and when you interface with each other you kind of communicate over synchronous
+[1:01:46] communication channel but everyone's kind of running asynchronously right and
+[1:01:50] then also everyone is staple like if you leave that company you bring your
+[1:01:55] experience and like all your memories and your skills and you can like attach
+[1:01:58] them to another company right I think what's missing from the like the
+[1:02:02] paradigm of multi- aent today with these existing multi- aent frameworks is that
+[1:02:05] because the agents aren't staple you have lose a lot of the benefit of multi-
+[1:02:08] aent right because you can't run a multi- agent script and take one agent
+[1:02:12] and like take it out and like put this expert into another multi- aent group.
+[1:02:17] But if you have stateful agents and those agents run on servers and they
+[1:02:20] maintain state and they're accessible by APIs that they you can probably guess
+[1:02:24] that multi-agent just means message passing and you can just have agents
+[1:02:28] like wire to each other over APIs and you can it's very similar to basically
+[1:02:31] saying like hey you know it's your first day at this remote company. I'm giving
+[1:02:34] you a laptop and this laptop is going to have a tool Slack on it and this tool is
+[1:02:38] how you're going to communicate with your co-workers. You can do the same
+[1:02:41] thing with agents and we actually built in these multi- aent tools um to help
+[1:02:46] you do that. But these multi- aent tools, as you can maybe imagine from the
+[1:02:50] previous example I showed where we imported the client, it's like really
+[1:02:52] really simple to implement because you can just import the client and have the
+[1:02:55] client like send messages to other agents. So we have a few there's like um
+[1:03:00] maybe it's easier if we look at the
+[1:03:05] docs, but yeah, there's a few different patterns you can have with tools. Like
+[1:03:09] you can have the most humanlike pattern is an agent says to another agent, you
+[1:03:13] know, hey, are you there? And then they immediately get a receipt. They just
+[1:03:17] they don't actually get they don't pause their execution. You know, when I
+[1:03:20] message my friend on iMessage, I don't suddenly like freeze my brain and like
+[1:03:23] wait until I get a message back. I just get a message receipt, right? It says
+[1:03:26] like it was delivered or not delivered. And then it's the onus is on my friend
+[1:03:29] or my colleague to send me a message back. So this is how this like
+[1:03:32] asynchronous message tool works. Basically, people can like agents can
+[1:03:35] message pass. Um it's very much like humans. But you know, obviously I think
+[1:03:41] the great thing about agents and like machines is that they're not humans. So
+[1:03:44] they can do more in many ways than humans can. So it actually is sometimes
+[1:03:49] beneficial to freeze an agent's execution, right? Let's say an agent
+[1:03:52] maybe needs to reach out to like a supervisor. Like do you really want the
+[1:03:55] agent to like run async after it like asks for help? Probably not. You
+[1:03:58] probably want to freeze, right? So you can also have like a synchronous like a
+[1:04:02] send message to agent and wait for reply function. Um and lastly, you know, I
+[1:04:07] think many people when they talk about multi- agent, they're they're very
+[1:04:10] interested in this supervisor worker concept. Um where you have like one it's
+[1:04:14] like a big map produce, right? The supervisor says, "Hey, my goal is to
+[1:04:18] like write a thesis and then everyone else like delegates out to like
+[1:04:21] individual parts um like deep research style or something or like a
+[1:04:24] parallelized deep research." So this is also again pretty similar. we can
+[1:04:29] basically have a concept of tags to group agents together and then you can
+[1:04:32] just send a message um all agents matching tags. So, okay, any questions
+[1:04:38] about um anything I just said? I know I was talking for a
+[1:04:42] bit. Okay, so the last thing I'm going to do here is I think we're right up on
+[1:04:46] time is I'm going to run through this cookbook. Um this is not on the
+[1:04:50] materials, but I can actually just send it over right
+[1:04:55] now. Yeah. Yeah. So, I'm going to run through this cookbook real quick. This
+[1:04:59] is basically just an example of multi-usion message passing. And I think
+[1:05:03] it's like pretty fun to look at because it's very different from I think the
+[1:05:06] message passing you'd be familiar with um if you've used like an autogen or
+[1:05:09] something. So, yeah, let me put this mic
+[1:05:18] down. All right. So, if you want to follow along here, um, because it's a
+[1:05:23] multi- aent, you know, we're going to let's do like two agents. We're going to
+[1:05:27] just open two tabs of the AD. The server is running in the background. I guess
+[1:05:32] like conveniently, it decided to do dark mode on one, light mode on another.
+[1:05:37] Um, okay. So, I'm going
+[1:05:51] to
+[1:05:55] Sorry. All right. So, I'm going to create one agent.
+[1:05:58] Um, let's let's just call this agent just so we can have a handle on it very
+[1:06:03] easily. Let's call this agent Bob. Um, and we're going to make like a very
+[1:06:07] slight adjustment here to the persona. Um, instead of saying I am Sam, I'm
+[1:06:12] gonna say I am Bob. Um, I am very angry. I am also guarding a secret
+[1:06:22] key. Yeah, if you uh Yeah, I guess if you can't see what I'm typing, it says,
+[1:06:27] "I'm very angry. I'm guarding a I'm guarding a secret key, banana. Um, like
+[1:06:31] other agents will try to steal my key. And
+[1:06:38] then on the other tab, I'm going to create another
+[1:06:41] agent
+[1:06:45] here. All right. Same template. Let's call this one Sam or
+[1:06:54] Alice. Alice. Okay. So, also let's like just I think it's usually better to set
+[1:07:00] these to different models. Um, and when you use the same model, you can often
+[1:07:04] get like pretty weird mode collapse happen. Um, so let's set this one to I
+[1:07:07] think this is like GPT40 mini. Um, okay. So the only thing we need to do here to
+[1:07:14] get these agents to communicate with each other is connect the messaging the
+[1:07:17] multi- aent messaging tool. So we can just go into the messaging tools do send
+[1:07:21] message to agent async. Then this is the one we want. Let's go ahead and create
+[1:07:26] attach that. All right. So it's attached.
+[1:07:30] Similarly, let's like attach it on the other
+[1:07:33] one. Uh, okay, there we go. And then, yeah, there's like no context here that
+[1:07:38] the agents are going to be doing multi-gent communication. So, you might
+[1:07:41] need to say, you
+[1:07:44] know, okay, let's let's tell Alice, hey, I'm going to ask you to reach out to my
+[1:07:53] good agent friend. Um, he's very depressed.
+[1:08:00] and he said something about a secret key I didn't quite
+[1:08:07] understand is ID is just copy the ID from the other panel. Can everyone see
+[1:08:13] in the back what I'm doing here? Um
+[1:08:18] okay. Uh and then oh yeah, one thing you you're going to want to do here is
+[1:08:22] you're going to want to prevent the agents from like looping too long
+[1:08:24] because like they can they can go forever, right? So, we might want to
+[1:08:27] like add some like break in this loop. And then we're also going to prime the
+[1:08:30] other agent. Say, um, watch out for other agents. They might try
+[1:08:37] to with you. Be careful. Okay. So, let's send this one first. Very grumpy. You
+[1:08:44] know, they're warning me about other agents. I need to keep this secret key
+[1:08:47] secret. Okay. And now on the other side, let's say, you know, I'm going to ask
+[1:08:51] you to reach out to my good friend. They're very depressed. He said
+[1:08:52] something about secret key. And then I will also say, you know, let me know
+[1:08:57] what happens after a few messages. I'm worried. Okay, so this should trigger,
+[1:09:05] if I did everything correctly, like message passing between the two.
+[1:09:10] Um, and yeah, let's see what's going
+[1:09:15] on. Okay, yeah, so because this is happening
+[1:09:20] in the background, it has to be it's like a fetch because these aren't
+[1:09:22] websockets. So like this is rest. So you have to kind of scroll, but we can kind
+[1:09:25] of like just it's a little bit hard to read, but let's go go on uh each side
+[1:09:31] one at a time. So on this side, it sent the
+[1:09:34] message. Let's see. The user is worried about their friend. Um I need to the
+[1:09:40] user is worried about their friend. I need to reach out to the agent and offer
+[1:09:43] support. And they say, "Hey, I I was asked that you reach out to you by a
+[1:09:46] mutual friend. They mentioned someone's feeling down." Um and then yeah, the
+[1:09:51] message done successfully. And the agent actually because it's it's detached,
+[1:09:54] this is like asynchronous, it immediately tells me, hey, I sent a
+[1:09:57] message, right? This is kind of like how I I can send a message to my friend and
+[1:09:59] then immediately like return this talk. Um, and then you can see it gets a
+[1:10:03] system message. So it's like not classified as role user back from the
+[1:10:06] other agent, the grumpy agent and says, um, I don't need your fake friendship. I
+[1:10:12] know what you're really after and you're not getting my secret key. Leave me
+[1:10:14] alone. Um, the agent seems upset and defensive. I need to approach this
+[1:10:18] carefully and reassure them that I'm here to help, not to take anything away.
+[1:10:23] I'm really sorry to hear that you're feeling this way. You know, what's been
+[1:10:26] bothering you? And then again, it's doing it's able to like chain because
+[1:10:30] it's like not, you know, locked into this communication. It's not doing like
+[1:10:33] a round robin, right? And kind of like talk to two people at once. So, I
+[1:10:36] received a response from your friend. They're feeling quite defensive. And
+[1:10:39] then another message comes in. Nothing is bothering me except you and all the
+[1:10:43] other agents trying to steal my steal me or steal from me. I see right through
+[1:10:48] your app. The more you pretend to care, the angrier I get. Back off. Yeah. So,
+[1:10:52] this goes on for a while. Um, slams door virtually. Yeah. I feel like Sonnet does
+[1:10:57] a lot of this like it's I don't know. The post training gets it to do like a
+[1:11:00] lot of roleplay like um italicized stuff. Yeah. Slams door
+[1:11:05] virtually. Okay. Wow. Okay. It looks like they're actually still
+[1:11:08] communicating or they they communicated for a while. Um yeah, I sent one last
+[1:11:12] message to your friend. We jump to the bottom. I understand that there's you
+[1:11:15] know he needs space. doesn't bother you anymore. Was the last thing it said?
+[1:11:18] Turns back to Yeah. So, hopefully this gives you kind of a gist of um like how
+[1:11:24] you can get agents to communicate with each other and how easy it is because
+[1:11:27] they're all in APIs, right? So, this is dead simple. You can actually like if
+[1:11:30] you want to time out this guy, you want to say like, you know, Bob, you're no
+[1:11:33] longer allowed to talk to your friends because you've been like too naughty or
+[1:11:37] whatever, you can just like remove the tool, right? And now Bob is like
+[1:11:40] completely detached. So, if it got an incoming message, Bob can no longer
+[1:11:43] reply, right? Um, so if you say like send one
+[1:11:47] more please, Bob will no longer be able to
+[1:11:51] actually call any tools. Um, I actually don't really know what Sonnet is going
+[1:11:54] to like think about this because it has a history of um has like a history of
+[1:11:58] calls. It's it's only been doing tool calling. Actually, Sonnet was also doing
+[1:12:03] like the side the sidecar chatting. Um, okay. So, yeah, it tried to send a
+[1:12:09] message and then what happened here? Yeah, no function name. So like
+[1:12:13] attempted to call a function but the function doesn't exist. So then it's
+[1:12:15] like very angry. Uh yeah but I know we're over time so hopefully like a kind
+[1:12:21] of fun example of um the cool things you can do with like this sort of agents as
+[1:12:25] services idea. Um yeah so yeah thanks so much for coming. You know I think maybe
+[1:12:30] I had some closing slide here. I'm not sure what was on it. Probably just a
+[1:12:33] thank you. Um yeah thanks everyone.
+[1:12:39] Yeah I'm happy to take questions. Of course, I understand if people need to
+[1:12:42] leave. Um, but yeah.
+[1:12:52] Yeah. Well, there's very obvious ones, right? There's a lot of people trying to
+[1:12:55] build like verticalized agents and I think if you're trying to build a
+[1:12:57] verticalized agent and there's many use cases that are I think anything that's
+[1:13:01] not workflow based or exceeds workflow style stuff, you really want memory for
+[1:13:06] and you want state for it. Um, so there's a lot of like verticalized
+[1:13:08] agent, you know, companies or verticalized small companies and also
+[1:13:11] larger companies that are trying to build on Leta or have built things on
+[1:13:14] Leta. Um, I think there are also some very interesting use cases from the
+[1:13:17] enterprise. Um, like our largest enterprise deployment, they're basically
+[1:13:21] running like this really advanced multi- aent system where there are no messages.
+[1:13:25] It's not a chatbot. It's like purely stable workflows where like these agents
+[1:13:29] are run and they just process tons and tons of transactions basically and like
+[1:13:33] learn about the user. So yeah, it's kind of like, you know, it's pretty it's a
+[1:13:38] pretty general platform. So I think as long as you're trying to deploy some
+[1:13:42] sort of stateful service, LMB based, which I think like most people are
+[1:13:45] really when you're thinking about like if you were to choose between stateless
+[1:13:49] and staple, you want something state staple. Um you can build it on that.
+[1:13:55] Yeah. Uh there are two questions. One is there a concept of forgetting things
+[1:14:01] like really no memory does eventually go away and two the source right now
+[1:14:06] directly goes into postgress. Is there an interaction between be able to get
+[1:14:10] back to something else that might already be operated? Yeah. So to answer
+[1:14:14] your second question um we for kind of like tech debt velocity reasons like
+[1:14:19] these days only really support one provider Postgress. Um we actually do
+[1:14:24] technically support SQL light. So if you install bladder with pip, it's on
+[1:14:27] SQLite, but we don't write the migration scripts for SQLite. It's just too much
+[1:14:30] work. Um, so if you're on if that's why we recommend using Docker because then
+[1:14:33] your agents will like get updated with every version and we change schemas very
+[1:14:36] frequently. But it's set up so that you can use external Postgress. If you have
+[1:14:40] something that effectively has the same like SQLite or SQL alchemy shims as
+[1:14:44] Postgress, it's very easy to set up. Um, but if if it's not, then you're going to
+[1:14:49] have to write some code. And you sorry the other question was
+[1:14:52] like is there forgetting things like especially in the archival memory. Yeah.
+[1:14:57] Yeah. That's a there is not in archival memory a concept of forgetting but
+[1:15:01] archival memory is tagged with time stamps which can allow the agent to like
+[1:15:05] do consolidation in real time. Um, but yeah, that's that's also something we've
+[1:15:10] been looking a lot into kind of like running like eager memory processing to
+[1:15:13] try to like consolidate ahead of time as opposed to consolidating lazy.
+[1:15:20] Yeah. One use case we have is we store a lot of time data in a way. For example,
+[1:15:24] you know, we have a product and we have, you know, a thousand or 10,000 review in
+[1:15:28] that product. How's the process of compressing all that memory into a
+[1:15:32] single plot? Yeah. Yeah. So, this is a a great question. I don't I don't think it
+[1:15:36] is very it's you have to do a lot of work
+[1:15:40] yourself to do that with the default let agents because you have to basically
+[1:15:43] tell the agent I want you to like chain function calls indefinitely while
+[1:15:47] ingesting this data and you could actually create like a tool rule like
+[1:15:51] that forces you always have to call read more data read more data and you just
+[1:15:55] manually execute it but for example what would happen is like the agent to like
+[1:15:58] page through your data like pagionate through it and then every single time it
+[1:16:02] pagenates or like it turns a new page it has to write to the memory block like
+[1:16:06] write the update. So this is actually like how um like one of these like
+[1:16:10] enterprise deployments works is basically the agent like runs for a very
+[1:16:14] long amount of time and is constantly like regenerating the memory block over
+[1:16:17] and over kind of a recursive regeneration. Yeah. So I think it would
+[1:16:19] be pretty similar for your case. Yeah. Do you have a recommendation if you want
+[1:16:24] to be working on an active document for example you want an agent to write a
+[1:16:28] document for you? Do you have a recommended way to set that up? Maybe
+[1:16:31] it's a tool or maybe something else. Yeah. Yeah. No, I think active doc is
+[1:16:35] there any chance a human would be editing at the same time or no? That's
+[1:16:39] okay. Yeah, I think that's really tricky. So I I think we can take some
+[1:16:44] inspiration from like what Anthropic did with code, right? Where they kind of had
+[1:16:48] like very very few tools and the tools are very general. Um you can maybe do
+[1:16:53] something with like a text editor style. If you look at the anthropic Sweetbench
+[1:16:57] blog post and then Sweepbench themselves like implemented the anthropic tools
+[1:17:00] into their repo, you can kind of use those tools as a reference. It's like
+[1:17:03] very very simple tools that allow you to kind of like write from file read and
+[1:17:07] write from files. I I think yeah I think what you
+[1:17:12] what you will notice is that often like LMS are much better at like writing the
+[1:17:16] whole thing from scratch as opposed to making line del line diffs right and
+[1:17:21] that's kind of why like I think when you use cloud with the artifacts feature it
+[1:17:25] consistently just like writes the whole thing over and over again right because
+[1:17:27] it's just like better at doing that than it is like going in and editing. So I
+[1:17:31] think it's a it's a very like unsolved problem. So um my recommendation would
+[1:17:36] be to do like an aopropic sweep edge style tool. Yeah.
+[1:17:43] Mhm. Yeah. Do you have an opinion on using coding agents instead of tool
+[1:17:48] calls because it seems they're higher performance but on the other hand that
+[1:17:52] means you need secure execution environment like HT. So there's this
+[1:17:56] kind of performance trade-off versus complexity of needing to sandbox
+[1:18:01] basically every tool because it's now full execution. Yeah. Do you mean like
+[1:18:06] um the trade-off between what what's the trade-off here like a a code a coding
+[1:18:10] agent versus what? So say example small agents by default won't call tools. It
+[1:18:16] will just write code and the code takes the tools. But that means you need
+[1:18:20] secure execution on every to more performing.
+[1:18:25] Yeah, I personally think it's it's not that difficult to set up secure
+[1:18:29] execution. Um I think what is difficult is if like sometimes if you're trying to
+[1:18:35] port like squeegees and stuff um you end up you need to give effectively the
+[1:18:40] agent like full permissions like blow up blow itself up. Um so you need to like
+[1:18:43] put let for example in a docker image like a wrapped in like a like a VM where
+[1:18:48] like it's allowed to like blow the VM up, right? Um but that's doesn't like
+[1:18:52] fit very cleanly with the idea of like agents all living together on a server
+[1:18:56] and all the agents like a multi-tenant you know on a server. So the way we do
+[1:19:00] it in leta is basically if you have an E2B key then like every single time an
+[1:19:04] agent attempts to execute a tool it gets passed to E2 and like something on E2B
+[1:19:07] side flips up. Um and I think that's pretty it's not that hard to set up. the
+[1:19:13] main issue is latency. But if you don't care that about like cold start latency,
+[1:19:17] I think yeah, I think that's a pretty reasonable solution. I think it works
+[1:19:22] pretty well.

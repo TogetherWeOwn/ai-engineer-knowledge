@@ -1,0 +1,764 @@
+# title: Build a Prompt Learning Loop - SallyAnn DeLucia & Fuad Ali, Arize
+# source: https://www.youtube.com/watch?v=SbcQYbrvAfI
+# speaker: SallyAnn DeLucia & Fuad Ali, Arize
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T10:03:43Z
+# sha256: d58056b268fede62cfa529e3f94ee4d77c51e34b44728521d545642026f319e6
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:13] [music]
+[00:21] Hey everyone, gonna get started here. Thanks so much for joining us today. Um,
+[00:25] I'm Sally. I'm the director of RISE. I'm going to be walking you through some of
+[00:29] crowd prompt learning. Uh we're actually going to be building a driven
+[00:33] optimization loop for the part of the workshop. Um I come from a technical
+[00:36] background and started off in data science before I made my way over to
+[00:40] product. Uh I do like to still be touching code today. I think one of my
+[00:44] favorite projects that I work on is building our own agent Alex into our
+[00:47] platform. So I'm very familiar with all of the pain points um and how important
+[00:51] it is to optimize your prompt. So I'm going to spend a little bit time on
+[00:55] slides. I like to like just set the scene, make sure everybody here has
+[00:58] context on what we're going to be doing and then we'll jump into the code with
+[01:01] me. So, I'll let you do a little bit of an intro.
+[01:03] >> Yeah, thank you so much, Ellen. Great to meet all of you. Excited to be walking
+[01:07] through prompt learning with you all. I don't know if you got a chance to see a
+[01:10] harness talk yesterday, but hopefully that gave you some good background on
+[01:15] how powerful prompting and prompt learning can be. Uh, so my name is I'm a
+[01:19] product manager here at Arise as well. And like Sally said, we like to stay in
+[01:23] code. We'll be doing a few slides, then we'll walk through the code and we'll be
+[01:26] floating around helping you guys debug and things like that. My background is
+[01:30] also technical. So, I was a backend distributed systems engineer for a long
+[01:34] time. So, no stranger to how important observability infrastructure really is.
+[01:38] Um, and I think it's an appropriate setting in AWS for that. So, yeah,
+[01:42] excited to dive deep into front loading with you all. Thank you.
+[01:46] >> Awesome. All right, so we're gonna get started. Just give you a little bit of
+[01:48] an agenda of the things I'm going to be covering. Uh, so we're gonna talk about
+[01:51] why agents fail today. what is evening prom learning? I want to go through a
+[01:55] case study kind of show youall why this actually works. Uh and we'll talk about
+[01:59] learning versus GA. I think everybody I had a few people come up to me over the
+[02:02] conference about like what about GEA? Uh we have some benchmarking against that
+[02:05] and then we'll hop into our workshop. Um but with this I want to ask a question.
+[02:09] How many people here are building agents today?
+[02:12] >> Okay, that's what I expected. Um and how many people actually feel like the
+[02:15] agents they're building are reliable? >> Yeah, that's what I also thought. So
+[02:21] let's talk a little bit about why agents fail today. So why do they fail? Well,
+[02:25] there's a few things that we're seeing with a lot of our folks and we're seeing
+[02:27] even internally as we build with Alex for why agents are b breaking. So um I
+[02:33] think that a lot of times it's not because the models are weak. It's a lot
+[02:36] of times the environment um and the instructions are weak. So uh having no
+[02:41] instructions um from their learned environment uh no planning or very
+[02:45] static planning. I feel like a lot of agents right now don't have planning. We
+[02:49] do have some good examples of planning like we have cloud code cursor. Those
+[02:52] are really great examples but I'm not seeing it make its way into every agent
+[02:56] that I come across. Uh missing tools big one. Sometimes you just don't have the
+[02:59] tool sets that you need. Uh and then missing kind of tool guidance on like
+[03:03] which of the tools we should be picking and then context engineering continues
+[03:06] to be a big struggle for folks. If I were to distill this out, I think it's
+[03:12] like these three core issues. So adaptability and selfarning. Um so no
+[03:17] system instructions learned from the environment touched on determinism
+[03:20] versus non-determinism balance. So having the planning um or no planning
+[03:25] versus doing like a very static planning. You want to kind of have some
+[03:28] flexibility there. And then context engineering I think is a term that just
+[03:32] kind of emerged in the last like you know six to eight months but it's
+[03:35] something that's really really important that we're finding you know missing
+[03:38] tools tool guidance just not having context or confirming your data and not
+[03:42] giving the LM enough context. So these are um kind of the core issues to still.
+[03:48] But I think there's one other pretty important thing. Um and that is kind of
+[03:52] this distribution of who's responsible for what. So um there's these technical
+[03:56] users, your AI engineers, your data scientists, developers, and they're
+[03:59] really responsible for the code automation pipelines actually, you know,
+[04:03] managing the performance and costs. But then we have our domain experts, subject
+[04:07] matter experts, AI product managers. These are the ones that actually knew
+[04:10] what the user experience would be. they probably are super familiar with um the
+[04:14] principles that we're actually building to our AI applications. They're tracking
+[04:18] our evals and they're really trying to ensure that the product success. So
+[04:21] there's this split between responsibilities but everybody is
+[04:24] contributing but then there's this difference um in terms of like maybe
+[04:29] technical abilities. And so with prompt learning it's going to be a combination
+[04:32] of all these things. So everybody's going to really need to be involved and
+[04:35] we can talk about that uh a little bit more. So [clears throat] what even is
+[04:39] prompting? I'm going to first kind of go through some of the um approaches that
+[04:45] we kind of borrowed when we came up with prompt learning. So this is something
+[04:47] that Arise has been really really uh dedicated to doing some research. And so
+[04:51] one of the first things we borrow from uh which is reinforcement learning. How
+[04:55] many folks here are familiar with how reinforcement learning works? All right,
+[04:58] cool. Um so if I were to give like a really like silly kind of analogy, we
+[05:02] have a reinforcement model. Uh pretend it's like a a student brain that we're
+[05:06] trying to kind of, you know, boost up. And so they're going to take an action
+[05:10] uh which might be something like you're just going to take a test an exam and
+[05:13] there's going to be a score. A teacher is going to come through and actually
+[05:15] you know score the exam here um that's going to produce this kind of like
+[05:19] scaler reward um and you know pretend the student has an algorithm in their
+[05:23] brain that can just kind of take those scores and update the weights in their
+[05:26] brain and kind of like the learning behavior there and then we kind of
+[05:29] reprocess. So you know in this kind of reinforcement one we're updating weights
+[05:33] based off of some scalers. Um, but it's really actually difficult to update the
+[05:37] weights directly, especially in like the LLM world. So, reinforcement learning
+[05:42] isn't going to quite work that well uh when we're we're doing things like
+[05:46] prompting. So, then there's metaprompting, which is very close to
+[05:50] what we do with uh prompt learning, but still not quite right. So, here with
+[05:56] metal prompting, we're asking LM to improve the prompt. Uh, so again, we use
+[06:00] that kind of like student example. We have an agent which is our student. Um,
+[06:04] and it's going to produce some kind of output like that's a user asking a
+[06:07] question getting an output. That's our test in this example. And then we're
+[06:10] going to score. Eval is pretty much what you can think of there. Uh, where it's
+[06:14] going to output a score and from there we have like the metapromp thing. So now
+[06:18] the teacher is kind of like the metapar prompt. It's going to take the result uh
+[06:22] from our scorer and update the prompts based off of that. Um, but it's still
+[06:28] not quite what we want to do. And that's where we kind of introduce this idea of
+[06:32] prompt learning. So prompt learning is going to take the the exam going to
+[06:36] produce an output. Um we're going to have our enlumm evals on there. But
+[06:40] there's also this really important piece which is the English feedback. So which
+[06:44] answers were wrong? Why were the answers wrong? Where the student needs to
+[06:47] actually study? Really pinpointing those issues. And then we still aren't using
+[06:51] metapro. We still are asking an LLM uh to improve the prompt. It's just the
+[06:55] information that we are giving that LLM uh is quite different. And so we're
+[07:00] going to update uh the prompt there with all of this kind of feedback. So from
+[07:05] our evals from a subject matter expert going in and labeling and use that uh to
+[07:10] kind of boost our prompt with better instructions and sometimes exams.
+[07:15] So this is kind of like the traditional prompt optimization where it's like we
+[07:19] have we're kind of treating it like an ML where we have our data and we have
+[07:23] the prompt. We're saying optimize this prompt and maximize our like prediction
+[07:26] impulse. Um but that doesn't quite work uh for Allens were missing a lot of
+[07:31] context. So what we really found um is that the human instructions of why it
+[07:37] failed. So imagine you have your application data, your traces, a data
+[07:40] set, whatever it is. Your subject matter expert goes in and they're not only
+[07:44] annotating correct or incorrect. They're saying this is why this is wrong. It
+[07:48] failed to adhere to this key instruction. It didn't adhere to the
+[07:51] context. It's missing out whatever it is. Um, and then you also have your ego
+[07:55] explanations from Ellen as a judge, which is same kind of principle where
+[07:58] instead of just the label, it provides the reasoning behind the label. And then
+[08:02] we're pointing it at the exact instructions um to change. We're
+[08:05] changing the system prompt to help it improve so that we then get, you know,
+[08:09] prediction labels, but we also get those evals um and explanations of it. So,
+[08:14] we're just kind of optimizing more than just um our outlet here. And I think a
+[08:19] really key learning that we've had is the explanations in human instructions
+[08:23] or through your own as a judge. That text is really really valuable. I think
+[08:27] that's what we see not being utilized in a lot of other broad optimization
+[08:31] approaches. Um they're either kind of optimizing for a score uh or they're
+[08:35] just paying attention to the output. But you can think of it this way. It's like
+[08:39] these elements are operating in the text domain. So we have all this rich text
+[08:42] that tells us exactly what it needs to do to improve. why wouldn't we use that
+[08:45] to actually improve our so um that's kind of the basics of prompt learning
+[08:53] but everybody always comes up to me and like sounds great s but does it actually
+[08:57] work um it does and we have some examples of when we do this so we did a
+[09:01] little bit of a case study um I think coding agents everybody is pretty much
+[09:05] using them at this point there's a quite a few that have been really really
+[09:08] successful I think cloud code is a great example cursor but there's also client
+[09:12] uh which is more of a um an open version of this and so we decided to take a look
+[09:19] and compare to see if we could you know do anything to improve. So these are
+[09:22] kind of the the baseline of where we started here. Um you can see the
+[09:26] difference between the different models. U obviously using two and throttle kind
+[09:30] of the state-of-the-art there but we also had this opportunity where CL was
+[09:34] using you know 45 and it was working decently well at 30% versus 40. Um and
+[09:40] then there was kind of the conversation around. So this is where we started um
+[09:45] and we took a pass optimizing the system prompt here. So you can see this is what
+[09:50] the old one was looking like. It has like no rules section. So it was just
+[09:54] very like you are a cloud agent. You're built on this model. You're you're here
+[09:58] to do coding. Um but there was no rules and so we took a pass at updating the
+[10:04] system. So there were all of these different uh rules associated. So when
+[10:07] dealing with errors or exceptions, handle them in a specific way. make sure
+[10:10] that the changes align with, you know, the systems design. Um any changes to be
+[10:15] accompanied by appropriate test. So really just kind of building in like the
+[10:18] rules that like a good engineer would have uh which was completely missing
+[10:22] before. Um and so we found that plan performs better with updated system
+[10:27] problem. Pretty kind of simple. It's kind of the whole concept here. It's
+[10:30] like you can see these different problems and we're seeing you know
+[10:33] things that were incorrect now being correctly done just by simply adding
+[10:36] more instructions. [clears throat] So it really demonstrates pretty well
+[10:40] here um how those system prompts can improve and we benchmarked again with a
+[10:46] s bench light to get another just like kind of coding uh benchmark for these
+[10:50] coding agents and we were able to improve by 15% just through the addition
+[10:56] of rules. Uh so I think that that's pretty powerful. So no fine-tuning, no
+[10:59] tool changes, no architecture changes. I think those are the big things folks
+[11:02] like reach for when they're trying to improve their agents. Uh but sometimes
+[11:07] it's just about your system prompt and just adding rules. I think we've really
+[11:09] seen that and that's why we're really passionate about prompt learning and
+[11:12] prompt optimization in general is it feels like the lowest lift way to get
+[11:16] massive improvement gains in your agent. Uh 4.1 achieved performance near 4.5
+[11:21] which is pretty much considered right now state-of-the-art when it comes to
+[11:24] coding questions and it's twothirds of the cost which is always uh really
+[11:28] beneficial. So uh these are some of kind of the tables here. will definitely
+[11:32] distribute this so you can kind of take a closer look. But I think the main
+[11:35] point I want y'all to come away with is the fact that like, you know, 15% is
+[11:39] pretty, you know, powerful uh improvement in our performance.
+[11:44] Now, a question we get all the time is we're taking these examples of perform
+[11:48] learning. So, how this is really important is we're going to take a data
+[11:50] set. A lot of time that data set is going to be a set of examples that
+[11:54] didn't perform well. either a human went through and uh labeled them and found
+[11:58] that they you know were incorrect or you have your emails that are labeling them
+[12:02] incorrect and so you've gathered all these examples and that's what we're
+[12:06] going to use to optimize our prompt. So I get a question all the time like well
+[12:09] aren't we going to overfitit uh based off of these bad examples but there's
+[12:14] this rule of generalization where mending properly enforces high level
+[12:18] reusable coding coding standards rather than repo specific fixes and we are
+[12:22] doing this train test split uh to ensure that the rules are generalized beyond
+[12:26] just like local quirks and whatever our uh training data set is. But if you kind
+[12:31] of think of this as like you hire an engineer, right, to to be an engineer at
+[12:35] your company, you do kind of want them to overfit to the database that they're
+[12:38] working on. So, uh we kind of feel that overfitting is maybe a better term for
+[12:43] it is expertise. Uh we are again not kind of training in the traditional
+[12:47] world. We are trying to build expertise and as we'll talk about this is not
+[12:50] something we feel that you do once. You're actually going to kind of
+[12:53] continuously be running this. So, um more problems are going to come up.
+[12:56] we're going to kind of optimize our prompt for what the application is
+[13:00] seeing now. Um, and then we'll kind of So, we don't actually think it's a flaw.
+[13:06] We feel like it's expertise instead. Um, we can kind of adapt as needed and kind
+[13:11] of mirroring what humans would do if they were taking on a task themselves.
+[13:16] Um this is just another set of benchmarking again kind of proving here
+[13:21] um that this diverse evaluation suite that focuses on the task for those
+[13:26] difficult or tasks that are difficult for relish language models um and we're
+[13:30] seeing again success with our improvements.
+[13:34] Now Ga just kind of came out recently and I think that's something everybody's
+[13:37] really excited about. I think the previous uh DSPI optimizers were a
+[13:42] little bit more focused on optimizing a metric and as we talked about like we
+[13:45] really want to be using uh the text modality that these applications are
+[13:48] working in um that have a lot of the the reasons or how we need to improve and so
+[13:54] we definitely wanted to do some benchmarking here. So how many people
+[13:57] are familiar with Gered about it? All right, cool. Well, I'll just give like
+[14:01] sort of high level. I just kind of noted that the main difference between their
+[14:05] other like new pro optimizers is that they are actually um using this positive
+[14:12] reflection and evaluation while they are are doing the optimization. So it's this
+[14:16] evolutionary optimization um where there's this parentto-based candidate
+[14:20] selection and probabilistic merging of prompts. What this really does under the
+[14:23] hood is we take candidate cross uh we evaluate them. Then there's this
+[14:27] reflection LM that's reviewing the evaluations and then kind of making some
+[14:31] mutations some changes um and kind of repeating until it feels like it has the
+[14:36] right set of prompts. So I think something that is important to notice
+[14:39] about GABA is it doesn't really choose kind of just one. It does try to keep
+[14:42] the top candidates um and then you know do the merging from there. But we
+[14:48] benchmarked it and proper learning actually does do a little bit of a
+[14:51] better job. And I think something that's really key is it does it in a lower
+[14:56] number of loops. And I think something that we'll we'll talk about in just a
+[15:00] second here is that it does actually matter what your emails look like and
+[15:04] how reliable those are. I think that's something we really feel strongly about
+[15:07] at Arise is uh you definitely want to be optimizing your agent prompts, but I
+[15:11] think a lot of people forget about the fact that you should also be optimizing
+[15:14] your email prompts because if you're using emails as a signal, um you can't
+[15:18] really rely on them if you don't feel confident in them. So, it's just as
+[15:20] important to invest there, making sure you're kind of applying the same
+[15:23] principles that you are to your agent prompt as your email prompts so you have
+[15:26] a really reliable signal that you can trust and then feed that into your
+[15:30] prompt optimization. But, um in both of these graphs, the pink line is prompt
+[15:34] learning. Uh we did also benchmark it against me pro their older optimization
+[15:38] technique that I was mentioning kind of functions off like um optimizing around
+[15:42] score and eval make the difference. So it kind
+[15:46] of I I highlighted on this slide here like the with eval engineering we were
+[15:50] able to do this. So we did have to make sure that the eval part of prompt
+[15:54] learning uh were really high quality because again it's this only works um if
+[16:00] the eval itself is working. So, yep, emails make all the difference.
+[16:05] Kind of spend some time optimizing a prompt here. Um, again, it's all about
+[16:09] making sure you have proper instruction. The same kind of rules apply.
+[16:13] So, I want to kind of walk through. I know there's a lot of content. I think
+[16:17] it's really important to have context. But before we jump into any of the
+[16:20] workshops, any questions I could answer about what I discussed so far?
+[16:27] >> Uh, I have a question comment. So I I think you know coding is the greatest
+[16:31] example in terms of having the structure and evals. Uh one thing I'm sort of
+[16:35] curious about is if you have other examples sort of general prompts
+[16:37] forational interactions with systems that are not
+[16:41] as easily quantifiable. I'm just curious about any experience you guys have
+[16:44] there. >> Yeah. Is that for like eval
+[16:47] general? >> Well I think it's just clear how you
+[16:49] would set up what the eval would look like and I'm just wondering how you
+[16:51] would do that for other types of so the question is like is there any kind of
+[16:56] instruction for how you should set up your evals? coding seems like a very
+[16:58] straightforward example. You kind of want to make sure the code's correct,
+[17:01] right? But where some of these other agent tasks um it's a little bit harder.
+[17:05] I think the advice that I usually give folks is we do have a set of like out of
+[17:08] box. You can always start with things like QA correctness or focus on the
+[17:11] task. But what I always suggest is like getting all the stakeholders kind of in
+[17:15] the room. So getting those you know subject matter experts and security you
+[17:19] know leadership and really defining what success would look like and then start
+[17:23] kind of converting that to different evaluations. So um I think an example is
+[17:27] Sterling and Alex. Um I have some task level evaluation. So like I really care
+[17:32] did it find the right data uh that it should have. Um should it did it create
+[17:37] a filter using semantic search or structured like making the right tool
+[17:40] call? Um and then I care did it call things in the right order? Was the plan
+[17:44] correct? So kind of thinking about like what each step was and then like even
+[17:47] security will be like well we care how often people are trying to jailbreak
+[17:50] Alex. So, it's just taking each of those success criteria, converting it to eval.
+[17:54] Um, and we do have different tools that can help you, but that's usually the
+[17:57] framework I give folks is like start with just success and then worry about
+[18:00] converting into an email after. >> Yeah. Just to add to that, maybe like
+[18:05] more of like a subjective use case is like for example like Booking.com is one
+[18:10] of our clients and so when they do like what is a good posting for a property
+[18:16] like what is a good picture? [clears throat] Defining that is really
+[18:20] hard, right? Like to you, you might think something is a very attractive
+[18:24] posting for like a hotel or something, right? But to someone else, it might
+[18:28] look really different. And sometimes, as kind of Sil was alluding to, it's
+[18:32] sufficient to just gate it as a good, bad, and then kind of iterate from
+[18:36] there. So like, is this a good picture or bad picture? Let decide and then gate
+[18:40] from there into specific background like, oh, this was dimly lit, the layout
+[18:44] of the room was different, etc., etc. Yeah.
+[18:46] >> Yeah. That's that you're actually building on the question I was going to
+[18:49] ask which is that they end up with that binary outcome which doesn't necessarily
+[18:53] give you a gradient to advance upon are you then effectively using those
+[18:56] questions like digitally lit not to like get like a more continuous space is that
+[19:01] >> exactly right and then from there as you get more signal you can refine your
+[19:05] evaluator further and further and then use those states and you can actually
+[19:08] put a lot of that in your prompting itself right so yeah
+[19:13] >> I have two questions and I'm not sure if I should ask both of them or maybe your
+[19:16] workshop will answer it. One is about rules and the rule section or like
+[19:21] operating procedures. I'm curious how you uh do you just continuously refine
+[19:28] that in the English language and uh maybe reduce the friction of any
+[19:33] contradictory rules. That's the first question. And then the other was I would
+[19:36] love to see the slide on eval. if you could just say a little bit more on how
+[19:40] you approach that because my issue [clears throat] in doing this work is um
+[19:46] whether or not to have like an a simulator of the product and then the
+[19:49] simulator is evaluating or to do what I'd like to do which is like an end
+[19:54] toend evaluation that I build but I would love to see you talk about that if
+[19:59] you could. >> Yeah, absolutely. So from the first one
+[20:01] about like how the instructions it's definitely something I think that like
+[20:05] you iterate over time on them. So a lot of times I think we take our best bet
+[20:09] like we write them by hand, right? And I think what we're trying to do with
+[20:11] proper optimization is like leverage the data uh to dynamically change them. Uh
+[20:16] and is I think great at like removing redundant instructions, things like
+[20:19] that. But the goal is is we want to move away from static instructions. We feel
+[20:23] very confidently that like that is not going to really scale. It's not going to
+[20:26] lead to like sustainable um performance. So the idea exactly with pump learning
+[20:31] is something that you can kind of run over time. We see this even like a long
+[20:34] running task eventually uh where you're building up examples of incorrect things
+[20:40] uh maybe having a human annotate them and then the task is kind of always
+[20:43] running producing optimized prompts that you can then pull in production and it
+[20:46] it kind of is like a cycle that repeats over time.
+[20:49] >> Sorry just to intervene. So, are you saying that when you're doing this over
+[20:52] a long period of time and then you have examples, you're just running the shots
+[20:56] back into your rules section? >> Kind of. It's going to pass it like when
+[21:00] we get to the optimization actual like loop we're going to build, you'll kind
+[21:03] of see it as like you are feeding the data in that's going to build a new set
+[21:07] of instructions that you would then, you know, push to production to use.
+[21:11] >> Okay. >> Uh I think your second question was
+[21:14] around evals and like how to where to start, how to like write them and like
+[21:18] how to optimize those. Is that right? >> Yes.
+[21:20] >> Yeah. So, it's a very similar approach. I think it's like the data that you're
+[21:23] reviewing is almost a little bit different. So, uh I should have pulled
+[21:27] up the the loops. I don't know if you can find it.
+[21:33] Let me just try something really quick to kind of show this.
+[21:40] There we go. So, this is kind of like how we we see
+[21:44] it is you have two co-evolving loops. I've been talking about the one on the
+[21:48] left, the blue one a lot about we're improving agent, we're collecting
+[21:51] failures, kind of setting that to do kind of fine-tuning or prompt learning,
+[21:55] but you basically want to do the same thing with your evals where uh we're
+[21:59] collecting the data set of failures, but instead of thinking about the failures
+[22:02] being the output of your agent, we're actually talking about the eval output.
+[22:06] So having somebody go through and you know evaluate the evaluators or using
+[22:11] things like log props as confidence scores or jury as a judge to determine
+[22:15] where things are not confident. We're kind of doing the same thing. So
+[22:17] figuring out where your eval is low confidence and then you're collecting
+[22:21] that annotating maybe having somebody go through and say okay this is where the
+[22:24] eval went wrong. And so it's the same pretty much process of optimizing your
+[22:28] eval prompt. It's just you know I think folks think they can just grab something
+[22:32] off the shelf or write something once and then they can just forget about it.
+[22:35] But this loop, I've said it a few times, but the the left loop only works as well
+[22:39] as your eval. >> Sorry, I think my question is actually
+[22:42] way more static and basic. It's like do you are you talking about this orange
+[22:46] circle as like are you building a system or simulator for the eval or are you
+[22:51] just talking about like system prompt, user prompt, eval?
+[22:54] >> Yeah, I think it's more right now what we're talking about is just like kind of
+[22:56] the different prompts. You could definitely do simulation, but I think
+[22:59] that's a whole different workshop. >> Thank you. Any [clears throat]
+[23:03] more maybe questions before we get to the bridge club? Any
+[23:08] switch back?
+[23:13] All right. Um, so here is going to be a QR code uh for our prompt learning repo.
+[23:20] Um, so I'll give everyone a few minutes to get such with that. Get it on your
+[23:25] laptops. I know it's a little bit clunky to add this QR and like airdrop it. was
+[23:30] not sure a better way. Um I can just show you also here if you want to find
+[23:35] it. Um it is going to be in our Rise AI uh repo here and under prompt learning
+[23:42] and you just want to kind of clone that. We are going to kind of be running it uh
+[23:45] locally here. >> You go back to the page with the URL.
+[23:50] >> Yes. Sorry about that.
+[23:55] Oh >> no, the page with the URL. Oh,
+[24:08] >> we'll give folks just a few minutes to get
+[24:10] >> What do you What's your process when you're building a new agent or work for
+[24:16] anything that could be evaluated? Do you guys start by just like, oh, try
+[24:22] something prototype and then see where it's bad and then do eval?
+[24:25] [clears throat] >> Yeah, I think there's different
+[24:27] perspectives on this. Our perspective is EOS should never block you. Like you
+[24:30] need to get started and you need to just build something really scrappy. We don't
+[24:34] think like you should, you know, waste time doing eval. I think it's helpful to
+[24:37] pull something out of the box sometimes in those situations just because it's
+[24:41] hard to comb through your data. like that's something we've experienced with
+[24:43] Alex of like when you're getting started just running a test manually reviewing
+[24:47] like it it's kind of painful. Um so I think that having eval is helpful but
+[24:52] shouldn't be a blocker. Pull something off the shelf maybe start with that then
+[24:55] as you're iterating you're understanding where your issues are then you're
+[24:57] starting to refine your evals as you're refining your agent.
+[25:01] >> Yeah. One last question. Yeah.
+[25:06] >> So it makes sense to like optimize the system
+[25:10] like sub aents or commands or how are you thinking about this like multi-
+[25:15] aent? >> Yeah. So the question is is like are you
+[25:18] just doing one single prompt or how do you think about this in a multi- aent? I
+[25:22] think we're kind of thinking that this right now is kind of independent tasks
+[25:25] that can optimize your prompts kind of independently and then running tests um
+[25:29] to get into like the agent simulation of running them all together. But right
+[25:32] now, our approach is a little bit isolated, but I definitely see a future
+[25:35] where we're going to kind of meet the the standard of like sub agents and
+[25:39] everything else that's going on right now.
+[25:43] >> No, I think that's pretty accurate. And also like I mean even in a single agent
+[25:47] use case versus like a multi- aent use case like ultimately like each of those
+[25:51] agents may be specialized. They may have their own prompts that they need to
+[25:55] learn from. So I think doing this in isolation still has benefits for the
+[26:00] multi- aent system as a whole that can pass on over time in scenarios like hand
+[26:04] off etc and making something like really really specialized. So I guess like what
+[26:09] we're talking about with like the overfitting as well which is again like
+[26:13] question we get all the time but really you want to be over fit on your code
+[26:17] base as an engineer. Um you don't want to be so generalized that you're no
+[26:21] longer good at picking up specific works in your code base.
+[26:25] Yeah.
+[26:28] >> All right. Everybody kind of getting to read the mode. Okay. Anybody need any
+[26:32] help?
+[26:36] >> All right. So, we are going to be using OpenAI for this. So, I think the next
+[26:40] thing that I'll have everyone do is probably spend some time just grabbing
+[26:43] your API key. We'll get to it and then I'll just kind of start walking through
+[26:47] our notebook here.
+[26:51] So, we are going to be doing a JSON webpage prompt example. So, you're going
+[26:54] to find that under notebooks here. Um, and so we'll give everybody a second to
+[26:59] pull it out. There's going to be just some slight adjustments we're going to
+[27:01] add to this example uh just to make it run a little faster and work a little
+[27:05] better. The first is um what this is even doing this is going to be a very
+[27:10] simple example uh for just a JSON web page prompts. If anybody has like a
+[27:15] prompt or use case that they want to kind of like code along, Van and I are
+[27:19] absolutely help like glad to help kind of adapt what you're working on to the
+[27:23] use case here. It's something very simple just to kind of demonstrate um
+[27:27] the the principles and we are going to be using we can definitely experiment.
+[27:32] If you want to swap out any other providers that you want to use, we can
+[27:34] also definitely help you do that. Um but the the goal of this is
+[27:39] essentially going to be to iterate through different versions of a prompt
+[27:43] using a data set. Um and we will optimize. So the first thing
+[27:48] is obviously we need to do some installs. Um I am just going to have you
+[27:51] all update it. It says like greater than 2.00.
+[27:55] Uh but we're going to actually just use I think 22 today.
+[28:02] And then the next thing is just to make this run a little faster. So we're going
+[28:05] to run things in async which is missing. So you can go ahead and add these lines
+[28:11] in the cell as well. All right, everyone kind of follow along and I never know
+[28:16] want to move too fast. Seems to head nuts. Cool. Let's talk about
+[28:19] configuration. So um I kind of talked about it a little bit when I was going
+[28:23] through the slides. So we are going to be doing some looping. So the general
+[28:26] idea is is we start out with the data set uh with some feedback in it and
+[28:30] we'll we'll look through the data set once we get it. Um, but you're going to
+[28:33] want to have either human evaluation. Um, so like annotations, either free
+[28:38] text, labels, um, or you're going to want to have some evaluation data. But
+[28:41] the feedback is really important. That's what makes this kind of work. Um, we're
+[28:45] going to then, you know, pass that to Allen to do the optimization and then
+[28:50] it's going to basically have eval. So as it's optimizing, it's using that kind of
+[28:55] data set to then run and assess whether or not it should, you know, kind of keep
+[28:59] optimizing. Um, and then it also provides you data that you can kind of
+[29:03] like use to gauge which of the prompts that it outputs um, in you know a
+[29:09] production setting. So we're going to do some configuration. Um, so I've kind of
+[29:13] wrote out here kind of what each of these means. So we have the number of
+[29:16] samples. So this controls how many rows of the sample data set. Um, you can, you
+[29:21] know, set to zero to use all data or you can, you know, use a positive number to
+[29:25] limit for, you know, faster experimentation. So I think that
+[29:28] sometimes folks use different um approaches here. Sometimes you want to
+[29:32] just move really quick so you set a low sample. Sometimes you want to be a
+[29:35] little bit more representative so you up it. Um I have it here set as 100. Feel
+[29:40] free to adjust. Um and then the next thing is train split. Um so I think
+[29:45] folks are probably pretty familiar with the concept here of like a train test
+[29:49] split, but it's just how much of the data do we want to use into our
+[29:52] training? Again, that's what we're using to actually optimize. Then how much of
+[29:55] it do we want to use when we're testing when we're running the eval um on the
+[29:59] new prompt? Um and there's number of rules. Uh
+[30:04] basically the specific number of rules to use for evaluation. This just
+[30:09] determines which prompts to use. Um and so this is like as we're running these
+[30:13] loops, we're outputting, you know, a bunch of different prompts. So this is
+[30:17] just saying how many um we should use for evaluation. And then key one here,
+[30:22] number of optimization loops. So this sets how many optimization iterations to
+[30:26] run per experiment. Um and each loop basically generates those outputs,
+[30:31] evaluates them and refineses the prompt. And so these just control the experiment
+[30:35] scope the data splitting um just went through the whole prompt learning loop
+[30:39] and and how much data we want to use. So you can kind of just run these as you
+[30:45] are or if you want to adjust them feel free. Uh and then the next step pretty
+[30:49] simple. We're just going to uh grab that open AI key if you haven't already uh
+[30:54] set that up. So, get passage is going to like pop up. Um I'll show you here
+[30:58] quick. It's going to pop up there. You can just paste in your API key there
+[31:03] before we start looking at the the data a little bit.
+[31:12] Just if anybody runs into any issues, you just give this away. All right. I
+[31:16] think this particular we get through this
+[31:26] >> I'm doing good but if you have a free one you want to give me
+[31:30] that >> I wish
+[31:34] >> all right let's talk about the data so we provided data with you with queries
+[31:39] um you can see here that we're doing the 8020 split based off of kind of
+[31:43] configuration we set above I'm just going to pull this um train set here and
+[31:48] let's just >> Yeah, I run because in the minus
+[31:54] 50 >> Oh, yep. You're right. That's a mistake
+[31:57] on my part. Yeah, it is the 50. Um
+[32:04] let's take a look at what this data set looks like. No. Uh just so folks can
+[32:10] kind of understand. Um so kind of starting here with some just basic input
+[32:15] and output. Um transcept we don't have any of the the
+[32:21] feedback in these rows that I printed out here but you can imagine you can
+[32:24] have different uh correctness labels here explanations any real validation
+[32:28] data can be whatever it is that um you'd like it to be. Some folks use multiple
+[32:32] eval feedback sometimes it's a combination
+[32:36] but you really want to have you know the input and output that will use that way.
+[32:40] Should my output of train set be the same as you?
+[32:44] >> Not necessarily. Depends on >> I didn't know if head was sort or not.
+[32:50] >> It all depends on kind of what the the same but we could look at like you know
+[32:53] if I did this this should be the same for you maybe just to make sure.
+[33:04] >> Yeah. >> That's what you're saying. Okay. Yeah.
+[33:09] Quick question. [clears throat] Um, is it possible for the input to be
+[33:13] like a chat history and not just >> Great question. So, I think it depends
+[33:19] on like what it is you're trying to do. If you're doing just like a simple kind
+[33:22] of uh system of the input, you kind of want it to be one to one. You don't want
+[33:26] to give it a ton of um like conversation data that's not relevant to the prompt
+[33:30] that you're optimizing. um we we generally just use like the single input
+[33:34] but I think that there are applications that you could do like conversation
+[33:37] level um inputs. >> Yeah. Because because quite often the
+[33:41] failure is somewhere middleation right. So so if you put just the
+[33:47] original task in uh then the probability of you hitting you know a failure in the
+[33:53] middle of the >> totally. So in that case, what we
+[33:57] generally see is like different rows of like having each of like the back and
+[34:00] forths be like kind of independent rows because you're probably going to
+[34:03] evaluate each of them and um honestly probably like get the human feedback on
+[34:08] each of them. So we usually separate them out in that way.
+[34:12] >> But it's a good point. If you just always are focusing on the first turn,
+[34:15] there's probably a lot of redundancy there. uh you definitely will have to
+[34:19] like say over parts of the conversation >> and and how we can biferate like
+[34:24] instructions and we have some context also. So
+[34:27] >> should not touch the context. It should only uh whatever the manipulate the
+[34:32] system instruction or the prompting context it should be the static it
+[34:37] should not be like based on the answer it will change my
+[34:41] context. >> Yes. What you're saying is like looking
+[34:43] at the input there might be like a tool volume context you're kind of passing
+[34:46] that in. You can absolutely include that in your data set um so that the
+[34:49] application kind of understands what other or not the application
+[34:52] [clears throat] but the prompt learning um LM can understand all of the data
+[34:57] that's kind of like available. So you can just have that passed in as extra
+[35:00] column if you want. Most people start with just kind of input and the
+[35:04] feedback. Um but you can absolutely add what other data you think is relevant
+[35:10] and if when for the rerunning when we're doing the experiment of testing you'll
+[35:14] definitely always want to have the data that would be required to answer
+[35:17] >> any even very simple some call some call or some context it is pulling some API
+[35:24] call whatever the prompt engineering it
+[35:28] should be based on the out getting the output right and whatever
+[35:33] the context front my plus whatever the tool call I have done API call all the
+[35:40] uh contact engineering and then last finalize
+[35:44] >> totally yeah so again at this point we're we're testing just like one prompt
+[35:48] and not that kind of end to end but you definitely want to have everything that
+[35:52] like is flowing into the prompt that you're optimizing so uh if your system
+[35:55] prompt takes in the user input for example some data from an external API
+[35:59] you would definitely want to provide all of that data does that make sense
+[36:04] Because because you're saying that like the the like trajectories
+[36:08] [clears throat] the like tool calls and what the agent's going to do depending
+[36:11] on what the tool call was is what you're trying to proper to.
+[36:14] >> Yeah, exactly. We want to just like because we're kind of trying to replay
+[36:16] and optimize one step of it. We definitely don't want to do it
+[36:19] completely in isolation. So if there's like data that flows into that prompt um
+[36:23] that's context that's using that's producing the output, right? So we want
+[36:26] to be sure that we're including that. We don't want to exclude anything. But if
+[36:29] it's data that comes like at a different step probably not then you don't want to
+[36:34] do that that way. It's just like think about what's relevant for the the step
+[36:37] that we're trying to optimize in this.
+[36:44] All right. Any other questions coming? All right. Cool. So we're going to set
+[36:49] up our initial system prompt. You can see this is something very very basic.
+[36:53] Uh we'll definitely I think we can do a whole lot better than this, but I just
+[36:56] kind of want to illustrate something uh that we're going to test and optimize.
+[37:01] So we're just saying you are an expert in JSON web page creation. Your task is
+[37:04] input. And then so all these inputs that we're seeing are going to be what we're
+[37:08] actually generating outputs for and trying to optimize. Now I already kind
+[37:12] of touched on this. Um evaluators are extremely important to make all of this
+[37:18] work, right? Um so we're going to uh initialize two evaluators that use
+[37:23] elements as a judge to assess the quality of generated outputs. So we are
+[37:26] using elements a judge. If you have any other like codebased evaluations,
+[37:29] whatever you need to do to evaluate, you can definitely swap those out. Uh but
+[37:34] we're going to do evaluate output. This is going to be a comprehensive evaluator
+[37:37] that assesses the JSON webpage correctness against the input query and
+[37:41] the evaluation rules. It's going to provide an output label of correct or
+[37:45] incorrect. So pretty simple binary. Again, you can use multilel. And then
+[37:50] it's going to have the detailed explanations as well. Um, and then we
+[37:54] have a rule checker. This is a more specialized evaluator that performs a
+[37:57] granular rule by rule analysis. Um, and it examines if each rule um was
+[38:04] compliant. And then both of these are going to
+[38:07] generate feedback that goes into our optimization loop uh to iteratively
+[38:11] improve the system prompt. Um, explanation role violations guide. Um
+[38:15] and we'll get to this the prompt learning optimizer and creating the more
+[38:19] effective prompts. So I have some imports here. Let's take a look at what
+[38:22] the actual eval output has. Um so we do have some rules that are in um in here
+[38:33] wait
+[38:36] um they're going to be in a repo. Um so we're going to open that as a file. We
+[38:40] have this llm provider and we're using open AI here. And then we're going to do
+[38:44] our classification evaluator. So, uh we're just calling it uh evaluate
+[38:48] output. It's al we have an evaluation template that we're reading from the
+[38:54] bottom here. Um then we just have choices correct and correct. Now we're
+[38:57] mapping a label to a score. Sometimes it's helpful to be able to like add or
+[39:00] score. Sometimes a number is easier than just looking at a bunch of labels. Uh it
+[39:04] is optional you want to map these if you have like a multiclass use case. You can
+[39:08] set the scores u accordingly. But these are just going to be our choices like
+[39:11] the rails that we want our elements as a judge to adhere to. And then all we're
+[39:16] doing here is getting our results. I have it doing some printing so you can
+[39:20] kind of take a look. So this is going to be slightly different than what you're
+[39:22] seeing in the notebook. So I'm just going to pause here. Uh if you want to
+[39:25] make the code changes from what you're seeing in probably your version, this is
+[39:29] a a good time for that. Does kind of the setup of the evaluator
+[39:34] make sense to all kind of the key. It's going to be the rails. It's going to be
+[39:38] the output. Uh and of course our template. [clears throat]
+[39:44] >> Yeah, you will want to grab your own uh OpenAI key here uh to set
+[39:52] [clears throat] >> and we can help you if you want to use
+[39:53] different provider. We can help you swap this out like that is helpful to
+[39:57] anybody. >> Okay, I'm going to start walking you
+[40:01] through the output generation. So uh this is just kind of you know you can
+[40:06] imagine this as your own agent logic or the the part that you're kind of
+[40:10] testing. Uh this is just going to function that actually generates the
+[40:13] JSON u outputs. We're using for one here with JSON response format zero
+[40:19] temperature for consistent outputs. Um it's taking a data set a system prompt
+[40:23] generates outputs for all rows returns the results for evaluation. Um and it's
+[40:28] called during each iteration to produce output. So this is like our
+[40:31] experimentation function that we're writing. So as we're passing in data,
+[40:34] it's producing new uh prompts. We need a way to test it, evaluate, understand uh
+[40:39] how we are kind of moving the needle here. So that's all this is. So it's
+[40:43] pretty straightforward function just called generate output. We have that
+[40:46] output model. Again, we're using OpenAI. If anybody wants help switching things
+[40:50] around, happy to help. Uh we are using response format because we are dealing
+[40:54] with JSON here. So uh we know that what you just prompted. I mean some of the
+[40:57] the newer models are decent at it, but using response format is really helpful.
+[41:02] And then we're also setting temperature to zero. Um, and here is just kind of
+[41:06] where we're passing all the data in. So the data set because again we want to
+[41:09] run this on all of the the testing data, the system prompt that will be input. So
+[41:15] as we get to the optimization loop, we're going to be passing in a new
+[41:18] prompt to this with the data set and then evaluating. Um, we have our output
+[41:23] model that we've already passed, concurrency, all that good stuff. And
+[41:25] it's just returning all of the outputs there. Would you for the uh the current
+[41:32] generation of models since this one's basically like in in AI terms ancient uh
+[41:36] would you like still recommend setting the temperature to zero or would you
+[41:40] actually want to try to encourage some of the creativity to like
+[41:43] >> I think it depends on the use case a little bit and what you're you're trying
+[41:46] to do. You can definitely experiment that and kind of take it through the
+[41:48] lens of how how important is consistency to use something like I feel like JSON
+[41:52] web page I feel like consistency probably like temperature zero makes
+[41:55] sense but I definitely think not for every agent every use case do you want
+[41:58] to use zero
+[42:03] any other questions get moving all right additional metric so we kind of talked
+[42:07] about before that we are kind of using some score mapping uh this part is
+[42:11] optional you want to use the metrics that make sense [clears throat] to you
+[42:14] we're not directly using this um as like we are kind of like using it to know
+[42:20] whether or not we optimize but it's not like we're you know using this as our
+[42:24] sole kind of indicator for the success. Uh here we are just going to calculate
+[42:30] some very basic metrics. Um it's just you can you know choose something like
+[42:35] accuracy, F1 precision, recall just some basic kind of classification metrics for
+[42:40] us to understand and because we are using binary mapping scores we can do
+[42:43] that. Um and so that's what you're seeing happen here. We're mapping to
+[42:47] binary and then just based off the score we calculate the metric. So very simple
+[42:52] uh helper function here.
+[42:57] All right, the good stuff the optimization loop. We made it. Um okay,
+[43:00] so this cell implements the core prompt optimization algorithm. It's a
+[43:04] three-part process. Uh so we want to generate and evaluate. So generate
+[43:07] outputs using the current pump on the test data set and evaluate their
+[43:10] correctness. Uh we want to train and optimize. If results are unsatisfactory,
+[43:15] generate uh outputs on the training set, evaluate them, use the feedback to
+[43:19] improve the prompt, and then iterate. So we kind of want to repeat until either
+[43:23] the threshold is met or all the loops are u kind of completed. So if you
+[43:28] remember above, um we're kind of setting that to just like five loops. Um and
+[43:34] then you know we can kind of repeat um based off of that or the thresh met um
+[43:41] it's going to track metrics across all the iterations. So turn to detailed
+[43:44] results including a train test accuracy scores the optimized prompts and the raw
+[43:48] value. So as I kind of mentioned at the beginning as we're running these
+[43:51] different loops on the experiments we're going to be producing a lot of different
+[43:54] prompts. Um and so we're kind of getting that information back that you can use.
+[43:59] Um and these are our key parameters. I'll kind of go through them, you know,
+[44:02] as we get to the code, but just to give you a heads up. Uh, this is the target
+[44:06] accuracy score to stop optimizations. Um, it could also be whatever other
+[44:10] metric you'll see, we have a score so you can kind of determine the number of
+[44:14] loops of the optimization iterations. We've set that score and then the number
+[44:18] of rules. Again, these are some configurations we've already set.
+[44:23] Um, cool. So, optimization loop. This is um going to take in all of those um you
+[44:30] know parameters that I've mentioned there. Um it just kind of kicks off
+[44:34] saying hey we're starting um it's going to do the initial evaluation so we
+[44:39] understand uh how things are starting off. Again you can kind of pass in data
+[44:44] too. You can kind of skip this initial evaluation. We're kind of running it um
+[44:48] at the start here. But if you were running production setting, you might
+[44:50] already have evalu.
+[44:55] Um, and then it's going to assess the threshold against kind of our initial
+[45:00] valuation. Again, this could kind of be skipped when we're coming from a
+[45:02] production setting, but wanted to kind of start us off from scratch so that we
+[45:06] can get a real feel for this. Um, and then it starts the loop. So, we're
+[45:10] generating output. Um, it's setting that as the train output. So, when I printed
+[45:15] train, you kind of saw the outputs. I kind of skipped ahead there. Um and then
+[45:18] it also will set um you know correctness, explanation, any rule
+[45:22] violations. Um and then we'll actually use our prompt learning optimizer. So
+[45:27] this comes with like the SDK uh the prop learning SDK that you can use um with
+[45:31] the rise. Uh so we're sending in that prompt optimization the b choice um and
+[45:36] then that API. So under the hood as we talked about in the slides taking in
+[45:40] that feedback um taking in the original prompt and trying to optimize to get
+[45:46] better results and then spinning out prompt um and then can also add an
+[45:50] evaluator. So again those three um kind of feedback columns we're looking to get
+[45:55] back as correctness explanation for that if there are any rule violations and
+[45:59] then from there we just kind of kicked off the optimizer and optimize with our
+[46:04] train set output those feedback columns again and then you know any context size
+[46:08] limitations you want to add um next step so the optimizer again is going to take
+[46:14] our data produce a prompt we want to evaluate so we understand how we're
+[46:17] doing what this code block doing is doing here so trying to get that new
+[46:21] prompting again with all those details getting our result and then we do that
+[46:27] with our test set as well and then we're getting back like our score and our
+[46:32] metric value and then doing the checks and then we repeat it all again till we
+[46:36] either get above our threshold or we've hit the max number of loops and then
+[46:41] returning our results. So that's kind of what's going to be happening other here.
+[46:45] Any questions on that?
+[46:53] uh just some result saving function more helper functions here. So we do want to
+[46:57] obviously save all these results. We don't want them just be ephemeral that
+[47:00] we can't ever access again. So just saving them all. Um you can also save
+[47:03] all the single experimentation so you have all of that data towards the end.
+[47:06] We'll be able to kind of pull this um and determine what the best prompt is.
+[47:10] But these are just very basic helper functions. I don't spend too much time
+[47:13] just saving them to CSV at the end of the day. Now we execution it. Um, so
+[47:19] this cell runs the prop optimization experiment, saves the results. We're
+[47:22] getting the JSON format, the CSV format. Um, it includes calls for the iteration
+[47:26] number, the number of rules, test, train, accuracy scores, all the data
+[47:30] that we're actually going to need to evaluate uh whether or not this thing is
+[47:34] successful, and then we're going to start getting uh results here. So, um,
+[47:39] this does take quite a while to run. So, we'll run and I think this will be a
+[47:42] great point for discussion, but as you kind of are running it, you're going to
+[47:45] start seeing the different loops. um kind of outputs coming out as well. Um
+[47:52] and yeah, we'll just kind of like work through it as it it runs. It's probably
+[47:56] going to take like 20 30 minutes for things to run, but um happy to take any
+[48:00] questions and help anybody out as they run into issues.
+[48:04] >> One thing, can you scroll back to the part of code that we needed to change?
+[48:12] >> Change. It's gonna be
+[48:22] >> So, one reminder are running into this. I don't think I
+[48:25] was >> for this line here, like when you're
+[48:28] doing install, you do want to be equals 2.2. Um, because I think there's a a
+[48:33] little bit of a package issue. Um, so just make sure that's you're hitting
+[48:38] errors with the eval. If not, let me down and try to fix it. This is the
+[48:43] reason why [clears throat] >> uses like a generic evaluation.
+[48:48] >> Yes. And you can kind of see the evaluation problem if you go to the
+[48:52] We've kind of just taken that part out of this, but we can definitely go
+[48:55] through that. Um so if you look here um on this line here, we're reading in
+[49:02] um under prompts here, you can find the evaluation if you're
+[49:07] curious. [snorts]
+[49:12] And this is the reason why everyone hates on docker. This is why we use
+[49:19] all. >> Yes, absolutely.
+[49:23] >> The notebook.
+[49:27] >> So I would also recommend uh patching your code with nestio if you haven't
+[49:32] already. Helps it run a lot faster. Also for the purpose of the workshop um I
+[49:37] switched our loops to one. uh that took me six minutes to run. So would
+[49:41] recommend also doing that instead of having five. Obviously wouldn't
+[49:45] recommend doing that when you're actually optimizing your prompt, but for
+[49:48] now it'll help you get through the workshop.
+[49:52] >> All right, I just want to kind of call out the the last little bit here. Um
+[49:58] >> the last step
+[50:02] before folks, let's see. Okay. Um so the the last little bit of code here um is
+[50:08] just to extract the prompt that achieves the best test accuracy. So I mentioned
+[50:12] how we're kind of like saving up all the results to use. Uh we just have a
+[50:15] function that essentially gets the last or the best uh version of that kind of
+[50:20] showing you the original and then the best optimized version uh which you can
+[50:24] then use to kind of [clears throat] pull and put into your um code. I did want to
+[50:27] kind of just give one kind of call out as you kind of saw today can be a little
+[50:32] bit um difficult to to manage and so I want to call out for those of you who
+[50:36] are kind of maybe looking for more of like an enterprise solution to this in
+[50:39] Arise uh you do have these prompt optimization tasks. Uh you can have your
+[50:42] prompts living in our prompt hub um data sets with all of your human annotations
+[50:46] or ebal that you can either create from traces or just by ingesting it into
+[50:50] Arise. Um, and then from there, all you really need to do is like give it a task
+[50:54] name, choose what you want your training data set to be, where the output lives,
+[50:58] where all your feedback columns are. Uh, you can adjust all of the parameters uh
+[51:03] that you'd like. And then from there, you can just like kick it off and it
+[51:06] will produce an optimized prompt in the hub for you. Um, so if I go over here, I
+[51:10] think I have some. No, maybe not.
+[51:17] it will basically just create a new version here that says it's optimized
+[51:19] prompts with all the results and we are building on this so you can add all your
+[51:23] ebots to it have that all running in the loop but just wanted to call out that if
+[51:27] you're not interested in maybe maintaining code loops and having to
+[51:31] build uh like a task infrastructure yourself it is something that we do
+[51:34] offer in Arise um but yeah hopefully I know some folks are hanging out we'll be
+[51:39] sticking around here for a little while as we um can help you kind of work
+[51:43] through issues But uh thanks so much for joining us. Um hopefully you learned
+[51:48] something useful. [music]
+[51:55] [music]

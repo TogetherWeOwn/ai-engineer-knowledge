@@ -1,0 +1,196 @@
+# title: Agent Output Is Not UX: Rendering Layer Your LLM Pipeline Is Missing - Bala Ramdoss, Amazon Lens
+# source: https://www.youtube.com/watch?v=maTp79FD9gI
+# speaker: Bala Ramdoss, Amazon Lens
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T07:23:06Z
+# sha256: 97a4134489052dfa4d0f476fcca13de13f7250c4dcdd9bd9e51104d231dee660
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:01] I asked my AI assistant to help me reserve a table at a popular restaurant.
+[00:06] Here's what it gave me.
+[00:09] Now, it's not wrong. The phone number is there.
+[00:13] The hours are right. It even knows the walk-in oyster bar at
+[00:18] the front. The model did the real work, but look at
+[00:22] the outcome. I have to do my research and work
+[00:26] towards actually booking the table. Like, we've been here for a while.
+[00:30] Now, imagine if you were to build something like this for your customers.
+[00:35] What would you want it to do? Same answer, rendered like this instead.
+[00:42] A date, a time, a couple of taps, and then you're done.
+[00:47] The agentic product you're building already has all the tools to support
+[00:51] your customer's needs. The only thing that you need to focus on
+[00:55] is the layer between the model and something that a human can interact
+[00:59] with. That layer is what I'm going to talk
+[01:01] about. The models and agents are here to stay.
+[01:05] And we should learn how to make it friendly to the humans.
+[01:09] Hello. Welcome to my talk. I'm Balaram Das.
+[01:13] I have been building customer-facing apps for over a decade.
+[01:17] And the past 6 years I've spent building Amazon Lens.
+[01:22] Amazon Lens is our suite of camera features powered by AI.
+[01:26] It enables you to shop using images, screenshots, and barcodes to discover
+[01:31] visually similar products. If you have Amazon app installed, I
+[01:35] encourage you to try. This talk comes from my experience
+[01:39] building customer-facing products that are in
+[01:42] millions and millions of mobile devices. Um quick dis- disclaimer before I go
+[01:47] further. I'm giving this talk on my own. The
+[01:50] opinions in this talk are mine and not my employer's.
+[01:56] When you think of building UX for an agentic AI, obviously ChatGPT comes into
+[02:00] mind. How do you draw these cards? How do you
+[02:04] choose carousel versus list? How do you craft this so the human can understand
+[02:09] and interact better? When you attempt to build something like
+[02:14] this, you run into a wall. There are problems that need to be
+[02:18] solved from the very early stages of your system.
+[02:22] Is that experience going to be snappy or slow?
+[02:26] Do we get all the information at first or one thing at a time?
+[02:32] And how do you scale this for mobile apps where versions and device
+[02:36] capabilities are fragmented? Like if you notice, none of these
+[02:39] problems are due to the model itself. The model does its job well.
+[02:44] Um these are delivery problems and they live in between the model output and
+[02:48] what's on the screen. That is the layer that decides whether
+[02:52] your product succeeds or not. So uh for this delivery problem,
+[02:58] if if you had asked me about uh about this layer 2 years ago,
+[03:03] I wouldn't have had a name for it. I'd built a couple of AI features by
+[03:08] then and every single time I solved this part from scratch.
+[03:12] A bespoke pattern shaped around whatever system I was in.
+[03:18] Uh there was no shared vocabulary for any of it.
+[03:22] What gets me is that this thing now has a name.
+[03:25] Generative UI. And there's an open spec for it.
+[03:29] ATUI from Google. Instead of the agent handing you a raw
+[03:32] text or HTML, it describes the UI as data.
+[03:37] A list of components and the client renders them with its own native
+[03:41] widgets. A problem I used to solve alone
+[03:45] is becoming something teams get to start from.
+[03:48] And that's exactly what I'm excited to dig into.
+[03:52] Um normal API returns data and the client decides how to draw it.
+[03:57] Like your model is good at tool use, coding, and even other complex tasks.
+[04:04] It can do UI, too. And that is what the generator UI is
+[04:08] about. And it's it's a spectrum. Uh Co-pilot Kit, a company that does
+[04:13] this primarily, lays out in three rounds.
+[04:17] At the bottom, we have control.
+[04:20] The model picks a pre-built component like a product
+[04:24] card. It never invents anything.
+[04:27] In the middle, um declarative.
+[04:30] The model composes UI from a catalog. Uh date field, a time field, or a submit
+[04:37] button. Um that's where A2UI sits.
+[04:41] And at the top, it's fully open-ended.
+[04:44] The model generates a novel UI on the fly like MC PA apps.
+[04:50] The higher you go, the more your client has to trust whatever the model hands
+[04:55] it. Um most production mobile apps live in
+[04:59] the bottom two rounds because, you know, that's where you stay safe.
+[05:02] And that's what we'll focus on.
+[05:06] Um adding to the complexity of UX building,
+[05:09] um mobile apps play an important part. Um on the web, if uh render breaks, you
+[05:15] know, you ship a fix and it's live in minutes.
+[05:18] Uh mobile apps cannot do that. Like you're looking at hundreds of millions
+[05:22] of installs and you don't control uh when any of them update.
+[05:28] So, when a client meets a content type it's never seen,
+[05:32] it doesn't gracefully degrade, it crashes.
+[05:36] And it keeps crashing for days or weeks um in hands of people who haven't
+[05:40] updated. So, one rule holds everything that
+[05:43] follows for mobile clients. You cannot meaningfully patch the client.
+[05:48] Um how does this system look when you zoom out?
+[05:53] Um here's the whole simplified pipeline. Um version aware context face that feeds
+[05:59] the model. Uh yes, that is context engineering.
+[06:03] The model outputs typed UI intent. Uh that flows through a BFF backend for
+[06:09] frontend. And to a client render that draws it and
+[06:13] uh falls back safely when it cannot. We'll break into three patterns.
+[06:19] Pattern one, the rendering contract. Pattern two,
+[06:23] streaming. Um that's the flow in between them.
+[06:26] Pattern three, uh the BFF that sits in the middle.
+[06:30] Uh we'll take them one at a time starting with the contract.
+[06:34] Um the contract is all about making the
+[06:37] model be aware of what the client capabilities are. You ensure it it stays
+[06:44] true to the client that the model is trying to draw the UI for.
+[06:48] Um what it ensures is that that the onus is
+[06:51] not on the client or the rendering layer to infer
+[06:55] what to show by looking at the token output.
+[06:59] Um you also maintain a repository of version map with the capabilities. For
+[07:04] example, you introduced a new flight uh card UI in version 2.0.
+[07:10] Uh make sure to surface it to the model only from version 2.0 onwards.
+[07:15] Um when you build the context.
+[07:20] The takeaway here is that the model is going to choose the CX and you provide
+[07:25] the right information in its con- context.
+[07:29] Um let's take a look at this example. And this this is usually the hard part
+[07:33] of building the system. This is the model facing half of the
+[07:38] contract. And you don't want the model to send
+[07:42] back text. Like, you want it to stream blocks of UI components.
+[07:48] Um a conversation block for what it says in text
+[07:53] and a UI block for what what it wants the client to render.
+[07:58] The contract even encodes layout rules. In this example, one to three flights
+[08:06] a swipable carousel. Four or more, a vertical list.
+[08:11] The model picks the intent. And notice what the model never does. It
+[08:16] never invents a component. It chooses from a fixed menu that you
+[08:21] provide to it. Obviously, it won't be in the millions.
+[08:25] It would be a handful. It turns out that
+[08:29] it gets significantly harder as you scale your features to more surfaces.
+[08:33] I'll let you think about how to engineer that context to make sure the model
+[08:38] succeeds in picking one.
+[08:42] So, that's the contract. Now, let's move on to the streaming
+[08:46] part. This was eye-opening to me when I first
+[08:50] encountered it. Traditionally, apps make an API call and
+[08:55] wait for something to happen. When LLMs are involved, this pattern
+[09:00] becomes ineffective as often the latency is higher due to
+[09:05] the model themselves. And on top of it, there are tons of
+[09:09] additional checks to ensure safety and whatnot.
+[09:12] And we also introduce a new layer that it's going to be a little bit complex to
+[09:17] do the dynamic UI. Um streaming helps here
+[09:22] uh by not making the client wait for the whole response.
+[09:26] It renders things in chunks at a time. Take a look at the illustrative example
+[09:33] when you have to surface information one chunk at a time.
+[09:37] First, you show a skeleton, then partially fill it, then complete it. It
+[09:43] may take 3 to 4 seconds to get there, but the wait is bearable.
+[09:50] That kind of changes what you measure for an app. Like you stop chasing the
+[09:55] total latency, which we have done for over a decade.
+[09:59] You start chasing time to first chunk. You know, the first
+[10:03] useful thing that your user sees. For this reason, the traditional loading
+[10:09] spinner won't work for AI features. Sometimes,
+[10:14] you have to get creative and design your feature around it. This may not work for
+[10:19] all, but here's a product example. And when you know it's going to take time to
+[10:23] render something, keep the user engaged. The Lens live allows the user to focus
+[10:29] different things, um tap on an object that they're interested in while they
+[10:33] wait for the results. Uh if you don't have the full screen in
+[10:38] your control, you can show the thinking CX. But please use it sparingly. The
+[10:44] overall AI users have moved out of the forgiving phase, and now they expect to
+[10:50] know what is happening. Now that you have a way to stream back
+[10:54] different states, you know how to show what your agent is doing.
+[10:59] Um here's an example I copied from Gemini.
+[11:02] When when it starts to work on a task, it gives a glimpse into what the agent
+[11:07] is doing. Even though it takes 10 seconds, I'm
+[11:10] okay if I know what's happening and be able to trust the agent's final
+[11:15] output.
+[11:17] We have covered streaming. Let's move on to the final and most
+[11:22] important part. Your new BFF.
+[11:26] Pattern one was about how UI gets picked. Pattern two was about how the
+[11:31] chunks delivered. Pattern three is all about how the
+[11:35] chunks become meaningful UI elements. This is a concept of server-driven UI.
+[11:42] And it's a spectrum of server control. And the more the server controls, the
+[11:47] more you build. The BFF is a subset of it and decides
+[11:52] how to render. It owns the platform specific rules like
+[11:56] Android versus iOS, that kind of stuff. Uh it also helps the client to make less
+[12:01] decisions and draw what's handed to it. That's the whole idea.
+[12:08] The BF BFF doesn't just ship layout. It does a little more.
+[12:15] In addition to the format and context, it does the hydration and adds actions.
+[12:23] Every rendered element carries an action payload to handle what
+[12:27] what a tap does, what the deep link hit opens.
+[12:30] It could even name the impression metric to log.
+[12:34] It carries this conversational context across turns. So, the next response know
+[12:39] what came before. And the good thing about this is that
+[12:44] you can actually do this to your existing apps.
+[12:47] You can reuse the existing CX units you already have.
+[12:51] The flight row, the product card, the components your app already shipped in
+[12:56] production. You're not building a new agentic look
+[13:01] into your app. And that's a good way to build for humans.
+[13:05] Same brand, same density, same familiar feel.
+[13:09] It looks and feels native.
+[13:13] That brings to our takeaways.
+[13:18] One, the models are highly capable already.
+[13:22] You feed a properly typed, versioned contract so it can pick and choose the
+[13:27] right CX. Two,
+[13:31] stream into typed components, not text. Let the user know what your agent is
+[13:36] doing. Three,
+[13:39] let the BFF absorb the model output so the client can stay dumb and safe.
+[13:47] No, none of these are about the model. The model was fine.
+[13:52] This layer is what ships the product. Bringing back to where we started,
+[13:58] your agent output is not the CX. You build on it.
+[14:03] Thanks for watching. If you'd like to learn more or connect
+[14:06] with me, here's a QR code.

@@ -1,0 +1,197 @@
+# title: Break It 'Til You Make It: Building the Self-Improving Stack for AI Agents - Aparna Dhinakaran
+# source: https://www.youtube.com/watch?v=Qvp9vw4jJQ8
+# speaker: Aparna Dhinakaran
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T12:45:36Z
+# sha256: 495331a9aad470a8d70301cb286d6fc7500bd2e2bc57e4977969fa67e6f92b79
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:02] Hey everyone, my name is Aperna. I'm one of the founders of Arise and today we're
+[00:06] going to talk about agent evaluation. At Arise, we build development tools to
+[00:10] help teams build agents and take them all the way to production. We focus on
+[00:15] everything from evaluation to observability monitoring and in tracing
+[00:21] your application so you can see every single step that your application took.
+[00:26] Uh let me tell you a little bit about why we got into this and then I'll jump
+[00:29] into uh some concrete tips about how we think about evaluating agents. First,
+[00:35] building agents is incredibly hard. There is a lot of iteration that goes on
+[00:39] at the prompt level, at the model level, at iterating on the different tool call
+[00:43] definitions. And for a lot of teams, this is what their experience looks
+[00:48] like. They're in an Excel sheet. They're swapping out different prompts. They're
+[00:53] trying to figure out did one prompt give them a better output than another
+[00:59] prompt. Often a lot of this is just based off of how it felt on a couple
+[01:03] different examples and then they go live into production of that prompt. Part of
+[01:09] this is that it's it's pretty difficult to actually systematically track where
+[01:15] is this new prompt doing better than your previous prompts, where is this
+[01:19] model doing better. Um, and it's hard to actually include other people,
+[01:23] especially if you have your product managers or your thememes actually a
+[01:27] part of this iterative evaluationdriven process to how you
+[01:32] actually want to think about improving your application. Um, and so it's hard
+[01:38] to consistently figure out what makes your agent better. And it doesn't get
+[01:42] easier once you actually deploy into production. It's pretty hard to
+[01:45] understand, well, where's the bottlenecks in my application? Is there
+[01:49] a specific sub agent or tool call that is kind of kind of consistently
+[01:56] creating, you know, poor responses? How do I want to actually identify those
+[02:00] bottlenecks and then what do I actually need to do to go fix it? And so today
+[02:05] I'm going to be diving into a little bit of the different components of how I
+[02:08] think about agent evaluations. We're going to talk about some of the most
+[02:11] common components, which is evaluating at the tool call level. um taking that
+[02:16] one step further going all the way to the trajectory and looking at did it
+[02:21] actually um maybe across an entire trace or or you know did it actually call for
+[02:26] example all the tool calls in the right order. We're going to then not only look
+[02:30] across a single trace but then across um multi-turn conversations because these
+[02:36] these interactions are no longer just kind of a single turn experience. are
+[02:39] often multi-turn, keeping track of what happened in the previous um interaction
+[02:44] and keeping that in mind as context for the next um next turn of the
+[02:48] conversation. Uh so we're going to talk a little bit about that and then I'm
+[02:51] going to jump into kind of a you know approach that we've been really excited
+[02:55] about which is how do we get these agents to self-improve and that starts
+[02:59] with not just thinking about the agent improving but also your eval
+[03:02] consistently improving. So with that let's jump in. I'm going to do a little
+[03:06] bit of slides and then I'm going to jump into actually a real example so you guys
+[03:11] can actually see it in in practice. So, first we're going to talk a little bit
+[03:14] about tool calling emails. Um, anyone who's building agents is probably
+[03:18] writing a lot of different tools um and making sure that your agent has access
+[03:23] to call all these different tools uh depending on the action it needs to
+[03:26] take. And pretty consistently it's your your agent needs to probably make the
+[03:31] decision of what's the right tool call to call in this specific scenario. I
+[03:36] have you know potentially contacts from previous part of a conversation or
+[03:40] previous actions it's taken and what do I actually need to call in order to kind
+[03:45] of next continue whatever is happening in that in that interaction. Um, so not
+[03:49] only do you have to pick the right tool call, but you also have to figure out
+[03:53] from that conversation or or context, what's the right arguments to pass into
+[03:58] that tool call. Um, and so it's pretty important to actually evaluate, did it
+[04:02] call the right tool? Um, and did it pass the right arguments into that tool call
+[04:07] itself. And I'm going to go into a little bit of depth of this and show you
+[04:10] how we think about eval uh, actually from from a product perspective. Um,
+[04:15] this is the Arise product. You can see here I'm actually uh tracing and looking
+[04:20] at the traces of our own actually co-pilot here. So this is our own
+[04:24] co-pilot and our own um agent that actually think about it almost like an
+[04:29] insights um a tool where teams can come in and ask all sorts of different
+[04:34] questions about where their application is doing well or not doing well and use
+[04:38] this to actually troubleshoot their their application and and suggest
+[04:42] improvements. And you know like any great product we actually dog food our
+[04:46] own tooling. And so these are actually the traces of different questions that
+[04:50] users have asked us. Um and we actually evaluate uh these interactions so we can
+[04:55] understand where our co-pilot's doing really well and where it's actually not
+[04:59] doing well. Um, one thing that we we actually like to look a lot at is not
+[05:05] just kind of the individual traces, but actually starting at a little bit more
+[05:09] of a higher level view where we can look across all the different paths that, you
+[05:14] know, all the different, you know, trajectories that our agent actually um
+[05:19] can can go down. So in our case, this is actually the architecture of our agent.
+[05:23] You can see here we we follow a little bit of an orchestration worker type
+[05:27] pattern where there's at the very high level a a planner that decides based off
+[05:32] of the information um what to go down and there's all sorts of different tools
+[05:37] that it can then call and sometimes depending on the output of those tools
+[05:41] it might need to call even another um router or orchestrator to figure out um
+[05:47] you know what next tool call to actually call. And so there's kind of multiple
+[05:51] levels to this to actually make sure that ultimately we respond to the user
+[05:56] in kind of a a a good a good way. um with this specific agent of ours um you
+[06:03] can see here that you know for me what I really think of a lot about is well at
+[06:07] the planner level at the the very beginning uh is you know all across all
+[06:13] the different paths that this agent could go where is it kind of doing
+[06:16] really well and are there any bottlenecks in performance and as I can
+[06:19] look through some of this it's you know there's evals around questions that that
+[06:24] are just related to you know generic questions that the user is asking Um, it
+[06:29] looks like we're actually not doing so well on search. I can see here we're
+[06:32] almost pretty consistently doing, you know, it's about half and half of times
+[06:37] we're getting it correct as we're getting it incorrect, which is not that
+[06:40] great. So, this is probably an area that I would dive into and look at kind of
+[06:44] the bottlenecks uh of, you know, where we're not doing so well when the user is
+[06:48] asking search questions. Um, and it looks like there's other questions that
+[06:52] we're actually doing doing pretty good on. So this type of highle view first is
+[06:57] just giving me a view of all the different paths that my agent can go
+[07:00] down and really kind of pinpointing to me what I should go focus on
+[07:04] specifically. So now when I go look inside of my traces, I can actually uh
+[07:09] start with something like the Q&A correctness and look at something like
+[07:15] well I I should probably care about um in this case it was specifically the
+[07:22] search Q&A correctness. So, what I should probably go look at is for search
+[07:26] Q&A correctness when it's incorrect. Let me go take a look at some of the
+[07:30] examples of that and try to understand where what I'm doing wrong here. And so,
+[07:34] in this case, when I'm looking at these, I can actually now drill and go into
+[07:38] specific um traces. And at this level, I have evals across the entire trace. I
+[07:45] have
+[07:48] evalu tool call level I also have um you know not only did it call the right tool
+[07:54] call it says the function call is correct but I also have eval on did it
+[07:59] actually pass all the right arguments in this case it looks like that's where
+[08:03] it's going wrong it says therefore the arguments do not align with the required
+[08:07] parameters leading to the conclusion that the arguments are incorrect so I
+[08:10] probably have an issue here where even though I'm calling it looks like the
+[08:13] right tool call um out of all the different ones that I have, it looks
+[08:17] like maybe I'm not passing in the right arguments inside of my tool call based
+[08:22] on the context of the conversation. So that's something that I should go fix.
+[08:27] Um so this is kind of the first big one that that we think a lot about. Um the
+[08:32] next one that it's pretty interesting is also, you know, for a lot of these it's
+[08:36] not just a single tool call that's made. It's many actually. And you can kind of
+[08:40] see that when when I was showing you the way that our architecture is built.
+[08:44] There's actually a lot of different even within the Q&A correctness. Uh when we
+[08:49] go down the search correctness path, there's actually a lot of different
+[08:52] subtools that are even called here. So it's pretty important to not only get uh
+[08:58] you know if it's individually calling a single tool correctly, but also is it
+[09:02] getting the order of the tools that it's supposed to call correctly. And that's
+[09:05] really what as as we think about trajectory eval starts to uh starts to
+[09:10] it starts to become about is really is it calling tool calls in the right order
+[09:16] um if across a series of steps that's needed for an agent to complete a task.
+[09:22] Is it consistently calling and and executing them in the same set of steps
+[09:27] or and and eventually converge on you know x number of steps to complete this
+[09:32] action or does it sometimes veer off and call it in a different order and
+[09:37] therefore require me to a have to spend a lot of tokens in order to do the same
+[09:42] ask um and then b is it kind of messing up and providing wrong kind of outputs
+[09:47] because of that. And so we recommend teams to actually drill in and look at,
+[09:52] you know, across not just an individual kind of a tool call, but actually
+[09:57] looking across um an entire trace and looking at the order of the tool calls
+[10:02] to see if that's actually done well and then evaluating kind of is overall in
+[10:06] this case I have it incorrect and so in this case is it actually consistently
+[10:11] getting the tool calling order correctness
+[10:14] uh uh correct. Um the next step here is well you can look across a single
+[10:19] individual trace or interaction but a lot of these interactions we're seeing
+[10:23] with agents actually ends up being multi-turn. So in this case I have like
+[10:26] a three back and forths between a human and an agent and there's a lot of
+[10:31] interesting questions you can actually ask at this stage. You can ask questions
+[10:34] like is the agent consistent in tone? Um is the agent maybe asking the same
+[10:40] question and again and again? um in which case it's not really learning
+[10:44] anything from the previous interactions that it's had with the human. Um and and
+[10:49] part of that is really does it keep track of context from the previous kind
+[10:53] of n minus one turns in order to be able to answer the nth uh turn of that
+[10:58] conversation really well. And so these are all the types of questions to think
+[11:02] about when you have something that that is
+[11:04] multi-turn. And I'll actually show you an example from another project here
+[11:09] where I do have kind of some of that multi-turn interaction. Um, this is
+[11:14] maybe one where I have kind of this back and forth with with an agent. And what I
+[11:19] care about here across this entire conversation is did I actually correctly
+[11:25] answer all the questions? Did I actually make sure I kept context so that I
+[11:29] wasn't kind of missing context that was made earlier in the conversation? And so
+[11:34] deeply recommend folks to actually think about session evaluations as part of
+[11:38] their evaluating of agents. Um and then lastly, I'll kind of go through this and
+[11:44] um I think this will be kind of a good spot for us to um deep dive into which
+[11:49] is we spent a lot of time even just now on the tool calling trajectory session a
+[11:55] lot talking about how to think about evaluating the agent or the application
+[12:00] prompt. And this is really important. I mean I we could spend a whole deep dive
+[12:05] on this itself but it's really important to evaluate it correctly identify where
+[12:10] does it go wrong so that you can annotate or you you know refine those
+[12:17] outputs and use those to actually improve your existing prompt. And I
+[12:21] think a lot of teams actually totally get this and are doing this all the time
+[12:25] to improve the agent prompt. Um, but what's really important is that the
+[12:29] emails that you're actually using, which is kind of the crux of how you identify
+[12:33] those failure cases, end up becoming crucial to calling out what you need to
+[12:39] improve. And you don't want those eval to remain static, the prompts for those
+[12:45] eval. And so there really is kind of another loop going on here, which is
+[12:50] about improving the eval prompts. And part of this is you're collecting um
+[12:59] consistently checking the the eval outcomes as well to make sure it's not
+[13:03] just the application that got it wrong, but it could have been the eval that you
+[13:07] know miscorrectly labeled it as wrong. Um and start to identify where the eval
+[13:14] might need some improvements. And similar to the process you did for the
+[13:18] agent application, do a workflow where you're iterating on the eval prompts. um
+[13:24] you know building up a golden data set consistently refining it. And there
+[13:29] really are kind of two iterative loops kind of going on at the same time. One
+[13:33] for the agent evaluations, one for um your your agent application prompts and
+[13:38] then one for your eval prompts. And as you think about this, both of them kind
+[13:43] of go hand inand to actually create a really good product experience um for
+[13:47] teams. Um, there's a lot more in here that, you know, I I think we we can dive
+[13:54] into, but um, hopefully this gives you a little bit of a primer about how to
+[13:57] think about agent evaluations. And, uh, check out Arise Phoenix. It's a
+[14:01] completely open-source um, product that you can use to learn a lot about what we
+[14:07] just went through and test it out in your own applications. Um, you could
+[14:11] check out Riseex if you want to um, think about how to run a lot of these
+[14:15] evaluations on your own data. Um, so feel free to check it out and hopefully
+[14:21] you guys got something out of this. Thanks everyone for the time.

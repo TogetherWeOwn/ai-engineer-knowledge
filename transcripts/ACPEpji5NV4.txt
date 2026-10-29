@@ -1,0 +1,249 @@
+# title: Distill the LLM, Don't Serve It: Search & Personalization at DoorDash — Raghav Saboo, DoorDash
+# source: https://www.youtube.com/watch?v=ACPEpji5NV4
+# speaker: Raghav Saboo, DoorDash
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T04:47:55Z
+# sha256: 9dd0383fc1a9e06ed243ccd762ecc75b4efe0a33631d6107b13f4bace9c30827
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:12] Thank you everyone for coming to this talk and Devanch for organizing this. Uh
+[00:18] I'm Ragav. I'm a staff uh machine learning engineer at Door Dash. I work
+[00:22] on search and personalization and uh today I'm going to talk about uh
+[00:28] the ways that we're integrating LLMs for you know our marketplace discovery uh
+[00:33] specifically in four pieces and um how these primitives are kind of uh uh
+[00:38] working towards our integration of LLMs into traditional uh Rexus as well. So
+[00:45] I'll start off uh today uh with a simple claim. Uh the claim is that to build
+[00:51] effective discovery in this case for a marketplace like Door Dash the real
+[00:57] bottleneck is semantic understanding. So that is knowing what you know actually
+[01:05] what items mean uh for users given some context and what a shopper actually
+[01:13] intends to do on you know an app like Door Dash. And historically we have
+[01:19] treated these uh as engagement optimization problems. Um however LLMs
+[01:25] give us a genuinely new lever to extend this. So this talk is about uh you know
+[01:32] the four primitives that have allowed us to start leveraging LLMs for problems at
+[01:38] Door Dash. As you may know Door Dash is now grown
+[01:44] uh well beyond restaurants. So we're in grocery, retail, pets, gifting and more.
+[01:50] And our goal is to capture every shoppable moment. Uh and we know that
+[01:56] across these verticals, the users frequently have very broad shopping
+[02:01] missions, right? So for example, a consumer may say when they come to our
+[02:06] app is, you know, I just adopted a puppy.
+[02:10] What do I need to get started this week? And this consumer start may start on
+[02:15] like searching for puppy food because they just adopted the puppy. That one
+[02:21] query could unfold into further query reformulations.
+[02:25] Um they land on collections for you know other shopping needs, complimentary
+[02:31] items such as crates, leashes, uh training pads all the way to checkout.
+[02:38] And this could happen over multiple sessions, mult multiple days, right? And
+[02:44] capturing that whole arc is pretty hard because it spans multiple models. Um,
+[02:49] and this is where the four primitives I will cover come in.
+[02:55] Specifically, supervision, catalog semantics, semantic personalization,
+[03:01] and steerable content generation. As we heard previously as well, it's a system
+[03:06] of shared representations that help us map this customer's journey uh with the
+[03:12] use of LLMs. Now, with supervision, the question
+[03:16] we're asking or looking to address is how do we teach our retrieval and
+[03:21] ranking systems what good means for different tasks? And here's a simple
+[03:26] example, right? A shopper searches for gluten-free pasta. And if we only rank
+[03:31] from engagement, very popular regular spaghettes might show up and because it
+[03:36] sells well, you know, it may continue to show up. Even gluten-free white bread
+[03:41] might be retrieved and, you know, show up because it overlaps with gluten-free.
+[03:46] But neither of these are clearly the right answer. What we actually want is
+[03:51] graded relevance. A true, you know, gluten-free pasta should be a high
+[03:56] relevance item. Chickpea pasta might be a reasonable substitute and regular
+[04:02] spaghetti while it's popular it fails the constraint that the user has. Now to
+[04:07] solve this there are obviously two sources of truth. We could look at human
+[04:12] annotation but that's expensive slow and becomes
+[04:17] quickly stale because our catalog changes quite rapidly.
+[04:22] Second is behavioral signals. They're abundant but obviously as I mentioned
+[04:25] biased by exposure, position, price, promotions
+[04:31] and you know previous model choices. So the missing signal is a scalable
+[04:36] reasoning signal. This is where LLMs are very useful as they offer a way to
+[04:41] produce that supervision for such tasks. So in our case, you know, the PIP
+[04:46] pipeline starts with human ground truths. uh we build a high quality seed
+[04:51] set of example query item pairs and on a three three uh level relevant scale 012.
+[05:00] We audit the suspicious cases. For example, if a human label says you know
+[05:04] that an item is irrelevant but that item performs very well on add to cart or
+[05:09] conversions, we send that case to a stronger LLM uh to re-evaluate with more
+[05:15] granular prompts. We also reconcile with other models. You
+[05:20] know, for example, our query to taxonomy or category models. And if a query, you
+[05:25] know, query maps to a set of valid categories and the items belong to those
+[05:29] valid categories, we may adjust the label accordingly. And through this
+[05:34] process, we're able to achieve a pretty high precision golden data set that we
+[05:39] then fine-tune a lightweight LLM, let's say, for example, a GPD 40 mini on top
+[05:45] of it. And that's when it, you know, really pays off. We are able to use that
+[05:51] fine-tuned labeler offline across, you know, our full catalog to generate uh
+[05:57] full graded query item pairs. And those labels become one shared target for both
+[06:02] retrieval and ranking systems. This pattern has been pretty important for us
+[06:07] over the past uh few years. um use you know expensive reasoning once offline
+[06:14] then distill it into models that can you know be served cheaply and quickly.
+[06:22] Now let's take retrieval first. The challenge is you know standard
+[06:25] embeddings um at e-commerce scale quickly collapse the relevance uh
+[06:31] distinction. items that are merely related sit close to items that actually
+[06:36] match and the model uh may know two items are related but not be able to
+[06:41] separate uh exact matches, substitutes, compliments.
+[06:46] So our fix is a two-stage contrastive method um trained on uh the same graded
+[06:51] labels. Stage one, which we call mining, does a global geometry shaping. We use
+[06:58] two tower encoders uh with multi-level supervised contrastive loss. Um after
+[07:03] that we use that base model to mine harder negatives and uh these are items
+[07:10] that the model confuses hard negatives that are ranked too high or strong
+[07:15] positives ranked too low. And the second stage after that is where we really put
+[07:22] the model through curriculum training. uh use those hard negatives, relabel
+[07:26] them and our uh you know relevance of the retrieval layer improves sharply
+[07:33] after that. So after stage one we see overlaps between you know relevant and
+[07:38] uh moderately relevant but after stage two there is a significant difference
+[07:43] and this has been one of like our biggest uh levers in retrieval
+[07:47] improvement uh across the board. um you know we've improved NDCG of relevance by
+[07:53] 2.3%. And uh that's also been true with our
+[07:57] downstream business metrics and we did the same with uh uh exercise
+[08:03] with our ranking models as well distilling LM reason labels into our
+[08:07] rankers. However, combining this with uh business and engagement objectives.
+[08:15] Here we add a new tower uh in this case an ordinal uh relevance tower on top of
+[08:20] the LLM graded labels and uh this prediction sits right alongside existing
+[08:27] engagement towers uh click add to cart and conversion and since they share the
+[08:32] same uh bottom layers the semantic fit and relevance fit gets distilled in the
+[08:38] same backward pass and uh our model is able to predict uh you know probability
+[08:43] of relevance across the different levels and we are able to blend uh through a
+[08:49] value function on on top of this that allows us to uh fine-tune between
+[08:54] engagement and relevance for different surfaces.
+[08:59] Now these two examples are part of a larger theme of our work across similar
+[09:04] projects uh where it seems right. We're not replacing the retrieval and ranking
+[09:09] system with an LLM, but rather distilling the uh reasoning and
+[09:13] understanding into some production ranking architecture. And this allows us
+[09:18] to kind of quickly test and also scalably improve our models uh with LLMs
+[09:23] while keeping uh you know the business and system objectives uh of these
+[09:28] surfaces in mind. So once we have supervision, the next
+[09:33] question is how do we represent a very large and constantly changing catalog uh
+[09:39] in a way that every model be it language models or uh you know traditional
+[09:44] retrieval and ranking models uh that they can understand and at you know Door
+[09:49] Dash's scale uh you can imagine we're kind of surfacing items across stores
+[09:53] across internationally actually uh now and you know that's easily a few billion
+[09:59] items at the store item level and for these items you obviously have unique
+[10:04] skew ids but it says nothing semantically. So we also have a human
+[10:09] curated taxonomy that helps us classify and categorize these items into
+[10:14] meaningful spaces. But often this is too coarse and too rigid.
+[10:19] So for example something like hot sauces may just have like sauces hot sauces in
+[10:24] the taxonomy uh but it doesn't tell you anything
+[10:27] about the relationship between hoof or franks or tobasco.
+[10:33] So that's where we've also adapted uh or adopted um semantic ids. Uh it's been
+[10:40] introduced previously already. It's a backbone for a lot of our uh work uh
+[10:46] now. And uh what it does is it gives us a you know a short hierarchical code
+[10:52] that's analogous to our taxonomy but uh the ability to control the fine grain
+[10:59] nature of it. And the result of this learn taxonomy is that each item gets
+[11:05] this hierarchical code and the prefix captures broad neighborhoods and you
+[11:11] know the later tokens capture finer distinctions.
+[11:15] So for example in the map over on on the slide you'll see hot sauces and the
+[11:20] structure emerging from the data with zero labels. each one share the same
+[11:26] first and second prefix in this uh ID sequence but then split by specialtity.
+[11:32] So now you've got Mexican, Caribbean, Korean hot sauces uh being split up. And
+[11:39] the important property is that this code that's learned is you know comparable by
+[11:43] as I said by prefix but also usable by all of our downstream models
+[11:50] and that unlocks a few things for us. So the first is cross-category comparisons
+[11:55] or relationships. You know chips, salsa, guacamole may live in different taxonomy
+[12:01] branches but a shared semantic ID neighborhood can uh indicate that they
+[12:05] belong together and maybe a shopping mission. Second cold start problems. uh
+[12:11] oftentimes we get new catalog items added by stores and with techniques like
+[12:16] engram and bite parent coding of these tokens we're able to scalably add these
+[12:21] to our models as sparse ID features third tail coverage so sparse items uh
+[12:29] and uh inherit a lot of signal from semantically related items and uh you
+[12:35] know we don't have to wait for the volume or exposure uh to you um for to
+[12:40] consumers for these items. And then lastly, nice to have is the fact that we
+[12:46] can actually also do a reverse audit. So we can audit our catalog and how well
+[12:50] our human labels agree with the semantically learned labels.
+[12:56] So a couple of examples of where we're using it today uh just to get give some
+[13:00] real metrics. Um it has been one of our biggest improvements to our ranker. Um
+[13:06] in in this case it's actually improved our uh ranker by uh improving MRR
+[13:12] between four to 5% and that's translated to pretty big conversion uh wins as
+[13:17] well. The second one that I'm particularly
+[13:21] fond of is query reformulation. So again going back to the hot sauce example,
+[13:26] Sriracha can lead to garlic chili garlic sauce or sambell Ole and because these
+[13:33] queries map onto like our catalog grounded semantic neighborhood uh that
+[13:40] results in much more relevant queries that we're suggesting to users. Um
+[13:45] ultimately if these are queries that we don't have inventory for on Door Dash,
+[13:50] they're meaningless. And with the addition of semantic ids in this query
+[13:54] graph, we were actually able to see pretty massive um MR gains as well uh
+[13:59] for for this piece of work. So for now we've talked about you know
+[14:05] item mapping and relevance and the next question is consumer context. What does
+[14:10] the system know about the shopper and can that knowledge be reused across
+[14:16] models again? And this is where uh our third primitive comes in memory. So
+[14:22] memory in the agent context is pretty well understood now. Um we apply the
+[14:28] same concepts to uh our recommendation systems. So user embeddings are clearly
+[14:35] very useful. uh we have many representations of our consumers but
+[14:39] they don't necessarily get to uh why a consumer may have certain intents um and
+[14:46] why they might have certain preferences. Additionally, LLMs cannot uh readily use
+[14:53] these uh embeddings. You could tokenize and like uh train these models to learn
+[14:57] it. But oftentimes having some explicit LM native counterpart is very useful and
+[15:03] that's what we found. So the idea of memory is to represent uh the consumer
+[15:09] in multiple forms semantic in you know inspectable and reusable
+[15:16] and uh the way we think about memory is uh in three time scales. So long-term
+[15:23] memory captures durable preferences from orders, searches, browsing, support
+[15:29] interactions. Real-time context captures uh agentic
+[15:34] inter interactions um oh sorry in session interactions so cart state
+[15:40] active searches and then we have stated preferences which come from agentic
+[15:45] interactions so something like ask door dash for example where consumers are
+[15:50] able to explicitly state their constraints and preferences as well
+[15:54] and the way we represent consumers in uh in uh this long-term memory is through
+[16:01] uh memory blocks. And these are structured in a way that allows uh us to
+[16:06] add new dimensions of the user, you know, from dietary preferences to dining
+[16:10] preferences to uh substitute pre uh preferences um as we learn more about
+[16:16] the consumer and that is uh decoupled from like the downstream system that u
+[16:22] that doesn't need to reinterpret uh this for their own use cases.
+[16:27] So each consumer's memory is multi materialized in multiple forms. So first
+[16:32] is text that's human readable. It's uh captures the consumer in a compact way.
+[16:37] Second is are latent vectors embeddings of those memory blocks that can be fed
+[16:42] into retrieval and ranking systems. And third are graph and tree or hierarchical
+[16:48] approaches. So uh you know type relationships between consumers and
+[16:53] brands taxonomies and memory uh revealed um preferences
+[17:00] and these are assembled into you know composite memory objects that both ML
+[17:05] models and LLM use downstream. So an example is you know this context graph
+[17:10] uh where we connect consumers with extracted memory concepts and a graph
+[17:16] needs fits neatly into shopping journeys because you know oftent times uh
+[17:21] consumer item interactions are sparse and multihop. And in this case these
+[17:26] context graphs are able to link consumers across memory concepts that we
+[17:30] previously did not have uh relationships for. And it's particularly helpful uh at
+[17:38] fine grain taxonomy levels. In our case, we're seeing uh for retrieval uh uh
+[17:44] using uh graph uh based embeddings outperforming our uh existing taxonomy
+[17:51] based embeddings.
+[17:54] And today this memory framework shows up in three places. The first is
+[17:59] personalized collections. I'll talk about that a bit later. Uh second is
+[18:03] agentic personalization. So ask door dash for example uses this to
+[18:07] personalize its sessions uh for you. And third in uh retrieval and ranking models
+[18:13] as I said we encode these memory blocks and feed them as features in in
+[18:18] downstream models as well.
+[18:22] So the fourth primitive is steerable content generation. We heard quite a bit
+[18:26] about it in the previous talk and this slide is my take on how we're p piecing
+[18:32] all these uh primitives together. So all of these inputs, semantic ids, memory
+[18:39] blocks um and graded relevance or um LLM supervision feed into multiple models
+[18:46] you know be it LLMs or small language models or um uh you know traditional
+[18:52] models and from these inputs we can generate different output shapes you
+[18:56] know ranked semantic ID lists, carousel titles, subcopies
+[19:00] and these show up across different surfaces today on Gord Dash and A direct
+[19:06] example of this is uh our um personalized collections on store pages.
+[19:11] So historically collections on store pages uh on Door Dash have been a fixed
+[19:17] library or attribute-based um and we've been able to kind of expand
+[19:23] that through uh consumer level collection generation. And today this is
+[19:29] an offline uh LLM process where we take in consumer memory semantic ids and syni
+[19:35] syn synthesize uh collections um all the way from title subtitle to the actual
+[19:40] items. And the important part is that control
+[19:44] and steerability. We're able to react to occasions and moments um and build those
+[19:50] collections as needed uh for different consumers at serving time. uh because
+[19:57] this is all batch and uh generated offline through LLMs, we are able to
+[20:03] still use our uh existing retrieval and ranking stack for item hydration,
+[20:07] collection ranking, etc. And you know this is for example what a
+[20:13] shopper actually sees, right? For a shopper with plant-based affinity, the
+[20:16] system can generate plant-based pantry rows. For cat-only households, it can
+[20:21] generate cat dry food rows. And if a session indicates that you know a person
+[20:26] is going through pantry restocking it can bias towards pantry staples. And our
+[20:31] early tests show that you know consumers are feeling the benefits of these
+[20:35] tailored experiences. Uh an example is uh within our pets vertical we've been
+[20:40] able to drive uh close to 1% uh order rate increases and 6% in uh active
+[20:46] users. So to conclude uh there are three
+[20:51] takeaways I would love for you to take away from this talk and how LLM fit into
+[20:56] search and recommendations. First discovery is a semantic understanding
+[21:02] problem. It's not only about engagement. LMS give us a way to reason about item
+[21:07] meaning and shopper intent. Uh in in Door Dash's case for example. Second uh
+[21:13] distill LM reasoning into primitives. capture you know reasoning uh offline as
+[21:19] labels, semantic ids, memory and then let smaller and faster models serve it.
+[21:26] The online LLM call is often not the product architecture you need. Third,
+[21:32] shared representations create many use cases. Uh once you have these
+[21:36] primitives, they can power, you know, retrieval, ranking, content generation,
+[21:41] etc. So last but not least, thank you and
+[21:45] thank you to all the collaborators at Door Dash who have helped ship a lot of
+[21:50] these things as well.

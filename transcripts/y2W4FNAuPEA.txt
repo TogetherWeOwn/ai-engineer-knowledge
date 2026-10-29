@@ -1,0 +1,892 @@
+# title: Deep dive on LLM Inference at Scale — Harshul Jain, Audible & Tanmay Sah, Independent AI Researcher
+# source: https://www.youtube.com/watch?v=y2W4FNAuPEA
+# speaker: Harshul Jain, Audible & Tanmay Sah, Independent AI Researcher
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T05:25:10Z
+# sha256: bbc081b0adaefe5ce7d7a065631e19fc29283faa7ac443ae93194d3c33246c87
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:13] Uh so good afternoon everyone. Um my name is Hershel Jan and he is Tanisha.
+[00:20] Uh and we would like to welcome you all in this two hours workshop on the LLM
+[00:25] inference. Uh so the goal of this workshop is to understand this domain
+[00:32] from the first principles uh dive deeper into it and like understand what's going
+[00:38] on throughout the industry. Uh a bit of background about us. So I am
+[00:45] a senior software engineer at Audible. uh have been building MLA data platforms
+[00:51] for the past five years and on the sides I have been writing this opensource
+[00:56] handbook on LLM inference and Tanme he is the senior quantitative
+[01:03] modeler at XAN cup bank corporation he recently completed his PhD and he has
+[01:09] been actively doing research in the agent verifiers and the world models
+[01:18] Uh so a quick show of hands here. Uh Vu here is like brand new to the LLM
+[01:24] inference. Okay, great. And Vu here has like
+[01:29] deployed these models in production. They have been tuning it. They have been
+[01:35] serving the production traffic. Okay, great.
+[01:41] So this workshop is targeted towards the beginner and the intermediate level. U
+[01:48] and all of the slides and exercises they are in the repo. I will share that soon.
+[01:55] Here is the quick agenda for the workshop. We will start with the problem
+[02:00] statement. We will try to understand few of the pain points around LLM inference.
+[02:06] uh then we understand what causes those pain points and build our foundations
+[02:10] from there. Then we will dive into like two kind of
+[02:15] the optimizations that we do like the model optimizations and the serving
+[02:19] optimizations. uh and then we start learning about
+[02:23] different serving engines that are available to deploy our LLM inference
+[02:29] solutions in production and we will showcase some benchmarks and the
+[02:33] decision chart on like which engine to use.
+[02:40] Cool. So to understand the pain points first we need to know what is like LLM
+[02:46] inference. So, and probably a lot of us already know this. Um, but yeah,
+[02:52] anything that you ask your AI to do like whether it be generate a video, audio,
+[02:58] analyze any text, uh, analyze your medical reports or like your tax bills,
+[03:04] all of that is like an LLM inference. And this market is like approximately
+[03:11] $23 billion today. uh semi analysis recently shared that if
+[03:18] you want to model like a Google search queries with LLMs, you need like a
+[03:23] profit drain of like $36 billion and query cost has to be less than 0.5
+[03:31] cents to keep your search business profitable.
+[03:35] On the other hand, the business insider mentioned like your AI has to be put on
+[03:40] diet and everyone has to start auditing and
+[03:44] budgeting their token usage and all of this is happening. Why? Because your
+[03:50] hardware is limited, compute is expensive, your inference is expensive
+[03:55] and with the growing need of like more and more AI usage, this inference cost
+[04:00] is rising more and more. So
+[04:05] this stat, it's an old stat from the open AI, but it's still it's still true.
+[04:11] So if you look at the like training cost of the GPT3, it was like around $4.6
+[04:17] million. It was a one-time cost. But if you see the inference cost that has been
+[04:23] like uh it's a recurring cost because it's a operating cost that scales with
+[04:28] every user that comes in that every token that comes in every session that
+[04:32] uh is being initiated on the like AI
+[04:39] and there are only two ways to basically counter this. Uh one way is you reduce
+[04:45] your token usage. um alternative is you should try to
+[04:50] optimize your inference solutions as a inference service provider for your
+[04:56] customers and for yourself. And so this um we have been seeing like lot and lot
+[05:02] of like new solutions coming out every then and now. Um and so the idea would
+[05:08] be like okay we will try to build those foundations that will help us understand
+[05:13] and evaluate like whatever ships next. Um so yeah to get started like we will
+[05:21] do a quick demo like it's a short demo of like what are the different pain
+[05:25] points around inference u and so this is the repo uh I mean you
+[05:33] can pull it or you can also open it on the GitHub
+[05:37] uh it's called LLM inference at scale a bit of background here like four months
+[05:42] back when I didn't knew anything on the LLM inference um I started learning it I
+[05:47] saw like lot of resources were scattered. So we started putting it uh
+[05:51] like all together in one place uh so that it could benefit people.
+[05:56] Um yes. So let me actually get out of this slideshow mode and probably
+[06:04] go into
+[06:08] I will go to this extended mode. Um
+[06:16] okay great. Uh yeah so in this uh repository if you
+[06:23] see a readme file there is like a link to the slides. Uh so this it will be
+[06:29] like this folder where you have like a pptx and there is like a benchmark
+[06:33] report in there. uh you can always like download it and
+[06:39] then for the demo purposes uh we have couple of Jupyter notebooks. Uh we have
+[06:44] like collaborated with Moab who are the like Google collab alternative
+[06:50] and what they basically provide you is like a free RTX 6000 GPU. It's a 100 GB
+[06:56] V RAM GPU. So
+[06:59] and we have like already set up these notebooks so that it becomes easy to
+[07:04] like experiment with and like all of the assets and everything are preset for
+[07:09] you. Uh so uh we will start with like a simple
+[07:15] demo a probably
+[07:21] let me just see
+[07:29] Okay. Um yeah. So
+[07:35] when it comes to the inference, you need to do an inference on a certain model,
+[07:40] right? Uh for the workshop purposes, we are using a simple ML 7B model. Uh it's
+[07:46] a small model of around 15GB in size. So we we are going to like load that into
+[07:51] the GPU. So, and we would look like some of the GPU
+[07:57] stats as well. So, we see like okay, we are working on the 6,000 Blackwell. Uh,
+[08:02] and you might be thinking I'm not running the cells because I don't trust
+[08:05] the Wi-Fi at conferences. So, yeah. So, I would probably be just
+[08:11] going over the results uh that we kind of ran previously.
+[08:18] Uh, yeah. So, we have like a GPU which is like 102GB.
+[08:23] Uh now the first thing that comes to my mind is like what's my memory
+[08:27] consumption looks like when I do the LLM inference. So I load this model
+[08:33] uh and I see like okay I have like a 15 GB here. So I have roughly like 87.5GB.
+[08:40] And now when I do the like inference here
+[08:45] uh what I notice is like the more the number of inputs I pass more is the
+[08:51] memory that I need. uh and it's increasing slowly but it's
+[08:55] still increasing. [snorts] So imagine like if you have a context length of
+[08:59] like around 4,000 or 16,000 or 32,000 uh tokens. Uh so this memory could like
+[09:06] really grow big and it you could actually get like all of those out of
+[09:10] memory issues. Uh so definitely this is like your
+[09:15] problem one like your memory increasing with the increase in tokens. So in form
+[09:19] of like a simple visualization it looks like this.
+[09:25] The second problem that you would see is like
+[09:28] the time to your first token it's very very slow. Uh we measure it by a metric
+[09:34] called TTFT. It's a short short form of it. uh and when you try to like measure
+[09:41] the TTFT uh with the like input size you would see like longer the context
+[09:49] you would see like this uh TTFT being slow. So now there are two problems.
+[09:54] Your memory increases with the token size. Your TTFT increases with the token
+[09:59] size. Uh sorry not the token size, the context
+[10:02] size.
+[10:06] Uh and then the third is the like throughput. The throughput is like how
+[10:11] many tokens can you serve per second and then how many users can you serve per
+[10:16] second. So if you take a very very vanilla implementation on your local
+[10:20] system uh it would be like very sequential. So
+[10:24] if you send like five requests all those five requests would be catered like
+[10:29] sequentially rather than parallelly. Uh and so like your request basically
+[10:36] takes more time to complete if you have like multiple users.
+[10:41] So these are the like three problems. There is a fourth one. I haven't
+[10:44] described it here. probably we will build that intuition as we move forward.
+[10:50] Uh but let's remember like these are the three problems the memory TTFT and the
+[10:55] throughput. Cool. Uh I will go back to the slides.
+[11:07] Okay, perfect.
+[11:15] Uh so it should be this.
+[11:20] >> Uh is it visible?
+[11:35] Oh, you you need the Oh, okay. Workshop. Okay.
+[11:47] Yeah. So, within that repository, if you see a workshop folder, you see that
+[11:53] readme and then the readme has all the links, the slides and the demos.
+[12:04] Uh, does that work?
+[12:09] Okay, perfect.
+[12:16] Okay. uh so let's start working through the foundations like let's start
+[12:20] understanding uh what are the reasons behind those
+[12:24] pain points and for that like we have to look at this inference pipeline
+[12:29] um so we get like an input text uh that
+[12:35] text could have like any number of words you convert those into the tokens so for
+[12:42] simplicity you can assume one word equal to one token
+[12:47] uh then you kind of convert them into like the embeddings and then you send it
+[12:51] to the like transformers uh like there are 32 layers of
+[12:56] transformers but that's specific to the Mistl 7B different models have different
+[13:00] kind number of layers uh and then you generate a new token and that token
+[13:05] basically goes back to the input then you generate another token and that
+[13:08] keeps on going now in this entire pipeline you would see like 95% of your
+[13:15] compute is like taken by these transformer layers. So it's worth
+[13:19] looking at like what goes within this transformer layer.
+[13:25] Within this transformer layer you would have like more layers. You have like a
+[13:29] normalization layer, you have an attention layer, you have a feed forward
+[13:34] layer and all. And attention layer is the one I think
+[13:38] that has been very very famous. Attention is all you need paper. I think
+[13:42] that's very well known. So attention is the most compute intensive layer and we
+[13:49] need to understand what goes within that attention layer.
+[13:54] So what does attention do? Attention uh so if you have an input text it needs to
+[14:00] find the attention scores of every token with respect to all of the previous
+[14:04] tokens. And to do that what it needs to do is
+[14:09] like it needs to project every token into like a key query and the value
+[14:13] space. So in like in a simpler terms just u understand this like if you have
+[14:22] 10 tokens then it needs like the 10 different query key and the value
+[14:26] vectors. If there are 100 tokens you would need 100 key and the value
+[14:30] vectors. If there are thousand tokens you would need thousand key value
+[14:34] vectors. And so like your number of the key and the value vectors they increase
+[14:38] as you increase the input size.
+[14:44] Uh and if you calculate the like KV size per token
+[14:50] uh for a mist 7B it comes out to be 131 KV. Uh this is because like
+[14:57] uh you have two vectors K and V. You have to multiply the size uh one vector
+[15:03] is like 128 dimensions. you have to multi multiply it by 32 transformer
+[15:08] layers and then you have to multiply it by the KV heads for ML 7B it's gate KV
+[15:15] heads it's not like 32 because it uses a different kind of an attention mechanism
+[15:21] u which we will talk about for sure but yeah so the KV size per token is like
+[15:29] your 131 KB now imagine if you have 4K context uh So that size becomes like
+[15:35] half a GB. Uh if you do like 16k context that size becomes 2.1 GB. Uh now
+[15:44] multiplay by the users like assume you can serve multiple users together
+[15:50] at the same time within that GPU you could have like 42GB with a 4K context
+[15:56] and 80 users. Um and if your GPU is only like let's say 24GB, you are already
+[16:03] running out of the memory. So you cannot serve that many users with that many
+[16:07] context.
+[16:12] To visualize this, look at a GPU memory. So the GPU memory has like a model
+[16:17] weights which are pretty fixed. These are pre-trained weights. Uh there is
+[16:23] like an overhead that is also fixed. that also like that changes but it does
+[16:27] not change that much u overall you can assume it's fixed and then there is like
+[16:33] a leftover memory so this leftover memory is what being used by your KB me
+[16:39] like key and the value vectors so assume like you have a one user you can
+[16:48] only serve that many key and the value vectors or that many tokens which can
+[16:54] like fit in this entire 80GB uh like memory that is left.
+[17:02] Uh so we can show this with a simple demo
+[17:07] too. Uh
+[17:13] okay, let me
+[17:18] Okay, great.
+[17:23] Okay, great. Uh, let me see if I can actually run
+[17:29] this. What
+[17:36] probably? Where the heck is this happening?
+[17:49] Okay, great. Yeah. So you would see like the GPU is
+[17:55] attached.
+[18:07] So here we are just trying to confirm the like memory based on the maths and
+[18:11] based on the intuition that we have built. So the model memory is like let's
+[18:16] say if you have a 7 billion parameters you are doing a 16 bit precision your
+[18:21] total memory comes out to be 14.6 GB with you can basically verify that with
+[18:26] the maths. So if you do all that math that comes out to be the 14.6GB.
+[18:33] Uh now comes the KVK and the KV size. So this KV size is like your 131 KB per
+[18:40] token. Uh and if you do that maths and you try
+[18:45] to like visualize this. [sighs]
+[18:52] Oh, sure.
+[19:00] Wait.
+[19:03] Okay. And then let's just visualize this.
+[19:09] Okay. Great. Uh yeah so this is the like a memory
+[19:14] chart. So if you see like as your context increases your memory keeps
+[19:19] increasing. Then another thing to realize is like as
+[19:24] your users increase uh then also your memory increases. So
+[19:29] if you want to serve like 160 users uh on a GPU you can support like uh you
+[19:37] can only support like a lesser context length. So there is always a tradeoff
+[19:42] between what context length you can serve versus how much cost you can save
+[19:48] by like putting your multiple uh users or the concurrent users into
+[19:53] like a single GPU. So you have to always take that tradeoff and and we will go
+[19:58] through that like uh in couple of more slides.
+[20:06] >> Uh can you repeat please?
+[20:14] Uh I'm sorry I'm cannot hear you.
+[20:24] >> Yeah.
+[20:33] Cool. Uh okay. Great. So let me pull back.
+[20:41] So that was like memory. Uh we need to understand uh why we had like uh slower
+[20:48] time to first token uh when we increase the context length.
+[20:54] So for that like we need to understand the two phases of inference and those
+[20:59] phases are like the prefill and the decode phase. I think you would all seen
+[21:03] like a lot of articles but we just wanted to explain it. Uh so when you
+[21:09] send like a lot of uh like when you send these input tokens
+[21:14] what you want to do is uh you want to build those key and the value vectors
+[21:18] that I mentioned for all the tokens. Then you want to compute the attention
+[21:23] scores of every token with respect to the previous token. All this operation
+[21:28] that you do it's a very very metricsh heavy uh it's a very very compute heavy
+[21:34] operation and we all know like the GPUs they are like very well suited for a
+[21:40] heavy compute workload so we call like a prefill to be like a compute bound uh
+[21:47] and it does take some time to complete so whatever time that this phase takes
+[21:52] to complete that's your time to the first token
+[21:57] So if if you have like a more input tokens, you have to generate more key
+[22:02] value vectors. You have to do lot more attention math and because of that your
+[22:08] TTFT becomes more more slower. Where is if once you generate one token
+[22:15] you need to keep doing this to generate another tokens sequentially one after
+[22:20] another. But in that process every time you have to build the key and the value
+[22:26] vectors of all the previous tokens which is same as prefill like you were
+[22:31] building key value vectors there also here also but in decode phase you are
+[22:36] only computing the attention math for the new token
+[22:41] and that is why it's a very less it's lesser compute oriented
+[22:46] and it's also called as memory bound. We will see it shortly why it's called as
+[22:50] memory bound.
+[22:54] So in a classic timeline you would see prefill and decode phase like this. So
+[23:01] time taken by prefill that's your time to first token and then your time taken
+[23:06] by every decode step that's your uh basically your inter token latency.
+[23:13] So that's like the fourth metric uh that you need to worry about like
+[23:19] what's the time being taken by your decode step.
+[23:25] Okay, cool. Uh now why why does the like decode step or
+[23:32] why does decode takes time and why it's being called as like a memory bound
+[23:38] operation? Let's try to understand that. uh to understand that we need to look at
+[23:44] how the metrics map basically works on the GPU on a high level. So GPU has two
+[23:49] kind of memories. You have a high bandwidth memory. You have a shared
+[23:54] memory. So the high bandwidth memory is a larger
+[23:58] size but a lower me like lower bandwidth.
+[24:02] By lower bandwidth I mean like you can transfer data out of it at a lower rate
+[24:07] compared to the shared memory. So the shared memory is smaller in size but it
+[24:12] has a very very high bandwidth. Uh that means you can transfer data in and out
+[24:17] of it with a very first thing. So when a when you have to do a metric math so you
+[24:23] have to pick the data in chunks from the high bandwidth memory you have to put it
+[24:28] into the shared memory. Do that math write back the result into
+[24:33] the high bandwidth memory.
+[24:37] uh for the prefill phase when you have to do this you have to do this matrix
+[24:45] math only once but for the decode phase you have to do this metric math uh like
+[24:53] uh again and again because you're generating each and every token
+[24:57] sequentially and so like you it doesn't matter like
+[25:02] how fast is your decode because now you can transfer your data
+[25:08] out of the high bandwidth memory into the S shared memory at a certain speed
+[25:14] because you are limited by the high bandwidth memory bandwidth speed
+[25:19] and so that governs your like token sealing like at what rate can you
+[25:24] actually generate tokens out of the decode step.
+[25:32] If you look at this in the roof line plot
+[25:37] uh so there is a left section which is called to be a memory bound.
+[25:43] Mathematically it's governed by the arithmetic intensity.
+[25:47] Arithmetic intensity is the number of flip-flop operations that you perform
+[25:52] per bite of data being transferred. So for the decode step
+[25:58] uh decode step since you are transferring lot of data like the key
+[26:04] and the value vectors of the all the previous tokens the model weights but
+[26:08] you are doing the like less computation because you're computing attention math
+[26:12] for only one token. Uh so it's arithmetic intensity is very low but for
+[26:19] a prefill phase you are transferring the data once but then like you are doing
+[26:25] this heavy computation and so it's arithmetic intensity is very high. So
+[26:30] now you know like in terms of mathematics like why the computer like
+[26:36] why the arithmetic intensity of prefill is very high compared to your decor.
+[26:43] Uh [snorts] okay
+[26:46] so this is like another small small demo. Uh
+[26:52] every time I have to Okay.
+[26:57] Okay, great. I hope this is already running. So yeah,
+[27:03] again we are loading the model. Now this is the like the prefill cost.
+[27:10] So what we are basically doing is uh we are getting the like um the input uh
+[27:15] text and then we are trying to generate this um the prefill step the amount of
+[27:22] time it takes. We see like as we increase the like size of the input
+[27:26] tokens this prefill is increasing. So you and this is the reason why your TDF
+[27:32] increases and then like your decode time. So the
+[27:37] decode time is like on average it stays about the same. Uh and so if it is like
+[27:44] assuming like you ignore the like cold start your decode time is like
+[27:48] approximately around the average line. it it it it is still impacted by like u
+[27:56] the input size. It's not like it's a constant uh time and it is because it
+[28:02] still needs to pull the key and the value vectors from the memory for all
+[28:05] the previous tokens. So there is still like uh that uh basically small increase
+[28:12] in time that you would see with the decode step. And then this is the like
+[28:17] classic uh roof line plot. Uh okay.
+[28:27] Presentation.
+[28:31] Okay. Five. Okay. Great. Okay. So
+[28:38] now now let's try to understand like uh the throughput dimension. You want to
+[28:44] understand how many users you can actually serve and I think we saw like a
+[28:49] diagram of the GPU memory where we saw okay there is some memory that is free
+[28:54] for the key and the value vectors to grow.
+[28:57] So assume like you have just a single user
+[29:02] uh what's the total KV size that you have
+[29:07] you can basically support it's defined by your context limit.
+[29:12] uh the max users that you can support is like whatever is your GPU uh
+[29:18] availability like whatever is the memory that is available in the GPU you divide
+[29:22] it by the key and the value size per user uh and when you do that like it
+[29:28] comes out to be like your the concurrent users.
+[29:33] Now assume like your GPU is fixed, your model is fixed.
+[29:40] Uh so
+[29:43] your KV size per token is fixed. There are only two dimensions that are left
+[29:48] here which is context and your concurrent users.
+[29:53] If you want to serve more concurrent users, you have to reduce the context
+[29:57] length. If you reduce the context length, you could impact your quality.
+[30:02] Uh so these are the two dimensions right now that we are trading off.
+[30:09] Then if we but can you actually serve the like max number of concurrent users?
+[30:17] Uh in an ideal world probably not because
+[30:22] every business has like a latency SLO that we have to meet.
+[30:28] So if you remember like in the decode step
+[30:32] I said the time for the decode still increases if you have more inputs.
+[30:38] It also increases if you have more users.
+[30:41] So ultimately uh your inter token latency also gets
+[30:47] impacted if you have like a higher batch size and
+[30:51] your TTF also gets impacted. So now there is a third dimension you have to
+[30:56] worry about which is like your latency. So the three dimensions that you have is
+[31:01] like a quality latency and the throughput. So it comes out to be like
+[31:05] this trade-off triangle where you have to choose between the two. So for a
+[31:12] premium chat application you would want to prioritize definitely
+[31:17] the quality and you want to prioritize the like the latency. You would not want
+[31:22] your users to wait infinitely for the like or like not infinitely but probably
+[31:28] for the larger latency. You can always sacrifice the number of
+[31:33] users you can support on the GPU and probably take that costed being more
+[31:38] customers in form of like and and like if you
+[31:43] consider like an agent uh sorry the async agent workload you would want to
+[31:49] like prioritize definitely quality and the throughput
+[31:52] uh because these are the longunning tasks
+[31:56] uh and you would want to like serve as many as concurrent tasks. fast as
+[32:01] possible but with a very very higher quality.
+[32:07] And often like we think like okay if the GPU is like a very expensive GPU
+[32:15] uh that might not be a good fit for us. Uh but it turns out that could actually
+[32:21] serve you the lowest cost per million uh tokens.
+[32:27] Uh but you really have to trust your kind of calculations on the max users
+[32:33] that you want and like uh you really have to make those estimations uh
+[32:39] correctly.
+[32:43] Uh
+[32:49] so we do have like uh let me just
+[32:59] Where is this? Okay, great. So, for the capacity
+[33:05] calculator, uh there is like a link to the collab because I was facing certain
+[33:11] issues with molab. I had to migrate out the wall widget library and I didn't
+[33:16] have time. So, being lazy, I just picked collab there. Uh apologies to Moab.
+[33:25] Uh so my VR is connected.
+[33:35] Okay.
+[33:46] Wi-Fi probably.
+[33:51] Okay. Great.
+[34:02] So what we have done over here is we have like shaded some like the GPUs with
+[34:07] their V RAMs, bandwidths, the flip-flops and the cost per hours. Um
+[34:14] then we kind of like built this simple uh like uh capacity calculator. This is
+[34:20] just a KV visualizer uh where you kind of like when you increase the number of
+[34:25] tokens uh you see like your KV size it increases and when you increase the
+[34:31] number of users your size is like increasing at a much faster rate
+[34:37] and then in this capacity calculator uh
+[34:46] let it run. So we have like a model which we which
+[34:52] is like a 7 billion parameter model that we selected.
+[34:58] We set the like precision to be FP16. Uh now we decide the way we basically go by
+[35:04] the GPU decision is you have to decide what's your like you have to fix one
+[35:11] dimension first which you care about the most.
+[35:15] for premium chat I mentioned like latency is definitely the one
+[35:21] uh and then like for the async workloads the batch the minimum batch size that
+[35:25] you want to serve for from like a single GPU that is the second dimension so you
+[35:31] want to fix these first so I will go about like in a premium chat application
+[35:38] uh so I can go ahead with like 10
+[35:41] milliseconds latency a minimum batch size I don't care like I can so I'm okay
+[35:47] with like probably two uh
+[35:53] okay so probably with the seven concurrent users on a single GPU and
+[35:59] then like my context limit is very important to me because I want to focus
+[36:03] on the quality as well uh and so like I do see like some of the
+[36:09] GPUs so the H18GB it's like a $8 per hour but like am I
+[36:18] 300x is it? Yeah. So it's like around $10 per hour but if you do all that
+[36:26] throughput math that we shared in the mathematics before you could find like
+[36:31] your cost per million dollar tokens that could be very very that could be like
+[36:36] lesser. So you need to do such calculations by
+[36:41] fixing those dimensions and you need to decide your GPU to like reduce your kind
+[36:47] of inference cost. This is at least the first step that you can take towards
+[36:51] optimizing the inference.
+[36:56] Okay, cool.
+[37:01] So the next slide. So let me Okay, great.
+[37:10] And so like now the next thing is about the model optimization. So we are now
+[37:15] basically have built that foundation where we understood some of the pain
+[37:19] points, reason behind those pain points, why those were happening
+[37:23] um how we could like address that GPU capacity thing. We need to understand
+[37:30] what can we do like what can we further do about it. So it it is about the model
+[37:36] optimization and I think I would like to invite Tan I he can talk more about
+[37:40] these model optimizations provided he has worked uh on this like during his
+[37:46] research times okay I can control
+[37:53] yeah here okay hi everyone uh mic check am I audible at last yeah okay so hi I'm
+[38:02] Tesha I work as a senior quant modeler and also I am an AI researcher. My work
+[38:08] focuses on a agent verification and right now building world models. So for
+[38:13] this one model optimization before we start model optimization so I
+[38:19] created a research template so that it will be easy for us to understand all
+[38:23] these complex things. I so our template is simple. First we will identify the
+[38:29] problem. Second step we will solve the problem using two algorithms. These are
+[38:34] just fake algorithms. So first algorithm is called ostrich algorithm. Whenever we
+[38:40] see uh just like ostrich whenever we see a problem ostrich put their head into
+[38:45] the sand. So same thing we will do whenever we face a problem we will just
+[38:50] ignore it. So this is an important algorithm we should follow. Second one
+[38:55] is created it is called world cup algorithm. For example, we don't know
+[39:01] who will win this FIFA World Cup. So, what organizers did, they uh break the
+[39:08] 48 teams into 12 groups, uh then round 32. So, round 32 right now is currently
+[39:14] going on. Uh then round 16, then quarterfinals, uh then semi-finals and
+[39:20] finals. So what they are doing is that uh they are breaking it into a smaller
+[39:26] problems and the useful results are moving forward. So same analogy or same
+[39:32] algorithm we will use uh to understand this model optimization all those
+[39:37] things. So yeah let's start. So I have one H100 GPU.
+[39:46] I have to use this open-source model what is called GPTOSS
+[39:51] 120 billion parameter model. So right now I think it's so they have trained it
+[39:57] on BF float 16 and weight is 240 GB. What should I do?
+[40:04] This is the problem we have. So first thing what we have to deal do is that
+[40:10] 240 GB and 80 uh GB H100. So and I have to fit only in one GPU or
+[40:19] not in multiple GPU. So what can we do? I think simple step is that just
+[40:25] compress it. But how should we compress it? Uh that's the another challenge. So
+[40:31] if we compress BF BF float 16 to FP8 uh then it will be around 120 GB but our
+[40:39] GPU H100 is still 80 GB. So what I think they did is that they compressed it into
+[40:45] further MX uh MX FP4 and I think size is around 65 GB. So this is something we
+[40:55] can do uh compress but question so and we will use over this ostrich algorithm
+[41:03] we are assuming that uh there is no loss in compressing a bigger model into a a
+[41:09] smaller size. Second thing in uh in this one okay yeah so in this
+[41:17] one in this slide we have used this mistral 7B so 7 billion parameters so
+[41:22] it's a small model 7 billion parameters so uh so if you multiply it by two bytes
+[41:27] so it so weight of it's around is 14 14.5 GB which can easily fit into H100
+[41:35] or even a a40 so so Next uh what we can do is that like
+[41:43] mistral 7B instead of compressing it a floating point 16 we can apply different
+[41:49] techniques like int 8 or int4 or nf4. So basically we have to just use ostrich
+[41:55] algorithm and just believe that uh there is no quality loss kind of things but
+[42:01] somehow we also have to mathematically prove that by doing some kind of test
+[42:05] testing on some external benchmark that whether it is working or not. So the and
+[42:12] this comes under post training quantization kind of thing. One can also
+[42:16] do uh this one uh during finetuning one can also do this kind of quantization.
+[42:22] This comes under a quant training kind of thing. So uh let's move to our next
+[42:28] problem. So
+[42:34] we have this huge matrices just just imagine imagine uh 1,000 by 1,000 uh
+[42:43] dimension matrix A and another matrix matrix um 1,000 by 1,000. So if we
+[42:51] multiply uh if we multiply by this two matrices so number of operations will be
+[42:57] 1,000 raised to the power q and this is kind of a problem in terms of uh uh in
+[43:05] terms of computing. So we wondered our matrix multiplication should be fast and
+[43:10] it should save memory. So what should we do? We have a giant matrix. Okay, let's
+[43:18] take this one. Uh, Mr. 4096 by 4096. What should we do uh to
+[43:25] solve our problem of speeding up the things and saving the memory 4096 by
+[43:31] 4096. So first thing is that we will use just
+[43:35] our world cup algorithm. We can decide a random number just break the block
+[43:41] vertically. It does not matter what you are choosing it. So you have so let's
+[43:47] say uh we have 4096 uh columns we will break it uh we will break it into a
+[43:54] group of 128 column each. So 128 128 128 128 uh vertical vert uh vertically so we
+[44:04] will get a 30 we will get this 32 blocks if we divide this 4096
+[44:09] then what will happen by doing this thing? So
+[44:13] if we just divide this one vertical vertically then we can use a multiple
+[44:19] GPU to speed up the process. So this kind of thing is called multi head
+[44:25] attention. So what else can we do? We have a big
+[44:30] matrix like uh as I have mentioned that ostrich
+[44:35] algorithm. So our main problem is sizing. So what we what we can do is
+[44:42] that instead of having all those 32 uh 32 vertical blocks we will throw away uh
+[44:48] 31 blocks and we will assume that one block is sufficient enough that all the
+[44:54] queries uh can handle those blocks. Our loss will be almost negligible and we
+[45:02] come up with this algorithm uh which uh and this algorithm is called a
+[45:06] multiquery attention. So as we can see right now we are at two spectrum. One is
+[45:12] multi head attention where we split it into 32 blocks and use different uh
+[45:20] different uh GPUs or do some parallel processing and at the same time we are
+[45:25] just throwing 31 blocks and uh we are calling this is as a multi-query
+[45:31] attention. So uh so at both extreme we should be come
+[45:36] up with a middle ground like something we can say that
+[45:41] instead of throwing all the 31 uh maybe we can group we can group we can group
+[45:46] some of the blocks together so that uh uh and we can assume that uh similar
+[45:53] blocks will attend to a um similar kind of uh queries. So this kind of technique
+[46:00] comes under grouped query attention which is very popular right now. Uh even
+[46:04] in uh even in mistral or in other models this grouped query attention works. So
+[46:11] right now we have understand that we have a big matrix uh we can divide it
+[46:16] the way we want and doing some mathematical calculation prove that loss
+[46:21] is almost negligible kind of thing. So what else we can do?
+[46:26] So after that uh after this grouped query attention
+[46:32] uh see
+[46:36] uh we have a big matrix uh one is one is key and one is value.
+[46:42] Let's compress that matrix into a latent vector and then come up with some
+[46:49] algorithm to uh reconstruct from latent vector uh to our original matrix. So
+[46:55] this kind of a strategy comes under this one um multi head latent latent
+[47:01] attention but again it has some problems with rope because rope is position
+[47:06] dependent and uh and it is position independent kind of thing. So yeah one
+[47:11] needs to also include some uh index for keys also so that one can map it. But
+[47:17] again main problem is that why why we are why we are multiplying all those big
+[47:24] matrices. So because that's how this attention mechanism works that
+[47:30] each token will pay attention to every token. So how about let's don't pay
+[47:36] attention to all the previous token only pay attention to the important tokens uh
+[47:41] which is important for us. So this is a kind of uh this kind of field is uh
+[47:47] evolving. So this comes under sparse uh deepseek sparse attention. So
+[47:53] uh yeah and yeah yeah yeah so okay next yeah so next one is flash attention. So
+[48:04] uh so in flash attention so main pro so main problem is that uh
+[48:11] uh so so currently so so currently not currently so right now almost everyone
+[48:16] uses flash attention but way in 2022 or 2023 uh so that's how it works that's
+[48:23] how it works is that uh so uh this
+[48:29] Q K query and A and key matrices they were in HBM. Uh it loads uh it uh first
+[48:38] uh it loads into uh this one uh tensor core and it do some uh it do some
+[48:44] calculation and then it will uh write it back to uh HBM and then uh this process
+[48:49] goes on multiple times. So in flash attention uh what they did is that
+[48:56] uh is that instead of multiplying the whole matrices so they just divided it
+[49:01] into like our world cup algorithm divided the bigger matrices into a small
+[49:06] tile and only put those small tiles uh into a SBM so that uh it can process
+[49:12] multiplication fast and just uh keep uh keeping track of this some three
+[49:17] variables so that they can calculate this online softmax.
+[49:23] Yeah. Next one. So, yeah. So, so this is just
+[49:28] mathematics. So, if we have a multi head attention if it is 524
+[49:34] uh KV uh then it depends upon how much how much grouping we want and so if
+[49:42] instead of 32 KV head we only want to use uh 8 KV heads. So uh so so we can
+[49:50] get a compression of 4x times and this multi head latent attention this formula
+[49:56] depends on the model to model how many layers your model have. So in the
+[50:01] original deepseek paper uh I think they have some 128 dimension
+[50:07] 128 d 12 I don't remember the exact dimension but according to that uh they
+[50:13] have used uh this one latent vector in which they have used 512 as a dimension
+[50:19] and some 64 for for rope index. So and then they
+[50:25] show that it is a 50x 56x uh more compressed than multi head
+[50:32] attention.
+[50:37] Okay. Yeah. So uh so yeah so this is uh so
+[50:42] this is the uh this is the trade-off uh trade-off diagram. So here I think we
+[50:46] have not talked about this linear attention or mamba. So main problem is
+[50:52] just all this m Matrix multiplication. Right now everyone is using attention.
+[50:57] Suppose in future uh if we don't want to use attention or
+[51:03] rather than generating tokens sequentially just use maybe diffusion
+[51:07] models where we can generate everything simultaneously. So all these algorithms
+[51:12] will change also. But here I think they have two more. One is linear attention
+[51:17] and one is mamba. So according to uh this slide so
+[51:23] if we are not compressing anything so MHA is just we are parallelizing the
+[51:28] process so there is no quality loss so it's a good and then this uh grouped
+[51:34] query attention which is I think almost uh every model is using uh just GQA and
+[51:40] DSA kind of thing or yeah I think same thing we are providing in
+[51:46] the attention mechanism scorecard So uh so I think uh this one mha quality is
+[51:53] good throughput is uh throughput is okay and for grouped query attention it
+[51:59] depends upon your use case also though yeah though
+[52:04] quality is almost similar to uh multi head attention but use case also matters
+[52:09] a lot yeah multi-query attention is just one extreme we are
+[52:15] I don't know why but we are just assuming that we only need one block and
+[52:20] all the queries will attend to that smaller smaller block. So, so quality is
+[52:26] not that great for M for MQA and this multi head latent attention. So yeah if
+[52:34] you have tried some this deep seat models so I think uh they are doing
+[52:38] great job yeah in in quality wise besides that sliding window so all these
+[52:45] are sub techniques which yeah yeah all these are some techniques
+[52:50] like I just slide the windows all those things and instead of yeah instead of
+[52:56] multiplying everything so linear attention is just saying that sum
+[53:00] summarize everything first uh and then look up into it and then mamba this is
+[53:06] just a state space model. Yeah,
+[53:12] I can cover that. Okay. Uh cool. Uh thank you T.
+[53:18] So for the model like optimizations we also have like the two notebooks
+[53:25] here. So there will be
+[53:32] I have to go to this.
+[53:42] Okay. Uh so for the quantization uh like the demo
+[53:49] uh this is is this already run? No. Let me just run this.
+[54:03] Okay. So we are loading the model which is like uh ML 7B.
+[54:12] Uh so
+[54:17] this one is like with the FP16 baseline.
+[54:29] Wait. Uh, did it run?
+[54:35] Okay. So, it's uh two millisecond run. Did this run? Okay. So, yeah, this time
+[54:43] it's fetching that model with the FP16 precision.
+[54:57] the Wi-Fi.
+[55:03] It's going to take time.
+[55:07] Okay.
+[55:11] >> Yeah, it because it's downloading the weights from the hugging face.
+[55:17] >> Huh.
+[55:20] Yeah. So, MOLAB is like running online. >> Yes.
+[55:26] because it needs to make the network call through to the hugging phase and
+[55:29] like it fetching I don't know like but it's taking time
+[55:34] to download probably
+[55:52] Okay.
+[55:55] So good. Okay. So here we see like the memory size is like 15 GB around
+[56:02] approximately with the FP16 precision. We are trying to do the 2x compression
+[56:08] as Tmet talked about with the int8.
+[56:13] Let's download. Okay. So we do see like your memory size is now like 7.5 GB.
+[56:21] What that means is now you have a more s more memory for your KV to basically
+[56:26] grow. That means you can either serve higher context limit or you can serve
+[56:30] the higher concurrent users there.
+[56:36] If you do the like in your basic you are doing the 4x compression so that with
+[56:42] the 4x compression it would be more lower. It would be I think around
+[56:48] 3 to 4 GB. Yeah. 4.5 GB
+[56:55] and Yep. So this is Wait. So this is just a basic plot
+[57:05] of like so these are the like theoretical
+[57:09] numbers. uh we are not doing the like any throughput test here but uh usually
+[57:13] you would see like your memory increases so pro you would also have like a bit of
+[57:18] higher uh throughput. Uh from some of the benchmarks that we
+[57:23] studied we saw like the intate uh compression it does have like a lower
+[57:28] throughput.
+[57:32] Okay. And then there is like a demo on the like the attention mechanisms.
+[57:42] So for the attention okay I have to run this.
+[57:58] Uh okay so it has run. Oh, wait. Why does it say no GPU detected?
+[58:09] It should say the GPU should be detected.
+[58:18] Oh, okay.
+[58:37] Wait,
+[58:50] but this is surprising.
+[58:57] Yeah, I guess it's not like able to detect the GPU for some reason.
+[59:04] Uh we do have like a GPU here.
+[59:11] Uh okay, never mind. Yeah. Yeah. So, but the like basic idea
+[59:16] here was more like as you try to move towards like
+[59:22] compressing the computation like by using different attention mechanisms
+[59:27] like moving from the multi head to the grouped query attention and then to the
+[59:33] MLA you would start seeing some optimizations.
+[59:38] Um I think yesterday night we were doing some benchmarking. Uh I wanted to
+[59:44] correct this part. Uh so it wasn't like 50 56x it was 14x. Uh basically the demo
+[59:52] had a mistake of like a computation uh where it did not multiply the number of
+[59:58] layers. Uh yeah so apologies for that. Uh so
+[1:00:04] this MLA is like a 14x savings work in comparison to like your multi head
+[1:00:10] attention.
+[1:00:14] Uh so now that we have understanding of the pain points, the foundations, the
+[1:00:21] one side of the optimizations which is the model optimizations,
+[1:00:25] we want to talk about what can you do on the like the serving side.
+[1:00:33] So the first thing is we saw like when you
+[1:00:38] perform like a simple decode step you are pulling it you are basically pulling
+[1:00:44] the model weights and then you are recomputing the key and the value
+[1:00:47] vectors for all the previous tokens even though you already computed the those
+[1:00:53] vectors for the tokens. So there is definitely like a lot of
+[1:00:59] compute wastage. Uh and if you kind of analyze the time
+[1:01:04] complexity of it, it would come out to be O of N². Uh and the way to resolve
+[1:01:10] that is like a classic trade-off against the memory. You can maintain a memory of
+[1:01:15] those vectors against the tokens and you can reference that memory. So that
+[1:01:20] memory was called as like KV cache. uh and the like the flow looks something
+[1:01:26] like this
+[1:01:30] and then based on this KV cache there were like four optimizations that were
+[1:01:34] really possible. Um
+[1:01:38] the first one is about the page detention. So what's the different
+[1:01:44] what's the problem today? So when you send like multiple requests as the input
+[1:01:48] to the GPU these requests are in a batch
+[1:01:54] uh every request is allocated like a continuous memory storage let's say of
+[1:02:01] I'm just taking an example like let's set uh 2 KB
+[1:02:06] however like your request needed only let's say
+[1:02:10] uh 1 KB so there is like u 50% of that memory fragmentation.
+[1:02:19] Uh and this fragmentation basically leads to the memory wastage. That means
+[1:02:26] there was a space in the memory where you could have served more requests but
+[1:02:31] you could not because you were looking for that contigious block of the memory.
+[1:02:36] So an inspiration to was being taken from like how the OS works like you
+[1:02:42] maintain a logical memory and you basically have a physical memory.
+[1:02:47] So in the logical memory it would still feel like
+[1:02:53] uh that the KV vector for the like every token is like a contiguous
+[1:03:00] but it will be mapping to a different physical address.
+[1:03:06] So that really helped like saving a lot of memory. Uh and it was only possible
+[1:03:14] because you they considered like memory as a set of blocks and you would be
+[1:03:19] dynamically allocating those blocks as the request need as the like new tokens
+[1:03:25] comes in and they need that kind of memory.
+[1:03:30] The another lever is like when you are sending multiple requests
+[1:03:37] in the batch GPU is like taking those requests
+[1:03:44] but it does not accepts the new batch unless all the requests in that batch
+[1:03:48] gets completed. So the diagram looks more like a page retention but here it
+[1:03:53] is more about like when is GPU available to take the next batch. So there is a
+[1:04:01] time period where GPU is like sitting really idle
+[1:04:05] and you want to like resolve for that and for that like the idea was like okay
+[1:04:11] let's do that continuous batching.
+[1:04:17] So the continuous batching also really helped with like throughput because now
+[1:04:21] you can ship more requests pretty quickly. Keep making sure like GPU
+[1:04:26] always uh get is always like occupied and it's not like uh sitting idle. So
+[1:04:33] you are saving on that compute. The third is the like prefix caching. So
+[1:04:39] you remember like the KV cache helped you save the computation for a single
+[1:04:44] request across the tokens. But what if like you have the same
+[1:04:50] tokens across multiple requests? How do you basically save against that? So the
+[1:04:56] prefix caching uh which was introduced by VLM
+[1:05:03] exactly counters that and then the third is like we talked
+[1:05:09] about the fourth actually. So we talked about quantizing the model
+[1:05:15] but you could also you can also like quantize the KV weights.
+[1:05:21] So that means now you you need like a lesser space for your key and the value
+[1:05:27] vectors. That means you can serve more key and the value vectors in the memory.
+[1:05:32] And that means like you can serve more tokens. That means you can serve more
+[1:05:36] context context limit. And that means like you can serve more model quality
+[1:05:45] and all of this is like uh already present in the VLM.
+[1:05:51] You don't really need to reinvent that wheel
+[1:05:56] uh and you can like deploy this VLM in production and you could see that
+[1:06:02] basically growth. So next we have like a benchmark that we
+[1:06:08] did. So this benchmark was let me see if I have that
+[1:06:17] here the demos.
+[1:06:23] So doing this benchmark takes like around 1 hour because you have to
+[1:06:28] continuously stop and like restart the VLM servers and you have to load the
+[1:06:33] models and all. So it does take a lot of time in doing the testing but I can like
+[1:06:39] really tell you here what we are doing. So we have kept the model as same like
+[1:06:45] the Mistful 7B. Uh and then we have like the set of
+[1:06:51] input questions that we are sending. Uh consider them as the prompts. Then we
+[1:06:57] have couple of helper functions here like checking the server is up or not.
+[1:07:02] The server is the VLM server. Then there are helper functions to get
+[1:07:08] the VLM metrics. uh and I will talk about like what those
+[1:07:12] metrics are. Uh then there are like lot of the benchmarks and all and then you
+[1:07:18] have to measure uh the KV usage and all. So these are the like helper functions.
+[1:07:25] So the baseline is very simple like we have a hugging phase baseline.
+[1:07:30] Uh this is the raw like sending the text to the LLM getting back the response. We
+[1:07:37] see some results here. We saw like hugging phase has a throughput of like
+[1:07:42] around 51 tokens per second. Time to first token was like 54 and then the
+[1:07:46] inter token latency was 19. Uh this bas uh this was all run on the
+[1:07:52] h100. Uh and then we start like a very default
+[1:07:59] VLM server. So by default VLM provides you the page detention, continuous
+[1:08:04] batching and the KV caching.
+[1:08:08] So three things are present by default
+[1:08:12] and when you try to compare those benchmarks you see your throughput is
+[1:08:18] like almost 15x you are able to serve more tokens per second
+[1:08:25] then your time to the first token
+[1:08:30] uh that also rises and then your v the inter token latency
+[1:08:37] kind goes down and then your KV versus users and the versus context rate
+[1:08:42] increases for sure.
+[1:08:47] Now when you apply the prefix caching to it
+[1:08:52] so with the prefix caching you see like your throughput increases
+[1:08:57] more your TDF decreases your inter token latency is approximately same uh and
+[1:09:04] then your KV cache usage versus the users it's kind of going down
+[1:09:10] the vers context it's not going down it's approximately same I think this is
+[1:09:15] also approximately same it's like not that uh big of a deal
+[1:09:21] when you apply the like KV quantization on top of it.
+[1:09:27] So it becomes like so so you see like your throughput is like almost similar.
+[1:09:34] Your time to first token is similar. Your token latency is similar but then
+[1:09:40] your KV usage actually goes down. And this is because like you have quantized
+[1:09:45] your key value space. Uh and then there is a concept of
+[1:09:51] speculative decoding that TME will talk about. Uh
+[1:09:56] so when you try to benchmark those so you also see like there is a uh like a
+[1:10:03] bit of like the less KV usage there although like the results are
+[1:10:07] approximately same.
+[1:10:15] So yeah, I mean overall like these are the like the metrics across probably I
+[1:10:22] should zoom out. Okay, it's not zoom out. It's
+[1:10:27] not working. Great. So yeah, this is the like VLM
+[1:10:34] benchmarks. Um it's your production default by the way. uh we will also
+[1:10:39] share that decision tree uh when we try to talk about like the other engines.
+[1:10:49] So yeah, so we should talk about like what
+[1:10:54] are some of the other inference optimizations we can do on top of it and
+[1:10:59] what were some of the other solutions that came out.
+[1:11:05] Uh so I would like to again invite Tanme. He's going to talk about like
+[1:11:10] some of these optimizations.
+[1:11:18] Oh, sorry. Uh I'm so sorry. Uh I didn't enable the slides.
+[1:11:25] Uh what was the Okay, great. Perfect.
+[1:11:30] >> Which one? >> The speculative.
+[1:11:32] >> Yeah. Thank you, Hersel. Yeah. So,
+[1:11:37] so all these are like speculative decoding all these are the uh so so what
+[1:11:43] we say uh different flavors of same kind of soda. So this uh this technique comes
+[1:11:50] under decoding accelerator. So first one so we are only talking about this
+[1:11:55] speculative decoding but there are other variants like self speculative eagle
+[1:12:01] medusa I only like I think uh this one eagle
+[1:12:05] algorithm personally I don't think
+[1:12:10] speculative decoding works because main problem is alignment okay so let's start
+[1:12:15] with what is uh speculative decoding main problem is that in transformer
+[1:12:20] architecture All these tokens are generated sequentially one by one by
+[1:12:26] one. How about just use a smaller model and let a smaller model to generate
+[1:12:34] maybe let's say four or five tokens and this teacher model or we can say
+[1:12:40] according to our world cup algorithm we can say referee. So referee will decide
+[1:12:45] how many uh tokens it accept and this loop keeps on going on and our
+[1:12:53] assumption is that there are certain domain where this kind of things will
+[1:12:59] work like maybe in decode maybe in coding or where almost there is no
+[1:13:04] creativity uh each uh code or syntax is almost similar. So maybe it can help it.
+[1:13:11] But uh based on personal testing, I didn't find this speculative decoding
+[1:13:17] useful at all. But other techniques like uh self speculative decoding where
+[1:13:24] teacher model also have one head auxiliary head and it will do same
+[1:13:29] similar kind of things what this base model or small model is doing it. But
+[1:13:36] then this eagle came Eagle 1 2 3 I don't know how many version versions are but
+[1:13:42] it is just saying that instead of creating instead of generating tokens uh
+[1:13:47] let's uh train a small model inside train a small model and just take a
+[1:13:53] features from one of its uh one of main models layer so that instead of
+[1:13:59] generating token uh it will generate uh this features so so uh so eagle is uh
+[1:14:05] Eagle is better compared to this other kind of technologies and then another
+[1:14:11] one is Medusa which is just saying that just generate all the tokens parallelly.
+[1:14:18] Uh okay. So here so here in this slide >> yeah the next slide.
+[1:14:25] >> Okay.
+[1:14:29] Okay. Yeah. Okay. Now we come to uh now we will come to this one prefix caching.
+[1:14:35] So I don't know whether people are using this one static prefix caching or not
+[1:14:39] but thing is that main problem with prefix caching is that sometimes we type
+[1:14:46] and make a small kind of mistake and this standard static prefix caching is
+[1:14:51] basically it takes a prompt do some hashing and then next time when user
+[1:14:55] asks similar kind of question it will try to match the hash. So if hash is uh
+[1:15:01] if hash is equal then then it will instead of recomputing all those K and B
+[1:15:06] it will just uh take it from from the storage but you know that sometimes we
+[1:15:11] make a mistake or maybe we can just change a word or letter something like
+[1:15:15] that then we have a very higher uh cache uh hit cache miss hit rate so that's why
+[1:15:23] uh this one uh radics tree so radics tree is becoming very popular and also
+[1:15:29] also because of agent. So I think almost everyone is doing agent and most of the
+[1:15:34] computation is going during TT during test time inference kind of thing where
+[1:15:39] we keep on asking same kind of questions and prompt for example you are an expert
+[1:15:45] software engineer multiply by 200 times. This kind of loop keeps on going inside
+[1:15:52] this uh agentic agentic kind of things where it is al necessary to keep uh or
+[1:15:59] store similar kind of things in a radics tree. So radics tree is just so so radic
+[1:16:07] tree is just advanced version of this prefix tree where where we will just
+[1:16:12] where we will just collapse a node if it does not have a does not have any branch
+[1:16:18] and for this kind of work where keep on repeating same thing this uh red x tree
+[1:16:28] helps a lot and st lang uh use this kind of algorithm
+[1:16:33] for prefix caching. Okay. Yeah. Then there is another thing.
+[1:16:39] One is tensor RT LLM. This is very confusing. When I first started, I was I
+[1:16:46] was just confused. What is tensor RTLM? So yeah. So tensor RT is just a uh it's
+[1:16:53] just a standard uh SDK kind of thing. Tensor RTLM is just an inference engine
+[1:16:59] just like VLM, SG lang. But problem is that it is related to Nvidia. They
+[1:17:07] optimized each and every layer and every problem as I mentioned in our world cup
+[1:17:13] algorithm. They just break everything and optimized everything at hardware
+[1:17:18] level also. So uh yeah. So okay next.
+[1:17:27] Yeah. So for this workshop we also uh did some benchmarking like which is best
+[1:17:34] uh so our setup was something similar was so so we did two kind of testing.
+[1:17:39] First one is without uh without agentic testing where we just so
+[1:17:46] we use this shared GPT uh this one data set and uh just ask those questions uh
+[1:17:53] using VLM and SG lang. Okay.
+[1:18:06] Yeah. Okay. And let me just zoom it up. Okay, great.
+[1:18:14] Okay. Yeah. So, yeah, for this workshop, we used H100 and of our first testing
+[1:18:20] was that uh we just uh we just asked uh we take questions from shared GPT and
+[1:18:26] put it into VLM, SG lang and we found that actually there's no statistical
+[1:18:32] difference between which one is better. So both have almost similar kind. So
+[1:18:38] both are fulfilling similar kind of request per second uh TTFT and latency.
+[1:18:44] So but only difference we have seen during agentic uh agentic branching. So
+[1:18:52] uh what we did was that we asked that similar kind of question that you are
+[1:18:56] the best this one software engineer in the world just solve the problem of
+[1:19:02] traffic congestion in this city kind of thing. Then we put this into LLM. LLM
+[1:19:09] generates some output. Then we did another uh round two also. So once this
+[1:19:15] LLM generates this output, then in round two we have specially mentioned that uh
+[1:19:23] provide uh review the proposal and give ratings from 1 to 10. So this uh two
+[1:19:30] turns we did uh and this loop keeps on uh repeating it. Uh what we found is
+[1:19:36] that for this kind of uh workflow where everything is standard
+[1:19:43] all those prompts and context engineering comes into the picture. If
+[1:19:47] we do proper this agentic branching then I think uh this HG lang is three to four
+[1:19:53] times better. But again this depends upon the different setup maybe uh if you
+[1:19:59] do it uh you may get different results. Okay. Yeah. So I think uh did we
+[1:20:07] uploaded it on GitHub? Okay. >> Yeah. So the PDF is like also in the
+[1:20:14] drive. Uh it's the same link as the slides.
+[1:20:19] So a quick summary here. So on a standard API workload throughput
+[1:20:26] you would see like a VLM and the SG lang would behave same. So if you don't have
+[1:20:33] if you have like a standard workload definitely go with VLM. It's the
+[1:20:37] production default anyways. But what Tanme was also saying is when you try to
+[1:20:43] like make it like agentic workloads that is where like your SG link really shines
+[1:20:51] uh and uh it kind of like provides you all the benefits.
+[1:20:57] So yeah keep like VLM as a default but if you have agentic workloads probably
+[1:21:03] try to move as the towards the SG lang. if you're not happy with DB LLM. Uh but
+[1:21:12] uh okay. Uh let me
+[1:21:21] Okay.
+[1:21:26] And then like there is like the like a comparison that is done at the 120
+[1:21:32] billion like for the GPTO OSS 120 billion. Um this is a benchmark that was
+[1:21:39] prepared by clarify. So there is like a blog link here. Oh nice.
+[1:21:48] Okay. Yeah. So they did the similar benchmark and they included like a
+[1:21:54] tensor RT LLM in it. Definitely you can always go through
+[1:22:00] these benchmarks and try to understand which basically suits your use case. As
+[1:22:06] we mentioned like Tensor RT they try to optimize the hardware side as well
+[1:22:10] having the peak hardware performance.
+[1:22:17] Wait uh this is
+[1:22:22] okay.
+[1:22:26] Yeah. And then like in terms of when you want
+[1:22:30] to dep pick like your engines once you figure out like between VLM, SG
+[1:22:37] lang tenserati so that there are some new engines that are popping up Nvidia
+[1:22:42] Dynamo for sure. Uh so they are also for the agentic uh session routing.
+[1:22:49] Uh hugging phase is always there. It's a simple no server. Then there is like an
+[1:22:55] MSAR engine that was recently proposed by
+[1:22:59] Stanford. They are for like the multimodel.
+[1:23:05] Uh so definitely you could explore those and when you try to basically just to
+[1:23:11] like give a quick summary uh you we start with like a baseline
+[1:23:17] we try to find what model could fit our use cases.
+[1:23:22] Um, so you could pick like uh Deep Seek, you
+[1:23:27] could pick like don't pick like a Mistral 7B. I mean, it's not good. Uh,
+[1:23:34] but yeah, so you pick your model and you want to like have a smaller memory and
+[1:23:41] you want to try to fit that bigger model into smaller memory so that you could
+[1:23:45] save cost on the GPU cost. So you can do like all those com quantization
+[1:23:52] then you can apply all those serving optimizations by using the right serving
+[1:23:56] engine under the hood. So that can really provide you that
+[1:24:02] throughut that you really want.
+[1:24:07] And now something that you can do uh after
+[1:24:13] going back home pro because we cannot like actually go over all the material
+[1:24:18] here uh is definitely reading about some of the source informations like
+[1:24:24] different attention mechanisms different like these engines like try to just read
+[1:24:29] the different benchmarks which are present online as well
+[1:24:34] and then there are a lot of like in-depth guides or the next phases of it
+[1:24:40] which is like learning about some KV eviction strategies. So world is moving
+[1:24:46] towards having a separate KV cache engineering domain. So you want to
+[1:24:51] understand what's going on in there. So KV cache KV eviction cache compressions
+[1:24:56] hybrid memories. So there are like lot of solutions that are happening around
+[1:25:00] there. So always try to stick to those foundations or like the fundamentals or
+[1:25:07] the first principles and try to see like which solution basically solves what
+[1:25:12] problem and whether you actually need that problem to be solved for your use
+[1:25:17] case and then there is like distributed LLM
+[1:25:21] inference which is like a different painoint altogether. Uh you would
+[1:25:27] probably need like a two-hour workshop there as well.
+[1:25:31] uh to like go over like all the internals do all the hands-on.
+[1:25:41] Yes. And this is something we are trying to propose for the AI engineer New York
+[1:25:45] session uh which is to like dive deeper into the advanced sections of the LLM
+[1:25:50] inference. So this workshop was more for the like beginner and the intermediate
+[1:25:55] level. Um so in this form we do have like a feedback as well plus also the
+[1:26:01] interest. Um if uh you think like we need certain improvements on certain
+[1:26:07] sections definitely give that feedback as well and if you want to see this
+[1:26:11] workshop in like New York uh fair you I mean definitely feel free to enroll your
+[1:26:19] interest. Uhhuh.
+[1:26:24] How is it possible? Well,
+[1:26:34] let me just check.
+[1:26:46] >> Huh? >> URL works, right? Not the QR code. Okay.
+[1:26:52] Probably I forgot to link those two together.
+[1:27:00] Z G A five.
+[1:27:11] Okay, cool. Yes. So if you can give that feedback let me just okay
+[1:27:20] that will be fine um and yeah I think we would like to wrap this workshop then
+[1:27:28] I'm sure like lot of you would be having a lot of questions so we can take all
+[1:27:32] those like offline uh we can meet uh and we can uh like talk about those
+[1:27:37] questions. >> Yeah sure. Uh thank you everyone. Thanks
+[1:27:42] for joining. Uh I think it was really meaningful and all of you like came
+[1:27:49] here. Uh thanks a lot. >> Yeah. Thanks.

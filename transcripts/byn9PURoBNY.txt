@@ -1,0 +1,277 @@
+# title: Infra behind Krea 2: How to train and serve at scale — Gabriel Jorge Menezes, Krea.ai
+# source: https://www.youtube.com/watch?v=byn9PURoBNY
+# speaker: Gabriel Jorge Menezes, Krea.ai
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T06:07:58Z
+# sha256: 7c48e05ed56d95e27e0f62f0d04ab1f8b5dd985afdaafaf98fe8441cc3252e7f
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:01] [music]
+[00:12] >> Hello everyone. My name is Gabriel. I work at Korea and
+[00:16] I'll be talking about the infrastructure that allowed us to train K2 and also how
+[00:20] we serve it. So, what is K2? K2 is our pre-trained
+[00:25] from scratch model we just released like less than a month
+[00:28] ago and the whole idea about training this
+[00:31] model was because we were kind of bored of AI images. They're quite, you know,
+[00:37] soulless. They have no spice. And the whole idea was we want to give creatives
+[00:42] tools to to explore out of distribution extremely interesting images, do
+[00:47] composition and like actually give tools to creatives and
+[00:50] that was the whole idea of the model. The model was trained from scratch. No
+[00:54] base checkpoint, not anything. Everything done in house and also
+[01:00] as I said, built for exploration and right now
+[01:03] this is what you can get out of Korea 2. Very different styles and,
+[01:08] you know, like pixel art and and like like photo real and like some silly
+[01:13] stuff. Uh, and the whole idea of the model, as I
+[01:16] said, let's explore this medium. Uh, Korea 2 is open source.
+[01:20] Right now, you can go play with it. There's two
+[01:24] checkpoints. We also serve in production.
+[01:26] There's a raw checkpoint we just pre-trained so people can post-train and
+[01:30] do whatever they wish to do with it. And there's also the post-train version
+[01:33] which is the turbo one which is very very fast. You can get like an image in
+[01:36] like, I don't know, less than a second. And this is just like this type of
+[01:40] images you can get in less than a second.
+[01:42] Uh, on Hugging Face GitHub, go go play with it. Also, you can go in production
+[01:46] on korea.ai and go play with it. Uh, so let's talk about how we trained
+[01:51] this model. Uh, as I said, it's going to be how we train and how we serve.
+[01:55] Uh, first the model I was trained from scratch on thousands of GPUs.
+[01:59] Uh, we have a big cluster, one main cluster with a lot of GPUs, all
+[02:02] Infiniband connected. And you put those GPUs work and it train. But like that
+[02:07] that's I wish was that simple, but it's not. Uh, so at the beginning we did a
+[02:11] bunch of like small ablations on like like a small number of GPUs to see like
+[02:16] how things will work. So you want to test some hypotheses and you do a small
+[02:20] number of GPUs and let it train for a little bit. Oh, this works, it doesn't
+[02:23] work. Let's scale. Uh, and as we are like training this model,
+[02:28] the whole idea was to like kind of bridge the gap between like LLM research
+[02:32] and diffusion transformers. Uh, so my AI researchers they ported a lot of
+[02:37] research from LLMs into into DiTs. And the whole like
+[02:42] like the whole like architecture of the model was meant to be extremely
+[02:45] extremely simple. And so like it is very very dumb, but like very effective.
+[02:51] Uh, and so let's start talking about numbers.
+[02:54] Uh, incredibly our maybe skill issue on our
+[02:57] part, maybe our cluster uh, was very interesting as we were like
+[03:01] scaling. Uh, when you did like small experiments,
+[03:04] experiments would like run for days and like even less than we would like to,
+[03:08] but like they would still run fine. Uh, and as we like start scaling, like
+[03:13] getting like more and more and more GPUs, like 128, 256, 512, whatever
+[03:16] number, and like you scale and scale, like things are crashing more. That's
+[03:19] expected, right? Like there's more surface area for things to break and
+[03:24] things going to go wrong. And a lot of the times things would go wrong in
+[03:27] silent ways. I don't know nickel timeouts,
+[03:29] like just crashes and you like the metrics are all good. Uh, and it is
+[03:34] extremely annoying stuff. At the beginning we were like paranoid, swap
+[03:37] node, change node, whatever, whatever, whatever. And we learned that like
+[03:41] sometimes you just let it crash. It crashes, like it runs for like an hour,
+[03:43] crash, runs for an hour, crash, and then runs again on the same set of machines,
+[03:47] same code, same data for like 12 hours, 16 hours, 24 hours.
+[03:52] Uh, there is this paper from Meta that kind of gives you a like rough estimate
+[03:56] of like how many failures you should expect. Uh, we we kind of saw the same
+[04:00] pattern but like not the same numbers. Uh,
+[04:03] our runs would last way way less than this. Uh, so it was extremely annoying
+[04:06] and you can imagine doing large-scale pre-training on runs that last less than
+[04:10] 8 hours, it is a problem, right? You want kept those GPUs fed and if things
+[04:15] are crashing, you are not doing progress and losing time and models are going to
+[04:18] be late. Uh, so for us
+[04:22] extremely important and like for at least from the infra side was to get
+[04:25] metrics. Metrics are everything. That's how I can support my researchers. That's
+[04:29] how I have visibility in the system. And like
+[04:32] if you're doing large-scale pre-training, I highly highly recommend
+[04:35] for you to invest heavily on metrics. Uh, don't don't go blind because you're
+[04:38] going to go you're going to go crazy. So I'm going to share some of the metrics
+[04:41] that like were important for us. And like they're quite silly but like
+[04:44] extremely effective. Uh, first one like GPU temperature. Uh, GPUs are very very
+[04:48] annoying. They if you're if you have a single GPU
+[04:52] that is like a bit warmer than the others, it's going to start like
+[04:55] throttling and slow down and and the training's going to be unstable and you
+[04:59] have weird problems. So for us it was like if there is any GPUs above like
+[05:03] 78°, you you remove them. Don't don't think about it. Don't try to fix. Don't
+[05:07] don't try to be smart. You just remove the GPU. Uh,
+[05:10] you're going to save time and just ask your provider and like this GPU's hot.
+[05:15] Please replace it. Uh
+[05:18] and this there there is two metrics that at the beginning we did not fully
+[05:21] understand and as we are like getting more and more used to GPUs and like how
+[05:25] they work, uh, there is GPU utilization which is a
+[05:27] lie. Uh, don't trust this. Uh, this is dumb. Uh, this tells you, oh, the GPU's
+[05:32] doing work. And this is amount of time GPU's doing
+[05:35] work but like not good work. Not how efficient the GPU's working. So like as
+[05:38] you can see during our pre-training, the GPUs are 100%. This is not true. We are
+[05:42] not fully utilizing the GPU. Uh, this is 100% a lie.
+[05:46] What we would use uh, as a proxy was tensor core utilization. This is
+[05:49] actually how how much of a tensor core you're using and like how effective they
+[05:53] are being. Uh and it was also very interesting as we're doing pre-training
+[05:56] and then you go from pre-training to mid-training to post-training, you start
+[05:59] like scaling the like the resolution of the images. So like for example,
+[06:03] pre-training we do like I think 128, 256, 512
+[06:07] 1024 pixels as they scale and you could see the tensor core utilization go up as
+[06:11] we like would scale on these these resolutions cuz now you're doing more
+[06:14] work on on on images. And like also very very interesting was InfiniBand and
+[06:20] NVLink metrics. These by default not exported by uh the NVIDIA metrics that
+[06:25] DCGM stuff. Some NVLink stuff, yes, but no InfiniBand. So if you don't have
+[06:29] InfiniBand metrics, uh go go go get it. Uh I'm telling you right now, if you're
+[06:34] doing large-scale pre-training with a bunch of GPUs talking to each other
+[06:36] between machines and you have no InfiniBand metrics, you're doing
+[06:39] something wrong. These was probably the most important
+[06:43] stuff for us because most of our failures were like related to like
+[06:45] cross-node communication. So like for example, here you just have
+[06:48] throughput, but like on our like reference dashboard, we have a bunch of
+[06:51] stuff like from like wait like when you when a message sent on on on the fabric
+[06:56] like how much time the the the message is waiting or like the like number of
+[07:01] errors and different types of errors and like number of packets and all of the
+[07:05] things that like InfiniBand's exported uh we collect. We had to build custom
+[07:09] stuff to get this. It was not hard. Uh you can figure it out. It's very very
+[07:12] easy. Same thing for NVLink. Uh NVIDIA exports some stuff about NVLink, but
+[07:17] like for example, NVLink NVLink errors, NVIDIA doesn't export this.
+[07:20] Uh so you can collect this and like as I said, InfiniBand was extremely
+[07:24] important and NVLink was a little bit less. Uh in some cases, these helped us
+[07:28] catch some problems in like especially like cuz NVLink single node, right? Like
+[07:32] communication inside a node. So sometimes a single node would have a
+[07:35] weird failure where the GPUs seem to be fine, but like some weird error happens
+[07:39] and then you can look at NVLink NVLink errors and like you see errors
+[07:42] happening. And then replace that machine. So,
+[07:46] go get this matrix. They they're extremely important and without this we
+[07:50] would not be able to to train at all. Also, as I said, our
+[07:56] our trains would crash constantly and a hacky way to do it to fix the problem
+[08:00] just checkpoint. Use and abuse the file system that you
+[08:03] have. At the beginning we use SEF. SEF didn't work well.
+[08:07] Was very annoying. It broke. We lost trust in data. So, I recommend if if you
+[08:13] have the money go go with something paid and
+[08:16] cuz you can trust your data. You can see numbers. This is our our worker cluster.
+[08:19] We can do like 1.8 terabytes of second of reads, almost a terabyte of
+[08:24] writes. And the file system would not choke on the training. So, we could
+[08:28] checkpoint every like 30 minutes, 20 minutes, produce like a terabyte of data
+[08:31] in like less than 30 seconds. So, this would not delay trainings. That
+[08:36] was like probably one of the like most important things that we need to to like
+[08:40] recoup the loss and just checkpoint. Don't don't don't don't forget about it.
+[08:46] And like how we serve. This goes in connection on how the
+[08:50] trains are launched. Because at the beginning I don't want my researchers to
+[08:54] think about GPUs. I just want them to launch stuff and this goes into a queue
+[08:59] and if we have GPUs we have GPUs. If we don't have GPUs we don't have GPUs.
+[09:03] So, queue. This is a open source project.
+[09:07] You can look it up. It does gang scheduling. Gang scheduling is important
+[09:10] for for for trainings in general.
+[09:14] And this gives us a semantic of like two tiers of priority
+[09:17] where you have a workload priority and this you can say like oh this training
+[09:21] is more important than this one. So, it skips on the queue in front of the
+[09:24] queue. And then after this we have the normal
+[09:28] Kubernetes priority if you're used to Kubernetes. And the way this system
+[09:31] works is like the training pods they always have like high priority for
+[09:35] everything. So, like once they are submitted they going on a schedule. If
+[09:38] there's inference running on those machines, the inference gets kicked out.
+[09:41] And you'd say, "Oh, this is bad. Production is going to go down." No, you
+[09:43] can build on top of that to to make production not go down, which is very,
+[09:46] very cool. Uh the only one of the problems with Q, which is annoying, you
+[09:50] can automate that. We have not. It's just that you specify the queues. The
+[09:55] queues have like amount of resources, CPU, and like Nvidia GPUs, memory,
+[09:59] whatever. Uh but this is manually like manually
+[10:03] like specified. And at least our cluster is quite fluid. Nodes phasing in and out
+[10:08] of existence. They go into to maintenance, whatever. You lose a few
+[10:12] nodes here and there. Uh this number gets out of sync. And sometimes these
+[10:16] these would break gang scheduling. Uh so, FYI, this this is a bit annoying.
+[10:20] You're going to face this if you use Q. Uh but yeah, very good project.
+[10:24] Kubernetes 1.15, uh we have not had the chance to play with it. Has gang
+[10:28] scheduling uh out of the box. Something very similar to Q.
+[10:31] Uh so, maybe you can use Kubernetes 1.15.
+[10:34] Uh and as I said, this this is the system that we built that allowed us to
+[10:38] train using the whole cluster. As I said, we have one big cluster that runs
+[10:41] production and and trainings. Uh so, I don't want my researchers to think
+[10:46] about GPUs, and I don't want make the trainings and research be delayed
+[10:49] because production is running, right? Uh production is lower priority. The site
+[10:54] still needs to work. People still need to be use the website. But like the
+[10:57] GPUs, they're like the value that we get off the GPUs doing trainings is more
+[11:01] like higher than than we get out of production.
+[11:04] So, the whole system works by default where there is this magical system that
+[11:08] I'm going to explain in in a bit that allows us to flip traffic between
+[11:11] clusters magically. And not just clusters, and like external providers,
+[11:15] GPU rentals, whatever. And you can see like the green like the the dark green
+[11:19] is like inference running in cluster. Uh and then someone launches a train, and
+[11:24] then suddenly start flipping to the other cluster, and then training is done
+[11:29] or whatever happens, it flips back. So, we stop wasting money. And this is
+[11:32] seamless. No one needs to think about it. Uh
+[11:35] the whole system like like handles itself.
+[11:39] And you get this this very nice pattern of like
+[11:42] I'm going to use all the GPUs in my cluster uh for trainings. Production is
+[11:45] going to run somewhere else. I don't need to think about it. My users on
+[11:47] production they not going to feel anything. Uh research is going to be
+[11:51] happy, and we can get values out of the GPUs.
+[11:54] Uh so, how does this work? There's this very nice project called virtual
+[11:57] kubelet, also open source. Uh you can build on top of it. It is a very nice
+[12:01] code base. Uh and this works by creating a fake
+[12:04] machine in Kubernetes. Uh Kubernetes has nodes. This creates a fake machine that
+[12:08] is like up to you to control how it works. So, Kubernetes does normal
+[12:11] scheduling as you would expect. Things would go into into these nodes. For
+[12:15] example, here all the GPUs are in the cluster in use, right? So, this pod goes
+[12:19] into the virtual kubelet node, and in there you can do whatever. This is the
+[12:23] system that we built. There is like you receive the pods back, and then you find
+[12:27] a provider. You can like This is up to you. Let's say you have a deal with some
+[12:31] provider that gives nice prices. You integrate integrate into here. We built
+[12:34] like some nice interfaces to be to to like not leak things. So, like we just
+[12:40] implement a provider, and there is a a algo that decides which one it goes.
+[12:44] Uh you translate this back of the pods into into the provider stuff, and you
+[12:48] deploy, and then you have something that reconciles between the both sides. And
+[12:51] what's extremely extremely nice, if you guys know about Kubernetes, Kubernetes
+[12:55] has like the horizontal pod auto scaler, which like scales the number of of
+[12:58] replicas. Uh number of replicas uh
+[13:02] Could you stop being annoying? Thank you, sir.
+[13:05] I appreciate it. There you go. Let's go back. Uh now we
+[13:09] go back. Uh
+[13:11] back back. There you go.
+[13:15] Like Kubernetes has the HPA, and the HPA scales the pods. And so, if something
+[13:18] fails, it is very interesting you don't need to handle the fail. Uh the only
+[13:21] thing you need to handle is like, "Oh, something failed." You mark the pod as
+[13:24] failed. Kubernetes is it's to detect that something has failed and create a
+[13:26] new one. Uh you don't need to try to save the world. Let Kubernetes handle it
+[13:30] for you, which is extremely nice way of handling stuff.
+[13:33] If something breaks on your side, something breaks on the the other side,
+[13:36] just mark it as failed, let Kubernetes handle it, create a new one, and things
+[13:39] keep working. Very, very nice way to handle stuff.
+[13:41] Uh and also very interesting, let's say you have GPUs on your cluster available,
+[13:45] right? You don't want to waste money. This would be very, very bad. So, the
+[13:48] system works about like works with like using taints, Kubernetes taints. They
+[13:53] allow and disallow things to run. Pods have tolerations for the taints. And
+[13:57] when we have GPUs in the cluster, uh
+[13:59] if you look back, there is the taint system on the bottom. This taint system,
+[14:03] it is what would like by itself decide what you like if you have GPUs or not
+[14:07] GPUs in the cluster. Uh and this adds a taint into the into the
+[14:12] node when we have a lot of GPUs. So, like a lot of GPUs in the cluster, we
+[14:15] taint the node, nothing can schedule on it. Uh so, we stop wasting GPUs.
+[14:20] Like the pods, they go into into the GPUs in the cluster, we don't waste
+[14:24] money. Uh and then imagine someone launches a training, right? This
+[14:27] training is going to take all the GPUs in the cluster, it's going to hog all of
+[14:29] the GPUs, no GPUs in the cluster. The system detects this, removes the taint,
+[14:33] new pod schedules there. Very, very nice. Uh you also don't think about it.
+[14:37] Uh and for us, for example, we use just some Prometheus metrics. That's how we
+[14:41] do it, very simple, uh but it works very, very, very well. Uh you let the
+[14:45] system run by itself. Someone's going to launch stuff. You're going to like the
+[14:49] training SLI is going to kick out the pods, it's going to schedule, it's going
+[14:52] to take the GPUs, the system is going to detect that, remove the taint, pod
+[14:55] schedules there. Very nice. Someone finish the training. Now we have pods
+[14:58] running on the other side, you're wasting money. Uh how do we fix this?
+[15:02] Uh same thing, you run something else that
+[15:04] detects the system and removes things back. Uh in this case, a descheduler.
+[15:08] Uh once the taint's added back, so like GPUs available, we add the taint, the
+[15:12] descheduler says, "Oh, these pods, they don't tolerate the taints.
+[15:15] I'm going to migrate them back." And you can ask, "Oh, why you don't use a no no
+[15:19] no execute taint?" No execute in Kubernetes would kick everything out at
+[15:22] the same time. So, as as like at moment you put the tanks, everything will be
+[15:26] kicked out and that's bad. Production would go down. So, like this system my
+[15:30] like slowly migrates the pods back, so production doesn't go down and we don't
+[15:33] waste money. Um it is a like a very like self-healing
+[15:37] system. You don't need to interfere with it. Uh it just runs.
+[15:41] Uh yes, of course, there was bugs at the beginning. Uh nothing's perfect. But
+[15:45] like once you calibrate it was was like very very well and like changed the way
+[15:48] we do research cuz no one else needs to care about GPUs. They just launch stuff.
+[15:52] If have GPUs, we have GPUs. If not, we don't have GPUs, go into the queue. And
+[15:56] we fully utilize the cluster for trainings. Production runs somewhere
+[15:58] else. And the GPUs are doing like useful work. And also like
+[16:02] if you're doing like diffusion transformers, they're not huge like LLMs
+[16:05] that need like multi-node like inference. Uh something that we learned
+[16:09] like whatever GPU works. Uh the GPU can be hot, falling out of the bus. It can
+[16:13] be exploding. Uh inference still going to run. It is very interesting. So, like
+[16:17] you can have very very bad GPUs for inference. Uh and everyone's going to be
+[16:21] happy. Uh
+[16:23] we are hiring. Uh if you're interested in building sort of stuff, uh doing
+[16:26] large-scale pre-training, uh build this sort of system for
+[16:29] researchers, shoot me a message at gabriel
+[16:32] plus hiring at cerebra.ai. There's also jobs listing and that's it.
+[16:36] Thank you.
+[16:51] >> [music]

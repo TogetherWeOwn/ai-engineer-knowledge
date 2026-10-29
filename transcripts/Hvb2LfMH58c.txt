@@ -1,0 +1,163 @@
+# title: The Frontier AI Inference Cloud for Agents — Byung-Gon (Gon) Chun, FriendliAI
+# source: https://www.youtube.com/watch?v=Hvb2LfMH58c
+# speaker: Byung-Gon (Gon) Chun, FriendliAI
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T04:58:04Z
+# sha256: 7d22a0b28d5d7d2426af2ead3e00fd19950819779f1b95e6e842c3c58fedfda1
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:13] Let's uh get started. Uh hi everyone. Thank you for coming. Uh this is the
+[00:18] late afternoon in the last day. Um so I really appre appreciate it. I'm gone,
+[00:25] founder and CEO of friendly AI. Today I want to talk about agentic inference. So
+[00:32] I'll first walk through what changed uh why it matters and how we rebuilt the
+[00:37] inference cloud for agents. Before we go deeper let me briefly
+[00:43] introduce friendly AI. Friendly AI is the frontier AI inference cloud for
+[00:48] agents. So we run inference for agents at scale faster, cheaper and more
+[00:53] reliably. We are born from a research team at S National University and those
+[00:59] research roots still define us. We are the team that invented continuous
+[01:05] batching. The inference optimization that is now standard across the industry
+[01:10] and our orca work inspired 3LM a widely used open source framework.
+[01:16] Today we operate globally headquartered in San Francisco with a team in soul to
+[01:22] scale frontier inference. As you know 2026 is a year agents go
+[01:28] into massive production and it's driven by two trends coming together. First
+[01:34] agents are going exponential. AI agents are driving explosive adoption
+[01:40] across software operations and knowledge work.
+[01:45] Second, open rate motors have reached the frontier and make agents economic.
+[01:51] They now rival closed frontier motors in capability, which means you can run
+[01:56] frontier quality agents on open motors with much lower token cost.
+[02:02] Let me make the openweight motor part concrete.
+[02:06] Open weight motors are now strong enough for these types of real agentic
+[02:10] workflows. Here we gave the exact same task building a tower defense game with
+[02:16] a coding agent to two models. On the left is GLM 5.2 an openw rate motor
+[02:22] running on friendly AI. On the right is anthropics opus 4.8.
+[02:29] The important point is not that the outputs are identical. The point is that
+[02:34] both complete the task at a level that is clearly usable for many agentic
+[02:40] workflows. Open weight models have crossed the quality threshold
+[02:46] but the economics are very different for the same task. Opus 4.8 cost about a
+[02:53] $150 GLM 5.2 unfriendly AI cost 27 cents about 5.6 times cheaper.
+[03:03] So this is the promise I mentioned earlier. Open rate models give you
+[03:07] frontier quality agents at a fraction of cost.
+[03:12] But motor cost is only one part of the story. To make agent actually fast and
+[03:18] reliable, the inference stack itself has to change. So let's look at what
+[03:23] actually happens inside an agentic workload.
+[03:28] So first let's look at changes in the workload. In the past the dominant usage
+[03:33] was chat. The basic unit was a request. A person asks a question, the model
+[03:39] answers and the person reads it. Latency meant how fast did I get one response.
+[03:46] Agents are different. The basic unit is a task. A task may involve many model
+[03:52] cores, many tool cores and it may run autonomously for a while.
+[03:58] So the user does not really care about the latency of one individual request.
+[04:04] The user cares about when the whole task is completed.
+[04:08] That means we have to optimize for tasks, not just individual requests.
+[04:15] Let's look at agent workflows more closely. An agent really runs a session
+[04:21] made up of tasks. Each task typically runs in a loop. First, it plans, which
+[04:27] usually means an LLM call. Then, it acts maybe by calling a tool. Then it
+[04:33] observes the result and adds the that back into the context and it repeats
+[04:39] this until the task is done. So we are constantly alternating between
+[04:44] LLM inference and one or more nonLM tool executions. So there is a gap between
+[04:51] LLM calls. An agent can also create sub agents and
+[04:57] run them in parallel.
+[05:01] Agent inputs also look very different from chat. The graph here shows the
+[05:05] prompt and completion length distributions of our internal coding
+[05:10] agent runs with GLM 5.2 which we use day-to-day.
+[05:16] They are much longer. They grow as the task progresses since every observation
+[05:21] gets appended back into the context. There's an important pattern here.
+[05:27] Consecutive agent steps usually share a huge prefix. If we recomp compute the
+[05:34] same prefix every time, we are burning a lot of compute on work we already did.
+[05:40] So this is one of the biggest opportunities in agentic inference.
+[05:46] So how token hungry are agents? Now let's look at a long horizon task
+[05:51] example like deep research. We ran explained the spec decoding
+[05:56] framework in VLM using code with GLM 5.2 unfriendly AI.
+[06:03] There are multiple stages and each stage is composed of sub agents which run
+[06:08] multiple inferences and tool cores. So it might run tens or even hundreds of
+[06:16] inference steps sometimes over minutes or hours and the shared context keeps
+[06:21] going the whole time. For the user what matters is not the latency of a single
+[06:26] token or one core. What matters is when is my test completed.
+[06:35] So agent inference is not just chat with more requests. It's a different problem.
+[06:41] The context grows over time. Tour work is interled between model cores. The
+[06:47] number of model cores depends on the input. So you can't really plan around a
+[06:51] fixed request rate plan. And the real metric is end to end test latency, not a
+[06:59] single request latency.
+[07:02] This is where friendly AI comes in. We rebuilt the frontier inference cloud
+[07:07] specifically for agentic goal close around the challenges I just walked
+[07:11] through and we set one goal optimize end to end
+[07:16] test latency the task not just the request. So how do
+[07:21] we do that? Let me show you the key engineering behind it.
+[07:27] Here's the engineering map for how we think about it. We built the stack layer
+[07:31] by layer around agent workflows. There are four big pillars I'm going to cover
+[07:37] today. Prefix caching key value in short KB cache management,
+[07:44] cash aware routing, agent aware optimization
+[07:49] and of course underneath we need model layer optimization like sparse attention
+[07:54] for long context techniques to reduce errors, fast corners, resilience serving
+[08:01] and more. In this talk, I'm going to focus on the four pillars.
+[08:08] Let's start with prefix caching. Since Asian steps share a large prefix, we
+[08:13] compute key value for that prefix once and cache it. Then on later steps, we
+[08:19] reuse the cache key value and only process the new suffix.
+[08:24] Reading from cache is much cheaper than recmp computing prefill. So this
+[08:28] improves time to first token and reduces compute on every step. And the longer
+[08:34] the task runs in agents, the more valuable this becomes.
+[08:41] But caching only works if the KV cache actually fits and can move around
+[08:47] efficiently. So we need strong KV cache management. We use frugal memory
+[08:54] management to pack more active context onto each GPU memory. We use KB
+[09:01] contigation to reduce the memory footprint.
+[09:05] We you we use hierarchical caching across GPU memory, host memory and
+[09:10] disks. So we can go beyond GPU limits. And we also use distributed caching. So
+[09:17] one prefix can be served across replicas, not just inside one instance.
+[09:26] At global cluster scale, routing becomes really important. A knife load balancer
+[09:31] may spread requests evenly across GPU clusters, but it can destroy cache
+[09:36] locality. A cache aware router at a global scale
+[09:41] does something smarter. It sends a request to part that already has the
+[09:45] right prefix cached turning a cord prefill into one cache ship. At the same
+[09:51] time, it still has to balance load. So one part doesn't become a hot spot.
+[09:58] In this example, the two requests of task A go to the same part one for cache
+[10:04] locality.
+[10:07] The next piece is agent aware optimization. And this is the next
+[10:12] fronture of agentic inference. Today, most systems schedule each LLM core as
+[10:19] if it were independent. They don't really understand that this
+[10:23] core is part of a longer agent program. But if the optimizer knows the agent
+[10:30] level context, we can make better decisions. For example, preempting the
+[10:35] right work, speculatively
+[10:39] prefilling context for an unlikely next step or making a better cache eviction
+[10:45] decision based on agent level context. So the goal is to reduce ant latency not
+[10:53] just make one call look fast.
+[10:57] When we put all of this together, this is the payoff. We are using the same
+[11:02] model GLM 5.2 with kilo code to create a simple mobile game. We ran the same task
+[11:09] with model APIs of friendly AI and another well-known inference provider.
+[11:15] As you can see, friendly completes the same task end to end tox
+[11:21] thanks to our Asenticentric cloud design.
+[11:27] So what does this unlock in practice? a stronger production agent stack.
+[11:33] Take an agent you already like. Now plug in openweight frontier models like GLM
+[11:39] 5.2, Minimax and Kimi served on friendly AI. The motor gives you frontier quality
+[11:46] capability and better economics. Friendly AI gives you the speed,
+[11:52] reliability and endtoend test performance needed in production. That
+[11:57] combination, quality, speed, reliability, and cost is what makes
+[12:03] agents actually useful and economical in production.
+[12:09] Friendly AI is currently powering teams in production from AI native startups to
+[12:14] global enterprises. I'd like to highlight a couple here.
+[12:20] Hilo is a hugely popular Asantic AI coding tool serving millions of users.
+[12:27] LG is a global enterprise whose businesses range from electronics to
+[12:32] healthcare to energy. Very different companies, but they all need the same
+[12:38] thing. Fast, reliable, cost effective agentic inference.
+[12:45] This testimonial from our client Kilo says it all. Over the past year, Kilo
+[12:51] Code has tested several inference providers hosting both open and closed
+[12:55] models. In a split test of GLM5 usage compared against other thirdparty
+[13:01] providers and direct usage from the model lab G.A.I., Friendly AI was
+[13:06] consistently seven times faster with a significantly lower error rate. Today,
+[13:13] friendly AI is a core component of the killer stack.
+[13:20] And you can consume this however fits your stack. Model API is the fastest way
+[13:25] to start. Core frontier open weight models through our serless API.
+[13:30] Dedicated endpoints give you your own isolated deployment with guaranteed
+[13:34] SLAs's for production workloads. And BYOG bring your own GPU lets you run
+[13:41] friendly inference on your own infrastructure. Same stack, three ways
+[13:46] to deploy.
+[13:49] To wrap up, there are three things to remember. First, frontier open weight
+[13:54] models make production agents economically scalable.
+[13:59] Second, agents are not just chat with more cores. Agentic inference requires
+[14:04] optimizing end to end task latency with the challenges I mentioned.
+[14:10] Third, friendly AI is built as an inference cloud for that word. Fast,
+[14:16] reliable, cost effective agentic inference.
+[14:23] Thank you for attending my session. If you're building agents, give uh frontier
+[14:28] openweight motors a try on friendly today. You can get started at
+[14:32] friendly.ai in minutes. And uh thank you. I'll be around after the session.
+[14:37] Um thank you. >> [applause]
+[14:54] [music]

@@ -1,0 +1,289 @@
+# title: Building safe Payment Infrastructure for the autonomous economy — Steve Kaliski, Stripe
+# source: https://www.youtube.com/watch?v=KLSuFPj2ld0
+# speaker: Steve Kaliski, Stripe
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T08:35:46Z
+# sha256: f36246820924eb834c9fe388b47af5b48fb59d73dc4f8b54a9ff7df7bf6b87bf
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:14] Just want to thank everyone for being here.
+[00:17] Um, I'm from Stripe and today I'm going to talk about building safe payment
+[00:20] infrastructure for the autonomous economy or how we can let robots spend
+[00:24] money and how businesses can receive money from robots.
+[00:28] So just about me, I'm a principal software engineer at Stripe. Spent my
+[00:31] first four years leading our issuing team, so that's our product that lets
+[00:34] developers create physical and virtual credit cards that historically would be
+[00:38] for humans and increasingly for robots. In the last two years,
+[00:43] I've been exploring how to let robots spend money and how Stripe businesses
+[00:46] can adapt to that new kind of buyer. And if I just want to take away, if you
+[00:50] stop listening for the rest of the presentation,
+[00:53] discovery and exploration benefit from non-determinism, right? So the amazing
+[00:58] thing about LLMs is huge corporate of information, the world's information can
+[01:02] predict and and recommend code or products or businesses for you.
+[01:06] But credentials, payments, and checkout require determinism. So not just benefit
+[01:10] from it, but require it. So that's sort of isolation of how do I
+[01:15] find things or what should I do from how am I going to transact
+[01:19] is sort of the critical separation. So we're going to talk about
+[01:23] agents as economic actors, all the bad things that can happen,
+[01:28] the solutions that that Stripe and our partners have worked together on to fix
+[01:32] those, and then a little bit of what's next.
+[01:34] So again, maybe another takeaway, agents
+[01:37] are already economic actors, right? They have their own currency and tokens. So
+[01:42] as you are in cloud code or codex or any other kind of application, you were in
+[01:46] effect spending money, right? It might be proxied through the subscription you
+[01:49] have or converted from the tokens that are being inputted or outputted turning
+[01:54] into dollars, but in effect we're already letting them spend, right? Just
+[01:57] not with any business but the LM uh provider that they're working with.
+[02:02] So, how do we enable other currencies and other spend patterns and other
+[02:06] payment methods and other business interactions is our is our main
+[02:08] question. So, um we probably we're going to zoom through this cuz all we talked
+[02:13] about today is agents, I imagine. So, uh agents produce text. Sometimes they need
+[02:17] to read or write data or interact with third parties. They do so using tools,
+[02:21] and sometimes those tools require money. So, how do we safely enable this? Um
+[02:25] again, we all know this, but uh crudely, an agent is just calling LM and
+[02:29] calling tools. They're spending both of them. Um and the tools in particular
+[02:34] we're going to talk about are search, credential management, and payment.
+[02:41] It's the magic, but it's also the risk. So, uh what are the main problems? Um I
+[02:44] can buy from the wrong place. I can buy the wrong thing. I can spend
+[02:48] the wrong amount. I can use the wrong credential.
+[02:51] So, the base approach uh in sort of the open class style, let's
+[02:55] just let the robot operate a human operate Well, hopefully not operate a
+[02:59] human, but uh concerning slip, uh hopefully it doesn't
+[03:03] come true. Let the robot just operate the browser like a human. Um
+[03:08] So, wrong place. Well, first, how does an agent certify it's in the right place
+[03:11] or domain? Um how do I know that, you know, maybe the the website looks a lot
+[03:15] like, you know, amazon.com, but is, you know, amazon. whatever and and is a fake
+[03:20] one. Um the wrong thing. Uh you could stumble through a site looking for a
+[03:24] purple T-shirt, and you could maybe, less concerningly, buy an orange
+[03:28] T-shirt, but you could also, you know, uh buy something that's 10 times more
+[03:32] expensive. The wrong amount. Um you know, as we
+[03:35] know, at least for me, I've seen totally
+[03:37] different prices here than back at home. Prices can drift. There's
+[03:40] miscalculations, different currencies, taxes, and so on. Like, the number you
+[03:44] your robot may extract from the page may not actually be the amount of money that
+[03:47] you want to spend. And of course, wrong credential. Um
+[03:51] you could paste your credit card, it could go the wrong place. Um, but, you
+[03:54] know, as as here, there are other different payment methods that are hard
+[03:58] or if not impossible for an agent to relay. So, we want to be able to solve
+[04:02] all four of those things. And again, the basic approach of taking a card number,
+[04:06] bad. Browsing a site can be finicky, filling forms, clicking pay, it's all
+[04:09] slow, um, hard to observe outcomes. And, you know, this isn't unique to
+[04:14] payments, right? It's the same as operating any web app or anything that
+[04:18] has a monetary risk. And that's why MSPs and uh, APIs exist. So, you know, in
+[04:23] Stripe parlance, the the left-hand side dashboard is for a human, and the
+[04:26] right-hand side, robots prefer code. So, the ideal approach is you know,
+[04:31] something where we can bind to a merchant. We can enforce spend policies.
+[04:35] It can be API-driven and thus programmatic. And you can have
+[04:38] verifiable identities. So, I'm going to talk about three
+[04:41] different things that Stripe and our partners have built together around
+[04:44] credentials, payment flows, and checkout to illustrate how we're trying to solve
+[04:48] all of those problems. So, first I want to talk about shared
+[04:51] payment tokens. And the idea here is that,
+[04:55] um, you know,
+[04:56] first, not all payment methods are, you know, universal like credit cards.
+[05:01] Um, some are expressed in different ways. Um, but there's also no way to
+[05:04] enforce spend limits or controls when you just hand a card number to someone
+[05:08] else, right? You're going to trust them that they charge the amount that you
+[05:11] parsed out of the page or whatnot. And what we built with shared payment
+[05:15] tokens is this idea that an agent collect a payment credential and it can
+[05:20] share it with the seller, you know, across hundreds of different payment
+[05:22] method types. And it can encode sort of like a mandate or smart contract, the
+[05:26] limitations of that credential to be used by a particular seller.
+[05:30] So, you know, we'll do a demo in a second, but I can apply usage limits to
+[05:34] specific currencies, to amounts, for time, and a particular seller. So,
+[05:40] even if I've been, you know, duped by a domain or
+[05:44] you know, haven't parsed the amount correctly, I can still apply what I
+[05:47] think is right in terms of the amount and the particular seller that I'm
+[05:50] targeting. So again, scope to seller,
+[05:54] it's enforced by Stripe, works across payment methods, and it's
+[05:58] auditable. So, I'm going to jump into a quick demo just to show you how that
+[06:01] works. So,
+[06:05] let's look at um kind of a common Stripe integration. So,
+[06:09] I have my seller Stripe account and I want to charge uh $50. So, I normally I
+[06:15] would create a payment intent and on line 39 I'd collect that payment method
+[06:18] myself and it would run and that's all great. Um
+[06:22] but now instead of collecting the payment method on my website, an agent
+[06:25] is collecting a payment method that it may have already received from its human
+[06:29] operator or through the subscription that backs the harness or whatever it
+[06:32] may be. So, we're going to introduce a second Stripe account. And this is the
+[06:36] agent Stripe account. And it's going to provision a shared
+[06:40] payment token. Let's say it collect had collected a Visa card.
+[06:44] And it's going to say that this Visa card, which has a much higher credit
+[06:47] limit, is only going to work for $25 and it's only going to work for the next 30
+[06:51] days and it's scoped to this particular seller, illustratively, my internal test
+[06:55] account. So, we're going to go ahead and we're
+[06:58] going to create that credential.
+[07:02] And instead of the seller using a payment method that they've collected,
+[07:06] they're going to receive a token that's been granted to them
+[07:10] and try to run the payment. So, let's
+[07:18] Cool. So, the first thing we see is that we created that new shared payment
+[07:23] token, which applies to that Visa card, it's
+[07:25] active, it has that $25 limit, and it's going to expire in 30 days.
+[07:30] Now, what's important as part of this also is we don't want the seller to be
+[07:33] fully hidden from what's happening. So, in the same way that they would have
+[07:37] otherwise collected a card and knew the brand and knew the last four and so on,
+[07:41] um we still send that information over. So,
+[07:44] the the brand and the last four, the credit type, they can use all these
+[07:49] inputs in their existing risk analysis. So, an important part here, too, is that
+[07:52] we're not trying to do something secret from the seller. We still want to
+[07:56] provide the relevant information to the seller so that they can still apply
+[07:59] their exact their previous uh risk systems
+[08:03] um so that, you know, they they can accept
+[08:05] payment. Um, but what we'll see is we actually had a failure here. So, the
+[08:09] request amount, which was $50, is greater than the amount that was uh
+[08:14] mandated. So, again, we like collected a credential, we shared it, we applied a
+[08:19] limit, we trusted the seller, the seller tried to do more, and now Stripe
+[08:23] enforced a limitation. So, uh again, like
+[08:26] this would work across any payment method type, and, you know, now that we
+[08:31] you know, can lower the cost, we'll see that uh this actually goes
+[08:34] through.
+[08:37] Yep, that payment went through. So, now we're able to securely send a
+[08:40] credential, apply limits, make sure there's a minimized blast radius,
+[08:44] um and still allow the seller to process payments as they normally would. Now, um
+[08:49] that covers credential sharing, but there's two more parts to this. This
+[08:53] how do we actually associate payment to a product, and then how do we do
+[08:56] checkout? So, uh the second thing we built uh we
+[08:59] worked with our friends at Tempo was what we call the machine payments
+[09:02] protocol. So, back to that original point around tool calls, um well, tool
+[09:06] calls are just sort of HP requests that agents can make. Um, and HP requests um
+[09:13] should be able to be paid for, right? So, one way is you pass in an API key,
+[09:16] but sometimes those interactions with tools can be ephemeral. So, we want to
+[09:20] be able to communicate the need to pay um
+[09:24] in those HP requests by returning a 402 status code, and then supply that
+[09:28] credential that we showed earlier um
+[09:31] so that we can actually get a good back. So, um
+[09:33] we've covered uh Uh, how do we get credentials, how do we know to pay for
+[09:37] them and associate with the actual product we're buying? So, again, um
+[09:41] closing that window of of improved determinism.
+[09:44] Um So, maximize determinism. Let's do demo.
+[09:50] So, now if we jump over here, I'm going to
+[09:54] start a server.
+[09:59] This server's a regular sort of uh web server. It has protected
+[10:03] endpoints that now require payment. So, let's say my robot is calling one of
+[10:08] these endpoints to try to execute a tool.
+[10:10] Make a curl request to it. It fails.
+[10:15] Tells us that we need to pay. It gives us some uh
+[10:19] encoded payload that explains what we're buying and who we're paying for and the
+[10:23] what we're paying for and the mechanism to pay for it.
+[10:27] Um and I can go ahead
+[10:30] and
+[10:33] uh pay for it now. So, now we get some extra information
+[10:37] back because we're speaking that protocol. We
+[10:40] can see that it's going to cost a penny um this to this particular recipient.
+[10:45] Um it'll be path USD on the tempo blockchain. And I can go ahead and
+[10:51] approve it.
+[10:54] So, now that goes through, get our success, and then we can see a
+[10:58] transaction landed on the blockchain. So, uh we're, you know, able to create
+[11:03] credentials that have limited use. Now we can be uh told by a seller how they
+[11:09] want money and have it be associated with the actual re- resource I'm
+[11:12] requesting. And now I can send them funds.
+[11:15] Um but the last part is um let's just jump back in.
+[11:20] It's like we're not always buying API calls,
+[11:23] right? And sometimes the uh details uh of the purchase matter quite a bit,
+[11:28] right? The tax amount, maybe there's that, there's uh restrictions about the
+[11:32] amount of things I could buy. All the things that a typical e-commerce site is
+[11:36] trying to convey. And to that earlier point around, you know, the the robot,
+[11:40] you know, stumbling around a checkout page, there are a lot of details that we
+[11:43] want to be able to relay back to the agent and ultimately back to the human
+[11:46] buyer to make sure that the thing we're buying is is the thing we think we're
+[11:50] buying, right? We want to minimize disputes and chargebacks and so on. And
+[11:55] if we have this proxy layer of the agent in between, we run the risk of
+[11:59] incorrectly relaying those details. So, what we built with Open AI being the
+[12:04] agent to commerce protocol is a standard set of APIs and objects that can explain
+[12:08] how checkouts work across the web.
+[12:12] So, similar to the last thing we showed
+[12:16] where the seller kind of conveys the need to pay, we establish a back and
+[12:20] forth between agent, a seller, and their PSP,
+[12:24] where every single time the agent wants to create a checkout or update the
+[12:27] quantity or pick a shipping amount, the seller can relay sort of like a tool
+[12:32] called relay back the latest state, respond to that request, and ultimately
+[12:36] result in payment.
+[12:39] So, we can sort of illustrate how this works with a
+[12:43] real business. Let's
+[12:46] spin up a server here.
+[12:52] So, Stripe operates something called Stripe
+[12:54] Press. It's our store of books. This is obviously a very cool, human-friendly
+[12:58] way to look at it, but our equivalency um
+[13:02] is the robot-friendly way of looking at it. So, um
+[13:05] the ACP protocol or ACP covers a few things. How do we express a product
+[13:09] catalog, right? So, instead of the robot stumbling around and having to click on
+[13:14] links and figure out what to buy, we can express our products just in JSON with
+[13:18] images and descriptions and pricing. And then the robot can pick one of those
+[13:22] and initiate a checkout. So,
+[13:25] uh Uh, we can pull up a familiar UI, maybe I'm
+[13:29] asking for recommendations about AI books.
+[13:31] And on the right-hand side we'll see the requests that the agent makes. So, it
+[13:35] tells a little bit about the buyer, the line items and quantity it wants.
+[13:39] And then the seller can relay back basically the state of the cart.
+[13:43] So, instead of the robot trying to, you know, pull information, you know, out of
+[13:47] a UI like this, it has structured data that I can refer to. So,
+[13:51] uh, the line items, the base price of each, applicable tax, the different
+[13:56] fulfillment options, and so on. So, nothing surprising here, but, you know,
+[14:00] our goal is to sort of establish that determinism, right? Where like we've
+[14:03] segued from discovery, where maybe we were doing some web crawling, now we've
+[14:07] transitioned to just purely programmatic back and forth.
+[14:10] So, you know, as I change payment methods or I change shipping,
+[14:14] and ultimately pay, those back and forth happen. Payments
+[14:20] goes through using something like a shared payment token or otherwise to
+[14:23] relay those credentials.
+[14:28] Let me check again.
+[14:31] Yep. So, you know, at the end we we have API-driven commerce flows that are
+[14:35] flexible to different payment methods, whether they're crypto or cards or any
+[14:38] of the other hundreds of payments that exist. And critically, the seller
+[14:42] remains in control. They continue to have the relationship that they expected
+[14:45] to have with customer, but also receive the signals um and risk data that they
+[14:49] need to safely interact with agents. And sort of the, you know,
+[14:56] goes without saying most of us have already done this with with our
+[14:58] products, but, you know, we want to make our products agent-friendly. Um, and if
+[15:02] we only expose you web UIs or or or applications like that, um we increase
+[15:07] the likelihood of non, you know, the non-determinism interacting with our
+[15:11] businesses. Instead, we should make them age friend agent-friendly um
+[15:15] to maximize the deterministic flows that agents have with our businesses. So,
+[15:19] leveraging things like shared payment tokens or wallets or other technologies
+[15:22] to then manage those credentials safely um is then important for agents so that
+[15:26] they're able to uh yeah, not accidentally spend a gazillion
+[15:30] dollars on a card. Um so
+[15:33] TLDR, discovery we should keep with non-determinism that's perfect. Payments
+[15:38] and checkout and credentials we want to shift towards exclusively deterministic.
+[15:43] Um so non-deterministic planner and constraints with verifiable parties and
+[15:47] structured negotiation results in a small radius of risk and hopefully safe
+[15:51] uh payments between agents and businesses. So that's all I got. Thank
+[15:55] you.
+[16:02] I have 2 minutes and 9 seconds if people have questions.
+[16:07] >> You mentioned blockchain. >> Yeah.
+[16:08] >> What is this hosted by Temple or is it Stripe or do they own their own separate
+[16:12] data? >> Yeah, so um you know, Stripe supports a
+[16:15] number of different uh protocols and and a
+[16:19] uh variety of networks including Base and Tempo. The transaction data uh
+[16:23] innately lives on those chains and then Stripe replicates the sort of product
+[16:27] view of that data in our own system. >> Yep. But why factor
+[16:33] >> This guy.
+[16:35] >> Um the shared payment tokens are really cool.
+[16:38] Uh in terms of say like recurring budgets and payments, like I'm thinking
+[16:43] of you know, I want to give Open Claw $25 a week to use with like
+[16:48] a particular model. How how does that uh kind of factor in?
+[16:51] >> Yeah, so you touched on two points the sort of the subscription thing and then
+[16:55] sort of more enduring policies. Um on the subscription side um
+[16:59] in the same way you give a credit card to a business and you permit it to spend
+[17:03] $25 or whatever on a on a periodic basis but it still uses the same credential.
+[17:08] Uh we have a similar idea there as well. Sort of similar to in OAuth access and
+[17:12] refresh flow where you can sort of like request uh subsequent usage. Um and then
+[17:17] on the another part about like uh uh
+[17:20] sort of more balanced budgets the sort of equivalency can work here where you
+[17:24] just pick a higher number. We still scope it to individual sellers,
+[17:28] but you could just create infinite of them.
+[17:35] >> Um so I'm wondering is Stripe projects just effectively a wrapper of these
+[17:39] primitives that you've discussed during the session?
+[17:41] >> Uh yes. Thank you for that plug. I did not have time to include that, but yes,
+[17:45] Stripe projects is built on shared payment tokens. And then the mannerism
+[17:48] in which seller or SAS business can express their products
+[17:52] as And then the point touched on the
+[17:54] recurring part is how the monthly part would work.
+[17:58] >> Thank you. >> You mentioned that you have started this
+[18:02] 2 years ago. I'm wondering about the the number of such payments done and the
+[18:08] volume If you can share something
+[18:11] >> We don't have public stats on any of that, but I think in general we're very
+[18:14] encouraged by it and we're really excited about
+[18:17] trying to support more businesses in accepting that type of payment.
+[18:26] Well, I'm at zero now, so thank you everyone. Appreciate it.

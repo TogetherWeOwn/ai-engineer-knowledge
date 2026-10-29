@@ -1,0 +1,149 @@
+# title: Same Model, Different Speed: Why Your Inference Provider Matters — FriendliAI
+# source: https://www.youtube.com/watch?v=_naLJOqVOEI
+# speaker: FriendliAI
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T03:21:46Z
+# sha256: d19489c6905cdc8f23920015978eb5dd20061cbb591d513de2b43060eafe6290
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:01] [music]
+[00:13] All right, let's get started. So, hello everyone. My name is Yun Mo. I'm a
+[00:18] founding engineer at Friendly AI uh building inference engine with our team
+[00:23] to optimize inference performance. Uh so today I'm going to talk about how we
+[00:28] built the fast and reliable inference API for frontier openweight models.
+[00:34] So oh thank you. Okay so before we dive in
+[00:41] let's do a quick show of hands. So who here uses closed weight frontier models
+[00:48] like GPT or cloud? Okay most of you are already using it.
+[00:54] And then who here mainly use openweight models?
+[00:59] Yeah. Yeah. Fewer than the closed weight models. So personally I recently using a
+[01:06] mix of both these days but I'm gradually migrating more of my workload to open
+[01:12] weight models. The reason is that open weight models uh have crossed the
+[01:17] threshold these days. For example, encoding, reasoning, and agentic
+[01:21] benchmarks. Models like GLM 5.2 are competing in the same tier as the
+[01:27] leading proprietary models. So, as you can see from this code arena
+[01:31] leaderboard, uh GLM 5.2 is ranked even higher than code opus 4.8. So, it is
+[01:38] right uh below the cloud fable 5. So, similarly across various coding terminal
+[01:45] and tool use benchmarks uh GM 5.2 2 and minmax M3 shows strong results. So the
+[01:51] question is no longer only whether open weight models are good enough for many
+[01:57] workloads now they are. So the next question is how fast and reliably we can
+[02:03] run them in production. So benchmark numbers alone uh don't
+[02:08] really give a clear sense of how well things actually works. So instead I ran
+[02:13] a a simple hands-on experiment to see how these models actually perform. So I
+[02:19] asked both GLM 5.2 and OPUS 4.8 uh 4.8 to build a tower defense game like this.
+[02:26] So as you can see both models produce working implementation with similar
+[02:31] structure and quality. So both one has a map and the turrets are shooting the the
+[02:36] enemies within the range. So yeah, both looks pretty great considering I made it
+[02:42] with a a single prompt. But when we look at a cost, the difference becomes very
+[02:47] clear. So GM 5.2 was more than 5.6 times cheaper for this task. And in agent SL
+[02:55] style workflows where you need to iterate multiple times, the the the gap
+[03:00] compounds quickly. So this is not just about motor quality anymore. It is about
+[03:06] what you can afford to run at scale. So after the model quality and cost, the
+[03:11] next next question is provider quality and provider quality is really about
+[03:17] performance. So even if the model weights are the same, latency,
+[03:21] throughput and reliability can vary significantly depending on where you run
+[03:26] it. Uh so this one has a open router snapshot which shows that uh these
+[03:31] differences are measurable. So if you're building an AI product, you should not
+[03:36] only ask which model to use, but you should also ask which providers gives
+[03:41] you the best performance, reliability, and pricing.
+[03:45] So I will show you another example. So here I use the same model 5.2 and the
+[03:51] same coding agent workflow. So the task is to build a simple Candy Crush style
+[03:56] mobile game which we call moto crush. So when you see this, the left side is
+[04:01] friendly AI. it generates the the the game within two minutes. Another
+[04:07] provider needs uh more than three minutes. So the model is the same. The
+[04:12] agent app is the same but the provider was different. So model developer tools
+[04:18] and coding agent this is this exper this is the experience that users actually
+[04:23] feels. So from this simple example we saw that
+[04:27] even with the same model and the same task the experience can feel very
+[04:32] different depending on the provider. The difference comes from the entire
+[04:36] inference tech. So the model architecture cache system routing policy
+[04:42] quantization strategy GPU corners all those things come together should shape
+[04:46] what the developer actually experiences. So this is the uh core of friendly AI's
+[04:52] value. So we are not just exposing a model API be uh so friendly AI is built
+[04:59] as a fullstack inference engine for geni models. This matters uh because fast and
+[05:05] reliable inference is not just one optimization. It is batching scheduling
+[05:10] quantization spec decoding and connors all all
+[05:15] everything should work together. So let me briefly explain uh how we built that
+[05:21] and how we make uh the inference performance uh to the cutting edge
+[05:27] level. So in the modern agent applications
+[05:31] inputs are often very long. It easily exceeds uh 10k tokens while outputs are
+[05:37] relatively short and more importantly a large portion of the inputs are repeated
+[05:43] across requests. In many real workloads like 50% to 80 to 90% of the tokens are
+[05:51] identical across different requests. So from a system perspective this means uh
+[05:56] most of the compute cost is in the prefill stage where the model processes
+[06:01] the entire inputs and build a KB cache. So if we recompuse this share prefix
+[06:06] every time you're wasting both latency and GPU cycles. So when a new reccast
+[06:11] share a a prefix with the previous one, we can reuse those tensor and skip the
+[06:16] corresponding prefer computation and directly reduce the TTFT and uh we can
+[06:22] avoid recmp computing large chunk of the input and but however making this work
+[06:27] at scale requires two key ch uh mechanisms. So first one is cache aware
+[06:32] routing. So in the distributed system KB cache is not centralized. It lives on
+[06:38] individual replicas. So the router must send incoming request to the replica
+[06:43] that already holds the relevant prefix in its cache otherwise we re we lose the
+[06:48] benefit of reuse. The second thing is cache hierarchy. So KB cache is
+[06:54] extremely memory intensive for large models and long context. KB cache size
+[06:59] can exceed model weights. So and as you know GPU VRAM is the fastest but there's
+[07:04] also very limited resources. So uh we treat cache as a hierarchy like hot
+[07:10] cache stays in GPU memory warm cachees in uh CPU RAM and quarter cache can be
+[07:16] offloaded to MVME or uh the disk spaces. The system dynamically offloads less
+[07:22] used blocks and prep them when uh when they need it. So by combining cash aware
+[07:29] routing and hierarchical memory management we significantly reduce the
+[07:33] prefix cost lower TTFT and making long context agent workload much more
+[07:38] efficient. So the next thing is interactive speed.
+[07:42] So standard auto reggressive decoding it generates one tokens per four pass that
+[07:48] makes decode uh inherently a sequenture and during the decode the GPU is often
+[07:54] underutilized and speculative decoding changes the shape of this problem. So
+[07:59] instead of generating one token and stopping it proposes multiple candidates
+[08:04] tokens ahead then the target model validates those uh candidates in a
+[08:09] single pass and if the tokens are accepted they are free. So this improves
+[08:15] time per output token uh without changing models uh output quality and
+[08:21] there are different ways to draft candidates. So one way is modelbased
+[08:26] speculation. It uses a small draft model to predict the future tokens and then
+[08:33] and the benefit of it is it can achieve higher acceptance rate but the cost is
+[08:39] the uh extra compute and another method is model free speculation. It uses
+[08:46] pattern from a prompt or prior output. So it has lower overhead but it works
+[08:52] best only when the output resembles the existing context. So the important part
+[08:57] is the trade-off. So speculation can improve per request latency but
+[09:02] validation as overhead to the batch. So the best strategy is not static. And at
+[09:09] friendly AI we take a hybrid approach. So the runtime can dynamically select
+[09:14] between model based and model speculation uh based on the workload and
+[09:19] request uh characteristic. So we also think about speculation as something we
+[09:24] can improve over time. So with self-evolving speculation uh draft model
+[09:29] can adapt based on the real serving traffic. So the speculator continuously
+[09:35] improves its prediction of the workload actually running in the in your uh
+[09:40] production. So the next thing I want to mention is
+[09:44] reliability. So speed alone is not enough. So production AI application uh
+[09:51] reliability is part of speed. So if an API is fast in average but frequently
+[09:57] hits timeout like five 5xx error 4 to9 rate limit or fail or that kind of
+[10:04] failure the user experiences uh still breaks. So this becomes even more
+[10:10] important for agentic workloads. As you know agent may need multiple model cores
+[10:17] to complete one task and if just one call phase in the middle the entire
+[10:21] workflow can be invalidated. So that's why we do not optimize only for the
+[10:26] latency or throughput. We optimize the full API experiences uh including the
+[10:31] error rate, uptime, all those things together. And this open AAI snapshot for
+[10:37] GLM 5.1 pro uh shows that friendly AI is not only the fast but it's also highly
+[10:43] reliable with over 99.9% up time.
+[10:49] So what I want to say is many inference provider out here of course in this menu
+[10:54] as well they will tell you that they are fast and some point of them they are but
+[11:01] on cert on certain benchmark under certain condition but for your
+[11:06] application the only benchmark that really matters is your own workload. So
+[11:11] your prompt your token length your traffic patterns and your latency
+[11:16] expectation. So our recommendation is simple. So please bring your workload to
+[11:22] us and test a poor experience with us in terms of like speed, reliability, cost
+[11:28] and quality. And of course um we build our inference service for exactly these
+[11:34] production workloads and we and we believe that we can give you the best
+[11:37] experience. So we have a boost in this venue. So bring your hardest problem to
+[11:42] us and let's solve it together. So to close I want to share a testimonial from
+[11:49] one of our customer is a kilo code. So kilo code is one of the largest coding
+[11:54] agent platform processing like several trillions of tokens every week. So they
+[12:00] have tested many different inference providers over past years and in their
+[12:05] split test for GLM models they were especially impressed by friendly AI. So
+[12:11] compared with many other inference provider, friendly AI was over like
+[12:16] seven times faster and had a sign significantly lower error rate. So I
+[12:21] believe you can get the same kind of experience with friendly AI. So if
+[12:25] you're building your frontier open models, building with your frontier open
+[12:29] models, come try them on friendly AI and bring your real workload and let us show
+[12:36] you what fast and reliable inference can do.
+[12:40] So this is the end of my talk and if you have any question feel free to ask.
+[12:45] Thank you.
+[13:02] >> [music]

@@ -1,0 +1,266 @@
+# title: Giving AI Agents Memory That Learns — Jake Broekhuizen, LangChain
+# source: https://www.youtube.com/watch?v=KGFyOtl5ktI
+# speaker: Jake Broekhuizen, LangChain
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T03:58:20Z
+# sha256: b503a81aa4195aaa3d89bf389cc24d94ba0f3b50d3d225a2963fa12d4591c722
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:01] [music]
+[00:12] >> Testing. Awesome.
+[00:17] Good morning everybody. Uh I know it's the last day of the
+[00:19] conference, so super excited to have you here. Hopefully hopefully I can keep you
+[00:23] engaged for the next uh 15 to 18 minutes or so. My name's Jake
+[00:28] and I lead our labs team here at LangChain. And today I want to talk to
+[00:32] you about a topic that I have uh been speaking a lot about with with
+[00:36] our team and and with a lot of teams that I speak with who are building
+[00:39] agents, and that's how to give your agents memory.
+[00:43] Whether you're building a coding agent, a support agent, a
+[00:47] uh a research agent, most teams arrive at the general same instinct that it
+[00:52] should get better from one run to the next.
+[00:56] So, let me give you an example to hold onto for the rest of this talk today.
+[00:59] Recently my my the the labs team at LangChain have been working with a
+[01:03] company in the financial services sector who's building a uh spending, budgeting,
+[01:08] and non-investment advice agent. Given the highly regulated nature of the
+[01:13] financial services sector, obviously you would imagine that it would need to
+[01:16] follow some strict tone guidelines. And so,
+[01:20] the way that it speaks and and the and its vocabulary and the way that it
+[01:23] interacts with different users is obviously the the tell on whether or not
+[01:28] it's following and abiding by the correct tone.
+[01:32] It will derive the way that it generates this tone from the context and from the
+[01:36] memories and from the references that it has to its rules and policies.
+[01:42] And you can imagine in some contexts, and actually in some contexts that we
+[01:46] experience, its tone would slip. And so, it would move from being advisory and
+[01:51] helpful to actually pointed and directive, saying things like
+[01:55] users in your similar situation would generally set a cap and it would
+[01:59] actually say, "Oh, well, actually it looks like you need to cancel some
+[02:01] subscriptions and move some money into savings." The company that we're working
+[02:05] with thought that this is a violation of tone
+[02:07] and there were similar instances of this, too. And so,
+[02:10] to correct that, the review process is manual. You have to have someone
+[02:13] understand the traces and understand where its tone slipped, make those
+[02:17] changes to the context that it needs to reference when it's giving its tone,
+[02:21] and then make sure that there are no regressions, as well.
+[02:24] Obviously, that that doesn't scale, or rather it's challenging to scale. And
+[02:27] so, the system should be or or the system
+[02:31] around the agent should be a place where it can continuously learn and benefit
+[02:35] from its interactions and its experiences. And that's the version of
+[02:38] memory that I want to talk about today.
+[02:43] To get there, I want to start with a tension that I think a lot of teams have
+[02:46] run into. I think all of us here today, the reason why we're at this conference
+[02:49] is we're curious, we're building agents. I think we've gotten very good at
+[02:52] observing them, but observing them and then turning those observations and
+[02:55] those agent experiences into lessons for future runs
+[03:00] are obviously very different things.
+[03:03] And so, that's where memory And so, that's where memory comes into
+[03:08] play. Agents are producing more signal and
+[03:12] more traces than ever before. And this is going to be something that's
+[03:14] obviously that will obviously increase as more agents are built.
+[03:18] That's fantastic for us because every run produces a trace and that trace is
+[03:22] stored somewhere. That's incredibly useful. It means that
+[03:25] we can understand the tools that were called, the reasoning that the agent
+[03:28] made as it was on its way to making its decision, the artifacts that it
+[03:32] referenced. Observability is obviously a critical
+[03:36] foundation for building very reliable very reliable agents.
+[03:40] But I think the challenge really is after the trace is stored or after the
+[03:44] log or after the transcript of what the agent did is stored.
+[03:48] If the future context that that agent references never changes,
+[03:51] then a misguided skill or instruction will mean that the agent The mistake
+[03:56] that the agent makes today will still persist in future runs.
+[04:01] The goal or the system that we want to work towards
+[04:04] is where a trace stops just being a log and becomes a source of signal.
+[04:09] Memory. Agents that are observable tell you what
+[04:12] happened. Agents that are adaptive are able to change are able to change and
+[04:16] guide themselves on the following runs.
+[04:20] So, I've mentioned memory. I think it will really help to sort of define what
+[04:22] I mean when I say memory. It's the durable context
+[04:27] that an agent references that will guide future runs.
+[04:31] A trace, a transcript, or a log is evidence of what happened.
+[04:36] It only becomes memory when that lesson is converted into durable context the
+[04:41] agent can reference on future runs. Now, you'll see six things on this slide
+[04:47] behind me. Facts, preferences, patterns, previous examples, skills, and
+[04:52] instructions. I think that it's helpful to group them
+[04:56] into three distinct buckets, a taxonomy that we borrow from cognitive science,
+[05:00] and actually that applies a lot when we're talking about agents that are
+[05:04] language-based.
+[05:07] First, there's what the agent knows. This is often referred to as semantic
+[05:10] memory. This includes things like the facts and the preferences that guide the
+[05:14] way that it responds.
+[05:19] Oops. Then there's the
+[05:21] Then there's what the agent has experienced.
+[05:24] This is the episodic memory. This is the learned patterns that it's seen, past
+[05:27] interactions, and examples.
+[05:31] And finally, there's how the agent should behave. This is also known as
+[05:34] procedural memory. And that's the instructions, the skills
+[05:38] that you're all probably very familiar with, and the rules that guide how it
+[05:42] should how it should behave.
+[05:45] Procedural memory is where actually most of the visible gains come from. So, in
+[05:49] that financial assistance that I the example that I gave at the beginning,
+[05:52] tone changes that we wanted to to promote to the agent and and make it
+[05:56] follow came in the form of updating its procedural memory. We weren't giving it
+[06:00] a new fact or we weren't telling it not to use a bad word. We were giving it a
+[06:05] rule to follow as it engages with its users. That's the
+[06:09] procedural memory that guides our agent.
+[06:15] Another distinction that that I want to make and I think this is very important
+[06:18] when thinking about the general agent agent memory paradigm is the separation
+[06:23] between working memory or short-term memory and long-term memory.
+[06:27] Working memory is what the agent is referencing in its current run. So,
+[06:31] these might be things like intermediate scratch pads. It might be tool results.
+[06:34] It might be the files retrieved as part of its operation.
+[06:38] Everything that it needs to do to perform its current job.
+[06:43] Long-term memory is what exists typically in some data structure or some
+[06:47] store somewhere else that has instructions and skills and things that
+[06:51] it needs to reference as part of future turns and and continuous
+[06:56] behavior. Different agent harnesses will leverage
+[07:01] and inject long-term memory in different ways, whether you're building your own
+[07:04] SDK or or using a variety of different popular agent frameworks.
+[07:09] Some inject it directly into the prompt. Some will use tools to retrieve that.
+[07:13] Some will Some will pull it directly from a store.
+[07:17] Some load it through files or some change the run time state.
+[07:20] The The implementation can vary, but the distinction is really important. Some of
+[07:24] the memory or some of the context that an agent references is temporary
+[07:28] while some of it is durable and long-term and is useful to guide future
+[07:31] runs. And I think that distinction is really
+[07:34] important when we think about traces and logs and artifacts that the agent
+[07:40] produces as it runs. A trace isn't just a record of the final
+[07:44] output. It's a record of how our working memory changed over the course of the
+[07:49] run. Some part of that should stay as
+[07:52] history. Some part of that should become durable
+[07:55] long-term context.
+[08:00] And so that's what gives Oh, that's what lends itself to this really helpful
+[08:04] mental model that I have or that I and and the team at LangChain and generally
+[08:09] I think is is a very useful way to sort of think about the
+[08:13] relationship between working or short-term memory and long-term memory.
+[08:16] It's a read-write cycle. And so you might have heard of
+[08:18] sleep-time compute or dreaming. Those terms refer to the way that memory
+[08:25] is updated or pulled from long-term into short-term whilst the agent is doing
+[08:31] work or actually in some cases whilst the agent is also not doing work. That's
+[08:34] the sleep-time compute. If we start somewhere at the beginning
+[08:38] of an agent run, it needs to read relevant context from long-term memory
+[08:42] into its short-term memory. So this is anything
+[08:45] This is anything important for the current run that it has It might be
+[08:48] skills, it might be instructions. You've probably seen progressive
+[08:52] disclosure with agents that actually pull in the relevant skills for a
+[08:54] certain task. That's that phase moving from long-term memory into short-term
+[08:58] memory. Then when the agent runs, it produces a
+[09:01] trace. This evidence is really important to us
+[09:05] because now we can understand how it retrieves context, the
+[09:09] the tool calls that it made or the decisions or the sub-agents or anything
+[09:12] that's part of its working job. As I mentioned, most evidence should
+[09:17] stay as history. If we turned everything that was from a If we turned all of that
+[09:21] evidence into long-term memory, then it would make the agent struggle and it
+[09:24] would make it harder to reason over future tasks. And so what I think is
+[09:28] really interesting is the filter step. How do you decide How do you decide what
+[09:32] is useful signal and what should become durable long-term context and how do you
+[09:36] decide what should stay as history.
+[09:39] Once you've made that decision and we'll get into that in a moment. Once you've
+[09:42] made that decision, that is that signal is then written back into durable
+[09:46] long-term context. So, in the case of our financial
+[09:50] assistant, that was be measured and not pointed or not directive,
+[09:54] so that it can update the way that it behaves on future turns.
+[09:58] And that's the core loop. Memory informs the run.
+[10:01] The run makes the evidence. We filter that evidence to make signal, and then
+[10:05] we use that signal to update memory. If you can build that flywheel,
+[10:10] then we trend towards a place where we can build very reliable and very
+[10:13] powerful powerful agents that just feel like they get better with time.
+[10:18] And so, once we have that mental model, I think, you know, an even more simple
+[10:21] way to break this down or to to abstract this away is is
+[10:25] capturing what happened, analyzing what might matter,
+[10:30] and then updating the context so that future runs can use this.
+[10:33] The implementations around how different how how different people building
+[10:37] different frameworks are still evolving, but this three-part shape is a really
+[10:40] useful starting point.
+[10:44] One implementation of this, and I won't I won't claim it's the only
+[10:47] implementation, but just as just a kind of like put some concrete structure to
+[10:51] what I'm talking about is the way that we do this with LangSmith.
+[10:55] The capture step, to be able to understand and see the trajectory and
+[10:58] the things that the agent did, is where our observability comes in.
+[11:04] You're able to see the tool calls. You're you're able to see the way that
+[11:06] the agents called sub-agents. You're you're able to see the context that was
+[11:09] retrieved. The analyze step in the middle is
+[11:12] something new that I'm really excited about, but basically, it is that
+[11:15] intelligent process that's doing the background analysis and doing the
+[11:18] background work to extract signal from traces based on the things that matter
+[11:22] to you, and then promoting that signal
+[11:25] to the memory store or the point of reference that the agent will use for
+[11:29] future runs, and that is LangSmith's context hub.
+[11:32] So, you can imagine now if there is a place where this analysis can be done,
+[11:37] signal can be in track extracted, a remote store where you can now go and
+[11:42] update what's in that so that the agent can pull that down the next time it
+[11:45] runs. That is what LangChain's context hub does.
+[11:48] And the abstract loop it maps cleanly. You capture the experience, you extract
+[11:52] the signal, and then you store that durable context
+[11:55] for future runs.
+[11:58] To kind of put that in some more detail and and also to frame it in the
+[12:04] in the the context of the financial assistant that I was speaking about at
+[12:07] the beginning and and sort of the way that we we built this loop.
+[12:11] When that agent runs, its context is loaded from the context hub and so that
+[12:14] might include its instructions, its skills, relevant markdown files that
+[12:18] matter to it, policies, and rules. When it functions or when we invoke that
+[12:23] agent, then the a trace is produced that shows us the the
+[12:27] uh failed tool calls or user corrections or in this case it flagged where our
+[12:31] tone strayed from what we wanted it to be.
+[12:34] Engine then looks for patterns and then identifies where different static skill
+[12:40] markdown files that are based in context hub need to be changed or promoted, and
+[12:44] it'll make that change.
+[12:47] And then the next time our agent runs, we're able to actually go and and
+[12:51] understand and see that its tone changes when it interacts with engages with
+[12:54] users.
+[12:59] So, some things that I and my team have
+[13:02] currently uh or kind of always think about when when designing memory and and
+[13:06] this should also as well ideally guide the the way that you design and build
+[13:11] some of these abstractions is that agents produce so much we call
+[13:14] it exhaust or we call it kind of like feedback. Not everything should become a
+[13:17] memory update. And actually the devil is in the details around what should become
+[13:21] one as as we've sort of discussed over the course of this presentation.
+[13:26] It's understanding and deciding what matters to you. You know, most trace
+[13:30] data actually should stay as history as referencable history. Some some might
+[13:33] become data sets to do offline evaluations and things like that.
+[13:37] A small a small segment of that or or subset
+[13:41] should end up becoming what changes your agent's memory.
+[13:44] Now, this second one is sort of like a gotcha that I I ran into a lot and I
+[13:48] think that you sort of tread the fine line of
+[13:51] trying to build a system that's optimized, but then also one that has
+[13:55] a memory store or updates available to it in the hot path. And what I found was
+[14:00] uh for particularly for long-running
+[14:02] background agents, right? Imagine if you have an agent that's running over long
+[14:05] time horizons and you make some memory updates in the beginning of its
+[14:08] operation, but because of the run time state and because of the way that it's
+[14:11] accessing memory, you don't actually access that or that's not available to
+[14:15] it for future runs. And so, you know, understanding what you can
+[14:19] cache, what you can't cache to be able to make sure that memory updates are
+[14:23] available for future runs, very important uh and sort of I was I was
+[14:27] banging my head on a wall for a while while while I was trying to sort of
+[14:29] understand why my behavior wasn't changing and
+[14:32] I needed to recognize and think about that second principle.
+[14:36] And then the third one as well. I think that
+[14:38] uh open core and uh you know, Hermes agent and and a lot of agents that are
+[14:43] uh becoming widely popular that sort of do this self-update process,
+[14:47] right? I think that it's another really important consideration of like what do
+[14:49] you make self-updateable as opposed to what do you make something that needs
+[14:53] human review? And so, if we're talking about
+[14:55] procedural memory with instructions and policies and tone
+[14:59] guidelines, those are probably going to drive about 75% of the behavior of my
+[15:04] agent. And so, that actually probably should have some level of human in the
+[15:07] loop and human interaction. You should have somewhere to surface it. The
+[15:10] changes that you make to the parts of the agent's memory that
+[15:13] are procedural before actually committing those and and putting those
+[15:17] in the in the in the agent's sort of like hot reload path.
+[15:21] So, protecting important behavior with the is, I guess, another really
+[15:24] important third third kind of like level to this that I
+[15:28] find really important. So, I'm going to come back to this
+[15:31] initial refrain. The next run should be better.
+[15:35] Memory allows us to do this. The word memory is thrown around a lot.
+[15:39] I think in the context of building agents and working with harnesses and
+[15:43] working with like providing context to your agent, memory really does give us
+[15:47] the ability to do this. And it's more than just a place to store information.
+[15:51] It's how experience becomes context. And then that context is how our next
+[15:56] runs get the chance to improve.
+[16:00] If you're curious about an actual implementation of this, by the way, that
+[16:03] QR code has a video of me walking through how I built an agent that does
+[16:07] exactly what I've just described. Uh
+[16:10] hopefully that'll kind of like make it tangible and and will sort of connect
+[16:13] some of those dots. Uh and if you want to have any further
+[16:16] discussions about this, please come and see me. We're at booth Eugene 19. Uh
+[16:21] I'd love to

@@ -1,0 +1,204 @@
+# title: From 15% to 90% GPU Utilization: Fix the Data Pipeline, Not the Model
+# source: https://www.youtube.com/watch?v=tNAV259UhCM
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T03:43:22Z
+# sha256: 975bc07bb2a1afbb551f5846a218a77aa4fb30e8f114acecaa3639bfd518e37a
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:01] [music]
+[00:13] Hello everyone. Thank you for joining me here. Um
+[00:18] yeah, today I'm going to talk about ray actors, vision tokens, and the gill.
+[00:24] um engineering a multimodal SFT data pipeline that keeps the GPUs busy.
+[00:31] So there's a lot of talk about you know how
+[00:35] to optimize training paradigms. Um but I want to give a different perspective on
+[00:41] the whole ecosystem of what it takes to get a model trained. Um and so the
+[00:46] question I'm going to be asking here is does your training loop really depend on
+[00:50] the GPUs right now? Is it blocked on the GPUs? And I think we're going to learn
+[00:55] that we're going to see in this experiment that the hardest part of
+[00:58] optimizing multimodal train throughput is not necessarily kernel optimization.
+[01:04] It is making sure that the G GPUs are constantly fed with data.
+[01:09] So let's go over the overview of what this topic what this talk will be about.
+[01:13] Anyway, so we will establish a baseline multimodal training pipeline um and then
+[01:19] we will encounter bottlenecks and then address them one at a time. So loosely
+[01:24] they are one concurrency how fast can you process one image before feeding it
+[01:29] to the model two pre-fetching how can we make sure that we have data on demand
+[01:35] three um how can we minimize data copies across different processes and four f
+[01:43] additional framework optimizations um so just tweaking your bells and whistles
+[01:50] um yeah so let's set up our premise We all know that GPUs incur expensive costs
+[01:56] and are generally want to maximize their utilization while we have them at hand.
+[02:02] Multimodal processing is different than text only um because there's a lot of
+[02:08] CPU inensive operations that have to happen before you actually feed the
+[02:13] model um the data. So whether that is um you know loading resizing or normalizing
+[02:20] images using like a library like pill for audio you do a lot of loading and
+[02:25] cropping you can use like numpy arrays and then videos are some sort of
+[02:29] combination of both um and then it's also true that usually your training
+[02:35] clusters have a lot more CPUs than GPUs at hand yet the GPU is what is starving
+[02:41] in this pipeline. So today we're going to introduce this equation called like
+[02:45] weight time ratio which is generally I formulated as like the time it takes to
+[02:50] prep your data and transfer it to the GPUs. Um and then we divide all of that
+[02:56] by the time it takes to do both of those and the train as well. So basically the
+[03:00] denominator is like your total pipeline. Um and we're going to see that during
+[03:06] our run we will go from a utilization of 15% to utilization of 90%. So our
+[03:14] baseline has like 85% of its spends 85% of its time um backed on data
+[03:21] acquisition whereas after we do these optimizations less than 10 and so for
+[03:27] the scope of this talk GPUs are not the goal. It's making sure that the data is
+[03:32] never the bottleneck is the goal. And so here's a little bit of background as to
+[03:37] like what our stack will look like. um we kind of take like a Quen 3VL based
+[03:44] model um kind of try to train it on the paradigms of chat VQA and like
+[03:50] multi-term VLM uh conversations. So to recap before the GPUs do any math um we
+[03:59] have to load the data we have to transform the data and then we have to
+[04:04] we have to transport it to the GPUs. Okay, this is a this is a overview of
+[04:10] what our data actually looks like. So, we will be using JSON L files. Um, and
+[04:16] then images are linked relatively uh to where the example lives. And then we're
+[04:22] going to assume that our data is just stored in S3. Um, in this example, for
+[04:26] example, it seems like that image 33471.jpeg
+[04:32] seems to be a picture of like a blue bus.
+[04:35] Um, yeah. So this is our system layout. On the left we have a data generator
+[04:40] which is responsible for the data loading, data transforming and data
+[04:45] transporting. Um and the that's like labeled as like fan out to the mega
+[04:50] megatron data parallel ranks. Um so the parallel ranks receive partitions of the
+[04:55] data as decided by the coordinator. Um it collates it performs forward pass and
+[05:01] backwards pass on this data. So, Megatron takes care of optimizing the
+[05:05] model weights across the DP ranks. And we're going to assume that it's like a
+[05:09] it's kind of it is kind of working as a black box.
+[05:15] Um, so let's start with the naive baseline path. So for each example, we
+[05:21] fetch the images from object store. Um, we kind of like we tokenize it, we
+[05:26] resize it, we write resize the images, normalize them, and then feed them to
+[05:30] the model. Um yeah and then when we do that
+[05:37] we can see that there's serial operations in the red which is namely
+[05:42] getting all the images one by one and then processing them one by one. So if
+[05:46] your if your trainer is asking for a batch size of like 256 then you have to
+[05:51] serially process all these images and then we can see that our train time
+[05:56] is somewhere between 15 to 20 seconds. uh however the data the time spent to
+[06:02] actually fetch the data is more than a 100 seconds. So that's why we result in
+[06:06] only 15% utilization of our GPUs. Um and then you can even see a profiling flame
+[06:12] graph that we spend most of the time doing S3 loads and then you can see a
+[06:15] long a little tail at the end about like loading the actual image on the pill uh
+[06:20] library. So okay, solution one, let's try to add
+[06:24] some concurrency to this. Instead of those red singular uh you know serial
+[06:30] processes, uh let's try to parallelize it by kind of having like a worker pool.
+[06:35] So when you request 256 examples, maybe let's just process all of those at once.
+[06:41] Um yeah, so for example, for example, we
+[06:47] have two costs. One is fetching the images, two is processing. So that's
+[06:51] like decoding, vision pre-processing, and then tokenizing your text. Um,
+[06:56] samples are very are independent. So this just means it's like embarrassingly
+[07:01] parallelizable. Um, and so yeah, you have a design
+[07:05] decisions here. What forms of concurrency do you want? So there's
+[07:10] asynchronous programming, uh, which is suitable for like IO work such as making
+[07:14] SQL queries or like performing network requests. There's threads uh which you
+[07:20] can use for like CPU intensive uh workloads that relinquish the Python
+[07:25] gill like the global interpreter lock. Um so this it's not straightforward what
+[07:30] operations actually release the lock. So you have to do a little more of your
+[07:33] investigation but common uses are like using hugging face transformers
+[07:37] tokenizers using the pill transforms API or like
+[07:42] some pandas operations processes um are more heavyweight but also provide
+[07:48] total isolation between your workload so you can leverage multiple cores on your
+[07:52] machine as you finish your work. Um, yeah, doing a deep dive on the right
+[07:56] solution would warrant its own talk, but like there's plenty of online resources
+[08:00] that can help you decide for your use case. What's important for our solution
+[08:04] is that we need to match our bottleneck. Not simply going with a lever that's
+[08:08] worked for us before. Um, so we'll choose async IO for fetching images here
+[08:14] and then use ray actors as our processors uh as our process
+[08:18] multipprocessing library. Um, ray actors are essentially the same as like general
+[08:23] processes, but they offer us APIs to communicate across workers that just
+[08:27] make it so that we don't have to reinvent the wheel. So, yeah, your
+[08:31] process is only as slow as your slowest link. Um, and we can see that our weight
+[08:35] time ratio has gone down. Um, on the second example, which is in the pink,
+[08:40] uh, you can see that the time spent fetching data per batch has gone
+[08:43] basically, yeah, around like around like 40 40 seconds.
+[08:49] Um, so this is this gives us a 25% speed up. However, you yeah that's the as you
+[08:56] can see the there's a huge gap that starts generating especially as we're
+[08:59] going through many many steps. Um, so can we somehow limit our bottleneck of
+[09:07] waiting on the trainer to request before provisioning our worker pool to fetch
+[09:11] the data? So can we just like preemptively fetch our data? Um
+[09:18] so we came up with solution two which was that we have a background thread
+[09:22] that fills up a queue ahead of time and it's always stays ahead of the consumer
+[09:27] which means that you your producer is producing examples
+[09:33] at a multiplier of your tra of your consumer and so the trainer is never
+[09:37] bottlenecked on actually requesting the data. When it requests data it's it is
+[09:42] available on demand. There's a caveat to prefetching. It makes your model and
+[09:46] data loader checkpointing and resumption like a little intricate of a process and
+[09:51] it can also suffer from a cold start period in which your queue is actually
+[09:55] getting filled up uh so it can be ready for training. Um but uh if you work
+[10:01] around those those details I think pre-fetching is a is a great idea.
+[10:07] Um yeah, so I think making sure your producer is always ahead of your
+[10:11] consumer will be will pay great dividends for you here.
+[10:16] Um unsurprisingly, we achieved close to 0 seconds of data fetching and
+[10:20] processing per batch because we've already fetched data and processed it
+[10:24] way before the trainer even needs it. Um and so we've effectively solved both the
+[10:29] data load and the transform bottlenecks. So after these two mitigations, we
+[10:35] thought we were done. throughput up GPUs fed however we observe that the data
+[10:40] transport costs still linger in fact they've gone up so every sample
+[10:46] transfers a large amount of like image arrays across process boundaries
+[10:49] multiple times every sample is pickled on the worker copied to the coordinator
+[10:54] and then repickled onto the trainer per sample per step we have a mem copy that
+[11:00] nobody really asked for so what h how this manifest is that your
+[11:06] data generator can often oo. Um, and so multimodal tensors are huge. They're
+[11:12] megabytes per sample. Um, and so by default, every sample is returned by
+[11:18] value, which means this that these expensive arrays are copied over from
+[11:22] process to process. So a fix for this, you can come up with an object store.
+[11:27] Um, this is a nice convenience method of that array provides you. Each sample
+[11:32] carries a object reference which is just a pointer to the data. Um and then the
+[11:36] driver just holds the pointer. The tensor never round trips to the head
+[11:40] node. Um and the Megatron data parallel ranks they can just directly call the
+[11:46] race store to fetch the data as they need.
+[11:50] So with every choice of your parallelism and concurrency solution, you always
+[11:55] have to think about the commu added communication costs. So plan wisely
+[11:59] around that. Okay. Yeah. And we were able to eliminate an extraneous like put
+[12:04] object uh kind of call that our prefetcher solution had that we did not
+[12:12] have to deal with by using the ray store. And we can see that our
+[12:16] communication costs go down and the ratio of the time spent waiting also
+[12:20] goes down. So to recap, we took a serial baseline. We added concurrency for data
+[12:26] loading and processing. We added pre-fetching to stay ahead of training
+[12:30] requests and we added the race store to minimize data transfer. We went from a
+[12:35] baseline weight ratio of 85% to 20%. And you can see that the saw to uh pattern
+[12:42] that you see in the top graph is alleviated uh to a large extent which
+[12:47] means that our utilization of the GPUs has gone up.
+[12:51] So when we're scaling up and now that we have like a good multimodal training
+[12:56] pipeline, let's try to scale it up to like a production run.
+[13:00] While doing that, we observed that our weight time ratio for the same pipeline
+[13:04] went up when all we did was scale some numbers. So we just added four times the
+[13:08] data parallel rings. We added like 200 data streams and then batch size is x
+[13:14] by4. Um so it turns out that since the data generator and the worker pool are
+[13:20] colllocated for fast data transfer
+[13:25] what happens is that there's a bottleneck on the network interface card
+[13:29] of that of that node. Uh which means that while we're packing all of this
+[13:34] working and processing into specific nodes that their network throughput is
+[13:39] not able to keep up with the demand of the training pipeline.
+[13:45] Um so at this point we did a little bit of digging into the frameworks that we
+[13:49] are using and we saw that by default Ray schedules workers on this it prefers to
+[13:55] schedule workers on the same nodes and colllocate workers which means that it's
+[14:00] easy to bottleneck one machine before you move to another machine. So
+[14:06] what we did was consider a possibility where we disagregate this whole process
+[14:12] where workers are spread across multiple nodes. Um so they can do their own image
+[14:18] processing and storing and in a lazy just in time manner are retrieved and
+[14:23] used by our DP rings. So yeah to re and then so these are the
+[14:29] two parameter two flags that we kind of tuned one is a zero copy retrieval and
+[14:35] second is a spread scheduling mechanism. Um neither of these actually helped in a
+[14:40] small scale experiment but together they had um a synergistic effect in a large
+[14:46] scale experiment. Um yeah so config can lose a config can
+[14:51] do poorly at a small scale but can do really good at a larger scale. So you
+[14:55] should always think about how to ablate across your your scaling ladders.
+[15:01] And these were the two flags that ended up making a huge difference uh in how
+[15:05] how fast our data processing pipeline was. And so now this is the final
+[15:10] pipeline that we've accomplished a concurrent eager um and a data access
+[15:16] pattern aware system that shares the training across loads and enables that
+[15:21] GAPU stay warm while providing smoothness and stability in training.
+[15:26] Overall we achieved a 50% additional throughput at scale just from these two
+[15:30] flags. It's the same knob opposite verdict
+[15:35] set by the bottleneck. So these are the learnings we get from
+[15:40] this talk if nothing else. Um GPUs are expensive but sometimes the biggest
+[15:44] battles happen outside of the GPU. So first ask yourself are you CPU bound or
+[15:48] GPU bound? Are you IO bound or computebound? And then solving one
+[15:54] bottleneck often exposes another. So first it was throughput for us then it
+[15:58] became weight time then it became memory then it became retrieval cost.
+[16:04] Um, classic moves are not the end. You know, parallelism and prefetching matter
+[16:08] and I think a lot of content has like covered this. Uh, but so do the
+[16:13] semantics of the frameworks that you're using and the and the constraints that
+[16:16] you're dealing with and scale always changes the answer. Tuning parameters
+[16:21] like zero copy waste um and spreading workers become important only at larger
+[16:27] scales and they may not manifest as obvious improvements at smaller levels.
+[16:33] Overall, profiling your baseline helps you move the needle. Um, yeah, thank you
+[16:38] everyone for attending the talk. Uh, if you have any questions, I'm happy to
+[16:42] answer them. Thanks.

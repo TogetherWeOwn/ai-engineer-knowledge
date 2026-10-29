@@ -1,0 +1,336 @@
+# title: Your Insecure MCP Server Won't Survive Production — Tun Shwe, Lenses
+# source: https://www.youtube.com/watch?v=BurJvbqFr4c
+# speaker: Tun Shwe, Lenses
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T09:57:59Z
+# sha256: c1086a4e6e24740f08a2b0a548b94099588f5ccb2d08049a586aa1043d47ca92
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:00] Hey folks, thank you for joining us for this session on why your insecure MCP
+[00:05] server won't survive production. My name is Tin Shway and I lead AI at
+[00:10] Lenses and day-to-day I'm an AI engineer and you can connect with me here on
+[00:14] LinkedIn.
+[00:17] And I'm Jeremy Fronae. I work on AI engineering at Lenses.
+[00:24] First, a quick note on where we work. Lenses is a data operating fabric that
+[00:28] sits between your agents and
+[00:32] Lenses is the de facto streaming data layer for providing trusted real-time
+[00:36] context to agentic AI. Companies work with us because we have
+[00:40] governance, security and large scale at the top of mind.
+[00:47] Here are a selection of our customers which gives us exposure to lots of
+[00:50] different industry use cases at large scale.
+[00:55] And we are here today of course because we have an open source MCP server that
+[00:59] we're applying our learnings to from the field. So, please give us a star to
+[01:03] follow the project. And here's what we'll cover in this
+[01:07] session. The takeaways we want you to have are the ways of thinking about
+[01:11] designing MCP servers and in fact any interface to make it robust for agentic
+[01:16] AI systems. And since this is a talk about MCP, we'll ensure you have tips on
+[01:21] how to approach securing your MCP service for production.
+[01:24] I'll cover the first few sections and in his sections Jeremy will go over the
+[01:29] OAuth flows.
+[01:33] So, let's go straight into why most MCP servers aren't great.
+[01:39] I like the way Jeremy Lowin, who is the creator of Fast MCP, put it. Um he said
+[01:44] that agents deserve their own interface that is optimized for their use cases.
+[01:49] To approach designing for agents through a product engineering lens.
+[01:53] I want to take that approach one step further.
+[01:56] A badly designed MCP server is also a badly secured one.
+[02:00] Poor design and poor security compound each other.
+[02:05] Jeremy put forward three dimensions in how humans and agents differ from one
+[02:10] another and to consider these three dimensions when you're designing for MCP
+[02:14] or any agentic interface. The extra layer I wanted to emphasize is
+[02:18] security that each one casts a security shadow.
+[02:24] First, there's discovery. When you use the new API, you pull up
+[02:27] the docs, you scan through them once, you find the three end points that you
+[02:31] need and you never look at those docs again.
+[02:34] An agent can't do that. Every time it connects to an MCP server,
+[02:38] it enumerates every single tool and reads every single description. And
+[02:42] that's expensive in tokens. But here's the security set shadow.
+[02:47] Every one of those tool descriptions is a surface for tool poisoning.
+[02:51] Attackers can embed hidden instructions inside descriptions that are invisible
+[02:54] in the UI, but the model will follow them without question.
+[02:58] More tools means more surface area for injection.
+[03:03] Second is iteration. If your script fails, you run it again. It takes a
+[03:07] second. When an agent retries, it sends the full conversation history over the
+[03:12] wire. And here's its security shadow.
+[03:17] An agent iterating over a poorly scoped MCP server is broadcasting your data
+[03:21] with every retry. The full conversation history goes over
+[03:25] the wire including any sensitive data returned by previous tool calls. Each
+[03:29] round trip is a chance for data leakage.
+[03:34] Third, context. You and I have decades of memories and experiences and
+[03:39] intuition. An agent has roughly 200,000 tokens and that's it.
+[03:44] The security shadow is detailed in OWASP's MCP top 10 list which I
+[03:49] recommend you all to go and read. And there it's listed as number 10, context
+[03:54] injection and oversharing. If your server dumps unfiltered data
+[03:58] into that limited window, you're handing off PII, credentials, internal system
+[04:03] details to a model that can be tricked into exfiltrating them.
+[04:08] An agent has to load all the context in before it can make a decision.
+[04:13] It makes it suitable for finding specific things, but it comes at the
+[04:16] cost of latency and context bloat. So, you think of it as finding a needle in a
+[04:20] haystack. If some of that hay is poisoned, the
+[04:24] agent just won't notice. So, you should think about curation.
+[04:29] Curate the MCP tools available to the agent and aim to expose the smallest
+[04:34] amount of information. The less you expose, the less can be
+[04:39] attacked. And here, less is more. Next, I'll go over what I consider five
+[04:46] key rules for secure agentic design. Uh to think with your product engineering
+[04:51] hat on and to apply it to MCP servers. The thing I want you to take away from
+[04:56] this section is that good MCP design and good MCP security are the same
+[05:00] discipline. If you get the design wrong, no amount of OAuth will save you.
+[05:05] I've got five principles here and they all give you protection against the
+[05:08] OWASP MCP top 10 before you write even a single line of OAuth code.
+[05:14] So, number one, shrink the attack surface by design.
+[05:18] Think in terms of outcomes. The idea here is to squash all the fine-grained
+[05:22] operations or underlying API calls into a single coarse-grained operation that
+[05:26] produces a desired outcome. Every tool you expose is a door.
+[05:31] Don't give the agent access to delete users when all it needs is to check an
+[05:34] order. Consolidate related operations behind a
+[05:37] single tool call with a well-defined outcome. So, you have one permission
+[05:41] check, one audit log entry, one place to enforce authorization. So, think fewer
+[05:47] doors with fewer locks to manage. Number two, constrain your inputs at the
+[05:53] schema level. You've got to accept the top-level
+[05:56] primitives like the enums, that will be the best approach. Um dictionaries are
+[06:00] also fine as long as they're not nested and to introduce more strictness, you
+[06:04] could use a typing library like Pydantic.
+[06:08] The aim is to reject free-form nested payloads to avoid command injection
+[06:12] flaws where the root cause is almost always unconstrained string arguments
+[06:16] that get passed downstream to a shell, a query engine or an API. Constrained
+[06:21] inputs are easier to validate and harder to exploit.
+[06:26] Number three, treat your documentation as a defensive layer.
+[06:30] Tool poisoning is number three on the OWASP MCP guide and it works by
+[06:34] embedding malicious instructions in tool descriptions that are invisible in the
+[06:38] UI, but executed by the model. If you don't write clear, complete
+[06:42] instructions, an attacker-controlled tool description in a neighboring MCP
+[06:47] server can shadow yours. If your documentation is complete and
+[06:51] unambiguous for every tool, it crowds out the space that a poisoned
+[06:55] neighboring server would try to fill. Number four,
+[07:00] return only what the agent needs. Oversharing data in tool responses is
+[07:04] number 10 in OWASP's MCP guide and it turns the agent's context window into a
+[07:09] liability. PII, internal identifiers, credentials,
+[07:14] system details, all sitting in the context, they're all just one prompt
+[07:18] injection away from exfiltration. So, strip your payloads to the minimum. If
+[07:22] the agent doesn't need a piece of data for its immediate task, then don't
+[07:26] return it.
+[07:29] And number five, minimize the blast radius. Scope
+[07:33] permissions at the tool and resource level, not the session level. Use the
+[07:37] MCP read-only annotation for non-destructive tools so that clients
+[07:41] can enforce boundaries or if an MCP tool is intended to have read-only access,
+[07:47] then consider turning it into an MCP resource.
+[07:50] Also, remember that every tool you remove is an attack vector that you
+[07:53] eliminate.
+[07:59] And you're building an interface, not a tool. So, this is the mindset to go in
+[08:02] with. An agent will use anything you provide
+[08:05] it with confidence, so you have to provide that trust layer.
+[08:11] So, now you've designed your server well. You followed the five principles.
+[08:15] Now you need to actually deploy it and this is where most teams hit what I call
+[08:19] the security cliff. If you're running MCP in standard IO
+[08:23] mode, life is pretty comfortable. It's a local process, a single user, no no
+[08:29] network exposure, no authentication needed. Your MCP host talks directly to
+[08:34] the server process on your machine. It's a walled garden and it works beautifully
+[08:37] for single-player developer productivity.
+[08:40] But production requires something completely different.
+[08:44] You need the streamable HTTP transport. Um this enables remote deployment,
+[08:49] multiple clients connecting to the same server. You can horizontally scale and
+[08:54] you can centralize your governance. And this is really where MCP becomes
+[08:57] genuinely valuable to an organization where you go from one developer on one
+[09:02] laptop to a shared capability that an entire team or entire fleet of agents
+[09:06] can use. MCP becomes the single interface that
+[09:10] all clients can use without having to worry about whether they're the latest
+[09:13] version of an API or considering the resources needed to scale.
+[09:19] The problem is there's no gradual on-ramp. You go from zero security
+[09:23] surface to a huge list of concerns all at once. You're suddenly needing OAuth,
+[09:28] token management, CORS configuration, TLS, rate limiting and more. And you
+[09:33] need it all at once. So, there's no halfway house because you can't do a
+[09:37] little bit of production. You're either behind the wall or you're standing out
+[09:41] in the open.
+[09:44] And you can't just stay local and hope for the best. Stack lock ran low tests
+[09:48] on standard IO transport and the results were brutal. 20 out of 22 requests
+[09:52] failed with just 20 simultaneous connections. Standard IO falls over the
+[09:57] moment you add concurrency. So, if you want to scale out, you have to cross the
+[10:00] chasm. And how do you start crossing that
+[10:04] chasm? I'm going to hand it over to Jeremy to continue.
+[10:10] Yes, so implementing an authorization server for MCP isn't that simple.
+[10:15] Let's look at the list of RFCs to implement.
+[10:20] With the core flow, the OAuth client discovery, and the metadata, and the
+[10:24] management of the token life cycle, we already have more than 10 specifications
+[10:29] to implement. Now, let's say we read all these RFCs,
+[10:34] and I'm ready to implement an authorization [clears throat] server for
+[10:36] MCP. What does the enterprise grade
+[10:39] authorization look like?
+[10:44] So, let's start by reviewing the local versus remote MCP server setups and
+[10:48] their respective OAuth flows. Tune talked about the walled garden, the
+[10:54] local MCP server running over standard IO with an API
+[10:58] key. Let's look at the flow diagram.
+[11:01] The MCP server runs on my machine. The client connects via standard IO.
+[11:06] The user must set the key as a parameter in the MCP client config.
+[11:11] And the parameter will be stored as an environment variable
+[11:15] passed by the MCP server with its request to the external service.
+[11:24] That might be good for local setups, but I need to provision, store, and maintain
+[11:30] the key. This key is long-lived, is rarely
+[11:34] rotated, and it isn't scoped to the specific actions that my client perform.
+[11:40] Even worse, these keys are often shared across systems.
+[11:45] So, the key is stored in a config file, an environment variable, and it isn't
+[11:49] verified by the MCP server. Now, let's look at a remote MCP server.
+[11:56] In this case, the MCP server runs on a remote server.
+[12:01] The client connects via HTTP. The user must set the key in the HTTP
+[12:05] authorization header. Again, we can see the MCP client config here on screen.
+[12:12] So, phase one is the generation of the token and the configuration of a client.
+[12:19] On step two, runtime, we can see the client performing a
+[12:22] request, attaching this API key in the authorization header.
+[12:27] This API key is validated or not by the MCP server itself, and will be passed
+[12:32] through to the upstream API, where it will be
+[12:36] this time verified. Whether the API key is validated or not, we'll get a 200
+[12:41] response or 401 response, in which case the user will need to rotate the token
+[12:46] manually. That's how a majority of remote MCP
+[12:50] servers are configured today. The key is long-lived, it isn't scoped
+[12:54] to the specific action of my agent, either. The key is stored in a config
+[12:59] file, and it isn't always verified by the MCP server.
+[13:04] Either the key is simply passed through to the API, creating a confused deputy
+[13:08] vulnerability, where malicious clients obtain authorization without the proper
+[13:12] user consent, or sometimes the key might be mapped to
+[13:16] another key and token for the API access itself.
+[13:20] Now, we have a single shared credential serving many users. That credential is
+[13:25] even more powerful, harder to revoke per user, and if leaked, it compromises
+[13:30] everyone. This approach works for long-lived,
+[13:34] unscoped credential setups. It still represents more than 50% of the MCP
+[13:38] servers out there. But what we see the ecosystem moving
+[13:42] towards is short-lived, scoped tokens via OAuth 2.1.
+[13:47] We even see token exchange for least privilege access.
+[13:51] Traditional OAuth assumes you know your clients up front.
+[13:55] You register them in a developer portal, you get a client ID, and you move on.
+[14:00] This works when you have five to 10 apps connecting to your service.
+[14:05] But with MCP, this flow breaks completely.
+[14:09] Think about what MCP's architecture actually looks like.
+[14:13] Any client, Cloud Desktop, Cursor, VS Code, a CLI tool, a random agent,
+[14:19] can discover and connect to any MCP server at runtime.
+[14:25] Pre-registration requires too much effort in a highly viable setting.
+[14:30] It's an unbounded number of clients connected to an unbounded number of
+[14:34] servers. You can't ask every developer to
+[14:37] manually register their app with every MCP server they might ever want to talk
+[14:41] to. So, that's where the dynamic client
+[14:44] registration comes in. In this case, we still have an MCP
+[14:49] server running on a remote server, but now it's protected by an OAuth
+[14:54] authorization server. The client can self-register itself
+[14:59] against the authorization server, and will get a new client ID on every
+[15:04] registration.
+[15:06] So, on phase one, the discovery, our MCP client, in this case Cursor,
+[15:12] will perform a request on {slash} MCP against the MCP server.
+[15:16] We can see the MCP server returning a 401 response because we do not have a
+[15:20] token to pass yet, but it also passes a WWW-Authenticate
+[15:25] header containing the resource metadata that can be used by our client in order
+[15:31] to discover the MCP server and its metadata.
+[15:36] The document itself looks a bit like this.
+[15:39] It describes the resource we're trying to access and the authorization server
+[15:43] protecting it. This lets our client point at the
+[15:47] authorization server itself and discover, this time, the metadata
+[15:51] exposed by the authorization server itself.
+[15:55] Now that our client knows how to authorize itself for an MCP server
+[15:59] access, it needs to register itself against the authorization server.
+[16:04] That is done via a request, a post request on {slash} register.
+[16:10] As we mentioned earlier, the authorization server will generate and
+[16:13] persist on disk a new client ID and return it to the client.
+[16:18] Now, we know who we're talking to. Next, it's time to authorize our client
+[16:24] against the authorization server. And for that, the MCP spec is mandating
+[16:29] to use the PKCE, the proof key for code exchange protocol. So, our MCP client is
+[16:34] first generating a code verifier and a code challenge
+[16:38] that it does pass through a request to {slash} authorize
+[16:43] in order to obtain an authorization code.
+[16:47] Our authorization server will validate this request and the code challenge.
+[16:53] And since we don't have a running session yet for this user, it will
+[16:56] redirect the user to its identity provider, so that's your single sign-on
+[17:01] form, in order for the user to log in. Upon successful log in, the user will be
+[17:06] redirected to a consent page where they can grant different scopes
+[17:10] to their client. Now that we issued a valid authorization
+[17:17] code for client, it's time to use it in order to get a token, an access token.
+[17:23] Does that by sending a request on {slash} token and passing the
+[17:28] authorization code and the code verifier that we generated for the PKCE protocol
+[17:32] earlier. Authorization server will validate
+[17:35] the PKCE challenge and the authorization code,
+[17:40] and it will then mint a brand new token. In this case, we're using JSON web
+[17:44] tokens in order to return an access token for
+[17:48] client to now use the MCP server. The final step is actually to
+[17:55] use the MCP server. This is when your MCP client is going to
+[18:00] perform a tool call, for example. We can see it will pass the access token
+[18:05] we just issued in the authorization as the bearer
+[18:09] value. Our MCP server will validate this token,
+[18:14] check the valid scopes, and it will now
+[18:18] perform the token exchange flow in order to change this delegation token
+[18:23] for a session token. This means our MCP server now is
+[18:27] actually a OAuth client for a new resource server,
+[18:32] our API, but it's using the exact same
+[18:34] authorization server in order to get a token.
+[18:38] So, that is the token exchange flow that is defined in RFC 8693.
+[18:43] And as we complete the flow, our MCP server can use this new session
+[18:47] token in order to perform an API call, bypassing
+[18:51] the token in the authorization header.
+[18:55] So, DCR solves the self-registration, the dynamic registration of the client,
+[19:01] so that our user doesn't have to go and pre-register, pre-generate uh static
+[19:05] credentials, and set it on the client, but it does have its own problems.
+[19:09] First, every time a user connects a client to an MCP server,
+[19:14] a new registration is created. Registrations are not portable, so using
+[19:19] Cloud on Windows and then on macOS creates two distinct client
+[19:23] registration.
+[19:26] DCR is vulnerable to phishing attacks because it doesn't provide a reliable
+[19:31] way to verify client identities. Anyone can post to that endpoint, the
+[19:36] {slash} register endpoint, including attackers.
+[19:40] Finally, the server is just trusting whatever metadata the client
+[19:44] self-asserts. It means a malicious client can claim to
+[19:47] be Cloud, and the server has no way to know
+[19:50] otherwise.
+[19:54] So, the MCP community had to come up with a better way to let clients
+[19:58] self-register. And that is CIMD, the client ID metadata
+[20:03] document. Here in this case, we still have an
+[20:07] authorization server in front of our MCP server,
+[20:11] but the client owner exposes the client ID on a public URL.
+[20:16] This will let our MCP server fetching the client ID during the authorization.
+[20:21] Let's have a look at the diagram. So, phase one is still the discovery.
+[20:26] Our client hits the MCP server without a token,
+[20:30] gets a 401 response, and uh the resource metadata URL. It can follow this URL,
+[20:36] discover the MCP server, and it will get to discover the authorization server.
+[20:42] But this time, the authorization server isn't mentioning it needs a slash
+[20:47] register request. It means the client, the MCP client, can
+[20:52] go straight to the authorization phase. We generate again the PKCE code
+[20:57] verifier, and we perform a slash authorize request. But this time, our
+[21:02] client passes its unique ID, and we can see it here. It's actually a valid URL
+[21:08] where the metadata for the client is being exposed.
+[21:14] This lets our authorization server fetch this metadata,
+[21:18] and register a new client with a unique ID
+[21:21] that is a URL that is exposed by the client owner.
+[21:27] And we can move to the authentication phase.
+[21:32] Again, the authorization server will redirect to the identity provider, wait
+[21:36] for a valid login on our user's side, present a consent screen
+[21:40] uh for the user to grant some scopes, and
+[21:44] we are ready to issue the delegation token and the session
+[21:48] token for a token use by the MCP server.
+[21:53] So here, CIMD has no growing database of client registration to maintain.
+[22:00] Proving that you control https://cloud.ai
+[22:04] is meaningful, unlike proving that you can post on the
+[22:07] registration endpoint. The redirect URIs that are explicitly
+[22:12] bound to the client in its metadata document are making it harder for
+[22:16] attackers to sneak in malicious callbacks.
+[22:20] And the authorization server can selectively allow or deny clients.
+[22:26] So, in summary, DCR is a good start, but it does create problems.
+[22:32] CIMD is a leap forward, and it is the preferred approach since November 2025.
+[22:40] But becoming enterprise grade requires adding other layers of security
+[22:44] and confidence. For permissions,
+[22:47] OAuth scopes gets you part of the way there,
+[22:50] but it's scoped to the session. True enterprise grade role-based access
+[22:54] control means scoping permissions at the individual tool and resource level, not
+[22:59] just the session.
+[23:03] Data masking is how you deal with the PII fields such as email,
+[23:07] phone, and national insurance numbers. They may need to be masked before the
+[23:12] agent sees them, because agents should never be exposed to data that they have
+[23:17] no business handling.
+[23:22] You will need to log what's happening in each interaction.
+[23:25] Which agent called which tool, with what parameters, and what data was returned.
+[23:31] For compliance with regulations such as the EU AI Act, regulators will expect
+[23:36] this level of transparency and detail for autonomous AI systems.
+[23:43] Finally, you'll need to be able to observe the full request.
+[23:47] This means the client request validation through the execution,
+[23:51] data retrieval, and the generated response.
+[23:55] If you cannot trace what an agent did end to end, you cannot govern it.
+[24:00] Tracing for agent AI follows the same principles as distributed system
+[24:05] observability, but applied to autonomous decision-making.
+[24:11] Thanks very much, Jeremy, and thank you all for tuning in to this session. We'd
+[24:16] love to know how your journey with productionizing MCP services is going,
+[24:20] so please leave us a comment or send us a message. You know where to find us.
+[24:24] And please do check out our MCP server and give us a star. So, hopefully we'll
+[24:28] see you again soon. Thanks, and bye. Thank you.

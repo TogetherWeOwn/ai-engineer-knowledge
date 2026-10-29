@@ -1,0 +1,108 @@
+name: Analyze one caption transcript
+
+on:
+  workflow_dispatch:
+    inputs:
+      vid:
+        description: Existing 11-character caption video ID (live transport is disabled)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: manual-caption-analysis
+  cancel-in-progress: false
+
+jobs:
+  analyze:
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      vid: ${{ steps.validate.outputs.vid }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - name: Validate the single video ID
+        id: validate
+        env:
+          VIDEO_ID: ${{ inputs.vid }}
+        run: |
+          python3 - <<'PY'
+          import os, re
+          vid = os.environ['VIDEO_ID']
+          if not re.fullmatch(r'[A-Za-z0-9_-]{11}', vid):
+              raise SystemExit('Invalid video ID')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as stream:
+              stream.write('vid=' + vid + '\n')
+          PY
+      - name: Require publication-date coverage first
+        run: python3 scripts/backfill_publish_dates.py --root . --check
+      - name: Validate captions and analyze (disabled without approved contract)
+        env:
+          VIDEO_ID: ${{ inputs.vid }}
+          # Disconnected placeholder only: no approved provider/secret contract exists.
+          # Installing a value cannot enable the transport or authorize a model call.
+          ANALYZER_LLM_API_KEY: ${{ secrets.ANALYZER_LLM_API_KEY }}
+        run: |
+          python3 scripts/analyze_transcript.py --root . --vid="$VIDEO_ID" --check
+          python3 scripts/analyze_transcript.py --root . --vid="$VIDEO_ID"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: single-analysis
+          path: analysis/${{ steps.validate.outputs.vid }}.json
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    needs: analyze
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: single-analysis
+          path: _analysis_artifact
+      - name: Revalidate the sole public artifact against the pinned corpus
+        env:
+          VIDEO_ID: ${{ needs.analyze.outputs.vid }}
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          from scripts.analyze_transcript import validate_publication
+          validate_publication(Path('.').absolute(), os.environ['VIDEO_ID'], Path('_analysis_artifact'))
+          PY
+      - name: Stage and publish only the validated analysis file
+        env:
+          VIDEO_ID: ${{ needs.analyze.outputs.vid }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          PUSH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          [[ "$VIDEO_ID" =~ ^[A-Za-z0-9_-]{11}$ ]] || exit 1
+          git add -- "analysis/$VIDEO_ID.json"
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+            commit -m 'data: analyze one caption transcript'
+          # Supply push authorization in process environment, never git config on disk.
+          AUTH_HEADER="$(printf 'x-access-token:%s' "$PUSH_TOKEN" | base64 -w0)"
+          GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.https://github.com/.extraheader \
+            GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $AUTH_HEADER" \
+            git push origin "HEAD:refs/heads/$DEFAULT_BRANCH"

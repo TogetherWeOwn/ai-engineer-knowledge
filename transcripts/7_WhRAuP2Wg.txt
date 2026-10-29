@@ -1,0 +1,789 @@
+# title: Building and Scaling an AI Agent Swarm of low latency real time voice bots: Damien Murphy
+# source: https://www.youtube.com/watch?v=7_WhRAuP2Wg
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T14:28:16Z
+# sha256: 481455c5ac49f8d42cda3035a0d32bee85c1adfd1e393f0f06f89fac93920892
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:00] [Music]
+[00:14] hey everybody yes we're going to get started
+[00:17] here uh thanks everybody for coming along um and thanks to AI Engineers for
+[00:22] for having us uh my name is Daman Murphy I'm a senior applied engineer at Deep gr
+[00:27] a lot of people ask me what is an applied engineer it's a customer facing
+[00:31] engineer right so we work directly with customers uh to basically help them
+[00:35] achieve their business cases um yeah about 20 years of experience full stack
+[00:40] developer uh been working in pre-sales post sales uh really just customer
+[00:44] facing roles for the last 10 years or so uh I've helped hundreds of companies uh
+[00:48] working with deep gram to actually build uh and scale low latency real-time voice
+[00:53] spots uh a lot has obviously changed in the past few few years around how we
+[00:57] actually build these voice spots uh and I'm going to kind of walk you through
+[01:00] that Evolution as well if you're not familiar with deep gr
+[01:04] uh we're a foundational AI company that means we build our own models we label
+[01:10] our own data and basically train and deploy at scale um we have a lot of
+[01:17] models we've over a thousand models running in production so we run a lot of
+[01:20] custom models um for different use cases right so you can think of meeting use
+[01:24] cases drive-thru use cases phone call use cases uh the vast majority of audio
+[01:29] today is generated in a call center and call center data is probably the worst
+[01:34] audio you've ever heard right it's you know 8K Mula or linear 16 and uh it's
+[01:40] just very hard to actually understand for an AI model so by us building and
+[01:44] training models specifically targeted to that lowquality audio we're able to have
+[01:49] a uh a much better performance um we're research Le so you know about 70% of the
+[01:54] company is research and Engineering uh and that means that we we really focus
+[01:58] on you know building that foundational scalable and cost effective AI Solutions
+[02:04] um you know building a model is easy rolling it out into production at a at a
+[02:08] low price point is hard yeah so what are we going to learn
+[02:13] today uh we're going to build a voice too AI agent that means you're literally
+[02:18] just going to send audio data in and you're going to get audio data back
+[02:21] right so you don't you don't need to hook in you know the llm the speech to
+[02:25] text and the text to speech uh you're going to be able to basically do audio
+[02:29] in audio out uh we're going to build a simple backend API for the AI agent and
+[02:34] that's going to enable us to you know build a front end that shows what's
+[02:38] happening uh and also uh allow the llm to do function
+[02:42] calling um and then we're going to talk a little bit about how you could scale
+[02:46] you know these AI agent
+[02:49] swarms yeah a couple of prerequisites I'm going to get into those first just
+[02:53] so that people have time to kind of uh install any tooling that they need um
+[02:58] I'll help you understand you know the kind of evolution of AI voice Bots right
+[03:02] so how they were previously how they're moving today uh I'll help you get set up
+[03:07] uh we'll go over a little bit of application architecture how it works
+[03:11] and then we'll we'll touch on uh scaling it as
+[03:14] well yeah so you're going to want to go to
+[03:17] deep.com uh sign up for an account uh it's a free account you get $200 in
+[03:22] credit uh that's about $ 750 hours of of transcription for free um you'll need no
+[03:28] JS installed on your machine um that will allow you to run a little HTTP
+[03:33] server and if you want to modify the back end and run your own back end um
+[03:37] you can also do that uh we recommend Chrome browser uh haven't tested on
+[03:42] other browsers so if you have Chrome great uh it should work in other
+[03:45] browsers but you just never know what browsers these days um you're going to
+[03:50] need a microphone and a speaker or headphones uh you're going to be talking
+[03:54] to this AI agent so um should work fine on a laptop with a with a speaker on but
+[04:00] yeah just keep the volume down a little bit so it's not it's not communicating
+[04:03] with other people's
+[04:06] agents we need the API uh I I've set it up today that
+[04:11] you're not going to need an llm API key or a deep gr API key just to keep it
+[04:16] simple um but uh after this you'll have the opportunity to uh sign up to the
+[04:21] wait list where you will need that API key awesome yeah so the current approach
+[04:28] and and I've been building these sorts of uh voice Bots at scale for quite some
+[04:33] time um and typically they revolve around Tre key pieces right so you've
+[04:38] got your speech to text that's going to take your audio give you back uh a
+[04:43] transcript and then you've got an llm that's going to take that text uh that
+[04:48] you've detected uh process it and then generate a text reply uh and then you're
+[04:53] going to use text to speech to actually speak that back um this has been around
+[04:58] for a while right it's better and better and lower and lower latency uh we can
+[05:02] really bring down the latency on on both the speech to text and the text to
+[05:07] speech uh especially if you run it self-hosted um so one of the things I
+[05:11] help a lot of customers with is you know collocating all of these pieces together
+[05:15] to bring the latency down uh the challenge with that is it becomes a
+[05:19] infrastructure challenge rather than a software challenge um so what we've
+[05:23] tried to do uh with our new voice agent API is actually offer all of that as a
+[05:29] single API right so you can send us audio we'll collocate all of those
+[05:33] Services together um and then we'll be able to send you back uh the response uh
+[05:39] we also handle a lot of the complexity of you know endp pointing when is the
+[05:43] user finished speaking um and those can be challenging um so being able to have
+[05:49] all of that in a single API really just makes it easy for the developer to to
+[05:53] build the application that they want to actually achieve um one of the things
+[05:57] you'll notice here as well is function calling so so depending on the llm you
+[06:01] use right um You may want to shift your entire infrastructure to a different
+[06:06] provider right so if you're using Cloud you'll probably go with something like
+[06:09] AWS if you're using open AI you might go with a Zur right you want the llm and
+[06:14] the other pieces of the puzzle uh to be collocated um if you're running your own
+[06:19] local llm right so Lama tree uh fi things like that um you can just put
+[06:23] them really anywhere you want uh and you can see here as well the
+[06:28] the time difference right so going from 500 milliseconds for the speech to text
+[06:33] to 700 milliseconds for the llm and and TTS um and you can really bring that all
+[06:39] down right so as you bring those latencies down you actually start to
+[06:45] respond too fast right and that's when we start adding in delays and things
+[06:49] like that to make sure that you're not you know being rude
+[06:54] um excuse me yeah I see a lot of people taking
+[07:00] upload uh I don't have them uploaded but after the event I I can talk to the
+[07:04] organizers and get them shared all righty so yeah let's see if
+[07:08] the demo gods are with me today and the audio
+[07:21] Works
+[07:26] hello NOP allow my mic let's try that one more
+[07:33] time hello hi there welcome to the Crusty
+[07:38] Crab drive-thru what can I get started for you today yeah could I get a Krabby
+[07:43] Patty please actual thing
+[07:48] would I think it might be picking itself up would you like to would you like to
+[07:53] go ahead and add anything else to your order yeah can I get a Kelp Shake as
+[07:59] well please
+[08:04] I've added a crabby patty and the CP shake to your order anything else yeah
+[08:09] could I get a crust crusty combo as well we don't have a crust Krispy combo
+[08:15] on the menu would you like a crusty combo instead
+[08:24] yeah crust let me just refresh this so it's not picking me up um so you can see
+[08:30] right we we've basically just sent audio to the service it's gone off and figured
+[08:35] out what to do function calling wise so the llm is actually making the order um
+[08:41] I'm not doing any sort of order making within the app I'm not parsing the llm
+[08:46] response everything's just happened uh automatically um cool so let's jump back
+[08:54] into the slides right so if you have noj
+[08:58] installed um I have two repositories for you um which is located here so
+[09:06] github.com SL Damian deepgram SL deepgram Workshop client and deepgram
+[09:13] workshop server um the server itself um I'm
+[09:17] actually running it on glitch.me um if you want to make changes
+[09:22] to the server you're going to need it publicly accessible right so in order
+[09:26] for the llm to be able to reach out to it and you you'll need that publicly
+[09:30] accessible um that's really a stretch goal you don't need to modify the back
+[09:34] end uh the back end I have running should should be able to handle
+[09:38] everything uh if you do want to make modifications and we'll go through that
+[09:41] a little bit later um you can basically spin it up yourself uh you know point
+[09:45] the llm to that new API um and it'll be able to then call those functions um
+[09:52] hands up anybody already got node.js installed okay we got good few and
+[09:59] anybody having trouble all good cool yeah so so once
+[10:05] you have that set up um you can simply uh run the workshop client um so the
+[10:11] workshop client is vanilla JS right I try to keep it as simple as possible uh
+[10:16] simple HTML um uh page and then the
+[10:22] main.js is um where we open that web socket connection uh we capture the
+[10:27] audio and then we send it so you know this this can send audio at a pretty
+[10:32] fast rate um if you were running this with a telephone system uh you could
+[10:37] probably send audio at like 20 millisecond chunks uh that's going to
+[10:41] give you the lowest latency uh the browser tends to send larger chunks um
+[10:45] so yeah you can you can definitely bring the latency down when you increase that
+[10:49] chunk rate uh we we can't process audio faster then you you send it to us
+[10:55] unfortunately um within the config and and this is really where your
+[11:00] telling you know the the API what it's actually going to do who it is how it's
+[11:04] going to work uh you can see we have a base
+[11:07] URL um so that base URL is just pointing to my websocket server or sorry my API
+[11:12] server and um we have some input parameters right so we're sending linear
+[11:17] 16 audio and uh down here at the drive-thru uh Speech to speech config um
+[11:25] this is telling you know the system okay I want to use open AI want to use GPD 40
+[11:31] these are the instructions right so you know simple uh system prompt and and we
+[11:36] have a function call here as well let me just bring this down a bit Yeah so this
+[11:40] function call is telling the system hey if you want to add an item to the order
+[11:46] this is the API you're going to call right and there's going to be a call ID
+[11:50] so you know when the system starts up it you know generates unique call ID so
+[11:54] that all your order items can go into your particular order um and and yeah
+[11:59] it's pretty straightforward um later on we'll actually look at how we can add
+[12:04] more of these um and I'll just go back to the slides
+[12:08] here oh yeah so just kind of talk at a high level uh I probably should have
+[12:12] done this before jumping into the code but um we have a user we have a browser
+[12:16] the browser is generating microphone data and and we're sending that
+[12:21] microphone data to the service uh so the voice agent API wraps all three pieces
+[12:26] together uh the llm can do the function call and so can the the client browser
+[12:31] so uh the llm adds the items automatically and then the browser is
+[12:36] just displaying what items are actually in that um in that
+[12:42] order uh any questions on that before I move
+[12:47] on oh yes you need that again there you go
+[13:01] was everybody able to find uh the G
+[13:06] repos okay nice you missed it it's on the
+[13:13] SL thank you
+[13:17] awesome yeah so so this is the agent configuration I was showing you earlier
+[13:22] um right now the app is pretty basic it only has an add item right so you can't
+[13:28] take items away can't modify items um and the reason we've limited it to that
+[13:33] is you know that's a challenge for you can you add order modification um we've
+[13:39] already got the API there so we have a remove item API and uh a few others let
+[13:44] me grab yeah so there's yeah these are all the apis that
+[13:50] are in the server code um so if you want to add that order modification um you're
+[13:56] going to need to look at you know uh basically removing an item from uh the
+[14:02] order I believe this one here uh Delete call ID order items uh so we've already
+[14:09] hooked up the ad item um but in order to remove items your llm is need to go to
+[14:14] understand what's already in the order and you'll need to use the get order uh
+[14:18] call but we'll get into that a little bit
+[14:22] later okay so we support multiple llms um So within the API today you can call
+[14:29] you know CLA uh lamry mixl uh supported with open Ai and Tropic and Gro uh we
+[14:35] will be adding to that as well over time but those are the kind of initial ones
+[14:40] um this API is is pre-release as well so you're basically getting a sneak peek to
+[14:47] it yeah so we have the the menu here so the menu is coming from the menu items
+[14:52] API um when I want to create a new call so on on loading of the web page we
+[14:59] basically grab a unique call ID and and we get the menu um the menu itself right
+[15:04] now is is baked into to the um llm system prompt um stretch goal would be
+[15:11] let's turn that into a function call as well right let's allow items to go out
+[15:16] of stock right and the llm will need to know when you're out of chicken wings
+[15:19] and things like that um and then we have the the get order for the call Api as
+[15:25] well yes so the web socer client itself um if you are familiar with the Chrome
+[15:31] Dev tools let me see if I can grab it
+[15:37] here yeah so in the network tab of the Chrome Dev tools there's a cool little
+[15:42] uh web socket inspector so if I start a conversation
+[15:47] um you'll be able to see the messages as they happen right so you can see here
+[15:50] I'm streaming audio at a pretty rapid rate um and you know when the API
+[15:55] responds it's it's going to send us back um messages as well so there's there's
+[16:00] quite a few life cycle messages that we'll send you too um and I can I can
+[16:05] bring those up now as
+[16:10] well yeah so the settings configuration um that's one that we send so we tell it
+[16:15] uh and this is being truncated as well there's there's a lot of like system
+[16:20] stuff and function calling as well in it and but we're basically telling the
+[16:23] system what we want to actually send it what we want it to be how we want it to
+[16:27] work uh what function we wanted to call and it's going to send us back this
+[16:31] session ID um and then the conversation text right so that's going to give us a
+[16:36] transcript of what the user is saying um that can be useful if you want to
+[16:40] display you know text on screen while the person is speaking uh sometimes that
+[16:45] feedback is is really useful so people know it's it's hearing you as you talk
+[16:49] um and then yeah the function calling so right now um this is only doing ad item
+[16:55] and you can see the argument here is basically the the Krabby pad
+[17:00] um yeah so the tool will respond uh whether it was a success or failure so
+[17:05] you know if it can't add the item you'll know about it um and then you'll also
+[17:10] get the assistance uh response back in text uh can be useful to know what the
+[17:16] AI is saying if you want to do content moderation um so you don't want it
+[17:20] offering free Krabby Patties for instance you might have a a mechanism to
+[17:24] detect you know um various things and you can apply that to a lot of different
+[17:28] use cases as well yeah so the backend API um this is
+[17:34] the main one that we're going to be be using today U but yeah I do recommend
+[17:39] trying to add a few more um and yeah on the server logs so you know in the
+[17:46] server where it's running this API you're going to see things like this
+[17:50] right so there's a new call coming in you've got that order ID uh you're
+[17:54] adding an item to that order uh and then you're getting uh the updated order here
+[17:59] as well um and this is essentially what you know we're consuming in the front
+[18:04] end to display the items as are ordered yeah so walking through the
+[18:09] client code uh there's five files I tried to split them out logically as
+[18:14] best I could um so let's go through uh each of those and just kind of explain
+[18:18] what each of them does um the main.js this is going to be you know all the
+[18:22] kind of front-end hookup code uh config.js that's going to be how we tell
+[18:27] the llm and uh the the agent API what to do uh the
+[18:39] services.jpg doeses some kind of interesting stuff around you know audio
+[18:44] manipulation and down sampling uh the browser itself actually sends higher um
+[18:50] higher sample rate audio and but we don't we don't need 48 kher audio at
+[18:55] that rate that's going to be a huge bandwidth uh usage um so we drop that
+[18:59] down to 16 khz which is you know essentially what the the API can handle
+[19:04] um pretty fast anyways uh and then animations.js is really just animating
+[19:08] that little bubble that you know kind of responds to
+[19:12] speech um and then the server code super simple expressjs API um if you're
+[19:17] familiar with expressjs you know it doesn't really get much more simple than
+[19:22] that okay so let's take a look at the code
+[19:29] yeah so this is the uh the index.js within the server code um it's just got
+[19:35] a few very simple uh function calls here so
+[19:41] um I'm not not sure how much I should go into this but yeah it's it's pretty
+[19:45] pretty straightforward it's just updating uh the App State um and
+[19:49] handling some of the crud operations um yeah so let's go through
+[19:54] these top to bottom uh the animation stuff it's just a simple canvas it's got
+[19:58] going to uh modify the the bubble uh and I'll show you the bubble again if you
+[20:03] forget what it looks like um yeah so this bubble here is going to respond to
+[20:09] speech so you can see it kind of getting bigger smaller bigger smaller and that
+[20:14] that's pretty much what that does um within audio JS so we've got a
+[20:19] couple of different uh functions in here we've got uh receive audio and capture
+[20:24] audio and then clear scheduled audio and down sample
+[20:29] um and this little function is just conversion function that the down sample
+[20:33] uses um the reason we need a clear scheduled audio is because you can
+[20:38] interrupt the llm while you're talking right or or the agent um and we may not
+[20:44] know that on the server side because you're handling it on the client side so
+[20:48] if you've got audio already playing you're going to want to pause that audio
+[20:52] as soon as you can uh you could even add a client side uh voice activity detector
+[20:57] uh solero bad is a is a really good one that I've used before um and that just
+[21:02] allows you to do that bargin so when you do start speaking you know it knows to
+[21:06] stop um you know and more advanced systems will help the llm actually
+[21:11] understand whereabouts in its speech did it get interrupted right because it then
+[21:16] it it may not know you didn't hear part you know at the end of its prior
+[21:20] response um and then yeah receiving audio so this is basically grabbing the
+[21:25] audio from the websocket um and just sticking it into a buffer and then the
+[21:30] capture audio this is just grabbing it from the the media devices on the
+[21:34] browser um and then once we get that we we call the call back and that call back
+[21:40] is is what we saw here uh which is the websocket send data um yeah so walking
+[21:46] down through this um unload we're going to prepare the agents config and and
+[21:52] send that over uh that'll give us the order ID um and then when I click Start
+[21:57] conversation on the U um that's going to call this uh code
+[22:01] here opens the websocket and begins sending audio data uh the errors any
+[22:07] websocket errors will be handed handled there um and then this is essentially
+[22:11] where we're getting back um text based uh status messages so user started
+[22:18] speaking um you know like what the AI said um and then here we're actually
+[22:23] receiving the audio um so receiving the audio is is is um what we looked at in
+[22:29] the audio JS file um and then we also have the ability to update voices um so
+[22:35] I don't think I showed that actually in the prior example uh have a version
+[22:40] running here let me just kick it
+[22:53] off
+[22:57] hello I there welcome to the Crusty Crab drive-thru what can I get for you
+[23:03] today yeah can I get a uh crabby patty
+[23:09] please God is a crabby patty anything else for you today yeah can I get a
+[23:15] crabby meal as well sure a crabby
+[23:20] meal actually can I change that to two crabby
+[23:26] putties I've added an addition crabby patty to your order anything else you'd
+[23:31] like yeah so we we have 12 different voices um that voice that second voice I
+[23:36] used there is actually my own voice um which which is pretty
+[23:41] handy yeah I had to I had to tell my parents when I train the voice is like
+[23:45] if you ever get a phone call from me looking for
+[23:52] money uh excuse me I'm still talking to it am I
+[23:59] I I have a question oh yes sorry going ahead um where in the stack do you
+[24:03] categorize the type of function call so whether that's add item
+[24:08] or uh remove item or mhm yeah yeah that's in the config
+[24:14] JS so you can see here we we tell it what to call and we give it a a base
+[24:23] URL um so it's not Dynamic based on the prompt
+[24:28] uh the llm will dynamically decide what to use okay MH okay yeah so there
+[24:35] there's no like direct calling of of it the llm is kind of kind of like you know
+[24:41] chaty be plugins right you don't really know if it's going to use it or not um
+[24:45] but yeah they've gotten pretty good especially gbd 40 and um I think uh
+[24:50] mistol as well is pretty good at calling it uh you'll probably have problems with
+[24:54] gbd 3.5 and function calling um it's just not really up to the level um to do
+[25:00] it um but yeah llms are getting better so uh they're able to do it
+[25:06] now
+[25:13] thanks I'm sorry putting on top of what you just said I don't know if anybody
+[25:18] hear sorry sorry I've realiz you have a good system promp along with a good
+[25:26] function definition that really works with most newer models
+[25:31] to consistently get it to use the tool or request the actual tool instead of
+[25:36] just coming up with yeah yeah definitely and like it really is only those newer
+[25:41] models right so the the latest CLA um I don't know if hiq is going to work super
+[25:47] great with function calling but definitely like Sonet and Opus uh work a
+[25:51] lot better um and then on grock um they host Lama um Lama tree 70 billion I
+[25:59] believe and M Mixel um you kind of your mileage may vary with those open source
+[26:04] llms I don't think they've caught up to the function calling level just yet um
+[26:09] but yeah like you know shoot for where the puck is going to be and I think uh a
+[26:12] lot of those will catch up pretty soon
+[26:16] yeah so I'm curious about your take on the ux of the voice uh in
+[26:25] particular what do you have in terms of recommendation specifically for
+[26:31] interrup for these model for these kind of
+[26:34] interaction think one place where people get up is well this is cute but often
+[26:40] times people think while they are saying something so are awward
+[26:47] silences where not changes and that and how does that
+[26:55] affect the use of the likewise
+[27:08] question yeah yeah so for anybody who didn't hear the question is about
+[27:11] interruptibility and and how to handle things like long pauses um and that
+[27:16] really comes down to endp pointing and contextual kind of um uh semantic endp
+[27:22] pointing is what we call it uh so that's something we're going to build into uh
+[27:25] this voice agent API so you know you can imagine a scenario where the user says
+[27:30] hang on a minute let me get that for you right you know say they're going to get
+[27:33] their account number or whatever it is and that doesn't necessarily require the
+[27:36] llm to go off on another kind of monologue and the llm might say sure you
+[27:42] know let me wait for you to get that right uh and that's kind of uh semantic
+[27:46] endp pointing the other type of endp pointing which is kind of you know
+[27:49] traditionally what people used was you know a span of Silence um is used to
+[27:54] determine when somebody's finished speaking um but yeah like if people are
+[27:57] calling out credit card numbers um it's pretty common for them to do back
+[28:01] channeling um so when you do back channeling you're essentially waiting
+[28:04] for like a a noise from the other person like a mhm you know so if I do like you
+[28:09] know 1 2 3 4 mhm 5 6 7 8 mhm and and that just kind of gives you that like
+[28:16] I've I've captured what you said um so that you don't go too fast and then the
+[28:20] person like falls behind um and a lot of the time with these voice agents what I
+[28:25] recommend to customers is you know what would a human do right um and there
+[28:29] seems to be this really high expectation that the AI should be able to understand
+[28:35] pretty much anything right um but the the reality is is that like nobody can
+[28:40] understand my email address over the phone um and I have to call it out like
+[28:44] you know D for Damian uh you know a for apple and and and this is with a human
+[28:49] but you know with an AI you need to build in that kind of understanding
+[28:53] logic and and I'll go into it a little bit later about you know how you can
+[28:56] make that composability with these agents and because you don't want to
+[29:00] create an agent that does everything you know for your entire business right uh
+[29:04] you want to create an agent that's capable at a particular task and then
+[29:09] build them together right so having that kind of multi-agent uh system where you
+[29:13] can offload parts of the conversation to you know a slightly different AI agent
+[29:19] that's able to collect credit card numbers very accurately and handle all
+[29:23] of the edge cases or you know verify account information you know versus you
+[29:27] know take an order um they're they're all very different use cases but um yeah
+[29:32] from what I've seen in in the market people tend to want to make it do all
+[29:36] the things in one system prompt um and it's just not there yet you know even
+[29:40] with these large context windows I don't think it's it's really good to try to
+[29:44] get it to do everything and have you know um a massive system prompt um like
+[29:50] as you increase the system prompt lent you also increase your time to First
+[29:54] token uh time to First token is is really the key metric trick for an llm
+[29:59] uh to respond um so you can start responding as soon as you get you know
+[30:03] let's say five tokens or 10 tokens and you can start the TTS playback at that
+[30:07] point um if you wait until like you know the 250th token uh the latency is going
+[30:13] to be much higher right maybe if you're using grock you could wait uh that long
+[30:17] because it's so fast but you most llms are outputting you know maybe 30 30
+[30:22] tokens per second uh and it's highly variable right like uh even GPD 40 can
+[30:27] give you like 900 millisecond uh latency on first token um and you know that
+[30:32] that's something that's going to improve over time but yeah it's definitely
+[30:35] something you have to be aware of when you're building these voice
+[30:39] spots Okay so casil
+[30:58] soltion your experience
+[31:16] are and just to clarify so um is the question about using this approach
+[31:22] versus which other approach sorry yeah like a
+[31:34] yeah so not sure if fully understand the question but um let me kind of
+[31:39] paraphrase it so using a chaty BT um today doesn't doesn't have ears or a
+[31:45] mount right so so you you just have an llm text in text out so you still have
+[31:50] to add the ears and the mount and and what we're doing here is is real time
+[31:54] low latency streaming so the audio is being streamed like you know uh straight
+[31:59] into the system and then audio is being streamed straight out of the system um
+[32:04] you know obviously GPD 40 had that big Fanfare announcement the day before
+[32:08] Google's announcement but neither of them have released anything yet um and
+[32:12] the reason that they haven't released anything yet is that it's hard right um
+[32:16] we've had realtime voice agents you know for for years and uh they've just gotten
+[32:21] better and better and better and and one of the key things there is the latency
+[32:26] from you know end of speech to transcript um once you go self-hosted
+[32:31] with deepgram you get that down to like 50 milliseconds um in our hosted API
+[32:35] you're going to get closer to half a second uh and that's just because we we
+[32:39] don't like crank up the compute um so as you increase the compute like say to 5x
+[32:45] you can get down to that 50 millisecond so a lot of these you know companies
+[32:49] that you see showing real-time voice spots and they're using deep gr under
+[32:53] the hood um you know today I think we're the only option for low latency real
+[32:58] time uh speech recognition um that may change in the future but yeah today this
+[33:03] is kind of state-ofthe-art I think that answer your
+[33:07] question
+[33:21] Yeahs theflow that yes so we're llm agnostic so you
+[33:27] you can use function calling with a lot of llms um like building a GPT assistant
+[33:33] um kind of follows a very similar API format it's a pretty standard open AI
+[33:38] kind of uh interface and and most llms have actually adopted that same
+[33:42] interface so you know you can use that same function calling and system prompt
+[33:47] with another llm um so um yeah I I think that's definitely interchangeable but
+[33:53] there there's no real difference between a GPD agent and what we're doing here
+[33:58] yeah um suppose the function call that you're making is like is going to be
+[34:03] long running um is that blocking to the voice agent and like I guess what are
+[34:08] some ways around it if the function call that you want to make is something
+[34:13] that's long MH yeah so the question was about uh long running function calling
+[34:17] uh and that's definitely a concern um I don't know if you want to do long
+[34:21] running function calling with a a real-time voice bot uh you might hand
+[34:25] that off to you know a a secondary system um so you say hey okay you know
+[34:31] I'm checking on that for you is anything else can help you with and then when
+[34:34] when it comes back your agent can then offer up the the information is is this
+[34:40] voice agent functions like only so like the Contex of this uh demo there's like
+[34:46] a get order function so like it first adds things to the order and then like
+[34:52] looks at the order but is there a way to proactively push things to the
+[34:56] conversation window M um as part as part of this yeah yeah so we're pushing the
+[35:02] order items from the llm so the llm is actually making the call to the add
+[35:07] order or add item to order API um so it's doing the pushing right I'm not
+[35:12] pushing anything client side I'm only reading client side so client side I'm
+[35:16] just polling the order as like you know give me the order give me the order give
+[35:19] me the order um and that's able to allow me to display the order um but the
+[35:24] actual pushing it's happening all from the llm
+[35:27] so with respect to like um like if we need to add information about the order
+[35:32] to the llm that is in and of itself a function
+[35:37] lull the API yeah so what you would want to do is you would want to give it a new
+[35:42] function um and we've already created the functions uh to give it and that's
+[35:46] kind of uh the next step in this so you would want to add uh a new function here
+[35:52] uh for get order right so this would be like your get
+[35:56] order function and then you can point that to uh the API to get the order
+[36:02] another one you'll probably want to do is is get menu right so you know is is
+[36:07] there an item that's no longer available right because we're pulling from the you
+[36:10] know the menu ordering system to see if something's out of stock and because we
+[36:14] know all the orders that have gone through uh and then another one you'll
+[36:17] want is actually a remove item so with remove item you have the ability to
+[36:22] modify the existing order and I didn't Implement these in the function calls
+[36:26] cuz I I thought be a good kind of learning exercise for people here um but
+[36:30] yeah you could definitely add those and and uh understand a little bit more how
+[36:34] to work got it and um if if we did want to have a long running function that ran
+[36:41] um it would be a nonblocking function called it triggers the job and then at
+[36:46] some later point the assistant attempts to fetch that information is there a way
+[36:51] for client to actually push data into the conversation blog like in with this
+[36:56] API is that yeah yeah absolutely so um as a part of
+[37:01] the you know the the information that the llm has access to um I don't know if
+[37:07] you can see it here it might be off screen uh you can see here the menu
+[37:11] right so the menu there is a part of it system prompt and but you could remove
+[37:16] that menu from there and add it as a function call so now anything that modif
+[37:21] like you could have a separate service modifying the menu it could be a
+[37:25] separate llm right and when that menu is modified and it pulls the menu it's now
+[37:31] updated its system
+[37:35] context cool yeah yeah
+[37:55] sure um I haven't tried it myself but I I'd probably imagine you'd want some
+[38:01] sort of web hook call back um so when the function call is complete it would
+[38:06] it would instantly return but then have a separate Handler that would would know
+[38:11] that it's uh completed um and then you can prompt the llm from that web hook
+[38:16] Handler to say Hey you know this thing you asked for earlier and it would kind
+[38:20] of act like a user um input as well
+[38:29] uh the the webbook Handler would probably run in the back end not in the
+[38:32] llm itself so the the llm would just say hey go do this long running task
+[38:38] instantly return and say okay I've kicked off that long running task and
+[38:42] then when the webbook Handler gets fired by the long running task it would then
+[38:46] tell the llm hey you know this long running task has
+[38:51] completed yeah I think you had a question as well on the in handling side
+[38:56] how do you differentiate between noise verus action
+[39:01] speech yeah so we have voice activity detectors uh and the voice activity
+[39:06] detector will only trigger on um audio that's generated by the vocal cords uh
+[39:11] it will trigger on coughs and huming and things like that um but you may want
+[39:16] that to happen as well um so you can put in things in place to detect okay did I
+[39:21] actually transcribe a word um you know should I respond to this um so those are
+[39:25] things you can Implement as well so on that will it added latency when I'm
+[39:30] speaking on the and if I while you have audio going on you'll
+[39:38] have to wait for the response yes we we'll send you a very quick uh user
+[39:43] started speaking event using a serers side uh vad and so the voice activity
+[39:48] detector is going to tell you as soon as you get it and we actually have code in
+[39:52] there as well to uh to clear I believe let me see where is it
+[39:58] uh in here yeah so you see if user started
+[40:03] speaking happens we basically stop the audio
+[40:08] playback what's the laty on that uh it can vary I think it should be in the
+[40:13] order of like less than 100 milliseconds mhm yeah is memory being handled at all
+[40:18] or is that just something separate uh memory would be kind of like separate uh
+[40:24] challenge you can obviously build up the system context um you know depending on
+[40:28] your use case like if you want to handle hourong calls you probably don't want to
+[40:32] keep building up the system context you want to use some sort of uh memory
+[40:37] system autogen have a pretty good teachable Agent um if you're if you're
+[40:42] familiar with it uh it has the ability to run a secondary llm to ask is there
+[40:47] anything new or updated you know in this new content update you know the existing
+[40:52] memory um a good example of that might be like oh I live at 123 street and then
+[40:57] it comes down later on it's like oh actually I live at 456 street right and
+[41:01] you don't want both conflicting in your system prompt you want to update uh the
+[41:05] prior memory of it yeah how do you protect against
+[41:14] injection content into the system yeah and and that's really the uh the reason
+[41:19] that we have um let me see this one here um this is why we have the conversation
+[41:25] text so you know you you'll hear stories of people getting you know Chevrolet
+[41:30] cars for for Z by you know modifying uh the system and but what you can do is
+[41:36] you can actually have a process on the text that you know tries to block
+[41:41] certain things right um and that content moderation is very important to prevent
+[41:45] things like that I don't think you're ever going to be able to prevent like
+[41:49] prompt modification right cuz you know if if you ask an AI bot five times or
+[41:55] even three times to like break its rules it probably will right like the first
+[41:59] time is like no no I can't do that and then the second time is like no
+[42:02] definitely can't do that third time's like sure I'll do that for you um and
+[42:05] and that's just an inherent problem with llm so you know you're not going to be
+[42:09] able to stop it on the way in but on the way out you could be like hey you know
+[42:13] you've offered something that we've detected is is invalid um but yeah it's
+[42:18] it's it's a hard problem I don't think anybody's really solve that I don't
+[42:22] think we understand llms enough to solve it yeah
+[42:27] I'm the TDS
+[42:48] andage yeah so the question was about the language support on um uh text to
+[42:55] speech and speech to text um let me just log in here
+[43:04] quickly yeah so if I jump over to the text of speech um these are the
+[43:09] different uh voices we have so we have 12 voices uh today we've got all of our
+[43:14] English voices uh publicly available um they're uh super low latency uh and very
+[43:21] low cost right about 20x cheaper than 11 Labs um so we're we're kind of competing
+[43:26] at the you know the Google AWS iser um voice pricing um but with the quality
+[43:33] that's pretty close to 11 laps um we're working today on prompt TTS um so that's
+[43:39] going to give you the ability to say Hey you know say this in an empathic Voice
+[43:43] or say it in a pirates voice right like the ability to prompt it um and once
+[43:48] we've completed that research we're then going to roll out other languages um the
+[43:53] challenge with building them now would be that we'd have to go back and retrain
+[43:56] all of the models once the prompt TTS is out um I believe our TTS launched about
+[44:02] 4 months ago um so yeah it's pretty pretty new to the market but uh you can
+[44:07] play all of them here as well which is Prett is great for Real Time
+[44:11] conversations and also you can build apps for
+[44:14] things deep gram is great for Real Time convers deep gram is great for real time
+[44:22] yeah and what I found with customers is uh the vast majority of customers want
+[44:25] female voices uh um I don't know what it is but I guess
+[44:30] nobody wants to be mansplained um yeah and then on the uh
+[44:36] on the language side uh we have 36 languages supported uh today on our Nova
+[44:41] 2 model uh we have a few more supported as well on our older models and but
+[44:46] we're adding languages you know every month there as well um we've actually
+[44:50] got an auto training pipeline set up probably the first in the world I think
+[44:54] where we have the ability to detect like like low confidence words and then like
+[44:59] retrain uh based on uh low performance um we've also got a ton of other
+[45:05] intelligence API so if you want to do summarization topic detection intent
+[45:09] recognition sentiment analysis uh you can send all of those off as well and I
+[45:14] think of like a customer service one here um and and those can be pretty
+[45:18] useful because like detecting Topics in an actual um audio file and where they
+[45:25] happen um is super useful right so if you if you're in a call center and you
+[45:30] want to understand you know at a high level how many calls you know of my
+[45:34] millions of calls touched on these different things and and which ones to
+[45:38] automate uh and we usually say to people that are you know automating the call
+[45:42] center is like you know Step One is analyze all your all your existing calls
+[45:46] right figure out what you've got and if you've got 40% you know uh phone issue
+[45:52] look at automating you know the phone issue first right and um a lot of them
+[45:56] do agent assist which is like bubbling up knowledge based articles to real
+[46:00] people uh and then once they have that built you know it's very easy to then
+[46:04] just you know uh use an AI um we don't necessarily want to replace people in
+[46:09] call centers we just want to take away the work that uh can be automated um so
+[46:14] like what we're seeing now in call centers is that like one call center
+[46:17] agent using a cloned AI voice can hand off a call um to the agent so let's say
+[46:24] it's collecting credit card information they can just you know press a button
+[46:27] let the AI collect credit card information and they can do five calls
+[46:31] simultaneously and then when a call needs their help they can jump over to
+[46:35] the call that needs their help um so you're kind of fxing productivity uh
+[46:39] with that
+[46:42] approach yeah C at the back there how do you go about monitoring like if you want
+[46:47] a monitor where wrong ja all those things mhm yeah
+[46:55] so there's multiple places you can do that um you're probably going to have
+[46:59] the agent actually running on a server uh you know for this Workshop we just
+[47:02] put it in a browser um but you know the vast majority of people will have this
+[47:07] agent running directly like on a twilio uh you know phone line um so when when
+[47:12] that agent is doing the work um you would handle that in your server code
+[47:16] right you might have some Moder moderation code that um you know detects
+[47:20] something out of out of allow and then you know uh blocks it um you can
+[47:26] definitely add it to the system prompt but uh it's only going to get you so
+[47:30] far Y what kind
+[47:47] ofu yeah so the question is about like how to monitor and and track metrics is
+[47:54] it MH yeah yeah yeah so there's a lot of Open Source projects out there at the
+[47:59] moment for kind of doing agent Ops uh one of them is called Agent Ops uh which
+[48:04] is pretty good that can give you you know uh temporal debugging so you can
+[48:08] actually debug what was happening throughout the llm flow um so there's a
+[48:12] lot of stuff in that space that's happening right now but yeah a lot of
+[48:15] your typical uh monitoring tools will will work there as
+[48:20] well y um well I know of course that's basically a big part of your
+[48:28] company secret so to speak I would be interested in general techniques you use
+[48:33] to reach for speed up compared to just the traditional building your own
+[48:42] just as you show in the beginning to text
+[48:53] the yes so a lot of our customers do that today right they host all the
+[48:57] different pieces um and it becomes like a large infrastructure challenge right
+[49:01] you and we'll we'll touch on that a little bit later as well uh as a part of
+[49:05] the the agent swarm stuff but it's like how do you make sure that you have low
+[49:10] latency in different regions right so people in the EU don't want to be
+[49:14] hitting a server in the US right um not just for gdpr reasons but the latency is
+[49:19] going to be higher same with APAC so now you have to build and scale each of your
+[49:25] clusters uh in multiple regions and they have to be able to Auto scale as well
+[49:29] right like um one of the major use cases for AI agents is Peak traffic right so
+[49:36] like you might only need 10 customer service agents you know five days a week
+[49:41] but if there's like an outage in pg& suddenly they need a million agents
+[49:45] right for one hour and so the ability to actually scale up uh same with um you
+[49:50] know 911 services um they can't take all the calls when there's a large disaster
+[49:55] or something happens um so a lot of people actually just you know get a a
+[49:59] busy tone and so the ability to to do that Spike up and scale in multiple
+[50:04] regions and that that's a huge challenge for a lot of startups so having somebody
+[50:08] that offers that as a service I think is is pretty useful sorry what I actually
+[50:14] meant question was more like if you thetically have it all running locally
+[50:19] so we completely forget about actual Hardware or scaling
+[50:24] Etc what kind of te is there
+[50:32] to yeah so so when you run in or hosted API you're running at a 1 second
+[50:37] interval right so every second you're getting what was spoken right kind of
+[50:41] like a metronome um once you run it yourself you can crank that up and you
+[50:46] can say you know what I'm going to run it five times a second um so you're
+[50:50] inferencing like an Ever growing context window um you know at a much faster Pace
+[50:56] uh most words are about half a second long so you know you're chop you're
+[51:00] basically inferencing words you know partially as well so the word something
+[51:05] might be so some something right so you're getting this increasing um
+[51:10] context window uh we run with like a 3 to 5c context window in a real time
+[51:15] streaming uh which allows us to solidify you know every 3 to 5 Seconds what was
+[51:20] spoken um and then as soon as we detect that end of speech we'll basically you
+[51:24] know say we're not going to get any more words let's you know finalize what we
+[51:28] have so far uh and that's really how you can achieve those low latencies um but
+[51:33] it is a lot of compute um yeah but with our system it's very fast very uh light
+[51:38] on comput so you can actually run a lot of streams like on a Tesla
+[51:44] T4 awesome oh one more question using our LM how can
+[51:51] we yeah so we we offer uh self hosting um so you can basically basically you
+[51:57] know grab our Docker images models uh run it on a GPU um like if if you can
+[52:02] get like three gpus on a single motorboard um that's going to give you
+[52:06] you know Lightning Fast uh uh end to end all right one more
+[52:24] question um so speed quality and price so yeah all
+[52:33] Tre all yeah it's it's it's easy to sell
+[52:37] deep ground uh okay I'm going to jump back into slides because I think some of
+[52:41] the other stuff might be of interest as well
+[52:45] um so yeah so some more advanced features that you could play around with
+[52:50] um make a whole new back end right maybe it's you know a table booking API um you
+[52:56] know a lot of businesses have to answer the phone um I don't think they want to
+[53:01] right they're already busy um handle multi-agent flows so have a rooting
+[53:06] agent with two sub agents um so you could have a booking agent and a
+[53:09] cancellation agent um and that can be the same voice on the same phone line um
+[53:14] so you know if I say hey I want to make a booking root it to the booking agent
+[53:18] or I want to cancel a booking root it to canellation agent um th those are uh
+[53:23] essentially how you would build out these uh these more complex
+[53:27] uh systems uh use cases call center AI
+[53:30] agents I think this is already here uh we we're seeing this right now like you
+[53:36] know you you have companies that have replaced you know a large proportion of
+[53:40] their call volume with AI um and you know they they still employ call center
+[53:46] agents because you know they they always need to hand off difficult calls that
+[53:50] they haven't covered yet with the AI agent you know to somebody that wants to
+[53:54] handle it um iot AI devices right so wearables uh Toys things like that um
+[54:01] there's a lot of them out there um and then yeah AI worker agents so you know
+[54:06] working in a Drive-Thru taking those orders and you know the workers that are
+[54:10] actually doing that are also you know busy preparing food and doing other
+[54:15] things um yeah so multi-agent swarms um so reduced complexity keep it simple
+[54:22] right get something that works really well really robust and kind of like box
+[54:27] it off right like single responsibility um reduce the costs use the smallest
+[54:32] cheapest model you can to achieve the use case um like right now it's probably
+[54:36] going to be those bigger models but I think in time you know the price point
+[54:40] of those is going to come down and the new generation will will kind of take
+[54:43] its place so you know every 6 months we're seeing like a 10x droing cost um
+[54:48] and then composability so you can reuse you know a sub agent in multiple
+[54:54] different flows um so this is a kind of a pretty
+[54:58] basic kind of layout so you have your Rootin agent that's able to figure out
+[55:03] you know which agent to use um you have a support agent and a booking agent in
+[55:08] this example and maybe you have a technical support agent and an account
+[55:11] support agent right two different uh types of agent but they they can each
+[55:15] kind of help depending on the need um your tech support agent is probably
+[55:19] going to be hooked up to some sort of rag system um Account Support an
+[55:23] existing booking agent is probably need to are going to need to verify uh that
+[55:28] this person you know owns the account that they're calling about new booking
+[55:32] agent might uh leverage like a credit card payment
+[55:36] agent um yeah so scaling it right we we talked a little bit about the latency um
+[55:41] so distance uh kills latency right like if you call a server in the US from Asia
+[55:48] um you're going to see like you know a second extra uh at least latency um if
+[55:53] you want to do Regional scaling right you're going to need to have uh the
+[55:57] ability to horizontally scale um you know within us East within us West
+[56:03] within Amia right you you're going to want to have redundancy as well and as
+[56:07] you add redundancy um you increase costs as well um but you know if you want High
+[56:13] availability and your agent to always be on you're going to need that uh
+[56:18] redundancy to do it um and then horizontal scaling within your you know
+[56:22] your Regional clusters um we support kubernetes and we'll give you all the
+[56:27] auto scaling Helm charts and everything um so that can be pretty pretty powerful
+[56:31] and but you can imagine like if you wanted to you know build an agent do you
+[56:36] really want to worry about all that infrastructure right or do you want to
+[56:40] just build the agent achieve the you know the value the business value and
+[56:45] and roll it out on a large scale yeah sorry going
+[56:50] on Bas this I was wondering what out on the
+[57:12] yeah I I think it's possible uh you still have to distribute the models
+[57:15] right the models tend to be quite large um I think Gemma is like you know two
+[57:20] gigs you can put it in the browser but it's it's going to take you a while to
+[57:23] download you know as you move to mobile devices you you know it's going to be
+[57:26] pretty hard to do it as well um like I I do believe that there's a lot of use
+[57:31] cases where on device makes sense and but those are like single single stream
+[57:37] right so you have a single stream you're sending a single request to an llm
+[57:41] you're getting you know single response um what we're building here is like you
+[57:45] know a million simultaneous calls right can come in um that's never really going
+[57:50] to work on device um just from a distributions perspective I guess um but
+[57:55] there there's use cases for it so uh like for the wearable use case uh
+[58:00] there's an open source project called friend uh help them integrate uh deep
+[58:04] grams real time uh speech recognition into that um so you know running it on
+[58:09] device doesn't necessarily mean the model has to be on device
+[58:23] um yeah
+[58:33] yeah something we're looking at uh you can run our current model on a Raspberry
+[58:38] Pi um it's not going to be super fast and it's not going to handle multiple
+[58:42] concurrent uh requests but uh it will run uh so it can run on CPU not just
+[58:51] GPU question what service do you recommend for the tel
+[58:57] use for things other options yeah there's a few telephony
+[59:02] providers out there uh twio vaj um we're kind of you know telepon agnostic as
+[59:08] long as you can get us the the audio stream uh usually that's achieved either
+[59:13] through like you know hooking into their API or just doing a zip trunk um so zip
+[59:17] trunk basically just hands off the processing of the call to a different
+[59:22] server yeah um G4 eventually releases their audio to Audio model is deep kind
+[59:32] of be likeing around that appliations around uh I I don't think we would
+[59:37] necessarily use it in in that regard um so uh I think it's great for the space
+[59:43] that you know they're they're releasing this um I think maybe in the future this
+[59:48] type of uh multimodal model will make sense and but it's yet to be seen what
+[59:53] the price point is going to be and what the latency will be um like even their
+[59:57] check completion API for for 40 is taking like up to a second um so if you
+[1:00:02] add audio into that as well that's additional processing um like it was a
+[1:00:06] really cool demo and and I loved like how the like a single model could have
+[1:00:11] you know infinite voices um and I I think that's where we'll see a lot of uh
+[1:00:16] changes in the future um at Deep gram our main focus is um like scalable uh
+[1:00:21] low cost efficient uh inferencing so you know the ability to run at these price
+[1:00:27] points um you know is probably going to be a barrier to entry um but yeah I'm
+[1:00:32] looking forward to see what they what they release and and
+[1:00:36] when yeah when you implement solution
+[1:00:46] for yeah so for model fine tuning uh the question was how long does it take so we
+[1:00:51] require between like 20 and 50 hours of audio uh to find tun speech to text um
+[1:00:57] and then we actually human label that so we have our our own team of human
+[1:01:01] labelers and what they'll do is they'll actually do three passes so the first
+[1:01:05] pass um usually works out at about like 12% word error rate so if if you give
+[1:01:10] somebody a piece of audio and you ask them to write down exactly what was said
+[1:01:13] and they'll have errors in it as well um so then we run it through a second pass
+[1:01:17] they fix the prior errors and then the third pass is and they're all different
+[1:01:21] people as well so the third pass goes in and basically gets us to like 99% uh
+[1:01:26] label accuracy uh and then we train the model training the model is pretty quick
+[1:01:29] right we could probably do it in under a day um but yeah getting all that audio
+[1:01:33] and then uh labeled and then we kick off the training cycle um for the text to
+[1:01:38] speech side we don't offer cloning uh voice cloning today I think there's a
+[1:01:42] lot of concerns around you know what happens when you clone people's voices
+[1:01:46] and um we do do cloning for certain customers um so if a customer comes to
+[1:01:51] us and says hey you know we want to use you but we need our own voice for our
+[1:01:55] brand um we can we can do that training but that would be a a business
+[1:02:01] engagement Yeah question over
+[1:02:09] there yeah so right now uh everything is just on this sandbox API U this API will
+[1:02:16] probably go away after the workshop um but we'll have a a way to actually sign
+[1:02:21] up uh for the API weight list so if you do want to get access to this uh and
+[1:02:26] then it will require an API key um and all of the services will be wrapped
+[1:02:31] under a single um kind of usage fee so your speech to text your llm and your
+[1:02:37] text to speech will all be under a single uh
+[1:02:43] cost awesome any more
+[1:02:48] questions yeah so you go yeah I was just wondering are there any plans to allow
+[1:02:53] kind of multiple speaker input within this M being able to recognize speaker
+[1:02:58] one speaker two speaker yeah yes so we we have diarization so if you send
+[1:03:04] multiple speakers on the same uh channel uh we'll be able to determine you know
+[1:03:09] speaker a speaker B um if you're sending us multi- Channel audio and that will
+[1:03:15] allow us to influence them separately um yeah so specifically me more the single
+[1:03:20] Channel and I played around a little bit it's not perfect today I'm just
+[1:03:25] wondering are to kind of enhance that yeah we're always improving uh
+[1:03:30] diarization uh it's definitely a challenge because um to to understand
+[1:03:34] how diarization works is you're building up embeddings of what people say um so
+[1:03:39] like our conversation so far you you've had maybe three or four sentences you
+[1:03:43] know maybe 20 seconds of audio and that may not be enough for the model to say
+[1:03:48] okay this is a unique speaker right um and it's it's building out these
+[1:03:52] embeddings in like 512 dimensional space so you know as more data comes in and we
+[1:03:57] we typically recommend 30 seconds per speaker um to actually generate a solid
+[1:04:02] embedding um if if we were to lower that requirement we might start like
+[1:04:07] mislabeling people from the same person um but it it is a challenge and it's I
+[1:04:12] don't think it's ever going to be perfect um you know one of the hardest
+[1:04:16] parts of diarization is actually when um is actually when uh people actually say
+[1:04:23] like yeah or mm so like like if if you're on a call and somebody while
+[1:04:27] you're speaking says yeah it's very hard for the AI with that tiny little you
+[1:04:33] know segment of audio to know that it's somebody else speaking um but yeah we we
+[1:04:38] we've seen a lot of cases where you know if it's a longer call um it works very
+[1:04:43] well but those first 60 seconds it's probably not going to determine who's
+[1:04:48] who sure sense and I imagine behind the scenes there's maybe some accuracy
+[1:04:53] percentage right simil or like is that something that might ever get exposed or
+[1:04:58] is that exposed today so we can kind of make a decision our right where it's we
+[1:05:03] get something back it's probably a 5% chance that it's this guy
+[1:05:08] speaking that would be really helpful yeah and one of the things a lot of
+[1:05:12] people ask for is the ability to you know get speaker identification right so
+[1:05:17] like a unique identifier for a speaker so like if you have a call center agent
+[1:05:22] and you know who they are on every call you know could you pass that to us and
+[1:05:26] we'll tell you you know where they the first Speaker the second speaker and
+[1:05:30] it's not something we expose today um obviously there's you know legal
+[1:05:34] challenges around fingerprinting voices and stuff um but yeah it's something
+[1:05:39] we're thinking about the ability to at least like identify a speaker um and
+[1:05:44] just say like you know this speaker is this
+[1:05:48] person you're welcome awesome um so I think that's
+[1:05:54] everything I have uh I'm interested though had anybody
+[1:05:58] achieved order update with the remove
+[1:06:03] item any anybody get any uh additional apis up and
+[1:06:13] running you got the demo little B too loud
+[1:06:17] yeah right right yeah it's fast yeah I told it to lots of items back to back
+[1:06:24] did nice yeah and and this is again running on our hosted API so we we
+[1:06:28] haven't even optimized this for low latency yet um but you can see how quick
+[1:06:33] it is even with those um hosted apis that it can respond that time um like we
+[1:06:39] we did run a um kind of a Sandbox environment where you know we cranked up
+[1:06:44] that compute and and it was just so fast that like it it was just like kind of
+[1:06:48] like interrupting you like the moment you stop speaking um uh which is which
+[1:06:54] is a pretty funny uh challenge but yeah uh thanks everybody for coming
+[1:07:00] um feel free to hit me up uh or chat with me after uh the workshop but yeah
+[1:07:05] hope you all enjoyed it [Music]

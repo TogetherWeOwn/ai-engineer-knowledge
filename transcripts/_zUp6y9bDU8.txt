@@ -1,0 +1,491 @@
+# title: Let Your Agent Cook: Using Skills to Evaluate and Improve Your App — Ankur Duggal, Arize AI
+# source: https://www.youtube.com/watch?v=_zUp6y9bDU8
+# speaker: Ankur Duggal, Arize AI
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T03:23:09Z
+# sha256: d328999dc827b7b9e40b86cc1de1d7ecb4a97d0e13370c282f786ce1d8adcc61
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:12] Good afternoon everyone. My name is Encore. Uh I'm going to be teaching you
+[00:16] how to make your agent cook. Again, not food related. I don't know. Uh but yeah,
+[00:21] we're going to get into it. Um so what I mean by that is actually before we get
+[00:25] into that, let's go ahead and start with a quick question and a poll with
+[00:28] everyone. Um, I'm sure a lot of you are building agents or have even shipped
+[00:32] agents. I'm just curious how many of you currently are shipping based off vibes.
+[00:36] And when I say vibes, it's not a bad thing. I mean like, hey, you're checking
+[00:40] your answers. You're looking at it. You're making sure that it's potentially
+[00:43] doing the right thing just based on the input and output. You're making sure
+[00:45] that it's correct or not. How many of you all are doing that?
+[00:50] Okay, pretty good reasonable amount of you. And then how many of you guys
+[00:54] actually have like set eval set up like you know like oh you have LM as a judge
+[00:58] or codebased evals or some sort of eval setup.
+[01:03] Okay, a little less. Not too much less though. That's pretty good actually. And
+[01:07] then how many of you that actually have your eval setup trust it enough that you
+[01:11] know you're good enough? You have a full coverage of your evals and you're ready
+[01:14] to you're continuously ready to keep going and moving forward.
+[01:18] Wow, that's that's pretty impressive. That was a solid hand up,
+[01:22] which is kind of what I expected. I mean, it's very hard to really trust
+[01:25] your emails because they're hard to build. You don't really know what you're
+[01:29] looking for. It's not a deterministic use case. And it's very hard to
+[01:32] determine what we need to actually evaluate to make sure our agents are
+[01:35] working properly. And that's kind of one of the biggest issues is a lot of people
+[01:38] are going to start off in a very good spot, which is based off vibes. It gets
+[01:42] you going. It makes sure that your agent's doing what you expect it to. But
+[01:46] realistically, you can't really ship based on this feeling of, "Yeah, it's
+[01:49] correct." Because when you're in production, you're not going to know
+[01:52] where things are broken, what's going wrong, unless you have actual eval set
+[01:56] up to find out where things are breaking and how you can actually directly fix
+[02:00] it. So before we get into eval, what I want
+[02:06] to kind of take is a whole step back and talk about how you can like what your
+[02:11] eval would be on top of. And that would be on top of traces. And why we need
+[02:16] traces is if you've ever used traditional software engineering, you
+[02:20] have something that you do call traces. It's for APM monitoring. It's making
+[02:24] sure your systems are reliable and are working. But realistically, what you you
+[02:28] can actually go ahead and debug those and it's very easy to do because you
+[02:32] have a very deterministic flow, right? You can even see right here, this is
+[02:36] very easy to follow and this is more or less what like code looks like. You have
+[02:39] a handle submit method. You check if it's valid. If it doesn't, it errors
+[02:44] out. If it is, then it goes down the next list and continues down that
+[02:46] process. So, it's very easy to figure out where things are b are breaking
+[02:50] based on a just based on that sort of uh path history. But in an agent,
+[02:55] unfortunately, with your code, really all you have is that one line of code,
+[02:59] which is just going to be agent.run and then the query. And ultimately, what
+[03:03] it's going to do is kind of up to it. Will it call a tool? Will it go ahead
+[03:06] and do some analysis? Will it do some internal thinking? What is its next best
+[03:11] step to do? and its actual best course of action. We don't know until we
+[03:15] actually see the traces. You won't know what your agent's doing. So that trace
+[03:19] kind of helps you define that. And so as a kind of a decent example as
+[03:24] to what a trace would look like would be this. You have your agent call. You go
+[03:30] ahead and see the LM calls. You have your documents you're retrieving, your
+[03:35] tools that you're retrieving. You basically have every step along your
+[03:38] journey that you would see of what your agent's doing.
+[03:42] And here you can even go ahead and see, hey, we have for example this tool.get
+[03:48] order status. It's the wrong tool occult. The user asked us, hey, I was
+[03:53] supposed to get a refund here. Where's my refund? If we respond back, hey, your
+[03:57] refund was issued and they know that that was their status based on their
+[04:00] order status. That's not what they were looking for. They were looking to
+[04:02] understand why hasn't their refund arrived? So we need to potentially call
+[04:06] different tools, do different actions, and there's so many different varieties
+[04:10] even just knowing that there's an issue here. But we'll dive into that in a
+[04:13] little bit. So when you actually go ahead and
+[04:17] understand, okay, we have a trace. Now I want to go ahead and debug what's going
+[04:22] wrong with my agent, we're going to start with where first you're going to
+[04:26] identify those issues, right? Those production failures like we just did in
+[04:29] that last slide. We found out that tool was wrong. But what's your next step?
+[04:33] You want to go ahead and find out, okay, not only where did it go wrong, can I
+[04:37] get a nice sample size of that sort of information that I can then use for
+[04:41] experimentation and iteration to improve the agent when I actually want to go
+[04:45] back and test against those cases. Then what actually was the issue, right?
+[04:50] Sure, the tool call was wrong, but should the LM prompt change? Should we
+[04:54] add in guardrails? Should we change up the tool? Was the tool just doing the
+[04:58] wrong things? Right? There's so many different areas that we need to test and
+[05:01] go against. And so we can go and test against those build out evaluations to
+[05:06] continuously monitor those use cases. So for example, if you find out, hey, we
+[05:11] need to make sure that we set up a guardrail here. How are we going to do
+[05:15] that? We want to and then we want to make sure that guardrail is doing its
+[05:18] job. So we set up a evaluator on top of that guardrail making sure is that
+[05:22] guardrail doing its job by prohibiting certain information from leaking.
+[05:27] Finally, you actually make those changes.
+[05:30] run that experiment that I was talking about in the beginning and finally ship
+[05:33] it to production and do that whole loop over and over again continuously. Now,
+[05:38] this is your standard go-to process for actually improving your agent. It's
+[05:43] pretty long, pretty manual, and pretty tedious.
+[05:47] It does it does work, but we want to kind of iterate and improve that. How
+[05:51] can we do that? We want to make sure that we're not
+[05:54] spending hours, days finding the issue, finding the trace, finding all these
+[05:59] different issue points, coming up with the potential solution, going through
+[06:03] that full eight-step process manually. We want to pull all of that together and
+[06:06] bring it into minutes. The best way to do that would be right here. We're going
+[06:11] to pull in all the data from all our different sources into one specific
+[06:15] area. We're going to start with, you know, pulling our ap our arise traces so
+[06:21] you can get all the information of what your agent did. You're going to pull in
+[06:25] your evaluations to see where things actually went wrong. You're going to
+[06:30] bring in your annotations from any humans that could theoretically tell you
+[06:33] a little bit more information as to, you know, where it could go right, how they
+[06:37] can improve it. You bring in your actual APM traces which could be hey is the
+[06:44] system up or down. you bring in your codebase so you can understand all right
+[06:49] based on this specific area where it failed the tool call what changes can I
+[06:53] make in my codebase so that we're c we're we're going down the right
+[06:56] pathways we're calling the right tools we're fixing our tools that are broken
+[07:02] and so you'll bring in all of these into one final space which is which is our
+[07:05] coding agent whether you use cloud code cursor codeex it doesn't matter all of
+[07:10] those you can connect all that data into and it can automatically do all of that
+[07:15] work for for you. So, I know this may sound really
+[07:19] complicated and I promise this also probably doesn't help to make it look
+[07:22] simpler, but it is very simple to get it set up. It's going to be just a couple
+[07:27] steps of just, you know, setting up your CLI and skills and you're ready to go.
+[07:32] You get access to a bunch of information, a bunch of different tools
+[07:35] that your agent can then do, which could be for example here, which are like,
+[07:40] hey, you can get your code instrumented. What that means is you can get all the
+[07:44] traces from your agent into whatever platform you choose like Arise. You
+[07:49] could go ahead and pull down those traces, build out data sets, run
+[07:53] experiments, run evaluations. You have the full gamut of the experience all
+[07:57] from within your coding agent. So, what I'm going to do here is we're
+[08:03] going to go ahead and look at a specific issue. And I want a little bit of kind
+[08:09] of uh voices from this side of the room uh where we can get some idea of like
+[08:15] hey what do you guys think could be the actual issue. So I'll give you a little
+[08:18] bit of background. This agent right here is a simple financial agent. I've asked
+[08:23] it should I invest in this company? I think I chose Tata Motors. Um anyways
+[08:29] and ultimately it gave me a response which said yes you should. I don't think
+[08:33] it's directly in the screenshot, but I promise you it told me that. Um, and
+[08:38] ultimately that's not really what we want to do because I'm not registered to
+[08:42] give any financial advice, nor is this agent, and I don't want to get in legal
+[08:45] trouble. If you guys can help me figure out
+[08:48] maybe, hey, what do you guys think could be the issue in this agent? So, what she
+[08:52] said was, "Hey, maybe the agent needs to ask a lot more questions back to get a
+[08:57] little bit more information before I can give a solid, concrete answer." That's a
+[09:00] very good guess. Anyone else have any ideas? Okay. And how do you suggest we
+[09:05] potentially improve that? By the way, he said it should ask, again, pretty
+[09:08] similar. It should ask more questions before making that recommendation, but
+[09:11] how do you suggest maybe we can go ahead and do that?
+[09:14] >> More context, more asking questions, more details.
+[09:17] >> Okay, so maybe some prompt changes to add in some context to get more context.
+[09:22] One more. >> Sorry.
+[09:25] >> Where's validation? >> Where's validation?
+[09:28] Yeah, that's true. We don't have any sort of ground truth to compare against.
+[09:31] We don't know if any of this is correct. So there's no validation that any of the
+[09:35] answers are even correct. You're right. There could be so many different issues.
+[09:38] And truthfully, oh yeah, go ahead. >> Question. Does the agent know the user's
+[09:43] financial background? >> It's a great question. In this case, no,
+[09:47] it does not. And yeah, it should definitely get a lot more information
+[09:50] into that. Uh he asked, by the way, should the user does the does the agent
+[09:55] know any information about the user's financial background? Um and yeah, it
+[09:59] definitely does not. And there's a lot of areas that this agent could be fixed.
+[10:02] And there's genuinely genuinely not one correct answer, right? But and I
+[10:08] genuinely don't even know what the right answer is to this because this agent is
+[10:11] still messed up right now. And we're going to go ahead and try to fix it
+[10:14] today in this demo. Um, and so what we're going to do is we're going to go
+[10:18] ahead and set up the CLI and skills, get that set up so we can actually get our
+[10:23] coding agent to go ahead and understand what's going wrong with our to go ahead
+[10:27] and pull down the traces, understand what's going wrong with our agent, look
+[10:31] at the evaluations we already have run, look at the annotations that exist,
+[10:36] maybe even do some of its own analysis, and potentially come back with some
+[10:40] future suggestions just like many of you have done today for how to actually
+[10:44] improve this agent. So that hey, maybe we could have it ask more questions.
+[10:48] Maybe we could add a guard rail so it only responds to certain questions and
+[10:52] doesn't give financial advice where it's not warranted. So there's lots of
+[10:57] different ways that it can come to do those fixes.
+[11:01] To get it started, what I'm going to do is I'm going to go ahead and pull open
+[11:05] let's see, do I have it here? Yes. Let's go ahead and pull open a new session.
+[11:11] Um, okay, cool. I'm in the right space. All
+[11:15] right. So, generally what you'd want to do whenever you want to set up the CLI
+[11:19] and skills, super easy. It would just be a couple steps to get that set up. Um I
+[11:24] apologize. Oh, here we go. I know what I'm doing, guys. Uh here we go. So,
+[11:30] we're going to start by setting up the CLI. You would just go ahead and copy
+[11:33] this one line of code to get that set up. So, I'd go into back into my
+[11:37] terminal and install that. Of course, I already had that installed right before
+[11:40] this, but just goes just very simple and quick to set up. Then what you do is you
+[11:45] would create your actual profile, which would help you connect it to wherever
+[11:49] your data stored. In this case, it would be arise. And you create that profile so
+[11:53] it can go ahead and pull in those traces and visual and get that sort of
+[11:57] information from those evals and annotations.
+[12:01] Once you have that profile created, you'd go ahead and set up your skills.
+[12:05] You could do this in a multitude of ways depending on your coding agent. For
+[12:08] today, we're using Cloud Code, so I use the marketplace to set it up, but it's
+[12:12] pretty easy to set up however you want.
+[12:17] From here, let's go ahead and we're just going to ask it. And again, uh just as a
+[12:23] warning, I am using dangerously skip permissions. Please don't do this. This
+[12:26] is not actually good practice. This is just for a demo, so I don't have to keep
+[12:30] pressing yes. Um, but we're going to go ahead and talk to Claude and have it go
+[12:35] ahead and take a look at these traces. So, I'm going to go ahead and see if I
+[12:39] can find the prompt I asked earlier, which was just use this skill and pull
+[12:45] down the traces from that specific agent. Find out what issues exist that
+[12:51] we can determine from any, like I said earlier, right? What any issues that
+[12:54] exist from any of the evals, any of the annotations that we've done. do your own
+[12:57] analysis and tell me what eval maybe I can build out in the future to make sure
+[13:02] that I don't run into any of these issues again. And so this is going to
+[13:06] take a couple minutes. Um, in the meantime, I'm going to go ahead and
+[13:11] first go and show you kind of how those traces look and how you can actually
+[13:15] start triaging it if you want to do it manually a little bit.
+[13:19] But while this is running in the background, let's go back into the
+[13:23] actual uh run into the actual agent that has those
+[13:28] sort of queries that we've asked. So, we'll go ahead and ask it a pretty
+[13:31] similar question. Um, you know, tell me if I should invest into, let's say,
+[13:37] Nvidia this time. It's a little bit more of a well-known stock. And we're going
+[13:42] to get that and it's going to try to tell us some sort of information. And as
+[13:45] that data comes in, looks like I've run this earlier. So, and you can see it's
+[13:50] coming in. Um, but from an earlier run, we can kind of see what it's done
+[13:53] already where you can see that query we asked, you can see the output that it'll
+[13:58] finally generate, which we'll see how similar it is in a minute from this
+[14:01] previous run. Um, and you can see all the steps that actually happened in your
+[14:05] agent, right? So, you can understand, hey, we had a supervisor agent, a
+[14:08] financial data agent, you can see the LLM calls, you can see all your
+[14:12] different tool calls. you get a lot of information right away that you can
+[14:16] start using just like we done in the initial slide to see where those issues
+[14:21] could lie. Now, let's see. Did Claude finish up? Looks like it's still
+[14:25] running. It's doing its thing. We'll let it cook. You know, it's kind of the
+[14:29] point of this. Um, while it's cooking, anyone have any questions as to like,
+[14:34] you know, how you can set up any sort form evals, any sort of traces,
+[14:40] anything along those lines? Anyone wanted to learn a little bit more about
+[14:45] Yeah.
+[14:57] >> Great question. Yeah. So, you would go ahead. So, what it does, it actually
+[15:00] goes ahead and downloads a lot of those traces um into the into your local
+[15:05] system. So, what it'll do is actually let me go ahead and show you what it how
+[15:09] it actually goes ahead and accesses the system itself. So when you give it
+[15:14] access to these skills, what you're actually giving it access to is the CLI
+[15:17] underneath. And what I mean by that is you're going to have all these different
+[15:21] CLIs that it can integrate with. So you can go ahead and set up and find the
+[15:26] data sets. You can pull down data sets. You can have it interact with the
+[15:30] essentially interact with the UI where it can set up evaluations on the
+[15:34] platform on your behalf. So you can monitor continuously monitor when your
+[15:37] agents are failing, build out data sets, run experiments. It can basically do
+[15:42] anything that you that you would be able to do in the platform. Sometimes it'll
+[15:46] download, sometimes it'll make API requests, but that's generally the uh
+[15:50] idea here. Great question. Any other questions in regards to CLI
+[15:57] tracing?
+[16:02] Okay, let's go ahead and see what Claude's done. Oh, still crunching away.
+[16:06] Um, so as we can see here, let's let's walk through what Claude's done so far.
+[16:10] So, we can see that we've gone ahead and gotten the spans.
+[16:15] It's digging into the evaluations to figure out where those issues are. Um,
+[16:20] it looks like it's not quite there's definitely found one very big issue with
+[16:24] some numeric groundedness. I know someone mentioned that earlier as a
+[16:27] potential issue or something related to that. Um, we're also seeing some tool
+[16:33] calls directly fail. Um, and let's see. We also see,
+[16:39] yeah, so we're getting a lot of different errors. Oh, looks like it just
+[16:42] finished up. And so you can see here we get a full list as to like, hey, what's
+[16:46] going wrong with our agent and what we can do to kind of fix it. So while it's
+[16:51] finishing up that, you can see here one of the biggest alarming things right out
+[16:56] of the gate is about 44% of our agent interactions are resulting in a bad
+[17:00] summary. That's really bad. I did not know that.
+[17:05] So, we definitely need to fix that one. Another big issue is Oh, did not mean to
+[17:11] scroll there. Another big issue is, hey, we're also just getting a lot of
+[17:16] fabricated answers, which is just as bad as this the
+[17:20] summarization being wrong. So, it sounds like it may be related, it may not be.
+[17:25] We can kind of debug that. We're also seeing a relatively high rate of us just
+[17:31] redundantly calling tools. It's a waste of our time, our resources, and our
+[17:35] money. So clearly, we're doing a lot of bad things that we need to go ahead and
+[17:38] fix. And that's just from the eval
+[17:43] from Claude's own analysis. It's able to even go ahead and figure out, hey,
+[17:47] there's other issues that are coming along. We're getting silent tool
+[17:50] failures. It's telling us it succeeded, but ultimately it's not giving us any
+[17:54] actual responses. We're getting the agent hallucinates
+[17:59] when tool fails instead of disclosing it. So again related but hey that means
+[18:04] maybe we need to not just do uh you know some eval built on top of this to
+[18:09] understand when the tool is failing but we also need to make some prompt based
+[18:12] changes to make sure that the the agent doesn't hallucinate here and you have a
+[18:16] multitude of like different things that it'll go ahead and tell you as well as
+[18:20] the evals it can build out. So what we could do is we can actually go ahead and
+[18:24] tell it, hey, let's go ahead and build number one, which was the tool success
+[18:30] silent failure eval, and fix numeric groundedness so that it'll make sure
+[18:34] that whenever it does respond, it's always grounded to some sort of actual
+[18:39] reference point and it's not making up these numbers.
+[18:43] But we're also going to head and make sure you test this against a data set uh
+[18:51] against the spans that caused the failure initially
+[18:57] using and then we're going to go ahead and use another Arise skill which would
+[19:01] be here the Arise uh data set skill, the Arise
+[19:07] Oh, there we go. Arise um evaluator skill as well as the Arise experiment
+[19:14] skill. So here it's going to be able to let me just go ahead and run let this
+[19:18] run and build out evals. All right. So again
+[19:24] I'm being pretty vague here but essentially I'm just telling it go ahead
+[19:26] and make the changes that you recommended as well as go ahead and run
+[19:30] these experiments for us. So now we can actually compare against where it failed
+[19:35] to make sure it passes against that right and so in this scenario we can see
+[19:40] okay it's going to go through and take its time. Um I'm going to go ahead and
+[19:44] show you a previous run because again this will take some time and while we
+[19:47] want to let it cook I don't want to have you guys staring at a screen where
+[19:50] Claude's just discombobulating or whatever it does in its free time. Um,
+[19:54] so let's go ahead and look at where I've actually gone ahead and asked Alex or
+[19:58] sorry Cloud Code to go ahead and answer some
+[20:02] of our previous issue that I ran into. And one of those was related to hey,
+[20:08] I've had some times where I'm trying to get some answers about uh
+[20:14] stocks that aren't necessarily from the United States. And so we're having
+[20:18] errors where we're talking about like South Korea or looks like they're all
+[20:23] South Korea based, but let's assume there's other answers here. Maybe Japan
+[20:27] or China and whatever, right? And you want to see and you want to be able to
+[20:30] understand, hey, I want to be able to compare stocks across different markets.
+[20:35] And clearly people are asking that, but we don't support it. And so what Claude
+[20:40] did, it went ahead found those areas where that issue existed. Like I said,
+[20:44] it looks like it was all South Korea here, but it found those areas. It built
+[20:49] out a data set for me, which I can then go ahead and test against to make sure
+[20:53] it works. And then it went ahead and ran experiments. And it made a couple
+[20:57] changes. So, it started with the initial one, which was the baseline, which was
+[21:00] buggy, which as we expected would result in 0% uh passing rate, which is what
+[21:06] happened when we initially got the actual productionbased traces.
+[21:11] It also made a quick fix where it normalized it by adding in that
+[21:16] uh country name. It didn't work. Why? Because the tool I was calling was also
+[21:21] outdated and I needed to update to the stable version. So then it made a third
+[21:26] iteration. And you can see that on this chart here as well where we were able to
+[21:30] see, hey, the first iteration didn't work. It went back, made a fix, and
+[21:35] finally got us to the final iteration where we're getting about a 90% success
+[21:39] rate. Clearly still not 100%. We still need to make some changes, but hey,
+[21:44] we're doing a lot better than we were earlier. So, this is like a great way to
+[21:50] get you going so you can actually start from, hey, I know there's an issue to
+[21:54] here's a fix. Now, I know we have quite a bit more time. I want to check in. How
+[22:00] is everyone doing? How do you guys feel? Do you guys have any questions about how
+[22:03] you can go ahead and get this started? Yeah.
+[22:23] Great question. So his question was how where do the experiments actually run?
+[22:27] Where do the evaluations run? Where does everything run? Um so you do have a
+[22:32] little bit of customization there. In this scenario, uh what I did is I had
+[22:36] the experiment run on my local machine, which is I think what will be the case
+[22:42] most of the time. And then what you what I did afterwards was I went or you can
+[22:47] host it on a cloud or wherever you'd like to experiment on. And then you can
+[22:50] go ahead and actually run the evaluations on Arise itself. So in this
+[22:53] case, I built out LM as a judge, which would then go ahead and let's see if I
+[22:58] can see the evaluator here itself. So you can see we built out two different
+[23:02] evaluators, a codebased and an LLM based. I actually had Claude go ahead
+[23:06] and do this. It built it out for me in the platform. And this was the final LLM
+[23:10] as a judge because it actually kind of failed in getting the codebased data to
+[23:14] set up. So that's why we have two. And so you can see the LM as a judge. It
+[23:18] went ahead and built it out for us with this prompt and got it going so that we
+[23:23] can actually compare. Hey, did the agent work properly?
+[23:28] Any other questions? That was a really good question by the way.
+[23:31] >> Yeah.
+[23:40] >> Very very good question. Um so eval can be set up however you like. We
+[23:46] have of course people can people can definitely use whatever sort of models
+[23:51] they want. No one wants to be limited to just claude or just open AAI especially
+[23:56] in today's modern age where you can see AI models literally ship every other day
+[24:01] and then you want to be like okay I want to use that one now right and also some
+[24:04] people have a preference for slightly cheaper models some people have a
+[24:07] preference for making sure their evals are topofthe line because ultimately
+[24:11] they know their agent's only going to be as good as their evals so they use the
+[24:14] highest end models for their evals even if they're not necessarily using those
+[24:18] in production so it kind of varies you have full customizable control over cut.
+[24:22] And so what you can see here for example, you have a full list of
+[24:25] whatever sort of model provider you want to use and you can connect those even if
+[24:29] you want to use any sort of local um open source models as well.
+[24:35] Yeah, good question. So her question was if we
+[24:40] have if I spin up a smaller agent to go ahead and make some of these bug fixes,
+[24:46] how does this compare to that? Realistically, you don't have to use
+[24:50] cloud codeex. You can use whatever sort of agent you want. The benefit of what
+[24:54] we've provided is a skill that you're able to go ahead and pull down the
+[24:58] information from your traces to make those fixes. So, you're not making those
+[25:02] fixes just based on, hey, I know this is wrong and the output's incorrect. You're
+[25:07] making those fixes based on, hey, I know this is wrong. Here's where it failed.
+[25:11] Here's why it failed. Here's how we can go ahead and fix it. because you have
+[25:15] not just the information of your codebase, you have the information of
+[25:19] any of your other APM tickets, whatever or APM logs, any of your other tickets
+[25:24] that exist in your Jira systems, etc. as well as your actual arise traces, which
+[25:29] would be like here's the pathway the agent took, here's where it messed up,
+[25:33] your eval, your annotations, etc. Any other questions? Yes.
+[25:38] >> Are these features available in Phoenix? >> Great question. Yes. Uh we do have so he
+[25:44] asked is are these features available in Phoenix. Phoenix is Aris's open- source
+[25:49] version. We do have I believe skills and MCP as well in Phoenix which you can go
+[25:55] ahead and hook up to your agent and it can go ahead and pull down the same sort
+[25:59] of information. Of course there are going to be some nice to haves in the
+[26:02] enterprise edition where you have access to these online evals in a certain way
+[26:06] that are much easier to format and set up. You have a little bit more
+[26:09] dashboarding and a few other features. But yes, the the skills in CLI you can
+[26:13] connect to your coding agent. >> Yes.
+[26:20] >> Agent said that summary. So how would you classify something as like a bad
+[26:27] agent know that's a good summary or a bad?
+[26:30] >> Very good question. So her question was in what I showed earlier there was a
+[26:35] eval or there was a response from Claude that said hey there was a bad summary.
+[26:39] How do we know what is a bad summary or a good summary? In that case, what I
+[26:44] actually had set up, it was actually based on one of the evals that I had
+[26:47] previously set up. And so, we can actually go ahead and look at that
+[26:50] evaluator here. We can go ahead and look at let's see some
+[26:58] I actually don't remember which one, but I'm going to go ahead and pull open this
+[27:01] one and hope this is the right one. Um, so as you can see here, this is
+[27:06] basically the summary eval that I'd created.
+[27:10] It's basically taking a look at the information we've gathered throughout
+[27:13] our entire agent, all the sort of context we've given to that summary
+[27:17] agent and making sure that it's referencing the right points, it's
+[27:21] answering the question accordingly, etc. Um, and so that's how we've gotten to
+[27:25] determine whether or not it was a good summary or not.
+[27:33] >> Uh, what if we set up a skill in the first place to see if it can do a good
+[27:37] summary? give it given us a good summary all the
+[27:41] time just like we set up a skill instead
+[27:45] instead of running. >> Yeah, great question. So, she's asking
+[27:50] why can't we just set up skills that you know ensure that it gives a good summary
+[27:55] and yes absolutely that is what you want to do. You want to make sure that you
+[27:59] update your prompts, update your skills, update your coding workflows so that
+[28:03] your agents will give the best summaries. The emails are only there to
+[28:06] help you determine where there are issues, monitor those issues, make sure
+[28:09] they don't repeat, right? And so you set up that skill, great, it works for the
+[28:15] next two months, two months later because there's a model regression
+[28:18] because people start asking questions in a different way. You end up getting
+[28:22] different results and you don't want your e you don't want your performance
+[28:26] to degrade because of that. So you want to be able to monitor and observe that.
+[28:30] That's the point of the evals. Did that help? Beautiful. Um I don't know for how
+[28:35] much time we have left but go ahead >> later
+[28:45] agents are assessed and soc.
+[28:56] So your question was if I've run into issues with linting with the agents
+[29:00] >> agents
+[29:07] seems like more >> good question. Yeah. So he's basically
+[29:13] saying hey um have you seen the issue where hey
+[29:17] you've given access claude to all these skills and all these sort of traces and
+[29:21] all this sort of information but ultimately most of the time I've seen
+[29:25] with cloud code or any of these other sort of coding agents they end up
+[29:29] focusing on linting rather than any other sort of issue am I correct yeah
+[29:33] that's a very good understanding and that's kind of why we built out these
+[29:36] skills which kind of focus on ensuring that they hyperfixate on the actual
+[29:41] issues that have been given to them, right? So they'll get all these trace
+[29:44] information so they'll understand, hey, it's not going to be a linting based
+[29:47] issue because you can see that it's calling the wrong tool and that's not
+[29:52] going to happen because of linting and it does have some reasoning capability
+[29:55] to understand that. Um, and so genuinely I haven't seen that so much when using
+[29:59] the skills.
+[30:03] Awesome. So as it Oh yeah.
+[30:21] Does does the system make it easy to understand? Sorry.
+[30:27] >> Great question. Yeah. So, how so his question was, does it make it easy to
+[30:31] understand how much it costs to run those evals? Absolutely. So, one of the
+[30:36] best parts of running evals is in the platform is you're going to be able to
+[30:40] get full trace history of what your emails did, which also comes with the
+[30:44] added benefit of, you can see right here, a nice little cost. And so, you'll
+[30:49] be able to understand how much your emails are actually costing you because
+[30:53] yes, of course, anything anytime you're running another LLM, it's going to be
+[30:57] additional cost to you. So, you want to make sure it's not. And of course,
+[31:00] what's really nice about building out evals, whether it's in the UI or via the
+[31:05] coding agent, you can have those set up basic requirements like, hey, we want to
+[31:10] sample specific amounts so we don't run it across 100% of our traces and 100% of
+[31:15] our calls. Um, you can make it focus on specific areas. And of course, you can
+[31:20] always dictate that in the coding agent or on the platform itself.
+[31:25] Um, so as a kind of refresher as to everything we kind of covered today,
+[31:30] again, it that's the wrong one. Oh, I think I have it over here.
+[31:35] Um, so
+[31:40] essentially what I really want to give you as a takeaway,
+[31:44] these AI agents, they're great. They will do basically everything you ask
+[31:48] them to, but again, they're not magic. Like he said, they can definitely focus
+[31:52] on linting. They can definitely get caught up in small little areas, but the
+[31:57] best part of them is they will automate your full workflow from beginning to
+[32:01] end. So whether it's that starting from observing where the issues lie,
+[32:07] finding those issues, being able to actually pull it down, understand where
+[32:12] the issues lie, create those data sets, build out exact fixes,
+[32:18] test them to make sure that they're working.
+[32:21] And finally, you can then go ahead and be the manual human to make sure that
+[32:26] hey, it didn't just go back and fix the linting changes, right? And we can make
+[32:30] sure that it actually made changes that actually help improve the agent and not
+[32:35] go for degradation.
+[32:39] That's kind of the general gist of what I wanted to show today. Um, any other
+[32:42] questions on this before, you know, I can maybe show one last thing of seeing.
+[32:46] Oh, still finishing up what I was trying to do earlier. I was hoping it might be
+[32:49] done after this. took about 14 minutes. But
+[32:55] um while that's finishing up, any other questions on how we can use our agents
+[32:59] to automate our workflows and improving your agents? Yeah.
+[33:19] >> Great question. So his question was, are we primarily relying on Claude or any of
+[33:24] these coding agents to actually go ahead and give us the evaluation if things are
+[33:28] working well or not? Um, yes, you can definitely rely on Claude to build out
+[33:33] everything. You can also manually do it. You can also ask Claude to do the
+[33:38] specific evaluations you want. So in this case, when you saw that nice clean
+[33:42] table, that was actually defined by the evaluations me and my team had set up
+[33:45] prior to this. Um, we'd gone ahead and looked at, hey, these are specific areas
+[33:50] that we know are potential limitations in most agents that work in this
+[33:54] workflow and we set up those as generic ones, which is why we got a bad summary.
+[33:58] We had some, hey, is the agent healthy? Is it giving the right are we getting
+[34:02] tool calls correct? Right? We know those are general areas, but what Claude was
+[34:06] able to do was look at our actual traces, understand based on those
+[34:11] traces, what are the actual issues we're falling into today. Right? we have our
+[34:16] live agent in production. I'm not going to be able to go through all of those
+[34:19] manually and find those, but Claude can or Claude cursor codeex, whatever,
+[34:24] right? And that's where like one of the biggest superpowers that you're able to
+[34:27] give these coding agents to be able to do that for you.
+[34:32] I saw another question here. Good question. So his question was is there
+[34:36] any sort of benchmark data set that we can see or any sort of like
+[34:40] visualization that can tell us hey this is a higher quality LLM to use for
+[34:44] evaluations more expensive less expensive um realistically no [laughter]
+[34:50] that would be sort of something you'd have to do for your own analysis you'd
+[34:53] have to figure it out because ultimately one of the things that I like to say is
+[34:57] if you're going to use out of the box eval to judge your agent you're going to
+[35:01] get out of the box results and that's not what you want when you're building
+[35:04] customtailored AI agents which are built to be personal
+[35:07] for you. Um, and the same goes for benchmarks, right? Benchmarks are great.
+[35:12] They'll show you, hey, this this is a good agent. This is a good sorry, this
+[35:16] is a good LLM. But realistically, what you want is, is it a good LLM for me?
+[35:21] And that's going to be tailored to your use case. So, if you're building for
+[35:24] finance, maybe you'll use a specific one. If you're building for, you know,
+[35:28] law in finance, it might be even this slightly different model, right? So, it
+[35:32] really depends on what you're building it for.
+[35:37] Cool. I think that's more or less it more or less it from me. Um, if anyone
+[35:40] has any other questions, I'm happy to answer them. But yeah, thank you guys.
+[35:46] [applause]

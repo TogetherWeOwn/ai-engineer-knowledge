@@ -1,0 +1,334 @@
+# title: How to Build an AI Code Review Agent - Daksh Gupta, Greptile
+# source: https://www.youtube.com/watch?v=4UtrRVtUN_g
+# speaker: Daksh Gupta, Greptile
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-27T04:41:46Z
+# sha256: 4bbd2d26c318459983022231be89b1f19a07dbfc0639d174804d80dc915f7fc5
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:01] [music]
+[00:12] >> Um all right, my name is Dax. I am one of the co-founders of a company called
+[00:15] Griptile and we build agents that review and test pull requests with the full
+[00:20] context of the code base. And by reviewing and testing these pull
+[00:23] requests, we reveal bugs, logical errors, code quality concerns, primarily
+[00:29] from the AI-generated code. Now, to give you a sense of scale, many
+[00:35] thousands of companies use Griptile every day.
+[00:37] About 1% of all pull requests on GitHub go through us and
+[00:42] a variety of many different types of code bases, whether it's the CUDA code
+[00:45] base at Nvidia or the wallet code base at Coinbase and many, many others.
+[00:49] And every now and then, we meet a company where we're actually not the
+[00:53] right code review or code testing product for them. Their needs are so
+[00:57] specialized and so esoteric that it's actually beneficial for them to build
+[01:01] their own. And when that happens, we tend to help
+[01:03] them for free. There's two reasons for this. One, we
+[01:06] have a lot of specialized knowledge about how to do this really, really
+[01:08] well. And second, we get to learn a lot about
+[01:11] how we can serve customers like those in the future.
+[01:14] And in this presentation, I want to tell you what we tell them, which is how to
+[01:18] build a really great AI code review agent yourself.
+[01:22] Now, there's kind of three things that people
+[01:24] like about Griptile and I'm going to talk through how to implement those
+[01:27] yourself. The first one is code base context. When customers use Griptile on
+[01:31] their pull requests, they find that it really understands their code base.
+[01:35] As a matter of fact, before we were a code validation company, we were a code
+[01:39] base context company. We were teaching language models from 2023 how to
+[01:42] understand the very large code bases and as a result of that, we got very good at
+[01:45] indexing code. Uh the second thing that people like
+[01:48] about Griptile is that it runs your code in the sense that spins up your stack in
+[01:51] a fully loaded dependency-rich sandbox and it clicks around and tests things
+[01:55] using computer user through pressure testing API endpoints and so on.
+[02:00] And the third thing is we're actually very efficient allocators of inference.
+[02:03] We pick the right model, the right quantity of inference budget for each
+[02:06] subtask in the review and validation process.
+[02:09] As a result of that, we're able to get a lot more performance per dollar than an
+[02:13] internal tool could or any competitor could.
+[02:16] So, there's kind of two reasons that you would want this presentation. Uh the
+[02:21] first one is you want to build your own review agent. And the second reason,
+[02:24] which is a bit more subtle, is if you're trying to pick a review or testing agent
+[02:28] for your company and you want to understand what makes a good one and
+[02:31] what makes a great one. All right. So, let's start right in.
+[02:36] Now, blank slate. You are part of the
+[02:39] platform team at your company or you're just the uh local uh AI psychotic member
+[02:44] of your team and you want to build the review validator of your company.
+[02:48] Um Companies are writing lots of code.
+[02:50] People are vibe coding. Uh you have, of course, engineers vibe
+[02:53] coding. Some of them are a little too close to the sun. Uh you have marketing
+[02:57] people writing code. And uh the new problem is the review bottleneck, the
+[03:01] validation bottleneck. And so, that's what you want to address.
+[03:04] The first thing that you should do is you should get yourself a sandbox.
+[03:07] There's many, many companies here that will sell you a sandbox. Uh you can also
+[03:10] just use firecracker or something like that. And you'll want to put an agent in
+[03:13] that sandbox. Uh the agent can be Code X or Cloud
+[03:17] Code. Personally, I recommend going model independent for reasons that I
+[03:20] will get into, so you can use something like Open Code or Pi as your harness.
+[03:23] Those are both open source. And uh you will need to then connect
+[03:27] your GitHub or your GitLab. Have a PR webhook send it the contents of a pull
+[03:30] request to any pull requests that are opened.
+[03:32] The agent can have some type of prompt that just says, "Hey, review this and
+[03:35] send back some feedback." And then you can wire that back using GitHub's review
+[03:39] APIs. Very simple. In fact, many people think that's
+[03:42] actually all it takes to build a review agent.
+[03:44] There's a few things that are going to go wrong when you start using this. But
+[03:46] what will happen is you will, in fact, have a pull request go live. The
+[03:51] contents will go to an agent and about 5 minutes later you will get some feedback
+[03:54] on your pull request. But here's what's going to go wrong in the time that it
+[03:58] takes you to build this. The first one is you're going to miss a
+[04:01] lot of bugs. As it turns out that actually bugs are interactively large.
+[04:03] They're In fact, I saw a a tweet not very long ago that said that bugs are
+[04:09] fractally infinite. So you will never run out of a of bugs in a particular
+[04:12] piece of code. That's the first thing that's going to go wrong is you're going
+[04:14] to miss bugs. Of course, that's the one thing that your system needs to do is to
+[04:17] prevent at least very catastrophic outages and incidents.
+[04:21] Second thing that's going to happen is it's going to miss context and it's it's
+[04:25] going to misunderstand parts of how your code base works. It maybe won't
+[04:27] understand where you're going with your code base. It won't understand how a
+[04:30] specific part of it works. It maybe will not understand how one of your libraries
+[04:33] works. It's possible you're one of those companies that never recovered from the
+[04:37] microservices apocalypse of the 2010s and so you just have thousands and
+[04:40] thousands of repos and you have to have context of all of them to be able to
+[04:43] operate. So that's the second thing that's going to go wrong.
+[04:45] The third thing is it'll be very expensive. I think people are very
+[04:48] surprised by this. So generally from people who have seen try
+[04:52] to do this, they'll find that they're spending between $3 and up to $25 per
+[04:56] pull request on reviewing it using coding agents. These tokens can add up
+[04:59] really really fast. Very quietly they got very expensive.
+[05:04] The fourth problem they'll find is nitpicky comments. Now this matters more
+[05:07] than you might think. Nitpicky comments are comments that are technically
+[05:09] correct but overly pedantic. There's two things that go wrong when you have
+[05:12] nitpicky comments. If you are a as a human reading those comments, they're
+[05:15] very annoying. They're like a boy that cries wolf. You'll just see lots and
+[05:18] lots of comments and it'll be kind of annoying for you to just read through
+[05:20] them and figure out which ones are just minor stylistic complaints and which
+[05:23] ones are actually catastrophic problems. The second thing that will go wrong is
+[05:27] they will wreck your code base because typically the way the review agents work
+[05:31] is they'll leave comments on GitHub and your coding agent picks them up and
+[05:34] resolves them. And coding agents are not discerning. They're going to look at
+[05:36] review comments and just address all of them and you'll end up with extremely
+[05:41] painfully defensive code as we found the coding agents are particularly astute at
+[05:45] writing. The next thing that go wrong is that
+[05:48] every time you run a review agent on the same pull request, you will somehow find
+[05:52] new bugs in the sense that it will keep catching new things in the pull request
+[05:56] very annoyingly, and you will And like I said, bugs will appear to be fractally
+[06:00] infinite. So,
+[06:03] the first thing that you want to do, the lowest hanging fruit, what is you want
+[06:06] to optimize the prompt. You started with a very simple prompt, something like
+[06:09] review this PR and then output the comments in GitHub's API schema format.
+[06:15] Generally, there's two themes within the bugs. Look for specific bug types, and
+[06:19] second, skip the nitpicks. And that's what you want to orient your prompt
+[06:22] around. You'll want to ask for specific bug types, and you can kind of do some
+[06:25] internal data science on existing outages and incidents that have happened
+[06:29] in your code base and figure out what types of bugs you have the highest
+[06:31] propensity to produce. Create a catalog of them, and then have
+[06:35] your prompt look for those specific bug types.
+[06:37] The second is you'll need to expressly tell it what a nitpick is and not to
+[06:40] look for them. And nitpicks can be anything from
+[06:43] asking why there isn't three layers of defense on this particular thing, or why
+[06:47] error handling is done in this slightly shoddy way.
+[06:51] Now, the thing that you'll run into when you
+[06:53] change these prompts is when you change a small thing in the prompt, it'll have
+[06:57] a weirdly big impact on the number of comments that your agent is writing on
+[07:00] your pull request. This is quite scary because it means you
+[07:02] don't really know if it's missing a bug or not. You don't know the
+[07:04] counterfactual. The
+[07:07] validation agents, or really any reviewer or tester, can can tell you
+[07:10] about the presence of bugs, but it fortunately can't tell you about the
+[07:12] absence of bugs. That's that's sort of a a limitation of the format.
+[07:16] And what makes this particularly difficult are bugs that are
+[07:18] extraordinarily rare and getting rarer by the day. In fact, according to our
+[07:22] data science, only about one out of every thousand pull requests has a
+[07:25] generally catastrophic bug in it. Or maybe one out of every thousand lines of
+[07:28] code has a catastrophic bug in it. And so, because these bugs are very
+[07:31] rare, you might release a version of your agent that you think is very good,
+[07:36] but it secretly misses a catastrophic bug in a pull request, and
+[07:39] you wouldn't know for a long time because you don't produce those bugs
+[07:42] very often. And so that brings us to the second
+[07:45] improvement. You will want a data set of historical PRs.
+[07:49] This is relatively easy if you're one of those companies that very nicely
+[07:51] catalogs every time something goes wrong in your code base. If you have that,
+[07:54] then you'll have a list of pull requests that have caused outages and incidents
+[07:57] in the past. You'll want to catalog them and then essentially have any version of
+[08:01] your review agent run through those and see with what frequency it can catch
+[08:04] those bugs. Now,
+[08:08] this will allow you to tune the prompt a little bit more confidently. But at the
+[08:11] same time, the interesting thing about bugs is in a
+[08:13] changing world, the topology and ontology of bugs changes over time.
+[08:17] And so you'll need to have a real-time updating data set.
+[08:21] And this is tricky because unless you have millions and millions of pull
+[08:23] requests, it's actually hard to have reasonably high coverage of bug types.
+[08:27] It's true that about 80 or 90% of your bugs will be just repeats of prior
+[08:30] mistakes, but increasingly as code agents get good, they're going to start
+[08:32] making novel mistakes. They'll fail in new ways that we've not anticipated
+[08:36] before. And so this is where you will start to
+[08:38] hit limitations. Now, quick side note, this is kind of what we
+[08:41] do at Reptile, except we actually have a lot of code from a lot of different
+[08:45] companies and we can test across a very, very large corpus of pull requests and
+[08:49] therefore improve our agent very confidently. It's one of the reasons why
+[08:51] we're able to eke out little bits of performance on the margins in ways that
+[08:54] internal review agents can't. But you can get decently far, especially for
+[08:57] your particular company, to do this with your internal data.
+[09:02] The next thing you want to do is model inversion. So,
+[09:05] for in case anyone was at my talk earlier this year in San Francisco at AI
+[09:09] Engineer, I talked a lot about the ways in which coding agents fail.
+[09:13] And I discovered an interesting pattern through that research, which is that the
+[09:16] types of bugs produced by Claude models or Codex models are actually quite
+[09:18] different from each other. And they're different in a number of
+[09:22] ways. As an example, Claude models are
+[09:24] something like three times more likely to produce one-off errors than GPT
+[09:27] models. GPT models, on the other hand, are
+[09:30] significantly more likely to produce auth bypasses than Claude models.
+[09:33] And these are all just artifacts of the post-training, as far as I understand.
+[09:37] Now, to prevent this, you'll find that if
+[09:40] you're using the same model to review the code written by the same model, um
+[09:44] you'll actually have relatively fewer bugs caught because they fail in the
+[09:47] same ways during review that they do during code generation.
+[09:50] And so you'll want to invert the model. If you've used Claude code to write the
+[09:53] code, you'll want to use a GPT model to review it and so on.
+[09:56] Now, doing this is somewhat straightforward for the 80th
+[10:01] percentile and quite tricky for the last 20.
+[10:04] So, if you're using coding agents, you'll notice they leave some type of
+[10:06] fingerprint to tell you what coding agent was used for a particular pull
+[10:08] request. For instance, Codex will name branches in a codex/branch name format.
+[10:14] Or Claude is going to write a co-authored by Claude in the PR
+[10:16] description and commit message. And about 80% of the time, this will be
+[10:19] true. In the final 20, when you happen to manually create a branch name or
+[10:22] there was some other reason that a different coding agent was perhaps used,
+[10:25] it's significantly harder to figure out which model was used during generation.
+[10:28] And you have to develop some type of heuristics to figure out what are the
+[10:30] signatures of models being used. Often you might have an internal catalog where
+[10:34] people report what coding agents are using these days or have some type of
+[10:37] telemetry that's coming out of your dev machines and and your engineers'
+[10:41] computers. We found that there's a 10% higher catch
+[10:45] rate if you flip models. And this might sound very small, but you have to know
+[10:48] that 10% is in terms of incidents and outages is actually quite a lot. It
+[10:52] means that there's a 10% higher chance that something will
+[10:54] go wrong if you're not using model inversion, which can be quite
+[10:57] catastrophic. And so we highly recommend that you use some type of model
+[11:00] inversion in your process. The third improvement is code base
+[11:06] context. Now, this is something that I care a lot about. Before we were doing
+[11:09] code validation, we were doing code base context. Uh we were trying to figure out
+[11:13] better ways to do rag over very large code bases. And even today, people
+[11:16] consider grep to effectively solved all of code base context. I actually think
+[11:20] that's not true for a number of reasons. One, grep is extremely imprecise.
+[11:24] And second, it's very expensive. To give you some sense of scale,
+[11:27] single-digit percentage points of GDP growth last year were inference. A very
+[11:31] large percentage of inference was coding agents. And if you actually look at a
+[11:34] coding agent trace, the vast majority of tokens used by coding agents are all the
+[11:38] same. grep, file read, cache write for the file contents. That means a
+[11:42] non-trivial percentage of GDP growth is grep, file read, cache write.
+[11:47] That's very bad. And this is because grep is very imprecise. It's reading
+[11:49] files in very large quantities, and I don't know, there's perhaps some adverse
+[11:52] incentives for companies paid by the token to figure out ways to burn more
+[11:55] tokens. But even so, you'll find that you'll need to use slightly more
+[11:58] surgical methods of figuring out where you should be reading. And the way we do
+[12:03] this is we produce an internal knowledge base where we essentially check across
+[12:06] the entire code base all the different parts, catalog them, and then index
+[12:10] saying, "Okay, well, this is authentication. Here's how it works.
+[12:12] Here are the flows. Here's a diagram of the flows. Here's every file that's
+[12:15] involved." One example of where code base context
+[12:17] matters is, for instance, when you're trying to catch an off bypass.
+[12:20] It's actually very difficult to figure out if an off bypass has occurred
+[12:23] because you need to have a pretty concrete understanding of whether you're
+[12:25] in an authenticated environment when you're in that part of the code base or
+[12:27] not. And that's very tricky. And so, you'll find that you will need
+[12:31] some type of uh of sort of code base context to be able to do this.
+[12:36] Now, I've been very centered around the
+[12:38] concept of bugs, but code can be very, very bad even if it's not buggy.
+[12:43] For one, it can be terrible quality, but second, it can just not fulfill the
+[12:46] expressed intent of the author. Recently, I saw a post that said that
+[12:50] people were increasingly using Slack as their IDE.
+[12:53] Now, I think that's a little funny, but at the same time, there's not that much
+[12:56] ex- expressed intent in a Slack message. You're only saying maybe a sentence or
+[13:00] two, if even, asking an agent to go and fix something, which means the there's a
+[13:04] lot of ambiguity in your instruction. As a result of this, you might find that
+[13:07] the coding agent has either misinterpreted your instructions or just
+[13:10] it was too ambiguous and it didn't know exactly what to do.
+[13:13] And so, your correct code can actually still be quite wrong.
+[13:16] Now, one of the ways in which we fight this is by giving agents increasingly
+[13:19] more context. And we find that the two types of context that matter most are
+[13:23] docs and tickets, and then of course, the code base
+[13:27] from your code base indexer or knowledge base.
+[13:29] You can get remarkably far if you give it access to your Jira and Linear, and
+[13:32] then your Confluence or Notion or whatever it is that you store your docs.
+[13:35] You'll find that there's a lot of tribal knowledge that is subconsciously helping
+[13:38] you produce better code. And when you have agents do the same thing, it feels
+[13:41] like they just don't know what's happening. And because you you
+[13:44] underestimate how much depth of knowledge you yourself have.
+[13:51] Now, the way that Reptile approaches this
+[13:53] problem is we actually disintermediate all of these context sources with a
+[13:57] living wiki. This wiki is essentially a sort of world model of how your company
+[14:01] works. It's everything that it knows about your
+[14:03] code base, everything it knows about your application through production
+[14:07] telemetry, through logs, everything it knows about your road map from your
+[14:10] documentation and your linear tickets and so on and so forth.
+[14:14] And it uses this wiki to supply context both making the agent more context aware
+[14:18] and making its code searches significantly more precise because it
+[14:21] will never read a file that it didn't need to read.
+[14:26] The last thing that you should do, or this might be four out of five. The next
+[14:29] thing that you should do is autonomous testing.
+[14:31] >> [clears throat] >> One of the things that we think about a
+[14:32] lot is that for instance, for UI changes, you might
+[14:36] be able to read through a bunch of changed files for React code and
+[14:41] conclude that there's nothing wrong with the code. But in fact, when you render
+[14:44] it, it might be, for instance, hidden on an iPhone.
+[14:47] Now, this is one of the more technically difficult problems to solve. The way
+[14:51] that we approach this at Reptile is we essentially build these dependency-rich
+[14:56] sandboxes, which are completely configurable virtual machines, and we
+[15:00] have customers, we work with them to essentially spin up their stack in these
+[15:04] sandboxes. And then Reptile's agent uses computer vision to test them end to end.
+[15:09] If you haven't been paying attention, computer vision has gotten very good,
+[15:11] and it's like far better in these new generation of GPT models and Opus models
+[15:15] than it was in the previous. For the first time, I think end to end QA is
+[15:18] nearly solved. The thing that you need to do though is
+[15:20] you need to document all the flows through your application. And second,
+[15:23] you need to be able to have a sufficiently simple build script so that
+[15:26] the agent can spin up your stack in your environments.
+[15:30] We have a team of forward deployed engineers that help companies do this.
+[15:33] We found that it's one of the trickier parts. Unless of course, you have very
+[15:36] good dev boxes already, in which case congratulations on working at Stripe.
+[15:43] So, oh, I This is the diagram I'm going to show you. But yes, you will need a
+[15:46] dev box, you will need PR branch dependencies where you're running the
+[15:48] app, and you'll need some type of flow map that says, "This is the auth code
+[15:51] and then this is the sign-up flow." and so on.
+[15:54] And using this, your agent can now test your code end-to-end and use vision
+[15:57] models to say, "Oh, like this button technically appears, but it actually is
+[16:00] hidden on iPhones, or it's not in the first fold on the iPhone duo, etc."
+[16:05] Now, if you do all of this, you'll find that the costs are still quite high. It
+[16:08] can cost you anywhere from three bucks to 15 to 20 to do a single pull request
+[16:13] review. And the thing you'll want to solve for
+[16:15] now is to use cheaper models for some things.
+[16:18] Now, to me, frontier models are still
+[16:21] generally speaking more capable than open source models. This has been true
+[16:24] for some time, even though the rubber band is tightening.
+[16:26] So, our share today is about 20% frontier models for the most critical
+[16:30] tasks. And then the long tail of tokens, which is exploratory, file reads, and so
+[16:34] on, we use a variety of smaller models. And so, if you do this, you can actually
+[16:39] reduce the cost of running your review agent quite drastically.
+[16:43] So, this is sort of a illustrative example of what we do, which is we'll
+[16:47] use a small model for our finding context, we'll use a very lightweight
+[16:50] computer use model for testing user flows, and we use a frontier model for
+[16:53] things like analyzing bugs, applying the review process, and first submission.
+[16:57] In practice, we have actually 20 different subtasks, and each of them has
+[17:00] a very specific set of models that we use for each of them. And we have a
+[17:03] small research team that is constantly iterating exactly what models we use for
+[17:06] what task. You can probably get 70 to 80% of the
+[17:09] way there using something of this kind where you just swap out very simple
+[17:13] tasks with very simple models. Now, this is another example of where it
+[17:16] really helps to have a very large data set. If you don't have a good data set,
+[17:19] you might be able to have trigger happily replace a lot of different sub
+[17:23] agents with smaller, faster models, and you won't know that it's this agent is
+[17:27] actually now quite a bit worse at catching bugs, and you would only find
+[17:29] out when it misses something that then causes an outage or incident.
+[17:34] And you will also find that you can kind of combat this problem of overactive
+[17:38] file reads using a cheap model that essentially looks through all of your
+[17:42] context pieces and figures out which ones actually should be included.
+[17:45] In theory, you should be able to use a decision model for this, something like
+[17:47] Java, or the Decisions API, to do effective re-ranking on all of the
+[17:51] different things, and deciding what should be and shouldn't be loaded into
+[17:54] Frontier Model Cache, which is in some ways your most expensive and most scarce
+[17:57] resource. If you do all of these things, you might
+[18:00] be able to actually get quite far in building your own review agent. And if
+[18:04] you do, please let me know. My email is
+[18:06] daksh@prod.com. I'd love to help you. And uh if you
+[18:11] choose not to build it, then you can also just use our product, um which is
+[18:14] free in comparison. But, uh thank you so [snorts] much.

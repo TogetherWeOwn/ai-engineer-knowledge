@@ -1,0 +1,271 @@
+# title: Contact Center Voice AI: Low-Latency Intelligence Extraction from Messy Audio Streams — Dippu Singh
+# source: https://www.youtube.com/watch?v=IEF842ZEU5A
+# speaker: Dippu Singh
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T09:54:51Z
+# sha256: 3b4411b91bceac90f51a290690475e32f6a893d23121c54e19e8b9e289d36cd5
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:00] Right, hello everyone. Welcome to the AI engineer 2026 online track.
+[00:06] Um, good morning, good afternoon, good evening, depending upon your time zone.
+[00:10] My name is Deepu Singh and I lead the initiatives in the emerging data
+[00:14] technologies and AI architecture at Fujitsu North America.
+[00:19] Um, and today I will be
+[00:22] uh, giving you or maybe provide you a deep dive into a very specific but a
+[00:27] very highly impactful engineering challenge, uh, which we have encountered
+[00:32] in our uh, contact centers. So, with that, let me just quickly share my
+[00:38] screen and get this going.
+[00:49] Right, so, um, um,
+[00:53] this is the topic of the discussion, VoiceOps-ifying
+[00:57] low latency intelligence extraction from uh, messy
+[01:02] audio streams. Uh, when we talk about, you know, generative AI, we often, you
+[01:07] know, focus on uh, clean text inputs, but if you go
+[01:12] into the real world, specifically in the customer service
+[01:16] or or maybe contact centers, specifically,
+[01:20] um, the data does not start as a clean text, right? It starts as messy, quite
+[01:26] overlapping, um, sometimes emotionally charged and
+[01:30] and it it may have multi-channel audio streams also within that, right? And and
+[01:36] today we will explore the technical architecture which is required to
+[01:41] capture that audio, process it with
+[01:44] ultra-low latency and use the generative AI to extract structured, actionable,
+[01:51] um, business intelligence out of it. Uh, so, with that, let's get started
+[01:56] with this.
+[01:59] So, here is our roadmap for the next 25 minutes. Um,
+[02:06] first we will stage the, um, um,
+[02:10] stage with what the current challenges are.
+[02:13] Uh, we have to understand the operational realities and the intense
+[02:17] human bottlenecks in in the modern contact centers
+[02:21] to understand why this engineering matters.
+[02:24] Uh, second, we will walk through the solution which is provided. I will break
+[02:29] down our high-level architecture into four key components,
+[02:34] um, detailing how we move from raw audio to
+[02:39] a structured JSON using advanced summarization workflows.
+[02:44] Thirdly, we will look at the key outcomes, specifically like how these
+[02:48] technical implementations they translate into hard ROI
+[02:52] and operational impacts. And finally, we will discuss the, um, roadmap ahead.
+[02:59] And being transparent about the current tech engineering constraints which we
+[03:03] face now and then and where we are taking this technology and the roadmap
+[03:09] ahead.
+[03:12] So, to engineer a great solution, we first need to deeply understand the
+[03:18] problem. So, let's look at the current state of the contact center operations.
+[03:26] So, contact centers, they are the frontlines of the customer experiences,
+[03:31] but structurally, they are breaking under the pressure.
+[03:36] If we look at the industry data, um, over 50% of the contact centers,
+[03:41] they identify uh, hiring, training, and productivity
+[03:46] as their most critical barriers. Why? Because the job is incredibly
+[03:52] difficult. When we analyze the reasons why the operators they leave for the
+[03:57] other professions, high stress is the number one factor as
+[04:02] part of it. Now, operators are expected to handle
+[04:06] complex customer emotions, navigate the, um,
+[04:11] multiple, uh, customer data platforms or the CRM systems involved into it, and
+[04:17] and also document everything perfectly. So,
+[04:21] if you think about this, this leads to a massive retention problem, right? Uh, we
+[04:26] are caught in a negative spiral um, where understaffing leads to higher
+[04:32] stress for the remaining operators, um, which leads to a high turnover and
+[04:39] uh, that ultimately implies to more understaffing, right?
+[04:44] So, to break this cycle, we just uh, cannot hire more people. We have to
+[04:51] fundamentally engineer the stress out of the workflow.
+[05:00] And the most glaring inefficiency in this workflow is something called, um,
+[05:06] after-call workflow or ACW, uh, which we are going to discuss as
+[05:11] part of this slide. Um, according to our baseline studies,
+[05:15] the average contact center call it typically
+[05:20] last about like 6.5 minutes. However, the average post-processing
+[05:26] time where the operator types up the notes, summarizes the call, and selects
+[05:30] the disposition codes, it it takes like almost 6.3 minutes. So, this is nearly
+[05:37] like 1:1 ratio we are talking about. Um,
+[05:41] and this also implies operators are spending almost as much time doing
+[05:46] administrative data entry as they are actually talking to the customers.
+[05:51] Um, furthermore, because the summarization relies on an individual
+[05:55] operator's memory and the writing skills, the data quality is highly
+[06:00] inconsistent. Um, our core engineering mission here
+[06:05] was clear, like use AI to target the after-call work which is ACW.
+[06:13] Um, if we can mechanize the summarization and the data extraction,
+[06:18] uh, theoretically, we can reduce the post-processing time, um,
+[06:24] almost by 50% or even more. And and this shifts the enterprise, you
+[06:29] know, focus from merely just handling the calls to actually, you know,
+[06:33] analyzing the voice of the customers for the business
+[06:37] growth which we are looking out every now and then.
+[06:43] So, how do we engineer that shift? Let's deep dive into the technical solution
+[06:49] and the architecture we built to solve this.
+[06:53] Um,
+[06:58] So, we designed a four-stage low latency pipeline to transform the conversational
+[07:04] audio into a structured business intelligence
+[07:08] um, with minimal human intervention. And it starts with voice capture, which is
+[07:14] tapping into the telephony system to extract raw, high-fidelity audio
+[07:20] streams. And that flows into our speech-to-text
+[07:25] engine, STT, uh, which is responsible for
+[07:28] high-accuracy transcription. Um, next is the brain of the system, the
+[07:33] generative AI core. This is where we do the heavy lifting of the intent
+[07:38] recognition and summarization. And finally, the customer data sync
+[07:43] layer which translates those AI insights into API calls to
+[07:48] update the, uh,
+[07:50] uh, customer data or CRM data automatically.
+[07:54] Uh, let's look at the engineering under the hood for each of these components in
+[07:59] detail.
+[08:04] So, the first component is the voice capture. In AI, um,
+[08:09] the typical rule is garbage in equals garbage out. So, if your audio intake is
+[08:15] flawed, the LLM will hallucinate later on. Um, we do real-time uh, audio
+[08:22] intake. So, applying noise filters to strip out the
+[08:26] uh, back office chatter or, um, you know, anything of those sort which
+[08:31] is creating an attenuation is important and normalize the audio
+[08:35] level is very very very important for us. Crucially, if we perform these
+[08:40] channel mapping, uh, we absolutely must spit split the, uh,
+[08:45] stereo audio to isolate the agent on one channel, say, on the very left, and the
+[08:52] customer on the other side, which is the very right, right? So, if if you mix
+[08:56] them into a single mono track, um, like kind of overlapping with each other, the
+[09:02] AI will struggle to figure out who said what and and
+[09:07] thereby, you know, ruining the entire downstream summary.
+[09:11] So, um, it's important that we have that channel
+[09:14] mapping intact and it separates which who is what and who is saying what,
+[09:19] right? Um, finally, we apply a security layer
+[09:23] because sometimes the audio streams can contain the credit card numbers or maybe
+[09:28] passwords or any anything which is personally identifiable information,
+[09:34] PII. So, we utilize buffer management and
+[09:38] early-stage PII masking technique uh, so that the sensitive data it never
+[09:45] hits the LLM memory banks whenever we are moving ahead in the channel.
+[09:53] Now, next, the audio it hits the, um speech-to-text engine for generative AI
+[10:01] or the LLMs to summarize the um data effectively or your response
+[10:06] effectively, we found that the speech-to-text, the STT
+[10:11] um accuracy must be above 90%. Uh we utilize advanced acoustic modeling to
+[10:19] map the um
+[10:22] phonemes and filter out any regional dialects. We then apply the language
+[10:29] logic utilizing like domain-specific dictionaries. Uh just for example, if
+[10:35] it's an insurance agent, the um speech-to-text engine STT needs to
+[10:41] know the difference between a term life and a term right. Both of them are very
+[10:46] close to each other, but still there should be a difference between them.
+[10:50] Uh finally, post-processing is also vital. Uh we use inverse text
+[10:56] normalization and auto punctuation. Uh for example, if if a customer says
+[11:01] $5,000, the speech-to-text um engine, it should must output that into numerical
+[11:08] fashion. And this numerical formatting, it it drastically improves the LLM's
+[11:13] ability to extract the entities in later point in time.
+[11:20] Now we reach the generative AI core. We are not just throwing a raw trask raw
+[11:27] tras transcript at LLM, but we are also asking it to summarize it. Like we use a
+[11:33] highly orchestrated approach in this case.
+[11:37] Um in our orchestration layer, we use specific prompt templates. Our
+[11:43] um setup showed that if if you just ask an LLM to summarize a call, it outputs a
+[11:50] messy narrative paragraph. So instead, we use few-shot libraries to instruct
+[11:57] the LLM to output separate bullet points.
+[12:01] Um one list for customer inquiry uh and a separate list for operator's action.
+[12:08] Uh then comes the reasoning layer. In the reasoning layer, we extract the
+[12:11] intent. We provide the LLM with a predefined list of customer
+[12:18] uh call reasons like uh cancellation or new application or
+[12:24] any kind of claim status and instruct it to classify the
+[12:28] transcript and output the reason why it chose that specific classification.
+[12:34] And finally, the trust layer where we apply the token optimization to keep the
+[12:40] um latency low and runs the uh automated hallucination checks to ensure the uh
+[12:48] generated summary is strict
+[12:51] um and it is grounded in the transcript.
+[12:58] Now the final technical hurdle is getting this beautiful data back into
+[13:03] hands of the business. Our API gateway acts as a schema mapper.
+[13:09] It takes the JSON output from the LLM uh and maps the field like customer
+[13:18] intent or resolution status and and directly to some corresponding fields in
+[13:24] the um based on the company CRM system or any
+[13:29] customer data which we have laid out via some REST APIs. So we don't remove the
+[13:34] human entirely in this. We use a verification step in between. Uh the
+[13:39] operator, it sees the AI-generated summary
+[13:43] auto-populated on their screen. Uh they do a quick visual field
+[13:47] validation, make some minor edits if necessary, and then just click the
+[13:52] confirm. Uh simultaneously, this structured data,
+[13:56] it flows into our business intelligence models
+[14:00] um aggregating the voice of the customer data for management dashboards and
+[14:07] automatically, you know, flagging the candidates for new FAQ
+[14:12] um data entries.
+[14:17] Now to tie the architecture together, this is the linear workflow logic of the
+[14:23] data pipeline. We take the raw transcript complete um
+[14:28] with the time indexing uh confidence is scoring and denoising.
+[14:33] We passes we pass it through these speaker separation because we split the
+[14:39] stereo channels um in the step one. Um we can easily stitch the dialogue
+[14:46] together logically. Like customer said X, agent said Y.
+[14:51] Uh then we move to the context deduct deduction where the LLM spots the
+[14:56] entities like account numbers um or product name or customer name run
+[15:03] the sentiment analysis and recognizes the intent. And the final state is the
+[15:08] structured output. So instead of a wall of text, uh the system, it outputs like
+[15:14] clear uh and a clean JSON schema matching some predefined uh customer
+[15:21] data or maybe CRM templates which we have in the enterprise and then
+[15:26] categorize neatly into bullet points. And and this strict formatting is what
+[15:31] turns an unstructured conversation into a database-ready asset.
+[15:40] So what happens when we deploy this architecture in a real contact center
+[15:44] environment? Let's look at the outcomes.
+[15:50] The operational impacts out of the implementation were quite immediate and
+[15:55] and highly measurable. Um look at the ACW time
+[16:01] under the manual operation, after average after-call work was 6.3 minutes.
+[16:08] Uh powered by our AI workflow, that dropped to like 3.1 minutes, which
+[16:15] is like almost 50% reduction in the processing time.
+[16:20] Um if you calculate that across 500 seats handling thousands of calls a day,
+[16:25] you are looking at a massive operational saving, the equivalent of almost
+[16:30] reclaiming dozens of full-time head counts purely from efficiency
+[16:34] standpoint. Um [snorts]
+[16:36] the next aspect is of data entry quality. It it moved from a highly
+[16:41] subjective and a variable to highly standardized and uniform output.
+[16:47] Uh the inquiry categorization or the call reason tagging, uh it moved from
+[16:53] being dependent on an operator mode or memory
+[16:59] um to um
+[17:01] being a strictly logic-based resulting in a highly consistent voice of the
+[17:06] customer data set for the management. And ultimately, by removing these
+[17:11] repetitive administrative burden of typing out notes, we reduce the
+[17:15] cognitive load on the operators, thereby stabilizing the operations and
+[17:20] directly combating the stress which is linked with the staff.
+[17:25] And and this ultimately reduced the turnover we identified
+[17:29] um at the very beginning of our discussion.
+[17:35] While the results were fantastic, the in the engineering work is never done um
+[17:42] and and let's talk about the constraints we face
+[17:46] uh and our roadmap for the future. Um
+[17:53] We are currently navigating three main constraints. First is the um
+[17:59] source to source to text accuracy, STT accuracy.
+[18:04] The entire generative AI summary, it relies on the transcript. So if the STT
+[18:09] engine uh fails to pick up heavy accents or poor
+[18:14] audio quality, the LLM has nothing to work with. So the STT optimization is a
+[18:20] continuous battle for us. Uh second is the initial setup cost.
+[18:25] While the long-term ROI is massive, the initial consumption of the API tokens,
+[18:31] especially running complex LLM reasonings on long 20-minute uh
+[18:37] transcripts can be costly. And uh especially during the initial
+[18:41] scaling phases, those are tough ones. And and we are constantly working on
+[18:46] token optimization techniques to bring this number down.
+[18:50] Uh the third is the security and compliance. Um handling PII uh per
+[18:57] any kind of sensitive information in audio streams is very complex. Um and
+[19:03] ensuring robust masking before the hit data hits the cloud endpoint is a strict
+[19:10] requirement. Um and uh because of this, we add some layers and
+[19:14] it ultimately reduces increases the latency and also
+[19:19] adds some overhead from architectural standpoint.
+[19:23] So we are still figuring it out how we can reduce those extra layers and make
+[19:27] it much more robust component-wise.
+[19:34] All right. So to address these constraints,
+[19:39] and and push the boundaries of what's possible, our roadmap is currently
+[19:44] broken down into three phases. Uh phase one, it focuses on explainable
+[19:50] AI. Um
+[19:52] we want to move beyond just summarizing calls to actually you know coaching the
+[19:57] operators. We are engineering the systems to
+[20:01] analyze the audio post call and provide operators with instant private feedback
+[20:08] on their either soft skills or empathy level or
+[20:13] any kind of accuracy from a information standpoint.
+[20:17] The phase two it targets the predictive staffing by taking the massive amount of
+[20:24] categorized intent data we are now capturing
+[20:28] we can feed the same exact data intent data into a
+[20:32] time series analytics. And this will allow the workforce
+[20:37] management to accurately forecast the call volume spikes based on those
+[20:42] specific topics and thereby optimizing the shift scheduling.
+[20:47] The phase three is perhaps the most important for human well-being combating
+[20:53] the customer harassment uh
+[20:57] contact center agents they mostly face an increasingly amount of verbal abuse.
+[21:03] And we are developing a low latency sentiment and acoustic
+[21:08] analysis that can detect when a customer becomes abusive.
+[21:14] Ultimately the system can you know uh trigger some
+[21:19] triggers I mean alerts or something which is important from notification
+[21:24] standpoint to supervisor or anyone who is there in the
+[21:28] from the management upper management standpoint or maybe seamlessly transfer
+[21:33] the call to an AI voice agent just to protect the human operator
+[21:38] mental health in case of these tough conversations.
+[21:47] All right. So uh by applying these rigorous
+[21:52] engineering techniques to the messy audio data we can definitely transform
+[21:59] the contact centers from uh
+[22:03] cost centers of like high stress into a highly efficient and intelligence
+[22:10] gathering engines that protect their workforces. That's the whole idea of
+[22:15] having this right. Thank you so much for your time and listening to me.
+[22:21] I have included my QR code which I will just flash in here uh
+[22:28] so that you can grab me over LinkedIn. And please feel free to connect if if
+[22:35] you would like to discuss the architecture or any prompt
+[22:39] engineering strategies related to the discussion which we had in here and
+[22:43] happy to connect and make things work things out between us and we can
+[22:49] have more conversations. So thank you so much for listening to me and have a good
+[22:54] one. Bye.

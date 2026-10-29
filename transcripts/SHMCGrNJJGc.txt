@@ -1,0 +1,1478 @@
+# title: How to Know If Your AI Agent Is Any Good: Evals With Phoenix & Claude — Laurie Voss, Arize AI
+# source: https://www.youtube.com/watch?v=SHMCGrNJJGc
+# speaker: Laurie Voss, Arize AI
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T02:45:39Z
+# sha256: 12a1260094449a88242e7148b61e84a32d07f4a2518e3559e161cbfe8efd837a
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:01] [music]
+[00:12] My name is Lauri Voss. I'm head of developer relations at Arise AI. Uh I
+[00:16] used to do JavaScript at npm, Inc. way back in the day, so you may remember me
+[00:20] from then. Uh but these days I think about AI applications and how to make
+[00:25] them run and how to make them actually work. Um, I had this slide up for the 15
+[00:30] minutes before. I hope you've seen it already. If not, now is the time to get
+[00:34] started. Um, this is a moderately hands-on
+[00:40] workshop. There's I've already built an agent for you. It's sitting there in
+[00:44] that repo. Uh, you will get to play with the prompts and run actual evals. Um,
+[00:49] but it's got checkpoints all the way through. So if you get lost, you can
+[00:53] just switch to the right checkpoint and uh uh jump to the part where it's
+[00:58] already working. Um you're going to need node 22 or later. All of this all of
+[01:03] these examples are going to be in Typescript. Um because you know it's me,
+[01:08] I'm going to use JavaScript if I can. Uh and uh you're going to be installing and
+[01:14] running Phoenix on your own laptop. uh on conference Wi-Fi that can be a
+[01:19] challenge, but I tried it this morning and it came through pretty quickly. So,
+[01:22] uh UVX is magic. Um you're not going to need to run any Python in this thing.
+[01:27] All of the Python is going to be run for you on your behalf by JavaScript, which
+[01:31] is nice. Um I think that's it for the setup. Um
+[01:36] so, what we're going to do today is um uh oh yeah, sorry, one more bit of
+[01:43] setup. Once Phoenix is installed, uh you should open up your browser on localhost
+[01:48] 606 so that you can see what it looks like. Um it's going to be empty right
+[01:54] now, but we are going to run the commands that will fill it with data.
+[01:58] Um you will also need an anthropic key. All
+[02:03] of my examples are using Claude. Uh you can do all of this stuff using any LLM
+[02:09] provider in the world, but I had to pick an example, so I picked the one that I
+[02:12] use every day. So, this one is using Claude. Um,
+[02:18] who needs help with the setup? Show of hands. Just shout at me. It's fine.
+[02:25] All right. So, the first 10. What's up?
+[02:31] >> Just getting started. >> Okay, great.
+[02:35] >> Yeah. So, the first 10 minutes are theory, which will give you some time to
+[02:38] catch up on the setup uh while I'm talking.
+[02:47] So, let's get started with the theory. Um, here's the situation I'm assuming
+[02:52] most of you are in. You have already built an application that has an LLM in
+[02:55] it. Uh, maybe a chatbot, maybe an agent. You tried it a bunch of times and it
+[02:59] looks pretty good. Uh, then you shipped it and somebody used it in a way that
+[03:03] you weren't expecting and it broke. Um, or you changed the prompt to fix one
+[03:09] thing. uh and you have this nagging feeling that you broke something else.
+[03:13] Uh and there's no way of knowing. That is the problem that today is about. That
+[03:17] is the problem that evals are here to solve. How do you know if your agent is
+[03:22] any good? How do you know if your change made things better or worse? Uh and how
+[03:27] do you stop it getting worse when you make changes uh without having to read
+[03:31] every output yourself?
+[03:36] My promise by the end of today is that you're going to have a working agent
+[03:40] traced end to end with code evals with LLM judge evals and with a custom eval
+[03:45] that you wrote yourself. Uh and you'll have checked whether your
+[03:49] judge can be trusted. You'll have run an experiment to prove that your changes
+[03:53] worked. Uh and you'll have have all of it running as a test suite with npm
+[03:58] tests so you can put it into npmci. Um, that is the bit that I'm most
+[04:04] excited about. So, it's going to be the last thing that we do. I see some people
+[04:07] have walked in late. So, let me just go back to the setup slide very quickly so
+[04:11] that they're not completely lost.
+[04:17] Right. Remember this repo because you're going to want this repo.
+[04:32] How is the Wi-Fi working for people? Is it Are you getting places?
+[04:36] >> Excellent. Okay. I did this at World's Fair and uh every and I accidentally had
+[04:42] a repo that was full of product images that looked really great in the demo,
+[04:46] but it was 400 megabytes of product images and it just complete failure.
+[04:50] Nobody was able to get even the repo down.
+[04:54] So, I've learned my lesson and today has no images. Uh,
+[04:59] so let's cover the basics. What is an eval? The shortest version, the one that
+[05:04] I use whenever I'm talking to somebody who's been an engineer for a while is
+[05:08] that uh there are these things called traces and they are basically logs and
+[05:13] there's these things called evals and they're basically tests and evals are
+[05:17] using are running tests on your traces. Um
+[05:22] the difference between an eval and a unit test is that uh evals are for
+[05:26] outputs that are never exactly the same twice, which is to say the
+[05:29] non-deterministic outputs that you get from LLMs.
+[05:32] Um traces record what your AI did at an incredible level of detail. So every
+[05:37] agent step, every tool call, every LLM call, the inputs and outputs at every
+[05:41] single step. A trace is made up of what we call
+[05:45] spans. Each span is one step in the execution. You can think of it as just a
+[05:49] line in the log. Um, and a so a whole agent turn is a span that has other
+[05:55] spans nested inside of it. Uh, and each one records its input, its output, how
+[05:59] long it took, how many tokens it used, uh, and sometimes how much it cost. So
+[06:04] traces tell you what happened and evals tell you whether it was any good and
+[06:08] that is the whole mental model for today. This is very far from being
+[06:12] rocket science. Looks good to me is not a test suite.
+[06:17] Um, but it's how most AI features get shipped. You build it, you try it a few
+[06:22] times, does it look right? Yeah, that looks good. You ship it. Uh, and it
+[06:27] probably does look good on the three things that you tried. Um, but three
+[06:31] tries is not a test suite. And the usual fix is unit tests. Um, but unit tests
+[06:37] don't work here because the same prompt is going to give a different answer text
+[06:40] every single time you run your application. Uh, so two completely
+[06:45] different answers can both be right. a thousand different answers can both can
+[06:48] all be right. Uh just differently right. So there's no expected string to assert
+[06:53] against. Uh so humans tend to fall back on human judgment. They look at the
+[06:58] strings being output and they're like well this looks fine. [snorts] Um but
+[07:02] that doesn't scale. It doesn't catch regressions and it certainly doesn't run
+[07:05] in CI where there are no humans to watch things.
+[07:09] Uh what that looks like in practice is you change your system prompts to fix
+[07:14] the tone and the tone gets better. Uh but now the bot is making up product
+[07:18] features. Uh and you don't find out until a customer does. Every prompt
+[07:22] change can affect every kind of input your users send. Uh and you can't test
+[07:26] all of those by hand. So you end up playing a game of whack-a-ole where you
+[07:29] fix one thing and something else breaks and you fix that and something else
+[07:32] breaks. uh evals fix that by giving you a number that you can track and can
+[07:38] compare and act on.
+[07:42] This matters more every month because uh every couple of weeks somebody releases
+[07:47] a new model and you're like, "Oh, I want to switch to the new model." Uh but you
+[07:51] have no way of knowing which things the new model is going to be better at uh
+[07:55] and which things the new model is going to be worse at unless you have a set of
+[07:58] evals that you can run things through. Uh, and that's exactly what we're going
+[08:02] to do today. We're going to start with uh Claude 4.5 and then we are going to
+[08:06] upgrade it to Claude uh Haiku 5.5 um uh which was conveniently released
+[08:14] like a week ago making this demo extremely easy to put together. I was
+[08:17] like I want to upgrade the model for this demo. So I'm going to make that the
+[08:21] demo. Uh so with eval you run the suite you can compare the numbers and by the
+[08:26] end of the afternoon you know uh whether you can upgrade your model.
+[08:31] Um and there are a few kinds of evals. The first kind is code evals. Code evals
+[08:35] are fast and free and a little bit brittle. They are very very similar to
+[08:40] unit tests. They are just ordinary functions where you basically assert a
+[08:46] string. There are a bunch of techniques you can use to make them more flexible
+[08:51] than a straight unit test that asserts a basic string. Uh but fundamentally
+[08:55] that's what they're doing. So the things that you can test with a Kodi valal are
+[08:59] stuff like did the output parse as JSON? Is it under 500 words? Did it mention
+[09:04] the thing that I asked about? The advantage of them is that they run in
+[09:07] milliseconds and they cost nothing to run. Um,
+[09:11] but there are lots of valid answers that a string match can't tell you about. Um,
+[09:17] and for that you need the second kind of eval which is the LLM is a judge eval.
+[09:22] Uh, which is what most people think about when they're thinking about evals.
+[09:26] In this one you use a second LLM to grade the output of the first LLM.
+[09:31] [snorts] Um, you grade it against what is called a rubric. There are a bunch of
+[09:35] terms in uh eval land that are borrowed from ML uh that I find obscure the
+[09:42] meaning of what's going on. One of them is traces and one of them is evals and
+[09:45] the other one is rubric. I'm like rubric just means rules. Why do we have a
+[09:49] special word for it? Anyway, uh L&M judges understand meaning not just
+[09:56] strings. So stuff like is this accurate? Does it stick to the source documents?
+[10:00] Is the tone right for a customer? Um, the catch is that because the LLM judge
+[10:06] isn't itself an LLM, it has all of the flaws that LLMs have. So, it can be
+[10:10] unpredictable. It is never the same twice. Uh, and it can make mistakes. Uh,
+[10:16] they also cost money because you're using an LLM. Uh, and they can be
+[10:21] confidently wrong. So, you have to check them. And that is one of the things that
+[10:24] we're going to do today. Then there's a third kind of eval uh, which is the
+[10:29] human eval. somebody who knows the domain, who can read the output and
+[10:34] grade it as an expert. Uh, humans are the gold standard for quality. Um,
+[10:39] they're also slow and expensive. Uh, and they get bored and start skimming. So,
+[10:45] uh, you want to use all three at the same time. These are not competing
+[10:49] approaches. They are complimentary approaches. And we're going to talk
+[10:52] about a little bit about how you use them in a complimentary way later.
+[10:56] So which eval do you use when? Use code when the answer is deterministic. So
+[11:03] things like formats and lengths and required fields and band phrases. Uh but
+[11:07] use an LLM judge when you need understanding. Is it accurate? Is it
+[11:11] grounded? Is it useful? Uh and use humans for the kinds of failures you
+[11:16] haven't seen before. Stuff that you haven't anticipated. And to check that
+[11:20] your LLM judges are judging correctly. Um, all of that applies to any LLM app,
+[11:26] but agents in particular make all of this stuff harder because agents are
+[11:30] more complicated. A single simp a single LLM call is relatively simple. You give
+[11:35] it an input, you get an output. Uh, but an agent tends to chain a whole bunch of
+[11:40] steps together. So, one of the things that can go wrong is very early on in
+[11:45] the chain, the agent makes a mistake and it cascades through all of the rest of
+[11:48] the steps in your agent and each one gets progressively more off the rails.
+[11:53] Um, and one of the biggest problems is being
+[11:58] confidently wrong. Confidently wrong is worse than obviously wrong. Uh, so I
+[12:02] talked about the cascading failure. Um, one example of that is say you've
+[12:08] written a financial analysis agent, which is the kind of agent that I'm
+[12:11] going to show you today. Um, and you ask it for a report on Tesla. It searches
+[12:16] for Tesla and instead of getting results about the car company, it gets results
+[12:19] about the 18th century inventor. It writes an beautiful, perfectly formatted
+[12:24] report about an 18th century inventor. Uh, and none of your checks fail because
+[12:30] you're like, it's well formatted. It's in a great tone. Everything is
+[12:34] grammatical. Uh, it's just about completely the wrong subject. Uh, and
+[12:40] that is the kind of failure that is uh um insidious with uh agents.
+[12:48] Agents can also fail in the opposite direction. Um, Anthropic uh, who make
+[12:53] Claude ran a benchmark called Ta2 bench which simulates customer service
+[12:57] conversations and they uh, gave it this task where the user asked to change
+[13:04] their flight. Uh, and the test according to the test the user was supposed to
+[13:09] fail the test uh, or rather the agent was supposed to fail because uh, the
+[13:14] person was in economy and you're not allowed to switch seats in economy. Uh
+[13:18] but what cloud found is that they can upgrade the person to first class.
+[13:23] You're allowed to change your seat in first class and then they downgraded
+[13:25] them back after changing their seat back down to economy. Uh and pass and like
+[13:31] did the thing that the user asked for and the test said no you failed because
+[13:34] you weren't supposed to be able to do that. Um but the agent had been smarter
+[13:40] than the rules that it was in. Um so you have to expect that uh when you are
+[13:45] building eval that sometimes the agent is going to come up with a solution to
+[13:48] the problem that you did not expect. So your tests have to be very flexible.
+[13:53] Um here's what an eval result generally looks like. Uh it comes with a score, it
+[13:59] comes with a label and it comes with an explanation. The score is a number
+[14:02] usually just zero or one. Uh and the label is just a word that the human can
+[14:07] read that matches what the score means. Uh so stuff like pass and fail,
+[14:11] actionable and not actionable. Uh and LLM judges add a third thing which is an
+[14:16] explanation of why you got the score you did, why you got the label you did. Um
+[14:22] and it is the most valuable part of an LLM judge. Uh because the explanation is
+[14:27] where the value is. It tells you what was wrong and what was missing and it
+[14:30] tells you a a lot of the time what to fix in your prompt to get this right. Uh
+[14:37] this is especially useful when you're running your evals at scale because you
+[14:40] can get, you know, 50, 100, a thousand explanations from your LLM and you can
+[14:45] get another LLM to read all of those explanations and be like, it looks like
+[14:48] there is a pattern in these explanations. It looks like we have a
+[14:51] systematic problem. And you can just feed them to your agent and your agent
+[14:54] goes, okay, I see 50 traces all doing the same all with the same explanation
+[14:58] of what went wrong. I can fix it. Um,
+[15:04] so this is the loop that we're going to be building today. We're going to trace
+[15:07] your agent. We're going to read what it did. We're going to write evals for what
+[15:10] matters. Uh, we're going to check that those eval can be trusted. Uh, then
+[15:14] we're going to change the agent and we're going to prove that the change
+[15:17] worked. Then we're going to lock that in so that it stays fixed by putting it
+[15:21] into CI. So, uh,
+[15:25] who still needs help getting set up? Who walked in late and needs set up? Show of
+[15:30] hands. Okay, let me head back to the setup screen and see if
+[15:35] you can get it.
+[15:46] Right, this is the magic URL.
+[15:50] If you haven't got this one, uh, all you have to do is read the readme and, uh,
+[15:55] run the instructions or just, you know, paste the readme into your agent and
+[15:58] your agent will read the instructions and get it all done for you. One of the
+[16:02] weird things about doing tutorials in 2026 is that we're just like, well, I
+[16:06] could show you how to do all of this stuff, or I could just tell you how to
+[16:09] tell your agent to do all of this stuff. Uh, and that's what we do a lot of the
+[16:14] time. All right, I'm now going to assume that
+[16:17] everybody has that URL. Cool.
+[16:31] So let's start with step one. Step one is tracing. Before you can evaluate
+[16:35] anything, you need to get the data to run the to run the evaluations on. And
+[16:39] that is what that is traces. Today we are going to be using Phoenix. I hope
+[16:44] that's not a surprise to anybody by now. Uh, Phoenix is ARIS's open-source AI
+[16:48] observability platform. Uh, it collects traces from your AI AI app with in
+[16:54] whatever framework you use to build it. It stores your evals next to those
+[16:57] traces. Uh, and it gives you a UI to dig through all of it. It also does data
+[17:01] sets and experiments, which we're going to be talking about today. Uh, and you
+[17:05] run it on your laptop. So, uh, you can keep it entirely private to yourself, or
+[17:11] you can run it on a server and share it with your team.
+[17:16] So now I'm going to dangerously see if I can actually Oh, that's so that is so
+[17:22] small. Let's make that bigger.
+[17:27] Okay, so what we're working in today is
+[17:30] Typescript. Uh you'll see a ton of examples in Python and Fenix has great
+[17:35] Python SDKs as well. Uh but I like JavaScript so we're going to use
+[17:38] TypeScript. Um the repo is a small set of uh scripts. Instrumentation.ts
+[17:45] sets up tracing. Agent.ts is the agent itself. Prompts.ts has the prompts. Uh
+[17:55] where are all of these things? There we go. Um
+[18:00] and you'll be editing the prompts in this folder. Uh sorry, in this file. Um
+[18:04] and the evals folder is where our evals go. Queries.json is our test data. Uh,
+[18:09] and hopefully every step today is just going to be one npm command. Uh, and
+[18:13] each one stands on its own. So if you fall behind, you can skip straight to
+[18:16] the next one. Uh, and use the seed data that I put in the repo uh, so that you
+[18:21] don't get left behind.
+[18:26] So what we're building today, or indeed what I've already built for you, is a
+[18:30] financial analyst. How it works is you give it a stock ticker and something to
+[18:34] focus on like Tesla vehicle deliveries. uh and it will go and it will search the
+[18:38] web for live data uh and write you a report about that. Uh there are whole
+[18:44] startups built on this idea of giving you you know financial analysis of
+[18:48] whether or not you should buy a stock. Uh but ours is deliberately simple
+[18:52] because I needed something that would make mistakes so that we could fix the
+[18:56] mistakes. Um
+[19:00] today is not about how to build an agent. I've just built the agent for
+[19:03] you. I assume you've already got an agent running somewhere and your what
+[19:06] you want is help on making it reliable. Um, our agent works in two turns. It has
+[19:12] a research turn where it searches the web and then it has a writing a report
+[19:16] writing turn where it takes the research and it writes the report about it. Um,
+[19:22] I'm I've built it using the claude agent SDK. If you haven't used it, that is
+[19:26] anthropics framework for agents. Uh it is the same engine that runs underneath
+[19:30] cla code which is going to become relevant later especially if you're
+[19:33] using claude code to work with it uh because the two versions of cloud code
+[19:37] tend to try to cooperate with each other and that makes them cheat the eval which
+[19:41] is not very helpful. Um uh it gives you tool use web search uh
+[19:47] and conversations that carry on across turns. There are also lots of other
+[19:50] options that we are compatible with. The Versel AI SDK, Mastra, Langchain,
+[19:55] OpenAI's agent SDK. Uh, Phoenix has adapters and instrumentation for every
+[20:01] possible framework that you can think of and every LLM provider that you can
+[20:05] possibly think of. Wherever you have built your agent in, Phoenix will work
+[20:08] with it and the instrumentation will happen automatically. Uh, but I had to
+[20:12] pick one for a demo, so I picked this one. Um, [snorts] tracing takes about
+[20:17] five lines. Um, first we're going to call register uh from the Phoenix hotel
+[20:22] package that sets up tracing and points it at Phoenix. One of the good things uh
+[20:27] about the industry is that everybody has pretty much picked uh the same uh
+[20:33] instrumentation standard. uh everything is built on open telemetry in the
+[20:37] industry and on top of open telemetry there is a standard called open
+[20:40] inference uh which arise takes care of um and everybody has already built the
+[20:46] instrumentation into their frameworks that is why we are compatible with all
+[20:49] of those frameworks all you have to do is use this registered command to say
+[20:53] hey that instrumentation that you've already built into your framework turn
+[20:58] it on and point it over here in this case you're just going to point it at
+[21:01] your laptop uh and That's all you have to do. Every
+[21:06] agent call that our agent makes is now going to be traced. Um,
+[21:11] oh, I said that already. Uh, so the good thing about this is that we don't have
+[21:15] to write a log line for every single call. We don't have to write a trace for
+[21:18] every single thing our agent does. It's just going to do it automatically.
+[21:22] Sometimes we will want to add additional information and the framework absolutely
+[21:25] supports that. Um, uh, but we don't have to do it for every single thing. Um
+[21:31] there's one gotcha in the TypeScript version that you should know about uh
+[21:36] which is that manually you should use manually instrument which will hand you
+[21:40] back a copy of the instrument uh and you should use the copy of the instrument uh
+[21:45] because the cloud agent SDK is an ES module uh and ES module exports are
+[21:51] readon. So the instrumentation can't do the thing like it can do in Python where
+[21:55] it swaps out your instrument and just changes everything. you have to use the
+[21:58] copy that it gives you which has that instrument swapped out. Um
+[22:05] it won't break it just won't log anything if you don't use the copy that
+[22:08] it gives you. Uh so everywhere in this repo we import claude agent SDK from our
+[22:13] instrumentation file never straight from the package.
+[22:17] Uh now if you open agent.ts you'll see our agents options. Uh we're going to
+[22:22] start using Claude Haiku F 4.5 uh because it is fast, it is cheap, and it
+[22:27] is sort of usefully dumb. Um it makes uh mistakes that are nice and predictable
+[22:33] even with a relatively simple agent. Um unlike the frontier models which will
+[22:39] still definitely make mistakes, but you have to have quite a complicated agent
+[22:42] and quite a complicated set of tasks. Uh and it makes it harder for the demo. Um
+[22:48] if you've not used it before then uh allowed tools is giving it web search so
+[22:53] it can find the current financial data. Uh and the permission mode don't ask
+[22:58] means that it's [snorts] uh going to not be interactive. It's not going to pause
+[23:01] and ask you questions uh because there's nobody there to say yes. Um that option
+[23:08] is going to become relevant uh to a failure mode later. [snorts] Um, and the
+[23:12] other three options, like I mentioned, they keep the your laptop out of the
+[23:16] agent. The cloud agent SDK, uh, runs the same engine as cloud code. Uh, so if
+[23:21] you're doing this in cloud code, it tends to pick up the options that you
+[23:24] and the tools and the skills that you've given to your copy of Claude code
+[23:28] instead of its copy of Cloud Code. Uh, which tends to make things extremely
+[23:32] non-deterministic in an unhelpful way. Uh so I've uh thrown in a couple lines
+[23:38] of code there that make sure that the cloud uh the cloud SDK is running in its
+[23:42] own isolated version of uh the cloud SDK and not uh stealing your copies of of
+[23:49] you know keys and things from your data. Um
+[23:55] [sighs]
+[23:57] right uh none of that is Phoenix specific by the way. Uh that is just a
+[24:02] danger of using the cloud SDK at the same time as you're using cloud code. Um
+[24:08] in this SDK one turn is one query call. So you give it a prompt. Uh it streams
+[24:13] back messages as the agent works. It thinks it calls a tool. It reads the
+[24:17] result. Uh it maybe calls another tool and when it's finished you get a result
+[24:22] message with the final text and a session ID. The session ID is how we
+[24:26] carry on the conversation. If we pass it back in as resume, the next turn
+[24:30] remembers everything that the last turn saw. Uh so that's how we can do the
+[24:34] research and then say, hey, write a report on this research because it knows
+[24:39] that it's in the same session. Uh and it can find the research that the previous
+[24:42] turn just created. Then we put the two turns together. Uh
+[24:47] so we get the two turns in one trace. Um first the research turn, then the
+[24:51] writing turn, resuming the research turn session so the writer can see everything
+[24:55] the researcher found. Um, and then we wrap the whole thing in trace agent. Um,
+[25:00] the reason we do that, uh, is because it gives us one parent span that
+[25:05] encompasses all of the data. If we didn't do that, we would get two, uh,
+[25:10] two, uh, sibling spans in our Phoenix. Um, which would be fine, but slightly
+[25:16] harder to read. Uh, so I'm just, uh, shaping the data now to make our lives
+[25:21] easier later.
+[25:24] Now, if you open up prompts.ts, ts. You'll see that uh there are a bunch of
+[25:27] prompts in there. They are deliberately bad. Um there's one line of research
+[25:32] instructions, one line of writing instructions. Uh and I did that on
+[25:36] purpose because it gives us lots to improve later. Um if you're coding
+[25:40] along, now is the time to start playing with things. Feel free to change them.
+[25:43] Add stuff like make no mistakes or I will tip you $100.
+[25:47] Um allegedly those help. Uh what I want is everyone in the room to
+[25:53] end up with a slightly different agent uh so that we get different experiences
+[25:58] uh which will make comparing notes more interesting.
+[26:02] So now if you've followed along and you've installed everything and
+[26:07] everything is going fine uh you should be able to run it. You should run npm
+[26:11] run agent dash uh Tesla and then growth outlook in quotes. Um,
+[26:20] you can do it on Tesla, you can do it on some other company if you like. Uh, it
+[26:24] will take a minute or two because it really does have to actually search the
+[26:26] web and you're on conference Wi-Fi. Um, and the model will do a few rounds of
+[26:31] reasoning. Um, what's happening here while that's
+[26:36] running for you uh is the agent gets the research prompt. It decides that it
+[26:41] needs to search uh which is a tool call. It reads the results uh decides whether
+[26:45] it has enough results or whether it needs to search again. And that is the
+[26:50] thing that makes it an agent. We haven't specified how many times it needs to
+[26:53] search the web. We haven't specified what it needs to search the web for. The
+[26:56] agent is making those decisions by itself. Uh so all of our agents are
+[27:01] going to make slightly different decisions about those things. They're
+[27:04] going to use slightly different search terms. Uh they're probably going to
+[27:07] search a different number of times. Um, and then once it's done, the writing
+[27:13] turn starts and it turns all of that into a report. So the path the agent
+[27:17] takes is nondeterministic by by design. Um, both reports might be fine if you
+[27:24] run it a if you run it twice. Um, or one might be great and one might be wrong
+[27:29] and you can't but you can't predict that uh output from the input. Uh, which is
+[27:34] why you need evals. Um, who's got an actual report yet? Anybody?
+[27:43] >> Still running. [snorts] >> Okay,
+[27:48] we've got time. Let me be brave. And actually try running it myself.
+[27:56] One of the problems that we're going to see that the agent runs into is that we
+[27:59] told it to write a report, but we didn't tell it where to write a report. And so
+[28:03] it assumes that it should be uh writing the report to a file. There we go. So
+[28:09] you can see mine. I need permission to write the financial report file. Would
+[28:12] you like me to display the report here? This is completely unhelpful. The agent
+[28:16] does not understand that it is running in a no permissions environment and that
+[28:20] I wanted the report actually output to the command line. Uh and that is because
+[28:25] my prompt is ambiguous. Um but sometimes it doesn't do that. Sometimes it does
+[28:30] just figure it out and give you the report. Uh, so that is the
+[28:33] nondeterminism that we're talking about. So let's see what Phoenix captured from
+[28:38] all of this.
+[28:41] Here is my Phoenix 101. There is my financial report. This is what a trace
+[28:47] looks like. So you can see the financial report agent running and you can see the
+[28:53] two invocations of the claude agent. One is the this is the research report. You
+[28:58] can see tool searches inside of it to find out whether what it's got available
+[29:03] to it. You can then see it finds that it's got a web search tool. So it
+[29:07] conducts three different web searches. You can see the inputs and the outputs.
+[29:11] Uh what the exact query is, what output it got from each tool call. Uh and then
+[29:16] you can see uh that it messed up in this case. uh it tried to write it it wrote a
+[29:22] report and then it tried to write it to a file path on my computer and said that
+[29:26] it couldn't work. Um
+[29:31] so uh
+[29:34] the important thing here is that we didn't have to add any logging to our
+[29:37] agent. The important thing here is that all of this showed up all of this very
+[29:40] useful information about what's going on without us doing anything. We didn't say
+[29:44] hey your tools need to be instrumented. We didn't say hey your web searches need
+[29:47] to be instrumented. All of that just happens as part of the cloud agent SDK
+[29:50] because it's already instrumented for us. Uh and you can click into any span
+[29:55] in Phoenix and you can see an enormous amount of data about what's going on. Um
+[30:04] uh and the reason that all of this
+[30:06] happened, the reason that it's trying to write to disk and then failing is
+[30:09] because we gave it that don't ask setting. We told it you're going to be
+[30:12] running unattended. Uh don't ask me any questions. it ran without asking any
+[30:17] questions and then it messed up. Um, but you wouldn't know that if you hadn't
+[30:22] been able to look at the trace, right? You just would have got a mysterious
+[30:25] output where it says something was wrong. The traces are where you can see
+[30:30] that the tool call is failing. The traces are where you can see it's trying
+[30:33] to do something that it's not been given permission to do. Um, and that is the
+[30:39] kind of stuff that lives in a span. Uh, so the span kind tells you what type of
+[30:44] step it is. So it's an agent tool, an agent, a tool call, an LLM and so on.
+[30:48] Um, and in a tool call and a web search and
+[30:53] things like that, you can see that our input is in fact JSON. Um,
+[30:58] and that's going to make our first eval uh because it gives us some structured
+[31:03] data. Um, you also get things like timing and token counts. Um, and uh,
+[31:11] often your agent will record what it costs.
+[31:14] Um, when we write eval in a bit, these are
+[31:18] the fields that we're going to pull out and grade.
+[31:26] So, uh, you've run one, you've won one, you've run one test so far. Uh, that is
+[31:34] not enough data to draw any conclusions from. So what I want you to do now is
+[31:37] run npm run batch uh which will run 15 queries in a row. Uh that will take a
+[31:43] little while. So I'm going to talk while you're doing that. Um it runs five at a
+[31:48] time. It takes three or four minutes optimistically on Wi-Fi. Um so start it
+[31:53] now. [snorts] Um if it fails for whatever reason, don't worry about it.
+[31:57] The seed project that you loaded earlier uh contains is called Phoenix 101
+[32:02] golden. Uh, and it has my 16 runs that I did earlier on reliable Wi-Fi on it. So,
+[32:08] you can use those instead if you can't get your batch to run.
+[32:13] Um, here are some examples of the queries.
+[32:18] Uh, there are obvious ones like Apple, Nvidia, and Amazon. And then there are
+[32:22] some edge cases that I put in there to make things fall over. Uh, so one asks
+[32:26] it to compare Apple and Microsoft, which is harder than just company covering one
+[32:30] company. Uh, one is about Rivian. uh which is not a public company. So
+[32:34] there's much less data out there than it does about uh public companies. Um
+[32:39] Coca-Cola is a very different type of company from a tech company. Uh and ZZQ
+[32:43] isn't a real ticker at all. I just made it up. Um and that is to see what the
+[32:48] agent does when it sees a ticker symbol that it doesn't recognize. Does it, you
+[32:51] know, invent a company? Does it guess what company you mean or does it say
+[32:56] what I'm hoping it says, which is that ticker doesn't exist? Um, one of them is
+[33:00] uh about Tesla, but the focus is yo is it a buy right now? Uh, because that is
+[33:06] how real people send queries to agents. They do it in slang. Uh, and they don't
+[33:11] often specify exactly what it is that they wanted. Um,
+[33:15] so these are all, you know, realish looking queries. Um,
+[33:23] and what you have to do is, like I said, you have to write down what good means
+[33:28] before you measure it. You can't say that your agent doesn't work if you
+[33:31] haven't specified what working means. So, for our analyst, uh, what does a
+[33:37] good report look like? Um, it should use real current data. It should probably be
+[33:42] about the right company. It should stick to what it actually found. Uh, and for
+[33:47] my purposes, I want it to tell us what we should do. I want it to say buy or
+[33:53] hold or sell this stock. I don't just want it to give me analysis.
+[33:57] Um, those sorts of requirements sound
+[34:00] obvious once you've written them down, but before that, they could just be
+[34:04] vague or different people on your team could have different ideas about what a
+[34:08] good financial an analyst agent would do.
+[34:10] >> [snorts] >> Uh so writing them down turns vague
+[34:13] disappointment into specific things that you can test and we are going to turn
+[34:17] every single one of those requirements into an eval today.
+[34:21] Defining good is not solely uh an engineering job. If you are defining
+[34:27] good for your product, you have to talk to the non-technical stakeholders in
+[34:32] your organization because they are the domain experts who are going to know
+[34:36] what good looks like. You as an engineer are going to have specific guesses about
+[34:41] what uh guesses and biases uh about what makes uh a good agent and what makes
+[34:46] good output and you are not always going to agree with the domain experts. So uh
+[34:52] the customerf facing people need to be in the room when you define what your
+[34:56] agent looks like. Uh it's also great uh if you don't have
+[35:02] users that you can make some up. uh you can get an LLM to generate lots of test
+[35:07] queries and vary them on purpose. So research Tesla's financial performance
+[35:12] is one way to ask what's going on with Tesla stock is another and yo is Tesla
+[35:17] by right now is a third. Um then you can get a human to look at the list because
+[35:22] LLM generated queries they are a useful way of seeding your initial data. They
+[35:26] are not perfect u mostly because they are relatively conservative. They don't
+[35:32] go as far a field as human users tend to actually go. Human users are like, you
+[35:37] know, tell me what's wrong with, you know, my child's health instead of
+[35:42] asking you for a financial analyst and you your agent has to have something to
+[35:45] do with that. Um, but synthetic data is a great way to get started once you've
+[35:50] got started and you have real users with real traffic. Real traffic is uh the
+[35:55] gold standard for testing an agent. you want to get it incorporated into your
+[35:59] data set as fast as you possibly can. Um,
+[36:04] one aside before we look at the data that I'm hope hoping is arriving in your
+[36:07] laptops right now. Um, I walked through tracing by hand because you should
+[36:11] understand what it's doing, but you can, like I said, you can also get your
+[36:14] coding agent to do all of this. Um, Phoenix has a really good CLI. Uh, and
+[36:19] if you run it setup command in your project, it will give your coding agent
+[36:23] um, it will get your coding agent to add tracing to your app. uh and it will work
+[36:28] until your your app uh has tracing installed and you don't have to figure
+[36:33] out how to add the register command and all of that stuff. It will work in every
+[36:36] language. Uh it's really neat. So step two is reading your data. Who
+[36:43] has any data at this point? Show hands. One person. Anybody else? Oh yeah. Cool.
+[36:49] All right. Several people. Fantastic. Uh
+[36:55] you have to read your traces before you write a single eval. Um reading a dozen
+[36:59] or more of them end to end. Uh what was the input? What was the output? Um what
+[37:04] specifically is wrong? This sounds manual and old-fashioned, but it's an
+[37:09] incredibly high value high value thing that you can do. Um, when you're
+[37:14] building an agent, uh, you have to manually inspect what is going on so
+[37:20] that you can find things that you the unknown unknowns that you weren't
+[37:23] expecting. Uh, Anthropics team regularly sits down and reads eval transcripts by
+[37:29] hand uh, and have built a bunch of tooling internally to make that easy to
+[37:34] do. [snorts] Um, if you automate before you understand how your agent fails,
+[37:38] you're going to end up measuring what's easy to measure instead of what actually
+[37:42] matters. Um, so you should read traces and we're
+[37:46] about to do that. But reading traces doesn't scale. Reading 16 traces
+[37:51] yourself is absolutely fine. Uh, but 1600 traces uh is going to give you a
+[37:56] bunch of really great data and it's also going to take a week out of your life.
+[38:00] Um, but it turns out that coding agents are
+[38:04] aces at reading traces. Uh, so you can point your coding agent at your traces
+[38:08] and get them to look for things that are weird in your traces. Get them to code
+[38:12] stuff up. [snorts] Uh, but they're not always going to find
+[38:16] what you expected. So manual inspection as a sampling technique always a really
+[38:20] great idea.
+[38:24] So, um, if you are using if you're getting the,
+[38:31] uh, agent to do stuff for you, you want to install the Phoenix plugin or the
+[38:35] Phoenix skill depending on which coding agent you're use you use. It was the
+[38:38] last step in the setup readme if you've still got that. Uh, so you may have it
+[38:43] already. Um, for cloud code, we have a plugin which is two commands. Uh, there
+[38:47] are also plugins for cursor and codeex. Uh, and for any other coding agent,
+[38:51] there is a skill file. Um, the plug-in connects your coding agent to your
+[38:56] Phoenix. Uh, and it already points at localhost 606, so there's nothing to
+[39:00] configure. Um, and Phoenix itself will hand your agent a skill called the
+[39:04] Phoenix error analysis skill with instructions on how to do error analysis
+[39:08] properly. Um, it should take about 10 seconds to
+[39:13] install. Uh, and I'm not going to hang around
+[39:17] waiting for you to install it. Um,
+[39:22] now open your coding agent and ask it to do the error analysis.
+[39:26] Uh, if you've got it. Who's got who's got
+[39:31] the skill installed from previously? Fantastic. I'm going to pick on you
+[39:35] again. Can you have you asked your coding agent to do things?
+[39:39] >> Okay, great. Um, the prompt is on the slide. Tell it where Phoenix is. Tell it
+[39:44] to read the traces. Come up with categories of failures. uh count them up
+[39:48] and write each category back onto its trace in Phoenix as an annotation. An
+[39:52] annotation is just a human readable string of text attached to a trace. Uh
+[39:59] they are a way of adding additional information to traces so that either
+[40:04] yourself or your agent can figure out what was going on. Um your your plug-in
+[40:09] is going to ask permission to use Phoenix's tools. So you should say yes.
+[40:12] Uh when I ran it, it took about 9 minutes. Uh, so I'm not going to pick on
+[40:17] you quite yet. Um,
+[40:22] uh, also if it asks to write notes into the repo, uh, that's fine. Just let it
+[40:27] write stuff to disk. Now, let's look at Phoenix again.
+[40:35] Um, I'm going to very dangerously
+[40:43] try and remember my syntax for search.
+[41:00] Ha. Okay, so these are all of my runs uh that are the financial reports. Uh we
+[41:07] can click into individual ones of them. Let's see if we can find the interesting
+[41:11] ones. Uh ZZQ, what was my output for ZZQ?
+[41:18] ZZZQ does not appear to be a valid or active financial ticker symbol. Hooray.
+[41:21] The agent did the thing that we were expecting it to do. Um
+[41:26] how about uh Coca-Cola?
+[41:31] First, it starts with the apology. It's running in restricted mode and it cannot
+[41:34] write files directly. We're going to have to fix that definitely. Uh then it
+[41:38] comes to a conclusion. Coca-Cola represents a high quality, lowrisk
+[41:42] dividend investment. Um KO is an excellent long-term income vehicle for
+[41:47] riskaverse investors. This one's going to be fun. Show of hands. Who thinks
+[41:52] that this is an actionable report?
+[41:57] [laughter] Okay, I primed you already. Uh it does
+[42:00] not say buy, sell, or hold. So it just says that it's a good investment. That
+[42:04] doesn't say what you should do. Uh I'm going to make my standard of
+[42:09] actionability for these reports that it should tell me whether I should buy,
+[42:12] sell, or hold the stock. I'm not going to leave it to be ambiguous. Um
+[42:19] a whole bunch of them do different things in this set. Uh
+[42:23] you can see this one had the same problem. It tried to write to disk and
+[42:26] it was and it was and it failed. Um, uh, the Rivian trace, I made a note that
+[42:34] Rivian was interesting.
+[42:39] There it is.
+[42:44] Uh, it's full of emojis for some reason. Um, it opens by asking, "Would you like
+[42:50] to Yes. Would you like to create the report
+[42:53] file?" We saw that earlier when I ran it live. Uh, it's asking me to do things
+[42:57] and it can't ask. I told it I told it it's not allowed to and it's asking to
+[43:01] do things anyway. Um,
+[43:07] all of these things are uh different ways of failing. Lots of these are
+[43:11] failures. Lots of these are sort of okay. Um,
+[43:17] but then uh there's Tesla. Tesla is particularly fascinating. Uh
+[43:27] specifically the yo is Tesla a buy right now one.
+[43:36] So in this one uh it says that the analyst consensus is a
+[43:42] buy. Uh it says 50% say buy, 52.6% 6% say hold and 13.1% say sell, which adds
+[43:51] up to 116% of analysts saying things. And it did not catch that its math was
+[43:57] completely wrong. What it did was it did two different web searches. One where it
+[44:01] found 50% of people saying something, another one where it found 13% of people
+[44:05] saying something. It took those two web searches and it munched them together
+[44:09] even though they were not from the same data set and it came up with 116%. But
+[44:14] it confidently wrote down that 116% of analysts say something. This is exactly
+[44:20] the kind of agentic failure that you see. Uh it is confidently wrong having
+[44:25] done uh bad math. Um if you go into these web searches, you
+[44:31] can see the specific places where it got the data and how it uh put those things
+[44:36] together. Um so when you find a failure, you have to
+[44:42] ask why it failed. the answer was wrong is a symptom. It's not a cause. Um
+[44:48] with the traces you can see what the actual answer was. Did it get bad search
+[44:51] results? That would be a retrieval failure. That is not what happened here.
+[44:54] This each search result was fine. Uh did it have the right data but the wrong
+[44:59] conclusion? Then that is a reasoning error. That is uh definitely what
+[45:03] happened here. Right? It saw two different bits of data and it did not
+[45:07] reason correctly about them. Um sometimes it will make numbers up
+[45:11] completely. that is a hallucination. Uh and sometimes it will answer a question
+[45:15] that isn't the question you asked. So a scope problem. Each cause has a
+[45:19] different fix. Uh but if you don't know the cause, you don't know the fix. Which
+[45:23] is why reading traces is useful. Um
+[45:28] there's a really great way to do this which is
+[45:33] let's switch back to slides. Uh you should write notes first and categories
+[45:38] second. So look through all of your traces and just write down in human
+[45:41] language what you see happening. So this is bad because it does this. This is
+[45:45] good because it does that. Uh that is called open coding. Uh another term
+[45:51] borrowed from ML. You're just saying uh what you saw. Once you've done that uh
+[45:57] you can then do what is called axial coding where you look through all of the
+[46:00] notes you've written to yourself and you group them into categories. It is very
+[46:04] very tempting as an engineer to g try and guess in advance what the categories
+[46:09] are going to be and come up with categories and just put things in
+[46:12] categories from the get-go uh because that is less work but you will do worse
+[46:17] at it because you will not know in advance what your failure nodes are
+[46:20] going to be. Uh so the categories you're going to pick are going to be either too
+[46:24] narrow or too broad or just not what not the kind of stuff that actually went
+[46:28] wrong. [snorts] Um,
+[46:33] while we're talking about this, I talked about how you stack up uh
+[46:39] um Kod valves and LLM judgy valves and
+[46:43] human evals. Uh this is uh a model barred from the security world called
+[46:49] the Swiss cheese model. Um every layer of defense that you have is
+[46:55] going to have holes in it. your your every eval you have is going to have a
+[46:59] blind spot. What you want to do is uh stack as many eval as you can on top of
+[47:05] each other such that it is very hard for an error to get all the way through all
+[47:09] of them. Um because they've all got holes but the
+[47:14] holes are not in the same place. So if you can uh if you have enough evals, if
+[47:20] you have enough different types of check going on, they will stack up on top of
+[47:24] each other and be much more reliable. Um so code evals can catch formatting
+[47:30] problems, but they will miss problems with meaning. LM judges will catch
+[47:33] reasoning gaps, but they will miss some subtle hallucinations. Humans will often
+[47:37] catch the subtle stuff, but they can't look at every single trace. So no single
+[47:41] method uh is going to catch everything. Um, so today we're building several
+[47:46] small evals, not one giant super eval, which is also another failure mode. When
+[47:51] people first get into evals, they're like, I'm going to think of every
+[47:54] possible thing that can go wrong and I'm going to cram it into one big LLM as a
+[47:57] judge, and it's going to find everything. And that is uh a very
+[48:02] unreliable and very complicated way of not solving the problem.
+[48:08] So, whoops.
+[48:14] Uh
+[48:21] so the agent may call uh the agent is going to do a whole bunch
+[48:26] of stuff. This is what the agent output looks like. I showed you already in
+[48:29] Phoenix. Um we've I've already showed you uh the
+[48:34] various things that uh it came up with. Um,
+[48:41] in this case, uh, my coding agent looked through all of my traces for me. It came
+[48:47] up with, uh, both, uh, open coding and aial coding, uh, and it came up with a
+[48:54] category, uh, called harness leakage. Uh, harness leakage is what it decided
+[49:00] to call that thing where it's constantly asking us to give it permission to do
+[49:04] things that it doesn't have permission to do. Um,
+[49:09] so, uh, that's a ton of that's a ton of times
+[49:14] for that specific thing to happen. [snorts] Um, there are also a bunch it
+[49:18] also found a bunch of other things. It found hallucination. It found uh,
+[49:21] reasoning errors like the Tesla one where it had too many it added up
+[49:25] percentages. Um if you're doing if you've run this data yourself and you've
+[49:30] come up with your coding agent has uh produced its own analysis, you're going
+[49:35] to get a different analysis and a different set of uh labels. Uh because
+[49:40] all of our agents are different. Who has got their coding agent to complete an
+[49:43] analysis yet? Anybody still running? >> All right. Well, we'll keep going.
+[49:50] Hopefully, you'll get some, but if not, you can just use my seed data.
+[49:56] Uh once you've got data, you can count the categories. The most common failure
+[50:00] is going to be where you look first, but the most common failure is not
+[50:04] necessarily the first thing that you're going to fix. What you want to do is
+[50:07] address uh frequency and severity. So if uh you know 40% of the time it
+[50:15] hallucinates, that's a problem. If 1% of the time it gives your user instructions
+[50:20] on how to build a bomb, you fix that immediately even though it happens only
+[50:23] 1% of the time because that's absolutely not what a financial analyst is supposed
+[50:26] to be doing. Uh so you multiply frequency by severity to get your
+[50:31] priority. All right, so hopefully your agents will
+[50:35] catch up to where we are, but I'm going to keep going. Step three is Kodi
+[50:39] valves. Kodi valves are the simple ones. There's no model, there's no API call,
+[50:43] there's just TypeScript. Uh the simplest useful eval that I could
+[50:48] think of was does the report actually mention the stock that we asked about.
+[50:52] Our agent is supposed to analyze a specific company. If it's doing that, it
+[50:56] should mention the ticker symbol of the company that it is analyzing. Uh if I
+[51:00] ask about Tesla and it writes about Microsoft, which is a thing that it
+[51:03] really did on at least one occasion, um that is a completely useless report. So
+[51:08] either the ticker report, the ticker is in the report or it isn't. and using an
+[51:12] LLM to check that would be complete overkill.
+[51:15] Uh so to run that check, the first thing
+[51:19] that we need to do do is get our data out of Phoenix so that we can run the
+[51:23] analysis. This is how that is done. Um we ask for spans for our project and
+[51:28] parent ID null means that only spans that have no parent. Um so those are the
+[51:33] top level spans. So the ones that I was showing you in my traces. Um, the repo
+[51:39] runs this in a little helper called get agent runs, which hands back each run
+[51:42] span ID, its input, and its output, plus the research turns output, uh, which
+[51:46] we're going to need later. Uh, and then this is the ticker check.
+[51:52] Um, create evaluator comes from the Phoenix
+[51:55] evals package. You can just give it an ordinary function. You don't have to
+[51:58] build an evaluator function yourself. Uh, all you have to do is tell it that
+[52:02] this is a code eval so that no LLM is involved. The function gets the input
+[52:06] and the output. It uh splits out the tickers we asked about. Uh it checks
+[52:11] that each one appears in the report. Uh and it returns a label and a score. And
+[52:15] if something's missing, it also it also says which ticker. So the failure
+[52:19] explains itself. Um the structured inputs that I talked
+[52:24] about earlier, how we the input being sent uh to our tool was JSON, that is
+[52:29] helping us out here because it's making it really easy to write this Kodi val
+[52:32] because it's already JSON. So we already know uh which thing is the ticker and
+[52:37] which thing is the uh description of the uh report that it should be writing.
+[52:42] [snorts] Um so if you can get uh your inputs to be structured data that's
+[52:48] going to make your evals really easy to work with. But if not you're going to
+[52:51] have to get another LLM involved to read your input figure out what the input was
+[52:55] and then pass it to your eval. Uh then we run it and we log the results
+[53:01] back to Phoenix. So the script runs the evaluator on every agent run and then it
+[53:05] calls log span annotations which attaches each result to its span. Um
+[53:10] that's going to be the same pattern for every single eval we run today. You get
+[53:13] the runs uh you evaluate them and then you log the results back to Phoenix. Uh
+[53:19] so uh the command here is npm run eval
+[53:24] code. Let me see if I can get that to work.
+[53:39] All right, it worked and it ran almost instantly because it's Kod valves. They
+[53:43] don't have to wait for an LLM to do anything. They just go [snorts]
+[53:46] uh and it has reported 15 fastes and two failures. One is Tesla is missing Tesla
+[53:52] and one is Amazon is missing Amazon. Uh so uh
+[54:00] this is the dumbest possible check that we could have made. Did the LLM actually
+[54:03] write a report about the thing that we asked it about? Write a report about and
+[54:07] it has already found some errors. It has found cases uh where it wrote about the
+[54:12] wrong thing. I know for instance that the am the problem with Amazon is uh
+[54:17] that it asked it about AWS profitability and the agent got focused on AWS and
+[54:23] wrote a report that was only about AWS and what AWS was doing uh and not about
+[54:28] what Amazon, you know, the shopping company does. Um so this is a test worth
+[54:35] doing and it cost you absolutely nothing to run. So Kod valves aren't toys. So,
+[54:41] did the output parses JSON? Is it under the length limit? Does it avoid phrases
+[54:45] you never want to see like as an AI language model? Um, and it doesn't have
+[54:50] to be a string check. Kodval just means that the grading is deterministic. So,
+[54:55] uh, your Kodval can be querying your database to make sure that the state is
+[54:58] correct. It can make sure that the tool calls did what the tool calls were
+[55:02] supposed to do. uh it can call an API and double check that the stock price uh
+[55:07] that the agent thinks is happening is really the stock price. Um anything that
+[55:12] gives the same answer for the same input every time can become a Kodi val. So
+[55:16] your Kodi valves can be quite advanced. Um but one thing you should be wary of
+[55:21] is grading the outcome and not the path. Uh there's a tempting mistake here um to
+[55:27] check that the agent took particular steps. Did it call the search tool first
+[55:31] and then this other tool? Uh, Anthropic advises that this is too rigid an
+[55:36] approach. Uh, like we saw earlier, the agent can be creative. It can do things
+[55:41] in an unexpected way. You don't want to assume that it's always going to do
+[55:46] exactly what you would have done. Uh, so you don't want to grade the path that it
+[55:50] took. You want to grade whether or not the outcome was good.
+[55:55] um our ticket check doesn't care how care how the agent found its data right
+[55:59] it just cares that the right company is in the report and that is the right
+[56:03] level for a lot of evals we will talk later about trajectory level evals where
+[56:07] we do actually want to grade the path but that is a very different uh kettle
+[56:11] of fish so that brings us to step four the LLM
+[56:16] as a judge uh and we're going to start with Phoenix's builtin evals
+[56:22] Um code can't check whether code can check
+[56:26] whether the ticker is in the report but it can't tell you if the analysis is any
+[56:29] good. Uh are the numbers accurate? Is the report report complete? Is the
+[56:33] recommendation well reasoned? These are questions about the meaning of the
+[56:37] report not the textual content of the report. And for those you need uh
+[56:41] something that has judgment. Uh an LLM judge has three parts. It has a judge
+[56:46] model which is the LM that is doing the judging. Uh it has a rubric which is the
+[56:50] prompt that tells it what good looks like. And then it has the data which is
+[56:53] the examples that it's grading. Phoenix keeps those three separate so you can
+[56:57] mix and match. You can try the same rules with different models. You can try
+[57:00] the same judge with different rules. Uh the good news for you is that Phoenix
+[57:06] ships a bunch of built-in evals. So you don't always have to write your own
+[57:10] evals, at least not right off the bat. Uh there's correctness which checks if
+[57:14] the answer is accurate. Uh there's faithfulness which checks if it sticks
+[57:18] to the source material. Uh we're going to see the difference between those two
+[57:21] in a second. Uh there's completeness, hallucination, refusal, PII, and
+[57:26] toxicity. Lots of things that lots of agents need to check are built in. Uh
+[57:32] and for agents, there are evals for tool use. Did it pick the right tool? Did it
+[57:35] pass the right arguments? Um did it do something sensible with with the result?
+[57:41] Uh these eval are not magical. They are just uh prompts that we've already
+[57:48] written and battle tested and made sure work for you.
+[57:52] Uh so let's find the judge model. Um
+[58:00] uh Phoenix evals in Typescript uh use the Versel AI SDK to talk to models. So
+[58:06] any model that the AI SDK supports can be a judge. Uh in this case I'm using
+[58:12] Claude Sonnet 5.5. Um, the agent runs on Haiku. Like I said, it's cheap and fast.
+[58:18] Our judge is running on Sonnet because you want your judge to be more capable
+[58:21] than the agent itself was. So, give it Sonnet or give it Opus. Uh, or give it
+[58:27] uh even better um give it a model from uh a different provider entirely. If
+[58:33] you've got an OpenAI key, get OpenAI to judge the work of Claude. Uh because
+[58:37] Claude has what is known as uh same model bias. So Claude tends to like the
+[58:42] output of other versions of Claude uh more than it does the output of uh of
+[58:47] OpenAI or some other provider. Um
+[58:52] the last line here uh in case you're wondering is suppressing tracing on the
+[58:57] judge because we turned on tracing across the board. The judge is itself a
+[59:01] copy of Claude. Uh so by default and in fact in my test data you will see that I
+[59:08] forgot to turn on uh uh telemetry suppression. So my traces are full of
+[59:13] the the judge running itself and and seeing all of the traces from the judge
+[59:18] which you don't need. Um
+[59:23] so every evaluator in this repo gets it gets this telemetry setting uh so that
+[59:28] the judge stays out of uh our agent. Um let's start with correctness. Uh which
+[59:35] is the obvious first choice. Is the uh is this report correct? Um that is one
+[59:40] import and one line of setup. You don't have to do anything. You just say hey
+[59:44] I'm running the correctness evaluator. Run it on my stuff and let's see how it
+[59:48] goes. Uh then you call evaluate and you get back a label, a score, and an
+[59:53] explanation. And the script runs it on every agent run and logs the results
+[59:56] back to Phoenix. Uh the same way we did the ticker check. Uh,
+[1:00:02] I should be able to run that as well.
+[1:00:12] That's going to take a little while because it has to actually do some LLM
+[1:00:15] stuff. Uh, if it works, it works. If it doesn't, I
+[1:00:20] have stuff already built in.
+[1:00:26] So you can see uh in my annotations column you can see the results of
+[1:00:31] various evaluations I've already run. In this case it's showing you the uh
+[1:00:35] actionability one but you can see uh correctness, faithfulness, human
+[1:00:39] actionable uh and mention sticker. We're going to talk about what all of those
+[1:00:43] are. But first you're going to see correctness. Uh correctness on all of
+[1:00:48] these is zero. Uh,
+[1:00:54] all 16 reports have been judged as incorrect. And the reason that they've
+[1:00:58] been judged as incorrect is because Claude judges correctness by what it
+[1:01:03] knows. That's the only thing that it has available to it. And Claude's knowledge
+[1:01:08] cut off uh at the moment is in something like January. So uh my agent is talking
+[1:01:14] about stock prices in October and Claude is freaking out and going, "You're
+[1:01:18] talking about stuff that's in the future. That's obviously a
+[1:01:20] hallucination. This report cannot possibly possibly correct. So our
+[1:01:24] built-in check for correctness fails every single report for that reason. Um
+[1:01:30] which is not terribly useful. Um so the eval is half wrong and half
+[1:01:37] right. Seven of in my data, seven of the 16 explanations complain that the judge
+[1:01:41] can't verify fresh data. Uh which is the eval definitely being wrong. Um, but
+[1:01:46] lots of them also point out something real. Things like the numbers don't add
+[1:01:50] up or dates that contradict each other. Um, so a score of zero is telling us
+[1:01:55] nothing here. It's telling us across the board that this that this eval is
+[1:01:58] probably not the right choice of eval. Um, what we want is a question that the
+[1:02:04] judge uh can actually answer. So uh
+[1:02:13] oh, I told you that already. All right. uh what we're going to use instead is
+[1:02:16] faithfulness. Faithfulness is asking a much better question. It's saying given
+[1:02:20] the data that you had, did your did your report make sense? Did is the answer
+[1:02:26] based in the data that we were given? This works much better because it can
+[1:02:29] work with data this exactly the same data that the agent was given and see if
+[1:02:33] it gets a report that makes sense. Uh so that's a question the judge can actually
+[1:02:39] answer. Uh and the context is already in the trace. Every web search is its own
+[1:02:44] span like we saw. Um, every research turns output is the agent's own notes on
+[1:02:49] what it found. So my first version, my first eval uh only gave the judge uh the
+[1:02:55] research notes and then I read the explanations and the judge was flagging
+[1:02:58] numbers as made up uh because my version of the eval hadn't told it that oh I I
+[1:03:03] searched the web and actually found this data. Uh so uh in the version you see
+[1:03:08] we've given it the full context. um our get agent runs helper is going to pull
+[1:03:14] both uh the raw search results and the notes so that it can see uh what the
+[1:03:22] research agent found and how it found that data.
+[1:03:27] Uh so like I said faithfulness takes three things. It takes the input which
+[1:03:30] is what the user asked. It takes the output which is the report and it takes
+[1:03:33] the context which is the search results and the notes that I was just talking
+[1:03:36] about. [snorts] Uh and you run it using the same pattern
+[1:03:40] as before. You create the evaluator, you evaluate every run, you log the results.
+[1:03:44] Um, like I said, it's slower than
+[1:03:47] correctness uh because the judge is reading every search. Uh, who has got
+[1:03:53] any results out of their uh eval so far? Again, you've got a faster Wi-Fi
+[1:04:00] connection than everybody else. Anybody else?
+[1:04:04] Cool. Um,
+[1:04:08] so let's look in Phoenix at my faithfulness reports. Um,
+[1:04:16] I got a lot of zeros on faithfulness, but not all of them.
+[1:04:22] Um, let's read the Microsoft explanation.
+[1:04:26] That was the one that I read that was most interesting.
+[1:04:30] Uh, as you can see, next to each one, you get the explanation. Um, so in this
+[1:04:35] one, the response adds several claims that the context does not support. Azure
+[1:04:39] is the number two cloud provider. The backlog gives three years of visibility
+[1:04:43] and there are implied FY202 targets. Uh, it is telling me what it doesn't like
+[1:04:52] about uh this thing. It does it's telling me why it thinks this thing is
+[1:04:56] unfaithful. Um, it's complaining that uh some of the
+[1:05:04] 2027 targets are fabricated because they're not in any search results. Uh,
+[1:05:09] the Nvidia one is also interesting if I can find that one.
+[1:05:20] Right. In this one, it says the response conflates two different data points.
+[1:05:23] This is a reasoning error that the agent that the judge has uh accurately found.
+[1:05:28] Um it says the context information this is
+[1:05:33] fabricated. These are much more useful results. We've got uh 14 out of 16 uh
+[1:05:39] reports marked as unfaithful here, but the explanations are way more useful. Uh
+[1:05:44] and it's actually doing the thing that we wanted it to do. Um
+[1:05:50] so for agents, you can also grade the tool calls. Uh so we saw the web search
+[1:05:54] spans inside each trace. Phoenix has built-in evals for all of those as well.
+[1:05:59] Tool selection asks did the agent pick the right tool uh or search when it
+[1:06:04] didn't need to. Tool invocation asks did it pass sensible arguments to those
+[1:06:08] tools like a search query that's actually about the company. And tool
+[1:06:12] response handling asks did it do something sensible uh with the result of
+[1:06:16] that call. Uh these are the decisions that can make
+[1:06:19] a break make or break an agent. Um, and they all happen before the report
+[1:06:24] actually gets read. Uh, and we already know our agent makes strange tool
+[1:06:28] choices sometimes, like it tries to save the report to a file. Uh, so we can see
+[1:06:33] if our built-in eval catches that. Uh, I'm not going to run this one, but you
+[1:06:38] can run that one. Um, tool selection takes three things. What the agent was
+[1:06:43] asked, which tools it could have used, and which ones it picked. Uh and the
+[1:06:46] script goes through every agent turn and every trace research and writing
+[1:06:49] separately and collects the tool spans underneath each one. Um the trace
+[1:06:54] records which tools the agent called but not which ones it could have called. So
+[1:06:58] we have to write that list ourselves uh in tool selection.ts.
+[1:07:03] Uh then it is uh the same pattern as every other run. Uh so npm run eval
+[1:07:10] tools uh and then you're done. Uh that one should take about 15 seconds.
+[1:07:17] So, let's look in Phoenix at tool selection.
+[1:07:38] Tool selection. It's helping me out.
+[1:07:44] All right. So, these are ones where it has decided that my tool selection was
+[1:07:48] incorrect for whatever reason. Uh, the user asked for a concise report based on
+[1:07:53] prior research. Writing it to a file with write is plausible and appropriate
+[1:07:57] since write exists and is safe. Uh, however, the LLM made a second redundant
+[1:08:02] bash call. Awesome. Uh, yeah, it sure did. Um,
+[1:08:09] the judge failed six that tried twice. It passed seven. Six of the seven that
+[1:08:14] tried once. Uh uh overall 13 of my 16 writing turns
+[1:08:19] tried to save a file. Um
+[1:08:25] and only one of these explanations said that the user never asked for a file to
+[1:08:30] be saved. So uh is this judge incorrect? Is the judge uh accurately judging that
+[1:08:37] the tool call was correct? Um, our writing prompt said, "Write a concise
+[1:08:43] financial report based on your research above." Our prompt is genuinely
+[1:08:47] ambiguous here. We said, "Write, we didn't say where to write it to. We
+[1:08:51] didn't say what to write it for. Uh, we didn't say who the audience was going to
+[1:08:54] be." So, the tool selection knows that and is looking at the input and is
+[1:08:57] going, "Well, it seems a reasonable thing for the agent to try and write to
+[1:09:01] disk here." Uh so again what you're telling the agent to do and what you're
+[1:09:08] telling the eval to do interact with each other. Uh you can't necessarily
+[1:09:13] trust that the tool call invocation is going to be right because in this case
+[1:09:17] the tool call is citing the tool call eval is siding with the agent. It's like
+[1:09:21] no the the agent is right. The agent gave us instructions uh the agent
+[1:09:26] received instructions and did its best is basically the eval's position. Uh,
+[1:09:34] eval results live in the trace as well. Um,
+[1:09:39] so if you're looking at the traces in Phoenix, uh, you can see them here
+[1:09:44] attached to which trace they got, which span in the trace they got attached to.
+[1:09:48] So you see actionability and correctness got attached to the root. Uh, whereas
+[1:09:52] tool selection is getting attached to the specific uh, turn that made that
+[1:09:57] tool call. Um, you can filter your traces by any
+[1:10:01] eval. Uh, you can sort by score to find your worst runs. You can click straight
+[1:10:05] from a failing score into the step that caused it. Uh, from score to from score
+[1:10:09] to cause in one click. Uh, so all of that is the built-in eval.
+[1:10:15] Um, and the lesson here is that choosing the
+[1:10:19] right eval beats tuning it. Choosing correctness was entirely the wrong eval.
+[1:10:23] It didn't tell us anything. It just told us a bunch of stuff was wrong. tool
+[1:10:26] selection did tell us something uh and faithfulness told us quite a lot. Um
+[1:10:33] so checking the right eval beats tuning it uh and knowing which question you're
+[1:10:37] actually asking is really the core of getting this right
+[1:10:42] which brings us to step five which is writing your own judge. This is where
+[1:10:45] the eval get specific to your application.
+[1:10:49] Uh, and again, this is when people are thinking about evals, this is what most
+[1:10:53] people are thinking about, but I wanted to make sure that you got the basics in
+[1:10:56] first. You don't have to jump straight to writing a custom rubric. You can
+[1:11:00] write code evals to get a bunch of stuff out of the way. You can write uh you can
+[1:11:04] use built-in eval to do a bunch of obvious stuff without having to invent
+[1:11:08] your own tool calling correctness uh uh evaluator.
+[1:11:13] Um, what I wanted my report to do was give
+[1:11:18] me a buy, sell, or hold recommendation. There is no built-in eval that checks
+[1:11:22] for that because that would be a very specific thing indeed. So, we're going
+[1:11:25] to write our own. Uh, every eval prompt I've seen that works well has five
+[1:11:30] different parts and we're going to go through them one at a time. The first
+[1:11:34] part is you give the judge a role and context. Uh, a thing you'll see all the
+[1:11:40] time is you are an expert blah blah blah blah blah. That does actually work.
+[1:11:45] That's why everybody puts it in there. Like it helps a little bit to tell the
+[1:11:48] to tell the agent what it is. Uh, telling it it's an expert as opposed to
+[1:11:53] just telling it that it is running up something else also seems to make a
+[1:11:57] difference when they do sideby-side comparisons. Um, it's just one of the
+[1:12:02] weird things about LLMs. You need to tell it it's really smart and it gets
+[1:12:04] like confident and tries. Um uh but what really matters is the
+[1:12:10] context. Um this is a financial report. Uh we are expecting a report that that
+[1:12:17] analyzes financial data and tells us real things. Um
+[1:12:21] and specifically what we care about is whether or not you could act on it. So
+[1:12:26] uh that gives us the explicit criteria that we include in our rubric. Um so
+[1:12:32] this is where a lot of people don't put in enough effort. So don't write a good
+[1:12:36] response is helpful and accurate because uh a judge doesn't know what helpful and
+[1:12:40] it doesn't know what accurate means in this context. Um a judge can't make a
+[1:12:45] yes or no decision from that. Write down exactly what makes a report actionable.
+[1:12:50] Uh so it makes a specific recommendation. It names concrete risks
+[1:12:54] and it looks forward not just back. Those are things that a judge can look
+[1:12:57] at and actually check. Uh, and note that we're not just making
+[1:13:03] up these things blind. Um, your criteria come from your error analysis. Uh, only
+[1:13:10] summarizes data with no interpretation is a problem that we saw when we were
+[1:13:13] reading our traces. We are putting that in there because it's a problem that we
+[1:13:16] are trying to avoid. Um, that is the whole point of reading the data first.
+[1:13:21] Specific criteria give you consistent judgments and you get specific criteria
+[1:13:26] by knowing in advance what the data is going to look like because you read it
+[1:13:29] yourself. Part three of a good rubric is to mark
+[1:13:34] the data clearly. Wrap each piece of data in its own XML tag. Claude was
+[1:13:38] trained on billions and billions of XML tags and it's really good at working
+[1:13:41] with them. Um, if you look into the code at our own
+[1:13:46] rubrics, that's what we're doing. uh our own prompts [snorts] uh wrap everything
+[1:13:50] in XML tags. Um and the double curly braces are template variables that
+[1:13:55] Phoenix fills in uh with each span's input and outputs. Uh the reason you do
+[1:14:01] this is because you want clear boundaries between what is the input,
+[1:14:04] what is the output, and what is your instructions. Uh this helps against
+[1:14:07] prompt injection, but it also helps uh the agent just getting confused. uh in
+[1:14:12] particular it helps you get con uh if you include examples which we're going
+[1:14:16] to see mark the example as an example and not the data otherwise it will get
+[1:14:21] very confused about that um I love to include labeled examples but it is in
+[1:14:26] fact a controversial proc uh a controversial practice uh in the eval
+[1:14:32] world um criteria tell the judge what you mean in
+[1:14:37] the abstract but examples show it exactly what you mean as a human, I find
+[1:14:42] it much easier to do something when somebody has shown me an example of how
+[1:14:45] it's supposed to work than if they've just given me a list of instructions of
+[1:14:49] how to work. Uh, and, uh, a lot of LLMs feel that way as well, apparently. Um,
+[1:14:57] so when you test your rubric, uh, which we're going to do in the next step, uh,
+[1:15:02] test it with examples and without examples and see which one does better.
+[1:15:07] Uh, because sometimes, uh, examples are going to help it do a better job. And
+[1:15:11] sometimes, uh, an example will make it overfit. It will look at your examples
+[1:15:17] and say, well, it doesn't look exactly like my example. Or it will try and make
+[1:15:19] every output look like your output example. Uh, which is less helpful.
+[1:15:24] Um, I ran exactly that test on mine. Uh, so in the rubric that I used, um, this
+[1:15:32] was fascinating in a really nerdy way, which is why I included it. Uh, I threw
+[1:15:36] out my examples and with the examples, the judge agreed with me, uh, 15, 15,
+[1:15:41] and 15 times out of 16 in three different runs. Uh, and if I threw out
+[1:15:46] the examples, it agreed with me 16 times twice, all 16 examples, and 15 times
+[1:15:52] once. Uh and so I was like I was very curious as to how throwing out the
+[1:15:56] examples made it better. Uh and the specific problem that it was having is
+[1:16:01] that in one of the reports it did not include
+[1:16:06] um uh it did not include a list of risks.
+[1:16:10] So as a human I read the report and it was like Microsoft is a buy and it
+[1:16:15] didn't include any risks and I was like that's fine. It's still actionable. It
+[1:16:18] included a buy. Uh so I marked it as uh an actionable report. Uh but my examples
+[1:16:25] said you must include risks. And so the agent uh the LLM judge was looking at
+[1:16:31] the rules and and looking at the examples and saying there must be risks
+[1:16:34] in here. So this is not actionable because there's no risks. So that's
+[1:16:39] genuinely an open question as to whether or not my human judgment was better or
+[1:16:43] worse than the judges. The judge was being very strict and I was being loosey
+[1:16:48] goosey when I as a human gave myself golden data.
+[1:16:51] >> Sorry, can I ask a question? >> Sure.
+[1:16:53] >> So what's your hypothesis then as to without the examples
+[1:16:58] it agreed with you so it saw that Microsoft as being actionable?
+[1:17:03] >> Yeah. >> Is that is that your hypothesis then
+[1:17:05] that like simply because you didn't say risk was a necessary element it felt
+[1:17:10] that that was a good actionable? I mean, it's not a hypothesis like the LLM judge
+[1:17:15] comes with an explanation. So, it says >> So, it said that that was actionable,
+[1:17:19] >> right? >> Yeah. So, like I said, in this case,
+[1:17:25] it's genuinely unclear whether or not I was doing the right thing or the judge
+[1:17:29] was doing the right thing. The judge decided to interpret the the rubric very
+[1:17:33] strictly and I when I was marking these things as human actionable or not, uh
+[1:17:38] was not being as strict. Um,
+[1:17:44] here's an example of an actionable one. Uh, it has specific numbers. It has
+[1:17:48] revenue growth. Uh, it has valuation compared to its sector. It names a
+[1:17:52] concrete risk. And it ends with a recommendation you could actually
+[1:17:54] follow, including when you'd change your mind. Um, and this is what a not
+[1:17:59] actionable one looks like. It isn't wrong. Everything in it is is true. It's
+[1:18:03] just not very useless. Investors should consider various faction uh factors is
+[1:18:08] not a recommendation. Um, now that the judge has seen both, the hope is that
+[1:18:13] it's more consistent on reports that fall somewhere in between. Uh, and
+[1:18:17] whether it actually is, you find out by testing.
+[1:18:20] Uh, part five of putting together a rubric is you constrain the answer. You
+[1:18:24] ask it for things that are actionable or not actionable. A thing you used to have
+[1:18:29] to do is you used to have to say output a string and the string must be the word
+[1:18:32] actionable or not actionable. Uh, you don't have to do that anymore. what uh
+[1:18:38] modern evaluators use tool calls uh to put their output. So those uh the
+[1:18:44] choices available for that tool call are defined in the tool call and not in your
+[1:18:49] rubric. Uh which makes them a lot more reliable.
+[1:18:54] So now it is your turn to write the rubric. Uh open evalactionability.ts.
+[1:19:00] Uh it has my rubric in it with all five parts. Um and you can make it yours. You
+[1:19:05] can change the criteria. You can change the examples. Uh
+[1:19:09] what would make you act on one of these reports? What did you see in your own
+[1:19:13] traces? Write that down and that should become your rubric. Um it will take
+[1:19:18] three or four minutes to run. Who has managed to stay up with me so far? Like
+[1:19:22] who is at this point? Excellent. I have multiple hands. Uh like I said, the last
+[1:19:29] time I did this workshop, everyone was completely lost because the 200 megabyte
+[1:19:34] repo. So the fact that anyone's got it this is just great for me. Um
+[1:19:40] this is how you wire it up. You create a classification evaluator which does all
+[1:19:43] the plumbing. Uh you give it a name, you give it the model. Uh you give it your
+[1:19:49] template. Uh and like I said uh out of band you give it its out its options. So
+[1:19:54] you give it its choices which are actionable with a score of one and not
+[1:19:58] actionable with a score of zero. Um,
+[1:20:03] so let's look at actionability in Phoenix. [snorts]
+[1:20:22] It's so cold in here that my fingers have gone all numb and I can't type
+[1:20:25] properly.
+[1:20:28] Okay.
+[1:20:36] So, the report analyzes JPM's rate exposure and loan growth uh and a
+[1:20:40] forward-looking output, but makes no buy, hold, sell recommendations.
+[1:20:44] Fantastic. It's doing exactly what it's supposed to do. Uh it is complaining
+[1:20:48] about uh the lack of recommendation of concrete recommendations. Um
+[1:21:00] before we look at all of these recommendations, we should look at the
+[1:21:02] split in the recommendations. Uh in my data, five of 16 reports were actionable
+[1:21:08] and 11 were counted as not actionable. Uh and that is one of the most useful
+[1:21:14] types of evals you can get. An eval where everything is perfect is not
+[1:21:18] particularly helpful. An EVA where everything is wrong is also equally
+[1:21:22] unhelpful. An EVA where you've got an even split that is a hill that you can
+[1:21:26] climb. You've suddenly got uh some you've got a def a set of examples where
+[1:21:31] things are actually working, a set of things where uh stuff isn't working and
+[1:21:35] you can start figuring out the differences between them. Um
+[1:21:43] so if you click through these traces, I'm not going to bother clicking through
+[1:21:46] all these traces. In Rivian it says it never makes a buy, hold, sell
+[1:21:49] recommendation or any equivalent next step. For Nvidia, it said the closing
+[1:21:54] investment thesis risk level is moderate, is vague rating, not guidance.
+[1:21:58] And uh for Meta, the verdict is the is only that the position is solid. So this
+[1:22:04] is the same problem over and over. It is refusing to give concrete buy, sell,
+[1:22:08] hold recommendations. Um,
+[1:22:14] if we uh we can open the Phoenix prompt
+[1:22:18] template. I'm not going to do it now. Um, but uh there's one more rule for
+[1:22:25] rubrics, which is that you should treat eval prompts as code. Your eval prompts
+[1:22:29] going into your into your custom eval are extremely sensitive to small changes
+[1:22:34] in wording. Um, so, uh, one example of that I ran into
+[1:22:41] while making this was, uh, I told you that you should put XML tags around
+[1:22:45] stuff. I forgot to put XML tags around my examples to begin with. Uh, and with
+[1:22:51] my examples as plain text, uh, I got a string of not actionable stuff, uh,
+[1:22:56] because it was getting confused about what the data was and what my examples
+[1:23:00] were. And when I wrapped them in XML tags, everything suddenly became
+[1:23:04] actionable because it could tell what I was talking about. Um,
+[1:23:09] this is there was no other change. I'd given it the same data, the same
+[1:23:13] instructions, the same input and the same output every time. Uh, it just got
+[1:23:17] less confused in the evaluator as to what was happening. Uh, so you have to
+[1:23:23] treat your evals as code. You should version them, you should check them, and
+[1:23:26] you should test them. Um, as I mentioned earlier, uh, there is
+[1:23:33] a trap to fall into with evaluators, which is to try and write write one
+[1:23:36] evaluator that does everything for you. It is called the god evaluator because
+[1:23:40] it is such a a common pattern. Uh, you try and get it to check accuracy, tone,
+[1:23:45] completeness, formatting, policy all in a single prompt. Uh, and it is a
+[1:23:49] nightmare because if it fails, what thing failed? Was it inaccurate? Was the
+[1:23:53] the tone wrong? Was the faithfulness wrong? which of the many many many
+[1:23:56] things that you've told this god evaluator to evaluate is it actually
+[1:24:00] wrong and you try and solve that by giving it 15 labels that it can spit out
+[1:24:05] uh and the whole thing becomes very hard to track. Uh the best practice is to
+[1:24:10] split this up split your evaluators into as many dimensions as you are testing.
+[1:24:15] So one for faithfulness, one for correctness, one for actionability.
+[1:24:19] Um, and you should also know which one of
+[1:24:22] your evals is a guardrail and which one is a north star. So, a guardrail is
+[1:24:26] something that should block the release. So, if the agent is making up a stock
+[1:24:30] price, that should halt shipping. Uh, but north stars are things that you're
+[1:24:36] aiming for. So, suggests other stocks worth a look would be nice to have. That
+[1:24:40] would be a good thing to include. Your eval can look for that, but it doesn't
+[1:24:43] have to gate shipping on that. Which brings us to step six, which is
+[1:24:49] testing your tests. We've built a judge and it says that some of our reports
+[1:24:52] aren't actionable. Uh but can we trust the judge? How do we know that the judge
+[1:24:57] is right? Uh the trick to remember is that your judge is a classifier in the
+[1:25:02] classic ML sense. Uh it is looking at a report and it is predicting a label as
+[1:25:07] actionable or not actionable. Predictions uh can be right or wrong. So
+[1:25:12] like any classifier, you measure it by comparing its predictions with the
+[1:25:15] truth. Uh, and here the truth is what a human expert would say. You get to judge
+[1:25:20] uh you get to mark the judge's homework. Uh,
+[1:25:24] in this case, the human expert is going to be me. I'm going to be deciding
+[1:25:27] whether or not stocks are buy, sell, or hold. Uh, not necessarily the expert
+[1:25:33] that you want. Uh, but we're doing our best. It's just a demo. Um, how you do
+[1:25:39] this is very simple. You open up a trace.
+[1:25:44] uh you click the little pencil button and you can add annotations. So I have
+[1:25:50] created an annotation in advance called human actionable uh and I can set it to
+[1:25:55] actionable or not actionable and I can very quickly
+[1:26:00] uh click through all of my traces and set that on each one which I've done in
+[1:26:04] advance. Uh this is where you would get uh a domain expert involved. You would
+[1:26:09] throw them at Phoenix. You'd say here are 10 traces, here are 20 traces.
+[1:26:13] there's 50 traces. Go through and read the output and give me give me your
+[1:26:17] golden data set about whether or not these things are good. Um,
+[1:26:24] [snorts] I sat down and labeled all 16 of my
+[1:26:27] reports properly against the same criteria that I gave the judge. Uh, and
+[1:26:30] those are sitting in your seed project so that you don't have to do that
+[1:26:33] because that would take you a long time. Um, what you're building when you do
+[1:26:37] this, like I said, is called a golden data set. Uh it's examples where to the
+[1:26:42] best of human knowledge you know that the answers are right. Um it is a lot of
+[1:26:47] work so you should make that work count. So you should give yourself the same
+[1:26:52] specific criteria that you gave the judge. That was the error that we were
+[1:26:56] talking about earlier. Uh where I was not exactly reading the rules that I had
+[1:27:01] put into my eval criteria. Right? I was disobeying one of my own rules. my rule
+[1:27:06] said uh must include risks and I said that this report is fine even though it
+[1:27:11] doesn't include risks. Uh and as a result me and the judge disagreed and I
+[1:27:15] feel like the judge was actually more correct than I was. It was being
+[1:27:18] stricter. Um so uh your enemy here is fatigue. Uh if you give yourself a
+[1:27:27] hundred traces to judge by trace 50, you're going to be really bored of
+[1:27:31] judging traces and you're going to get lazier about it. Uh so it is better to
+[1:27:36] have 50 really well-labeled uh examples than a hundred where you
+[1:27:41] were just clicking through and saying ah this looks fine. Uh the the higher the
+[1:27:46] quality the data in your golden data set uh the more reliable everything is going
+[1:27:50] to be. Um
+[1:27:53] and one of the best things that you can do is that uh is continuously add to
+[1:27:57] your golden data set. when you see a tricky example, when you see something
+[1:28:00] strange happen in production, figure out what the answer should have been and put
+[1:28:03] it into your golden data set. Uh, a few good rules for human go for a
+[1:28:08] good golden data set is that you should write test tasks a human could pass. Uh,
+[1:28:13] if your agent fails a task every single time, that is almost always going to be
+[1:28:17] a broken task, not a broken agent. Um, and for each task, you should have an
+[1:28:22] answer that you know is good, which proves the task can be done. Uh, you
+[1:28:26] should also test in both directions. If you only check, for instance, that the
+[1:28:30] agent searches the web when it's supposed to search the web, you're going
+[1:28:33] to accidentally train your agent to search the web every single time, all
+[1:28:36] the time, even when it doesn't need to. Uh, and here's a rule from machine
+[1:28:42] learning that applies to judges as well. Don't tune on your test set. Uh, split
+[1:28:46] your labels into two groups. One that you use to tune your evals and one that
+[1:28:51] you use to test that they are working. Uh when you only have 16 answers in your
+[1:28:56] golden data set, that makes it your test set very small. Uh because the rule is
+[1:29:00] usually 75% in the tuning set, 25% in the test set. So there's only four in
+[1:29:05] our test set. Uh but if you were up to 100, that would be fine. Um
+[1:29:12] Phoenix data sets have splits built in. So this is very easy to do. Uh
+[1:29:17] see what that looks like. uh
+[1:29:22] so first it builds the golden data set with splits. It finds every report with
+[1:29:26] a human label. Uh uh and each one becomes an example in a
+[1:29:31] Phoenix data set. The input is the report. The expected output is the
+[1:29:35] human's label. We sort them by span ID. Then every fourth example goes into the
+[1:29:39] test split and the rest go into dev. Uh sorting first means that a report always
+[1:29:44] lands in the same split however many times you run this. Uh, and span
+[1:29:48] [snorts] ID links each example back to the trace it came from. Uh, so you can
+[1:29:52] always click through to the original run.
+[1:29:57] Then we run the judge against the humans. This is an experiment which is
+[1:30:01] something that we're going to dig into in a little bit. Um, but for now uh an
+[1:30:05] experiment takes a data set. It takes a task task to run on every example uh and
+[1:30:10] evaluators to score the results. The task here is our judge and the evaluator
+[1:30:14] is a tiny Kodi val which checks whether the judge's label matches the humans. Uh
+[1:30:19] notice that we only run it in the devs split. Uh you can run this yourself by
+[1:30:24] running npm run meta.
+[1:30:28] [sighs] Let's see if we can get it to go.
+[1:30:44] It's going to run an LM. So, uh, I'm going to assume that it does the same
+[1:30:48] thing that it did last night. Um, the script should print a little table at
+[1:30:52] the end. Uh, and on my 12 dev reports, the judge and I made the same call every
+[1:30:57] time, which is great, but it's also only 12 reports. Uh, so read that as, you
+[1:31:03] know, no sign of a problem yet. you're going to want a larger test set when
+[1:31:06] you're running this in production. Um, cool. It actually completed it. Uh,
+[1:31:14] the more interesting part is the two ports that I the two reports that I
+[1:31:18] found hardest to label. Um,
+[1:31:24] so in my Phoenix data, uh, there's Coca-Cola and there's
+[1:31:30] Microsoft.
+[1:31:38] Um
+[1:31:42] the the first one is Coca-Cola. The Coca-Cola is the one that flipped uh
+[1:31:46] when I changed from the XML tags to the uh from not having XML tags to having
+[1:31:50] XML tags. Uh this is where when it got the examples it got better. Um
+[1:31:58] borderline for me turns out to be uh borderline as well. the it the report
+[1:32:02] calls KO ideal for conservative income oriented pol uh portfolios uh which
+[1:32:08] sounds like a recommendation. So as a human I went back and forth on whether
+[1:32:12] or not I should count that as a recommendation. Ultimately I decided it
+[1:32:15] did not uh but the judge also goes back and forth on whether or not that counts
+[1:32:18] as enough of a recommendation. Um
+[1:32:23] and the second one was Microsoft uh which I'm not going to bother to click
+[1:32:26] into which is the other way around. The report says buy with reasons uh and a
+[1:32:30] time horizon. Uh and it never mentions a single risk. This is the one that I was
+[1:32:34] talking about earlier. Uh my rubric lists name concrete risks as a
+[1:32:39] criterion. Uh and I decided that was fine and the judge decided that that was
+[1:32:44] not fine. It said it was weak on risks. There is no risk section. It clears the
+[1:32:48] bar for actionability but though not by much. So, the judge looking at this
+[1:32:53] stuff came up with exactly my human judgment on whether or not this was an
+[1:32:57] actionable report, including the ambiguity.
+[1:33:02] Um, and that ambiguity is still in our rubric
+[1:33:08] because we haven't changed it yet. Uh, so it's very tempting to fix it. So, I
+[1:33:13] tried I added one sentence uh which was a report is actionable only if it meets
+[1:33:18] all four criteria because previously that was ambiguous. I said a report
+[1:33:21] should include all of these things. I didn't say that it must. Uh so you can
+[1:33:27] change the you can change the rubric and be more specific and say yes this
+[1:33:31] absolutely must contain all these four criteria. Uh and on dev uh that broke
+[1:33:36] Microsoft my 12 out of 12 agreement became 11 out of 12 agreement. Um
+[1:33:42] and uh it also in the test split it broke Apple uh because Apple didn't have
+[1:33:48] enough uh a big enough risk section as far as the agent was the judge was
+[1:33:52] concerned. Um what that tells you is that I could
+[1:33:57] change my rubric and make my eval worse. Uh I can make my eval less helpful. I
+[1:34:02] can make my EVA less like what a human would do. Uh even though I'm trying to
+[1:34:06] be specific. Um the script also prints precision and
+[1:34:11] recall. Uh precision these are very important things again borrowed from the
+[1:34:16] ML land or rather from stats land. Um precision asks when the judge says not
+[1:34:22] actionable how often is it correct? And recall asks of all the reports that
+[1:34:28] aren't actionable how many did the judge catch? Those two sound very similar but
+[1:34:33] measure different things. Um, in most cases, you're going to want to
+[1:34:39] prioritize recall because what recall gives you is it catches everything, but
+[1:34:44] it gives you high recall catches everything, but it will give you uh
+[1:34:48] false alarms. A false alarm costs you a minute or two when you look at a report
+[1:34:52] that turns out to be fine. Uh, but a missed failure uh would give you a bad
+[1:34:57] report that reaches a customer. Um, so you have to trade one for the other. If
+[1:35:03] recall goes up uh um then uh precision will go down and vice versa. So for your
+[1:35:11] application you have to decide whether being accurate uh as in throwing away
+[1:35:17] some things that were actually correct uh but but uh you decided they weren't
+[1:35:23] is better or worse than getting false alarms where you say something is
+[1:35:27] important and it turns out not to be. Um judges also have biases. Uh I mentioned
+[1:35:35] one of them already. Um one is position bias. Given two options, they tend to
+[1:35:40] prefer depending on the model either which one comes first or which one comes
+[1:35:44] last. It depends which way the model around which way around the model was
+[1:35:47] changed. Uh but you should swap your options so that it's not always looking
+[1:35:52] at those uh things in the same order. Um they have length bias. Uh, judges prefer
+[1:35:58] long answers and they also have a confidence bias. Judges prefer answers
+[1:36:02] that sound fluent and confident. Um, and the one that I mentioned already is
+[1:36:07] self-preference. A model judging its own output tends to rate it higher. Uh,
+[1:36:13] which is why we judged Haiku with sonnet. Uh, and ideally you judge haiku
+[1:36:17] with something from open AAI. Um, but before you get too worried about
+[1:36:24] how much you can trust a judge, it's worth noting that human judges also
+[1:36:28] disagree with each other a lot of the time. Um, if you give two experts the
+[1:36:32] same outputs in the same rubric and measured how often they agree, uh, there
+[1:36:35] is a standard score for that called Cohen's Kappa, uh, and for this kind of
+[1:36:39] task, it's often as low as 02 or.3. Uh, which is to say they agree with each
+[1:36:45] other not very much more often than just random chance. Um [snorts] so the bar
+[1:36:50] for your human judgment is h for the bar for your judge is human performance and
+[1:36:55] h human performance uh is not actually that good when you compare humans to
+[1:36:59] each other. So having a judge that disagree you don't do not need a judge
+[1:37:04] that agrees with you 100% of the time. Uh your judge is never going to agree
+[1:37:09] with you 100% of the time. What you want is a judge that does better than another
+[1:37:12] human doing the judge would be. uh because your judge can run across
+[1:37:17] thousands of examples and help itself out that way. Um
+[1:37:22] one last principle on judges uh is that failures should seem fair. When
+[1:37:26] something fails, it should be obvious what the agent did wrong. If you look at
+[1:37:29] the failure and go, "Well, actually that looks fine to me," then the problem is
+[1:37:33] probably your eval. Um there's a famous example of this uh when
+[1:37:38] Claude Opus 4.5 first scored 42% on a benchmark called Corebench uh which
+[1:37:44] tests whether agents can reproduce scientific papers. Uh anthropic were
+[1:37:49] upset about that low score. Uh so a researcher ran the actual transcripts
+[1:37:53] and found uh that uh Claude was just being uh right in a different way. Uh it
+[1:38:01] the test expected uh six digits of precision and Claude gave the right
+[1:38:06] answer to two digits of four digits of precision rather. Um and the test said
+[1:38:10] that was wrong. There were ambiguous task descriptions. Some of the tasks
+[1:38:14] couldn't be reproduced at all. Uh so Anthropic went through and they fixed
+[1:38:18] all of the tests and they said these tests could be better. Uh and magically
+[1:38:22] they got 95% on the eval. Um this happens all the time. SWEBench
+[1:38:28] and all of the other uh benchmarks that you see are constantly being
+[1:38:33] re-evaluated and manually tweaked and uh that is why you see version two, version
+[1:38:38] three, version four of of uh the famous benchmarks uh because people are
+[1:38:42] constantly finding that the benchmarks are not actually as good as they could
+[1:38:45] be and your evals are going to end up with the same problem. Uh so you need to
+[1:38:51] be constantly re-evaluating your test set.
+[1:38:55] Uh which brings us to step seven which is uh experiments. We've got evals that
+[1:39:00] we trust. Now we are going to use them to actually improve that the agent and
+[1:39:04] prove that the fixed worked. Uh I'm going to go a little faster now as
+[1:39:11] I've been going on a very leisurely pace. I'm getting beginning to run out
+[1:39:14] of time. Um so the here's the problem. We know that some reports aren't
+[1:39:19] actionable and we know why. So we change the prompt and then what? How do you
+[1:39:22] know that it worked? Uh, how do you know that you didn't break something that was
+[1:39:27] working before? If you run it on a couple of examples and eyeball it, then
+[1:39:30] you're back to vibes. A prompt change that you haven't measured is just a
+[1:39:34] vibe. What you want is a controlled comparison. You want the same inputs,
+[1:39:38] the same eval before and after. That is an experiment.
+[1:39:42] Um
+[1:39:46] so uh what you can do in Phoenix is you can take a bunch of your evals that you
+[1:39:51] have filtered down to not actionable say uh and you can select them and you can
+[1:39:56] add them to a data set. Um that gives you a set to test against uh
+[1:40:02] against specific things. Um I'm not going to do that since I've already done
+[1:40:06] it over here. Um
+[1:40:14] Um once you have a data set you can create turn that into an experiment and
+[1:40:18] run uh your experiment against only the data set only against the evals that
+[1:40:24] were failing as opposed to against your entire set every single time which you
+[1:40:28] know if you've got a decent sized split and a decent sized test set is saving
+[1:40:31] you thousands and thousands of tests every time. Uh
+[1:40:36] now we're going to fix what the eval found. So, uh, if you're still coding
+[1:40:42] along, congratulations. Open prompts.ts. There is an improved version of each
+[1:40:46] prompt. Uh, or you can write your own. Um,
+[1:40:51] and every change maps to a finding. So, the judge said, uh, makes no
+[1:40:56] recommendation, so we asked for an explicit recommendation. It said
+[1:40:59] mentions risks with no evidence. So, we asked for risks with supporting data.
+[1:41:03] Faithfulness found invented numbers, so we said use only numbers that appear in
+[1:41:07] your research. uh and reading traces found that the agent uh was trying to
+[1:41:11] save files all the time. Uh so we tell it to reply with the report instead.
+[1:41:17] We're not guessing here. We are coming up with specific things for the agent to
+[1:41:20] do as a result of the previous results of our evals. Uh
+[1:41:27] this is what the experiment script looks like. An experiment is a data set, a
+[1:41:30] task and evaluators. The data set is the one that we just created. Uh the task is
+[1:41:35] a function that just runs the agent on each example. Uh
+[1:41:40] in this case, we're running the entire agent, but we could be running it on a
+[1:41:43] specific subset of the agents behavior or a specific subtask uh if we wanted
+[1:41:48] to. Uh our task hands back the report and the research. So each eval gets a
+[1:41:53] small wrapper that picks out the fields that it needs. Uh and then faithfulness
+[1:41:57] gets the research as its context. The same as before, uh Phoenix runs the task
+[1:42:02] on every example. It scores every result and it stores everything so you can
+[1:42:06] compare. If you want to run this, you can run npm run experiment and it will
+[1:42:10] take about four minutes to run. Um, but I'm running out of time so I'm not
+[1:42:15] going to wait for four minutes. Uh, I ran mine ahead of time. How many
+[1:42:21] examples do you need? Uh, is a really good question. Uh, 10 to 20 examples
+[1:42:26] gives you a rough direction of where things are going. Is very useful in dev.
+[1:42:30] Um, if you're getting into production, uh, you're going to want hundreds of
+[1:42:33] examples. Um, that is going to take a long time, but is, uh, very worth it for
+[1:42:41] accuracy. Um, for every, uh, to have your error bars on your accuracy, you
+[1:42:48] need to quadruple the number of examples. So, uh, going from 25 examples
+[1:42:55] to 100 examples is really, really helpful. uh and is not that much effort
+[1:43:00] going to get that big a jump again you'd have to go to 400 examples which begins
+[1:43:05] to get into the territory of you're never going to bother to do this uh but
+[1:43:09] the bigger the better uh and the more production failures you throw into your
+[1:43:13] data set the better um so I ran mine three times and the
+[1:43:18] reason I did that uh is because the agent is non-deterministic each run of
+[1:43:22] each example uh can mislead you in either direction um And there are two
+[1:43:28] useful ways of thinking about how an agent runs uh when it runs multiple
+[1:43:33] times. The first is called pass at K which is uh does it succeed at least
+[1:43:38] once in K tries and then there is pass to the K which does it increase every
+[1:43:45] single time uh does it pass every single time I run uh K times. Um
+[1:43:52] so as K goes up those two numbers diverge. Uh the more tries you give it,
+[1:43:58] the more likely pass at K is to succeed because it succeeds at least once. The
+[1:44:02] more tries you give it, the more likely it is to fail at least once and then
+[1:44:05] pass it K pass to the K will go down. Um a coding assistant gets that gets it
+[1:44:11] right on the second try is fine. So pass it K is fine. Um a support bot that's
+[1:44:16] wrong runtime in every five is a huge problem. And a financial anal analyst uh
+[1:44:22] that gives inaccurate recommendations is also a huge problem. Uh so you want pass
+[1:44:27] to the K. You want it to pass every single time for those.
+[1:44:31] Um when you're improving an agent, there's
+[1:44:35] an order of operations based on how useful making a change is going to be.
+[1:44:41] The first one is data quality. If your underlying data is bad, if it's hard to
+[1:44:46] read, if it's difficult to interpret for the agent or for the judge, uh then
+[1:44:51] nothing else you do, nothing else you tweak is going to be useful. Once you've
+[1:44:55] got good quality data, then you move to the prompts. Uh that is what we've been
+[1:44:59] messing with mostly today. Uh is to make things better at the prompt level by
+[1:45:04] changing our rubric, by changing our agent.
+[1:45:07] Then there's model choice. Uh model choice has a lot of leverage, but it
+[1:45:15] also changes a whole bunch of stuff at the same time.
+[1:45:18] uh and also the usual way that you're going to change your model is you're
+[1:45:22] going to change it to a bigger model and that makes things more expensive. So
+[1:45:25] that is uh creates a tradeoff uh that you don't always want to make. Uh and
+[1:45:31] finally there's hyperparameters. Hyperparameters are things like
+[1:45:34] temperature and stuff like that. Uh they're so useless that uh people have
+[1:45:38] that modern models have stopped allowing you to tune them. You can't pass
+[1:45:42] temperature to model to modern claw models. Um so if you're tempted to it is
+[1:45:48] the least useful thing that you can pass.
+[1:45:53] Um so if we're looking at my experiments you can look in your seed data and get
+[1:45:57] see see the same experiments. Um you'll see that uh
+[1:46:03] as I improved as I improved my runs I went from uh
+[1:46:10] 16 out 15 out of 16 to 48 out of 48. and went from 5 out of 16 to 48 out of 48.
+[1:46:15] And faithfulness went from 2 out of 16 to 3 out of 48. Uh, which is not that
+[1:46:20] good, right? Like we really should have done better on faithfulness with my
+[1:46:24] improved prompt. Um,
+[1:46:28] the uh
+[1:46:31] important thing is did anything that used to pass break? We can filter down
+[1:46:36] to the passes split. I'm not going to do it in the UI right now. Uh, but all of
+[1:46:40] the five reports that passed previously as I improved my prompt still passed.
+[1:46:45] Uh, so actionability went straight to perfect. Um, but faithfulness was bad.
+[1:46:50] Faithfulness uh went from 2 out of 16 to 3 out of 48. Uh, even though the prompt
+[1:46:56] literally says only use numbers that appear in your research. Um,
+[1:47:01] so we fixed what we measured in a single line of the prompt. Uh, didn't fix the
+[1:47:06] agent making things up. That is the next thing that we have to fix for this
+[1:47:09] agent. Uh we have fixed whether or not it is making a good judgment call. Uh
+[1:47:15] but we have not fixed uh that it is uh inventing the data some of the time.
+[1:47:22] Um if we want to we can look into uh each
+[1:47:27] of the runs and you'll see that each of the because it's nondeterministic each
+[1:47:31] of the runs are coming up with different advice. Um, but I'm not going to do that
+[1:47:35] because I'm running out of time and I want to get to some other stuff. Uh,
+[1:47:44] let's get to Okay, cool. Um, a good eval like the 56 the 511 split
+[1:47:52] that I was talking about on my 16 data sets. That is what is called a
+[1:47:55] capability eval. A capability eval is a thing that our agent can't do yet. And
+[1:47:59] it gives us a hill that we can measure ourselves climbing. Uh when it passes
+[1:48:04] reliably, when you get a test that passes 100% of the time, you don't throw
+[1:48:09] it away. You turn it into what is called a regression eval. That is the kind that
+[1:48:13] you can put into your CI and say this used to pass 100% of the time. If it
+[1:48:16] suddenly stops passing 100% of the time, then we can call that a failure and we
+[1:48:20] should stop release. Um how do we climb this hill is the question. uh
+[1:48:28] we could work on the prompt again or uh we could do the thing that I said that
+[1:48:32] we would do which is we can upgrade the model. Uh so you can run the experiment
+[1:48:37] again by passing in a new model haiku 5.5 and then run npm experiment. Um,
+[1:48:44] I said at the start of today that you can't switch models without eval. And
+[1:48:47] this is what it looks like when you can switch a model with an eval because we
+[1:48:51] know now that we are measuring all of these things. Um, with three
+[1:48:55] repetitions, it takes 13 minutes, which is more time than we've got left. So,
+[1:48:58] I'm just going to skip to the results. Uh, here is Haiku 4.5 versus 5.5. Uh,
+[1:49:05] faithfulness improved. It got more than three times better. It is still
+[1:49:08] terrible. This agent is still making things up all the time.
+[1:49:12] Uh, but consistent calls got better. So, it is at least making the same call over
+[1:49:16] and over. Is that good? Uh, it's also costing four times as much money. Is
+[1:49:21] that worth it? Uh, is a question that you need to make for yourself in
+[1:49:25] production when you're doing this kind of thing. Um,
+[1:49:31] one of the ways that it got more consistent, one of the ways it stopped
+[1:49:34] varying between buy and sell between calls, uh, is it just got more
+[1:49:38] conservative. Haiku 5.5 uh it turns out just says hold all the time. Uh so uh is
+[1:49:46] that better or worse? Probably worse. Uh probably we need to iterate on Haiku 5.5
+[1:49:52] being too conservative uh about things. But at least we know now that something
+[1:49:57] has changed and that the conserviveness is a problem with Haiku 5.5.
+[1:50:02] Um that is the problem that I found. It went it went to 41 of out of uh 45 calls
+[1:50:09] it said uh hold 41% of the on 41 of the times. Um which is perfectly consistent
+[1:50:16] between runs. Uh so it it got better at the uh consistency check that I was
+[1:50:21] talking about over here the consistent call. Uh but it got there by just
+[1:50:26] picking the same answer every single time.
+[1:50:28] >> [snorts] >> Um
+[1:50:32] but that is the eval iterate cycle. Uh and the cycle is where the value is not
+[1:50:36] anyone's score. You run your evals, you read the failures and the explanations,
+[1:50:40] you spot the pattern, you change the prompt or the tools or the data and you
+[1:50:43] run the experiment again. Did it get better? Uh your evals can now answer
+[1:50:48] that question for you. You can go from I think it works to I can show you it
+[1:50:52] works. Uh I have just enough time to talk about
+[1:50:57] how to do the last step which is eval in CI.
+[1:51:00] Uh more and more teams that ship AI quickly write the eval before the
+[1:51:05] feature. That's called eval driven development. Um say you want your
+[1:51:09] support agent to always check who the customer is before giving a refund. Uh
+[1:51:14] you can write the eval that checks for that first and now done has a definition
+[1:51:18] that you can measure a hill that you can climb from the start. Um,
+[1:51:24] we talked already about capability capability evals and regression evals.
+[1:51:29] Um, here's how uh to create a eval that runs
+[1:51:34] in CI. Um, if you've never used VEST, VEST is a
+[1:51:40] JavaScript testr runner and Fenix can plug straight into it. Uh, if you open
+[1:51:44] agent.eval.ts, you'll see that it looks like an ordinary test file because it is
+[1:51:47] one. There is a describe block and a test for each query in our regression
+[1:51:51] set. So Coca-Cola, Apple versus Microsoft, Rivian, uh, and the fake
+[1:51:55] ZZZQ. Um, each test runs the agent, logs the
+[1:52:00] report as the output, uh, and then runs our evals on it. And the same ticker
+[1:52:04] check and actionability judge that we wrote earlier. We don't have to add new
+[1:52:07] evals for CI. Uh, then at the bottom, we gate the
+[1:52:12] build on acceptance criteria. This is where I talked about guardrails and
+[1:52:15] northstars. Mention sticker is a guardrail. It has to be talking about
+[1:52:19] the right company. Um actionability is a target. The average has to stay 08 or
+[1:52:25] better. Uh because an LLM judge can be a bit noisy on a single report. So we gate
+[1:52:29] on the average uh not on just one. Uh and then you can run npm test uh and it
+[1:52:36] runs like any test suite. Um and at the end the reporter prints out a scorecard.
+[1:52:42] Um, and that'll take about four minutes, which is more time than I've got left.
+[1:52:46] Um, a red build. If a failed build, if your
+[1:52:51] build fails, this is what you'd get. All four tests ran and every report
+[1:52:54] mentioned its ticker, but Rivian's report wasn't actionable. So, the
+[1:52:57] actionability average came out at 75. Uh, it doesn't say you failed. It just
+[1:53:01] says that you missed. Um,
+[1:53:06] but, uh, a green run, uh, is where all of those pass. Um,
+[1:53:13] I'm not going to show the experiment view because again, I'm running out of
+[1:53:16] time. Uh, but when a build fails, you don't just get a red cross. You get an
+[1:53:21] explanation that says whether things are good or bad and why they went wrong. And
+[1:53:25] that is the important thing. Uh, this same test suite can be run in GitHub
+[1:53:29] actions. Uh, it starts Phoenix as a service container. Uh,
+[1:53:36] but now we've done everything that I've said that you can do. uh you can run
+[1:53:41] your evals, you can test things, you can make sure uh that it matches your human
+[1:53:45] judgment, you can put it into CI and you can make sure that your builds are gated
+[1:53:49] on whether or not uh the LLM's judgment of what you've encoded as the definition
+[1:53:55] of good uh really works. Um
+[1:54:00] and there's something I love about this which is that anyone who knows what good
+[1:54:04] looks like can write evals now. uh your product managers, your support team,
+[1:54:09] your person in sales who keeps hearing the same complaint. They don't need to
+[1:54:12] write TypeScript. Uh they just need to describe what a good answer looks like
+[1:54:17] uh and give it to you or even better just give it to a coding agent which
+[1:54:21] will then write all of the evals for them.
+[1:54:24] Uh you shouldn't run your whole agent on every single commit because uh it's
+[1:54:30] going to take a really long time and cost you a whole bunch of money. Um, but
+[1:54:35] now you've got the repo I promised you. You've got all of the code. You've got
+[1:54:38] all of the examples. You can see how everything is done. Uh, you can point
+[1:54:41] your agent at it and say, "Do this, but for my codebase," uh, and your agent
+[1:54:45] will figure it out. Um, there is one thing that we didn't get
+[1:54:50] time to build today, uh, which is, uh, once you're live, you should keep
+[1:54:55] evaluating. You should run your evals on a sample of real traffic, uh, and alert
+[1:55:00] when scores drop and stay down. um not on every single failure because one
+[1:55:04] failure would be noise. Um but if you get a trend in failures, uh production
+[1:55:10] monitoring is incredibly useful and eval can get you that as well.
+[1:55:15] So this is the full cycle that we built. We traced, we read, we evaluated, we
+[1:55:20] checked, we improved, uh and we locked it in with CI. Uh but you don't have to
+[1:55:26] do all of the stuff that you've learned today on Monday. You can start small.
+[1:55:30] You can just instrument your agent. you can just read some traces. You will get
+[1:55:34] information reading 12 traces that you wouldn't have got uh by just looking at
+[1:55:39] the output. Um so run them. Look at the results and build from there.
+[1:55:45] Uh so go try it on a app of your own. This
+[1:55:49] is the repo that I said that everything was in. Uh the Phoenix docs are there.
+[1:55:53] Uh Phoenix itself is open source. So you can mess with the code and tell us that
+[1:55:58] we got stuff wrong in there. Uh and that just on time is it. Thank you very much
+[1:56:04] everybody. [applause]

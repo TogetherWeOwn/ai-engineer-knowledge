@@ -1,0 +1,121 @@
+# title: Autoresearch Made Our Models 3x Faster — Tejas Bhakta, Morph
+# source: https://www.youtube.com/watch?v=vrDvatGtIxs
+# speaker: Tejas Bhakta, Morph
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T04:44:17Z
+# sha256: 526a3766adff014e47adc0419d8aaf8f461b40d40940a311ea2734c987ab09b6
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:12] Hi everyone, I'm Tis. Uh, so I'm going to be explaining how we make models
+[00:16] three times faster with auto research. Uh, so previous to this, uh, I actually
+[00:21] used to do GPU mining in my dorm room with 1080 Ti all the way up to working
+[00:25] at Tesla on inference optimization for Tesla AI.
+[00:29] Uh but first what is auto research? So auto research is this framework from
+[00:33] Andre Kapathy where uh you basically set up a framework for an agent to move
+[00:38] towards a goal that you define uh and all you have to do basically is say at
+[00:42] the high level what you want it to do and it will try things as it goes and
+[00:45] move back and forth uh towards that goal.
+[00:49] In actuality it's really just a while loop. The agent proposes a solution. You
+[00:53] have a setup to to define what's correct benchmark it for us. uh and then you
+[00:58] keep or revert that and you do this in a loop until your goal is met.
+[01:02] And so this is very well aligned to GPU kernels. Uh so if you don't know what a
+[01:06] GPU kernel is, it's basically a low-level operator. And in a Nvidia GPU,
+[01:09] this is a CUDA kernel. Uh and this is um an operator that's used by the GPU to
+[01:14] operate like millions of times in parallel, for example, like a matrix
+[01:16] multiply or an expert computation. And why are GPUs such a good fit for
+[01:22] auto research? It's because they're super verifiable. you can verify them
+[01:25] for correctness and speed and that's basically all you need for your auto
+[01:27] research framework. Uh so in actuality there are some
+[01:31] caveats here. Um the auto research framework is really good for like
+[01:35] picking block sizes and these tiny parameters but they're also still really
+[01:38] bad at the high level idea like seeing like I want to use this GPU and I
+[01:42] actually want to pipeline it. It's not going to come up with these
+[01:44] groundbreaking ideas. So it's still up to the human to do that. But the actual
+[01:46] implementation is very straightforward once you once you have the idea laid
+[01:50] out. So it is still your job to have good ideas is what I'm saying. Uh and so
+[01:55] the actual secret formula here is you have the good ideas auto research picks
+[01:59] out the parameters and everything to verify that it actually works uh and go
+[02:02] moves toward that verifiable goal of it being x times faster and uh still
+[02:06] correct and you mix that with billions of tokens of your favorite model and
+[02:10] that results in kernels that beat hand tuning.
+[02:13] Uh so what are the actual things you care about when you're when you're when
+[02:16] you're writing a custom kernel or you're having your agent write a custom kernel?
+[02:19] So the three main things you can have are a compute bottleneck uh a memory
+[02:23] bottleneck or you just have excessive overhead from uh too many kernels being
+[02:26] launched and you can do you can view these things with by profiling with a
+[02:29] profiler like NSIS for example which is Nvidia's profiler. Uh, and so this this
+[02:35] gra this page looks super daunting, but basically your job as a human is to look
+[02:39] at the top here and be like this is dumb. Uh, we are loading 32k chunks into
+[02:44] context. Uh, and we don't actually need to for this deepseek attention for
+[02:48] example. Uh, and we should only be doing it every 32k instead. And so at a high
+[02:51] level, all you have to be telling auto research is this top method is dumb.
+[02:54] Let's pipeline it instead. And everything else like the sizing, the
+[02:57] chunk sizing, the context chunks, that all should just be decided by auto
+[03:00] research. And so my problem is that I really love
+[03:04] cheap GPUs. And so that means like GPUs that don't have NVLink for example uh is
+[03:09] example of like GPUs you can get for cheaper. Uh but the problem is you don't
+[03:12] actually have kernels off the shelf for those. And so you have to come up with a
+[03:15] auto research framework as well as a custom harness. So what goes into the
+[03:17] harness to make this really good. Uh so one thing you really need to make
+[03:22] sure your agent is aware of is the hardware. And so on a B200 for example,
+[03:25] you need to make sure it has context of uh the warps. It has T-M TMA. And so if
+[03:30] you don't know what these are, these are just uh low-level operators that you
+[03:33] have um on a specific hardware. And this changes generation to generation. Like
+[03:38] H200 won't have T-M for example. That's a new feature that came out with B200,
+[03:42] which is why you need to have this in context. Um and so this this basically
+[03:46] is just like bunch of MD files you need to give so it has context.
+[03:50] Other thing you need to make sure your agent has context of is the model. And
+[03:53] so every new model like Deepseek Flash comes out with like new tricks. like
+[03:56] deepseek had two new attentions that was released in the deepseek flash for
+[04:00] deepseek v4. Uh so compressed sparse attention hierarchal compress and if you
+[04:04] don't do this the model will 100% hallucinate uh the actual attention
+[04:08] mechanism and you will get useless kernels.
+[04:12] Uh by far the biggest problem when you're doing this is going to be reward
+[04:15] hacking. And so if you were to tell your kernel engineer co-orker I need to make
+[04:20] uh the GPU this GPU kernel faster. uh it's obviously not going to your human
+[04:24] co-workers is not going to go in and do some stuff that's going to make it slow
+[04:27] like the endto-end model inference slower but uh agents are not humans and
+[04:31] they will do plenty of things to make it slower like they'll disable CUDA graphs
+[04:34] which can make it 20 times slower and they might make that one kernel faster
+[04:37] but make the whole like it's not a viable kernel because it's they're
+[04:40] disabling a bunch of speed ups like CUDA graphs or only testing on small context
+[04:44] windows and so a lot of this is also just defining what not to do which is
+[04:48] actually very important when you're doing frontier work that agents can't
+[04:50] actually easily with a one shot.
+[04:56] Uh, another reward hack is that some models just don't actually write the
+[04:59] cute DSL you need uh when you're trying to write kernels. And this is a common
+[05:03] problem with enthropic models. And so, yeah, I mean, Anthropic says what they
+[05:08] say about uh nerfing models. You can it's guess if it's I'm guessing if it's
+[05:11] nerfing or not, but I would recommend using a different model. Uh, and it
+[05:15] won't always be faster everywhere actually. So sometimes the kernels you
+[05:18] come up with might only work well on like zero to 100k and then you need to
+[05:22] go back to this the default kernel that you could you get from like a flash
+[05:25] infer cutless. Um and so and that's another thing to look out for is that
+[05:29] your kernel isn't always just a swap in for all all workloads.
+[05:34] Uh but one of the great things is is that kernels compound. So like if you
+[05:37] make one for your sparse MLA for deepseek for example um you can get
+[05:40] speed ups there and you just stack them on like that then plus NVFP4 fore uh you
+[05:46] could do for us if we if you don't have NVL link you just keep stacking and
+[05:49] stacking and stacking and then eventually you taper off at whatever the
+[05:52] hardware limit is uh for your GPU and that's uh some people call this like MFU
+[05:57] which is like the actual theoretical max utilization from a GPU.
+[06:01] Uh and so to go even farther, if you have actually have bare metal access,
+[06:05] your auto research framework can uh do very hacky things. So hackers that have
+[06:08] hacked with GPUs are probably going to like this. You can uh tweak your BIOS
+[06:12] settings, you can overclock the GPU, uh you can force like PCIe relaxing, all
+[06:16] these little tweaks of like uh old school hackers used to do, but this can
+[06:21] actually help with inference as well. And so net on bare metal optimizations,
+[06:25] you can get roughly 25% over like a virtualized setup you get from using a
+[06:28] cloud provider. Uh so once you've done that, you can
+[06:33] combine all of the kernels you did as well as all of the hardware level hacks
+[06:35] you did. Uh you can get a 3x speed up. And so I know this this might all sound
+[06:39] like roses and flowers, but it's not actually the case. Around 80% of the
+[06:42] things that auto research is going to do are going to be bad. Uh so it's
+[06:45] important to remember while you're u like working on this that most things
+[06:49] are going to be bad. It's going to try to trick you all the time. Uh but at the
+[06:52] end you can actually get really good results from this.
+[06:56] with TLDDR. Uh have better ideas than use auto research. Super simple. Simple,
+[07:01] right? Uh so it turns out you can actually get
+[07:05] paid to do this. Uh if you think this is cool, consider joining us and you can
+[07:08] email me here. Thanks, guys.

@@ -1,0 +1,26 @@
+# observability-operations
+
+## Techniques and revisions
+
+- [Monitor agent progress and behavioral failures in addition to container health](agent-behavior-health.md) — `agent-behavior-health` (stable)
+- [Collect sparse agent-reported friction and verify it against traces before acting](agent-friction-feedback.md) — `agent-friction-feedback` (stable)
+- [Version and diff the context transformations actually delivered to each run](context-transform-provenance.md) — `context-transform-provenance` (stable)
+- [Trace stage latency, waiting time and tool waterfalls end to end](critical-path-tracing.md) — `critical-path-tracing` (stable)
+- [Record accountable version-bound decisions with evidence and a rollback path](decision-receipts.md) — `decision-receipts` (stable)
+- [Let deterministic detectors trigger bounded evidence-based agent investigations](deterministic-anomaly-triage.md) — `deterministic-anomaly-triage` (stable)
+- [Scope failure counters to the relevant request, task and provider rather than unrelated traffic](failure-counter-scope.md) — `failure-counter-scope` (stable)
+- [Expose guardrail decisions as auditable telemetry without confusing classifiers with authorization](guardrail-telemetry.md) — `guardrail-telemetry` (stable)
+- [Match follow-up windows to failure latency and expire temporary watches safely](monitor-expiry.md) — `monitor-expiry` (stable)
+- [Generate provenance-linked operational digests from shipped changes](operational-digests.md) — `operational-digests` (stable)
+- [Diagnose components with scoped redacted artifacts instead of entering customer-data sandboxes](privacy-preserving-debugging.md) — `privacy-preserving-debugging` (stable)
+- [Expose full event and trace evidence through scoped query tools rather than metrics alone](queryable-trace-store.md) — `queryable-trace-store` (stable)
+- [Register temporary guards with firing telemetry, ownership and a retirement condition](shim-lifecycle.md) — `shim-lifecycle` (stable)
+- [Inspect nominally successful traces for silent failures and repeated friction](silent-failure-mining.md) — `silent-failure-mining` (stable)
+- [Define service and agent SLOs with actionable thresholds](slo-error-budgets.md) — `slo-error-budgets` (stable)
+- [Publish stable artifact links that retain explicit version and source provenance](stable-versioned-report-links.md) — `stable-versioned-report-links` (stable)
+- [Use structured correlated traces across tasks, runs, tools, heads and deployments](structured-observability.md) — `structured-observability` (stable)
+- [Use supported telemetry hooks and test adapter coverage rather than relying blindly on monkey patches](telemetry-adapter-risk.md) — `telemetry-adapter-risk` (stable)
+- [Separate telemetry transport from evaluation and orchestration control paths](telemetry-control-separation.md) — `telemetry-control-separation` (stable)
+- [Verify that instrumentation reaches the intended collector and can be queried](telemetry-delivery-tests.md) — `telemetry-delivery-tests` (stable)
+- [Prevent recursive self-ingestion and duplicated trace-context amplification](trace-amplification-guard.md) — `trace-amplification-guard` (stable)
+- [Control tracing overhead with redaction, sampling and retention policy](trace-cost-sampling.md) — `trace-cost-sampling` (stable)

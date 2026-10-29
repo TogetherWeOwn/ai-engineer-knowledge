@@ -1,0 +1,240 @@
+# title: GraphRAG methods to create optimized LLM context windows for Retrieval — Jonathan Larson, Microsoft
+# source: https://www.youtube.com/watch?v=c5qJHr3DnT4
+# speaker: Jonathan Larson, Microsoft
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T12:30:55Z
+# sha256: cc8a7c4d33837b2274d20ddc9a6bbd2a214a688ad259632b3a6122f38e29c6b2
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:01] [Music]
+[00:15] Um well hello everyone um thanks for coming to the session here today. My
+[00:18] name is Jonathan Larson and uh I run the graph uh team at Microsoft Research. Um,
+[00:24] some of you may have seen our paper that we actually released last year uh the
+[00:28] graphite paper or you might have seen our GitHub repo uh that was out there
+[00:33] and uh has a lot of stars on it. Um when we released this last year to our
+[00:37] surprise it got a lot of attention and also it inspired many other offerings
+[00:41] that we saw that were out there as well too. Um my favorites of course were the
+[00:45] ones that New Foratic as well too. uh but uh there's been lots
+[00:50] of derivative work from it and today though I'm not here to talk to you about
+[00:54] some of the things that have been I'm here to talk to you about some of the
+[00:57] new horizons and the two things I really want to leave you with here today are
+[01:01] that uh LM memory with structure is just an absolutely key enabler for uh
+[01:06] building effective AI applications. The second as we'll talk about a little bit
+[01:11] later in the talk as well too are that uh agents of course paired with these
+[01:15] structures can provide something even more powerful. And let me go ahead and
+[01:18] go back to the slide here. So today I'm going to tell you about a couple things.
+[01:21] The first is actually showing you graph as applied to a specific domain. In this
+[01:26] case, we're going to apply it to the coding domain to look at enterprise
+[01:28] productivity uh in the coding space. The second is we're going to take a look at
+[01:33] a new release that we are announcing today. Uh we're actually having a blog
+[01:36] post on this tomorrow. Uh we have benchmark QED just went open source as
+[01:40] well. And then I'll talk about some uh new results that we've had on uh some
+[01:44] graph evolutions on a new uh technology we've been working on called lazy graph.
+[01:48] I won't be going into the specifics of how it works. I'll just be showing some
+[01:50] benchmarks and talking about some of the ways you be able to access it soon. So
+[01:55] with that, let me go ahead and jump into graph for code and tell you about how
+[01:59] we've been using graph rag to actually help uh drive repository level
+[02:03] understanding. And I want to start first with a little demonstration. Uh everyone
+[02:07] likes to watch little videos. So I'm going to go ahead and hit play. And yes,
+[02:09] it's showing on the screen there. So, this is a little a terminal based video
+[02:13] game that one of my engineers have put together. It's a one where you jump over
+[02:17] obstacles and then you get points when you jump over them and you run into
+[02:20] them, you lose points. And two important things, though. First, the LM has never
+[02:23] seen this code before and it's small enough for the human to know the ground
+[02:27] truth holistically because it's only about 200 lines of code across seven
+[02:30] files. But it's complex enough that the LMS's had a lot of troubles
+[02:34] understanding it if you just provide all the code directly into the context
+[02:37] window. So with that as a background, let's take a look at what happens if you
+[02:40] use typical regular rag over the top of this. So if you're using uh one of the
+[02:45] tools that help analyze your code, this is the type of answer you might get
+[02:48] back. And this is we ran this through with a regular rag system. And we asked
+[02:52] it describe what this application is and how it works. And just to read you
+[02:57] because what it says because it's too small to read. The application is
+[03:00] designed as a game that is configured and initiated through a main function.
+[03:03] The game leverages a configuration file and has its main components such as the
+[03:07] game screen, game logic encapsulated in separate classes and functions. Totally
+[03:12] useless. It just says it's a game. That's there's nothing more to it than
+[03:15] that. Um, and it just put a bunch of other craft in there. If you use
+[03:19] graphite for code over the exact same codebase with the exact same question,
+[03:24] you get a much much better description. This is just a very stark contrast to
+[03:28] get between the two. So, in the graphic for code, it says, "The application is a
+[03:32] terminal-based interactive game designed to run with a in a cursorbased terminal
+[03:36] environment. So far, not much better, but this next line just kills it. It
+[03:40] features a player character that can jump vertically, obstacles that move
+[03:44] horizontally across the screen, and a static background layer. The game
+[03:48] controls via keyboard input, specifically using the space bar to
+[03:51] trigger the player's jump action. So, what this is showing you is semantic
+[03:55] understanding. So if you've read our paper or used any of the um graphite
+[04:00] code base that we've put out there, you've you'll know about the concept of
+[04:03] what we call local and global queries. And so this is what we would call a
+[04:06] global query over top of the repository. It requires understanding the whole
+[04:10] repository to answer that question correctly. And we can see that it excels
+[04:15] at that. So one of the next things we decided to do was well if I can answer
+[04:19] questions pretty well, can it maybe do code translation? And so that was the
+[04:24] next thing that we aimed it at. So taking the same codebase here, we took
+[04:27] on the challenge of taking this Python code and then asking to translate it
+[04:31] directly into Rust. And let me show you just how that actually works. Let me go
+[04:34] and play the video here. So we're going to do is start off with um in VS Code
+[04:38] here, we're going to look at the four source code files. Well, there's four
+[04:41] main ones. There's seven files total for this game. These are the source Python
+[04:45] code uh files that we're working with here. We're going to go ahead and run
+[04:48] those just to show you. Again, this is the same game. So this is again the same
+[04:51] sidescroller game here. And then what we're going to do is we're going to
+[04:54] actually take those source code files and just put them straight into an LLM.
+[04:57] We're first not going to use graphite for code. We're just going to take all
+[05:00] that source code because it's only 200 lines of code and put in some nice
+[05:03] prompts. We tried a wide variety of these prompts and then try and see if
+[05:06] the LM could actually translate that code holistically and all of its pieces
+[05:10] into Rust and actually just work out of the box. And so this is actually the
+[05:14] translation happening there. Um we're going to go ahead and copy the Rust code
+[05:17] that it generated. So it did generate Rust code. I got have to give it credit
+[05:20] for that. But after it generated the code and we reviewed it there. We went
+[05:24] and we tried to compile it and there's problems everywhere. Doesn't work out of
+[05:28] the box. Uh so then we use graphite for code again bringing structure and these
+[05:34] these graph structures to the codebase there. We're going to just go ahead and
+[05:37] run the translate function on graphite for code and it generates on its side
+[05:42] all these all these new Rust files that you see are on the side there. I'm just
+[05:45] going to skip past it because I don't want to bore you with clicking through a
+[05:48] bunch of Rust files. But once we generated all these REST files, we can
+[05:51] go ahead and run those REST files on Graphic for Code side of things. And
+[05:55] presto, we have a full video game completely translated from Python now
+[06:01] working in Rust natively. But we didn't want to stop there. The next thing that
+[06:05] we wanted to do was, well, that game is kind of a toy example. It's like 200
+[06:10] lines of code. Let's go to a codebase with 100,000 lines of code. And that's
+[06:13] what we did next. So we went to the Doom codebase. It's about 30 years old. Now,
+[06:18] we did run a bunch of tests over the top of this here first uh because I figured,
+[06:22] well, all the LLMs are trained on the Doom codebase. I mean, it's it's going
+[06:25] to just know these things on natively and automatically. So, we did a bunch of
+[06:29] tests with that. We actually figured out while it knew the Doom Doom codebase, it
+[06:33] didn't know any of the specifics. So, if you ask it to actually modify the Doom
+[06:36] codebase in any sort of meaningful way, the LM models just fail again
+[06:39] completely. Um so then what we did next was well if we can reason and understand
+[06:45] over top of this codebase 100,000 lines of code 231 files um maybe we can
+[06:50] generate some new outputs that you otherwise couldn't generate. So with
+[06:53] that we then immediately had to start used it to start generating
+[06:56] documentation. So this is actually showing a highle repository level
+[07:00] documentation. Again going back to the concepts of graph we have local and we
+[07:04] have global queries. This is showing you the global query results and so it's not
+[07:08] looking at the understanding of a single file. This is looking at modules in
+[07:11] their entirety like across 20 30 files and being able to actually give you
+[07:15] sense for like what's the sound system inside of the video game and how does
+[07:19] that work but then you can still drill down into what we would call the local
+[07:22] style queries and actually see the individual files as well too. So then we
+[07:27] thought, well, this is kind of neat. We can look at the documentation, but if we
+[07:32] can look at the documentation, we can do Q&A. We can do code translation. Can we
+[07:35] maybe take this one step further? Do feature development? So that's the next
+[07:39] thing I'm going to show you. So um, we had a lot of, uh, video game players in
+[07:43] our office and we were kind of thinking about like what would be a cool thing we
+[07:46] put over top of this Doom video game. And someone me said, well, does you
+[07:49] can't jump in the original video game. What if we added the ability for a
+[07:52] player to jump? And that's a complex thing to add into Doom because it
+[07:56] requires multifile modification. And if you try to use AI systems to do multi
+[08:02] modification, what it'll often do is it will do a great job editing one of the
+[08:06] files and then completely break a bunch of the other files in the process of
+[08:08] doing so. And then it that just rinses and repeats and continually kind of you
+[08:13] end up with something that doesn't work is what what you oftentimes run into.
+[08:16] And it's because of this lack of understanding how everything fits
+[08:19] together. But again, this is where graph can really help out. So with that, we
+[08:24] went ahead and this is, if you haven't seen the Doom video game, this is
+[08:27] actually a little video of the original Doom video game being played, just to
+[08:31] give you some context for what it was. Then we used uh the new um GitHub
+[08:36] copilot coding agent that was announced at Build and we wired it up directly to
+[08:40] a graphite for code. So we're going to go ahead and create new issue. This is
+[08:43] pointing to the Doom codebase and we're going to tell it add jump capability to
+[08:48] the player. We're just going to add a couple sentences of description here and
+[08:51] then tell it to go. And then we're going to assign it to that GitHub copilot
+[08:56] coding agent. And then the next thing we're going to
+[08:59] do is we're going to then go ahead and look at what's happening underneath the
+[09:03] hood. So this is actually the GitHub copilot coding agent reaching out to
+[09:06] graph for code on the back end coming up with a plan that's holistic and it's
+[09:10] approaching it from the top down. And then this is really the m the aha moment
+[09:14] we have for us. It changed a whole lot of files and it worked out of the box
+[09:18] where all the other agents that we had tried completely failed on this task and
+[09:22] because it worked because of those graphic structures that we were bringing
+[09:25] to bear and actually using those uh with that. So then the end result was we were
+[09:31] laid with joy and jumping in doom specifically. So uh that's kind of the
+[09:36] story of how we got to with that. So with that um I do have another part of
+[09:41] the talk I'm going to talk about today and that's also um five minutes to talk
+[09:45] about that one and that's benchmark QED uh just shifting topics a little bit I
+[09:48] just showed you graph ragra is applied to one vertical uh next I want to
+[09:52] specifically talk about um how do we measure and evaluate systems like graph
+[09:56] how do we build systems to evaluate those local and global quality metrics
+[10:01] and so for that today I'm announcing benchmark QED this is available now open
+[10:05] source on GitHub so you can go ahead and uh uh check it out at the link. We just
+[10:09] I think got it live last night. Um, and there's three components to this. The
+[10:14] first is what we're calling auto Q. And auto Q is focused on doing query
+[10:19] generation for target data sets. So, it allows you to take a data set and then
+[10:22] generate queries for it. AutoE is the evaluation using LLM as a judge to
+[10:28] actually then evaluate how those queries performed on that said data set. Autod
+[10:33] is the third component and that really focuses on data set summarization and
+[10:36] data set sampling. Let's jump into just a couple of these in a little more
+[10:40] detail. So if you take a look at auto Q, autoq is taking a look at the local and
+[10:45] global aspects. You can see that there on the x-axis. On the y-axis, it's then
+[10:50] combining that against data driven basically questions that are generated
+[10:54] based on the data itself or persona or activity driven which is the second type
+[10:58] that we have there. Those are more complex slick if you take on the role of
+[11:01] a person in that domain field and then using that to generate questions. So to
+[11:05] show you a few of these sample questions, I'm just going to choose a
+[11:08] couple here. This was built on an AP news data set that was focused on like
+[11:12] medical type of events. And so a data local question might be why are junior
+[11:17] doctors in South Korea striking in February 2024? There's a lot of highly
+[11:21] specific information in this and I would expect regular rag to perform very well
+[11:25] on this type of question. In contrast, take an activity global question here.
+[11:30] It might be what are the main public health initiatives mentioned that target
+[11:34] underserved communities. There is nothing in that question that you can
+[11:37] really pivot on in terms of like embedding or uh indexing that would
+[11:41] really work on it. You really have to holistically know the entire data set.
+[11:45] And so this uh auto Q will help generate questions across that whole spectrum
+[11:50] from local to global from data driven to activity driven and give you these
+[11:53] categories of questions that you can use. Now once you generate those
+[11:56] questions we can then start measuring them using autoe which is the evaluation
+[12:00] platform that we released along with um this as well too. So just to get show
+[12:04] you this in in practice and how it works it use it gives you a composite score
+[12:09] for metrics. The first is comprehensiveness diversity and
+[12:12] empowerment which if you're familiar with our paper those are three original
+[12:15] ones that we used back in that one and a new one that we also call relevance. And
+[12:19] so we actually did some comparisons uh just to show you how this works on lazy
+[12:23] graph rag which is one of the newer technologies that we've been working on.
+[12:26] And we compared it to vector rag on 8k 120k and million token context windows.
+[12:31] And we had a few takeaways from that. The first is if you take a look at these
+[12:34] charts any bar that is above the 50% mark uh gives um means that lazy graph
+[12:40] is winning in that benchmark against those specific vector eggs. So, vector
+[12:43] egg blue here is 8K, 120K, and a million token context windows. And it's winning
+[12:48] correspondingly at 92%, 90, and 91% of the time against data local questions,
+[12:53] which is kind of a surprise because one of the first things that we started
+[12:56] seeing is that laser graph was actually providing dominant performance um across
+[13:01] the entire span of questions, whether they were local or global. And we do
+[13:04] expect rag to be performing better on local questions. And you can see that
+[13:08] from the fact that data local and the data global there's a little bit of a
+[13:11] lift between these bars between the global and the and the local ones.
+[13:15] Second thing we noticed is that the long context window didn't really make much
+[13:19] of a difference. We were expecting that maybe the long context windows might
+[13:21] give you a little bit of a um because you have a better understanding towards
+[13:24] those global types of questions. But it actually turns out that laser graph in
+[13:28] this case was still able to dominate those metrics. And in fact, when it when
+[13:32] we ran the test, it's not on the slide here, we actually found that lazy graph
+[13:35] was a tenth of the cost of what we saw in the 1 million token context windows
+[13:39] as well too. So those are a couple things to show there. Now, uh with the
+[13:44] last minute that I have, I did want to address another thing too with lazy
+[13:47] graph. Um you may have read the blog posts about it in November last year
+[13:50] when we first discussed it. Um it is now uh officially being lined up for launch
+[13:54] in a couple products. Uh the first is Azure local and so uh it will they just
+[14:00] announced at build that uh lazy graph rag will soon be incorporated into their
+[14:04] platform for that. So you can actually try it out for yourselves there and it's
+[14:07] also being incorporated into the recently announced at build Microsoft
+[14:11] discovery platform tool as well. So if you're not familiar with Microsoft
+[14:14] discovery it does graph-based scientific co-reasoning and just to give you a
+[14:18] quick summary of it goes from hypothesis experiment learning and knowledge. I'll
+[14:23] just play a quick like 5-second video here. And the questions the answers to
+[14:27] the questions that you start coming back to with on this are powered underneath
+[14:30] the hood by graph and lazy graph as well too. So as you can see the co-pilot here
+[14:34] is generating the deep reasoning over graph-based scientific knowledge. Those
+[14:38] graphs are being powered by uh graphagg and lazy graph. So with that, I just
+[14:43] want to leave you with a couple takeaways. And the first is just that
+[14:46] LLM memory structure, LM memory with structure is just a really really
+[14:51] powerful tool uh to keep in your tool belt. Um and the agents of course can
+[14:56] massively amplify this power. And if you have any questions, I'll be outside if
+[14:59] you want to talk about any of this further. Thank you so much for your
+[15:02] time.
+[15:06] [Music]

@@ -1,0 +1,379 @@
+# title: Engineering voice agents: Latency, quality, and scale — Rishabh Bhargava, Together AI
+# source: https://www.youtube.com/watch?v=N7b1PJc7SFc
+# speaker: Rishabh Bhargava, Together AI
+# channel: AI Engineer (https://www.youtube.com/@aiDotEngineer)
+# caption_track: auto (YouTube automatic captions, en)
+# retrieved_at: 2026-10-22T08:44:40Z
+# sha256: f44b6e12e963b1986c2fbc4d4872d7930b01ab52d921d032ba00726dc616be1a
+# auto/author captions, unverified
+# takedown: rights holders may open an issue on this repository to have this file removed
+[00:14] All right. Well, folks, thanks for being here. Excited to chat more about how to
+[00:18] engineer voice agents, you know, high quality, low latency at scale. First,
+[00:22] maybe a little bit about me. My name is Rishab. I work at a company called
+[00:26] Together AI. I lead the voice AI team there.
+[00:28] Prior to Together, I was the co-founder CEO of a company called Refuel that was
+[00:32] acquired by Together last year. But generally been building AI and machine
+[00:36] learning infrastructure for about a decade.
+[00:38] For folks who maybe don't know about Together, Together is building the AI
+[00:42] native cloud. What that really means is for companies that are looking to train
+[00:46] models and need access to reliable compute, or you want to do inference at
+[00:49] scale, we're probably a very good fit for you. We work with, you know, there's
+[00:53] a million plus developers. We closely work with hundreds of companies and, you
+[00:57] know, very proud to be working with companies like Cursor and Deck again.
+[01:01] Okay, here is the agenda for today. So, we're going to first talk about, you
+[01:06] know, why we're talking about voice, although the previous speaker alluded to
+[01:08] a lot of interesting things that he's doing with voice. But why does voice
+[01:11] really matter? What does it actually take to build voice agents at scale?
+[01:15] What are the challenges? We'll talk about this pipeline architecture, which
+[01:18] is becoming the dominant way to build agents in production today.
+[01:22] We'll go a little bit deep dive a little bit. We'll look at all the components.
+[01:25] We'll look at the system and trade-offs. And then finally, we'll chat about maybe
+[01:29] what might be the next generation of building voice agents in the coming
+[01:32] months and years. Okay, so starting with why voice
+[01:36] matters. Well, there's billions of phone calls a year
+[01:40] that are still handled by humans. I am pretty sure all of us have the
+[01:43] experience of calling customer support, asking about the status of our order,
+[01:47] looking to change the reservation. We've also probably had the experience
+[01:51] of calling a doctor's office because we got to book an appointment for ourself
+[01:56] or a loved one. And pretty much everybody here probably has had the
+[01:58] experience of being on hold. Now, it would be amazing for AI agents to be
+[02:02] able to handle some of these calls for us.
+[02:05] But really one of the more exciting directions is, frankly, voice is just
+[02:09] this brand new interface to interact with systems and computers. Look,
+[02:14] humans, we learned how to talk before we learned how to read, right? So, this
+[02:18] comes very naturally to us. And obviously, we're seeing this with
+[02:21] ChatGPT's advanced voice mode. And we're seeing this with folks who are starting
+[02:26] to directly talk to Cursor, talk to Claude code in order to get their work
+[02:29] done. And this is, frankly, just the beginning.
+[02:32] And one of the exciting pieces of 2026 is, you know, building these rich,
+[02:37] high-quality conversations. This is not the domain of science fiction or
+[02:41] research anymore. This is primarily an engineering problem today.
+[02:45] Now, why is it hard? Well, there's a few things that you got to solve first.
+[02:49] First, building voice AI and building voice agents, this has to be real time.
+[02:55] You know, when humans are having a conversation, we respond to each other's
+[02:59] cues in something like 300 milliseconds. And so, if you're talking to an AI and
+[03:03] it's taking more than 500 milliseconds to respond, you'll start to notice. If
+[03:08] it takes a second, if it takes 2 seconds, people will just hang up. So,
+[03:12] you got to get latency down. The next thing that matters is you want
+[03:17] it to be a reasonably smart call. You want to get the work, the job done. And
+[03:21] so, for real-world complex workflows, you know, the instructions are
+[03:26] complicated. There's a lot of ambiguity. You have to be good at tool calling
+[03:30] because that's the way you give agents access to the real world. So, you have a
+[03:34] baseline level of intelligence that you got to meet.
+[03:37] The third piece that you got to solve for is
+[03:39] the voice has to be natural enough. It has to sound pleasant enough.
+[03:43] And this means a lot of different things. It means, you know, can it talk
+[03:46] to you in your own language with the right accent potentially?
+[03:49] Can it pronounce your name? Can it deliver the right emotion that is
+[03:53] needed for a particular situation? A lot of the things fall into that bucket.
+[03:58] And finally, you know, you could switch together like a nice demo with one
+[04:02] person calling. But what happens when you're doing 100 calls, 1,000 calls,
+[04:07] 10,000 calls concurrently? Reliability really starts to matter.
+[04:11] And this is an and problem. You have to solve every single one of them at the
+[04:16] same time, or you're going to be in a little bit of a trouble.
+[04:20] So, at least today, the dominant way of
+[04:24] building these voice agents is this pipeline architecture or this cascading
+[04:28] architecture, which attempts to solve all of the problems that I outlined
+[04:31] earlier. Now, there's a few boxes that are going on, but, you know, it
+[04:34] conceptually it's relatively simple to understand, which is audio chunks from
+[04:39] an end user that are being streamed in, potentially to an agent orchestrator,
+[04:43] something like a pipe cat or live kit or something that is homegrown. And then
+[04:46] essentially, this audio is being fed into a speech-to-text system that
+[04:50] converts it into text. That's being fed into an LLM that then decides, do I do a
+[04:54] tool call? What is the output? Produces text that is then fed into a
+[04:58] text-to-speech model, which starts to produce audio chunks that are then
+[05:02] streamed back to the end user. So, that's a rough architecture.
+[05:06] Let's maybe look at like each of the components
+[05:09] one by one, the components that matter here.
+[05:12] The first is speech to text. You know, very much like the ears of your agent
+[05:16] here. The The performance metrics that matter
+[05:19] here, the first is quality, word error rate. Now, you know, depending on use
+[05:23] case, the numbers might look different, but state-of-the-art models are
+[05:26] typically in the 6% word error rate on open benchmarks. What that really means
+[05:31] is the transcript that is produced by your model, comparing it with the
+[05:35] reference transcript, that 6% of words have an error in them.
+[05:39] Now, you can imagine why this might matter, right? Because if you don't get
+[05:42] the transcript right, you don't get somebody's name right, you don't get the
+[05:45] name of, let's say, a drug right, essentially, there's no way to fix this.
+[05:49] Your LLM will make the will carry forward the mistake. The TTS model will
+[05:53] carry forward the mistake. So, you have to get it right for the important
+[05:56] keywords. And then the second metric that matters
+[05:59] often, which is latency driven, is time to complete a transcript. The way to
+[06:03] understand this is when somebody completes an utterance, they stop
+[06:07] speaking, how many milliseconds does it take for you to complete the transcript
+[06:11] and have that be ready for the LLM? And so, as an example, for some of the
+[06:14] models that we run on Together, we we get sort of consistently P90 of like 100
+[06:19] milliseconds, which is pretty fast. Aside from just raw performance, there's
+[06:24] a few other capabilities that matter. Turn detection, very important, still
+[06:29] somewhat unsolved problem, frankly. That could be a 20-minute talk in itself. But
+[06:33] really, the best way to understand this is you've got people who are, you know,
+[06:36] they're talking. Maybe they pause for a second. But do you actually know? Does
+[06:40] that pause mean their turn has ended? Are they going to continue talking?
+[06:44] Because really, the last thing that you want here is for you to for the agent to
+[06:47] start, you know, sending audio back and talking at this person even though their
+[06:51] turn hasn't ended. We don't enjoy this in human conversations, and we will
+[06:55] certainly not enjoy this in AI conversations.
+[06:59] Depending on who your customers are, language matters, and so being able to
+[07:02] do this for a wide variety of language and getting it right there, it's
+[07:06] important. And the final piece that I'll mention, this is somewhat new, is
+[07:10] we're also starting to see architectures, model architectures that
+[07:14] are streaming native. A little sidebar, we won't spend too much time on this,
+[07:18] but there's an architectural evolution for speech-to-text models that is in
+[07:22] progress, which is going from batch models to stream models.
+[07:25] Whisper is the sort of canonical model came out a few years ago.
+[07:30] Um, it was trained on 30-second audio clips.
+[07:33] 30 seconds is way too much. You can't wait 30 seconds to start to do
+[07:36] transcription. So, people have had to build all sorts of complicated logic
+[07:39] around models like Whisper to do chunking and to pad it with silences and
+[07:44] then it make multiple calls, stitch that together to produce the final transcript
+[07:48] in in streaming mode. But recently, and this is a fairly new model from the
+[07:52] Nvidia team, instead, you have the encoder of the
+[07:56] model have two interesting characteristics. The first is it's
+[08:00] trained with different amounts of look-ahead time. So, it only looks at
+[08:04] perhaps 80 milliseconds or maybe up to a second of audio instead of 30 seconds.
+[08:08] And it's also able to cache these activations so that as you kind of make
+[08:12] small steps in audio frames, you're actually only doing the heavy
+[08:16] computation once. So, again, just kind of stepping out, but, you know, it's an
+[08:21] interesting direction that we're seeing to be able to handle streaming
+[08:24] conversations for these voice agent use cases.
+[08:27] Okay, so that's speech to text. Jumping into the next part of the pipeline,
+[08:32] which is LLMs. You know, very much the brains of of your agent.
+[08:36] The performance metric that matters here first and foremost is streaming latency.
+[08:40] And so, you know, TTFT is the metric here. And a rough kind of,
+[08:44] you know, metric is like it would it's usually pretty good if you can get to
+[08:47] 300 milliseconds of TTFT because, you know, you want to start
+[08:52] producing tokens, start feeding that into the TTS model as fast as possible.
+[08:57] That number, 200 to 300 milliseconds, has implications for what models you can
+[09:01] use. And so, a good size model typically ends up being in this 8 to 30 billion
+[09:06] range. If you go any bigger, you'll burn through your latency budgets. If you go
+[09:10] too small, that has implications for the intelligence of the model and, frankly,
+[09:16] the tool calling that is needed, which are both pretty critical if you want to
+[09:20] build a voice agent that does meaningful stuff in the world.
+[09:24] Okay, text to speech. This is very much, you know, the voice of your agent.
+[09:28] There's a few interesting things on on sort of performance and capabilities.
+[09:33] Performance again, you know, the trend continues. What is the time to first
+[09:36] audio, right? As you get a transcript, how long does it take to produce the
+[09:39] first audio chunk that can start be start to be streamed back? And aside
+[09:43] from TTFA, what is the real-time factor look like?
+[09:46] Real-time factor is, and this is generally the case for most TTS models,
+[09:50] but what it means is how much how much audio can you produce in
+[09:56] certain number of seconds of processing time. So, if you can produce 10 seconds
+[09:59] of audio in 5 seconds, your your RDF is 0.5.
+[10:03] And so, you typically want that to be less than one so that you're not
+[10:06] buffering. Um quality is one of the hard ones with
+[10:10] TTS because, you know, there are some objective measures, but frankly nothing
+[10:14] quite beats listening to audio samples for the models for the voices that you
+[10:18] care about and getting a feel for is this the right uh experience that you
+[10:23] want your end customers to have. Some of the other capabilities, you
+[10:28] know, it's you know, naturalness across a different uh number of different
+[10:31] voices, being able to pronounce things exactly right, whether it's, you know,
+[10:36] customer names, whether it's product names, um being able to have some amount
+[10:40] of control over emotions. And so, you might see TTS models that allow you to
+[10:44] add these digital little tags which says, you know, this is happy or angry
+[10:48] or sad. And it's the start, but these models are getting pretty good uh at
+[10:52] emotional control. And of course, coverage over language continues to
+[10:55] matter. Okay, so those are the main components,
+[11:00] but just to kind of zoom out a little bit. You know, this is still All of
+[11:03] these components are part of this larger architecture which is multiple models at
+[11:08] being being orchestrated. And so, the there's a few things that we should
+[11:12] always kind of keep in mind which is first, you know, there's a latency and
+[11:15] cost budget across these models that we're thinking about.
+[11:19] A rough rubric is the LLM is going to take up a majority of it followed by TTS
+[11:23] followed by speech to text both from a latency and a cost perspective. Um
+[11:28] and so, again, just kind of rough rules to kind of think about. And one piece
+[11:32] that we didn't mention and we'll come back to this in a second is so far a lot
+[11:36] of the the numbers that we're looking at is just engine latency. How much time
+[11:41] does it take the model to produce an output? But actually, when you're
+[11:44] calling models that might be sitting in different data centers, there's network
+[11:48] latency as well and that starts to have an impact. But again, we'll come to that
+[11:51] in um in one more slide.
+[11:55] Auto scaling is also, you know, somewhat interesting and tricky to get right for
+[11:59] for agent systems. Of course, you want to be doing auto scaling to scale up as
+[12:03] demand goes up, scale down potentially, you know, night times or weekends you
+[12:07] want to scale down seamlessly. Scaling up, you know,
+[12:10] what we've typically seen as people are much more aggressive about scaling up
+[12:14] because the last thing you want is, you know, request to be slowed down or
+[12:17] backed up. So, you typically might auto scale earlier than you might do with
+[12:22] somewhat more asynchronous systems. And scaling down is also tricky because you
+[12:26] might actually have these stateful long-lived connections to your models.
+[12:30] And so, you can't just arbitrarily kill a pod. You might want to wait for
+[12:34] conversations to kind of fully finish. So, some interesting nuances with auto
+[12:37] scaling. And finally, you know, it's like, you
+[12:40] know, global deployments are important because you want your models uh you want
+[12:44] your system to be as close to your end users to shave off latency as much as
+[12:48] possible. And of course, you know, if you're building sort of models in Europe
+[12:52] or in places where residency matters, you want to be making sure that you have
+[12:56] the ability to deploy wherever you uh we absolutely need.
+[13:01] I know I referenced co-location. Um but here's one way to kind of understand
+[13:06] this problem. So, the chart on the left-hand side, this is very much, you
+[13:09] know, a fairly optimized uh sort of system where you're doing
+[13:14] a pretty good job with your speech to text and text to speech and LLM models
+[13:18] where the engine latency is in exactly the right ballpark. You're doing 100 to
+[13:22] 200 milliseconds of time to first token or audio. But you might actually end up
+[13:28] having your models being sufficiently far away from your agent orchestrator
+[13:33] that it's taking 75 milliseconds of network latency. 75 milliseconds is
+[13:37] really not that much. Like, you know, even in I think like, you know, US West
+[13:41] to Europe would certainly be 75 milliseconds, but you know, depending on
+[13:45] networking it can be much higher as well. And so,
+[13:49] an interesting kind of direction that we're seeing folks go is how can you
+[13:53] co-locate all your models and potentially your agent orchestrator to
+[13:57] either be in the same data center or be very very close to each other. How can
+[14:01] you get them literally in the same building? Because that drop from 75
+[14:05] milliseconds to five basically gets you a 30% reduction in
+[14:09] already a fairly optimized voice agent setup, right? So, some of these things
+[14:14] um especially again with real-time systems uh it's just pretty important to
+[14:18] have like fairly deep observability and, you know, every 10 milliseconds matters.
+[14:24] Okay. So, hopefully that's an interesting picture on sort of this
+[14:27] pipeline architecture. Um
+[14:30] but that's not the only way people do it. One of the other kind of directions
+[14:34] that is becoming interesting is a pure speech to speech model. And so, instead
+[14:39] of having speech to text followed by LLM followed by text to speech where you're
+[14:43] sort of coordinating and orchestrating across a number of different models, um
+[14:48] it's just way simpler if you could have a pure speech to speech model that still
+[14:52] is responsible for function calling, um still handles all of the complicated
+[14:56] instructions, uh but just a single model doing it. And of course, you know, for
+[15:00] folks who've played around with OpenAI's real-time API, they have a single model
+[15:03] behind the scenes. Uh Nvidia recently launched a model called voice chat,
+[15:07] again, very similar ideas. The reason why most of these models are
+[15:12] not used in production too much is because they have they still have
+[15:16] trouble with instruction following and tool calling. So, you know, the
+[15:19] real-world experience often looks like you'll try them
+[15:22] um and then you spend a lot of time just prompt engineering and hoping to kind of
+[15:25] fix issues and, you know, eventually move to a pipeline architecture. But
+[15:30] as these models get better, which I'm confident they will, uh
+[15:35] it has some pretty incredible benefits because suddenly you don't lose anything
+[15:40] about the nuances of speech when that speech is getting converted into text.
+[15:44] So, the model will natively understand what was the tone, what was the emotion,
+[15:48] uh was the user hesitant? That that stuff will still remain with the model
+[15:52] to make the next kind of decision. And
+[15:55] this type of model also allows for um sort of more full duplex homi- like
+[16:00] communication which basically means that the model can start producing audio
+[16:03] while it's still receiving audio. And this means that, you know, as your as a
+[16:07] customer is talking to this model, you can back channel. You can say, you
+[16:11] know, I see or aha like similar to what a human conversation would look like.
+[16:15] And these models become much better at handling interruptions and bargins,
+[16:19] which again, with a pipeline architecture you have to do a lot more
+[16:22] complicated engineering work around. So,
+[16:26] um hopefully this kind of points in the
+[16:28] direction of like, you know, what might be coming in the future. But frankly, we
+[16:31] have a lot of engineering work ahead for all of these kind of voice interfaces
+[16:35] that still have to be built. Um if you want to learn more about what
+[16:40] Together does, you know, uh here are a couple of links. We are hiring. We also
+[16:44] have a booth G1 downstairs. Um happy to chat more and happy to answer questions.
+[16:57] For voice to function calling use cases, what sort of um
+[17:00] evals do you use? And then, what score do you need to get on those evals in
+[17:04] order to have something that's good enough for production?
+[17:07] Um that's like the classic answer is like
+[17:11] it depends, you you know, but um I think in terms of evals like, you know,
+[17:16] there's of course like component by component evals. So, if we're talking
+[17:19] about sort of like the pipeline architecture
+[17:21] um and assuming that speech to text is good, text to speech is good, and the
+[17:24] only thing that we're caring about is sort of function calling or tool calling
+[17:28] evals on the LLM, then it's very similar to how one might do evals for tool
+[17:32] calling for LLMs broadly, which is, you know, was the um uh was the tool call
+[17:38] correct? Was the output actually possible? There's a bunch of those. One
+[17:41] would imagine that, you know, you'd want the
+[17:44] uh the tool call structure to at least be very close to 100% uh
+[17:47] um and then the correctness, again, it depends a little bit on what does the
+[17:52] use case kind of eventually demand. One of the other things that we're
+[17:55] seeing is especially to get around to make models better at tool calling and
+[18:00] because we have to stay within that LLM budget of like, you know, the models
+[18:03] have to be relatively small, we do see customers fine-tune smaller
+[18:08] LLMs with their kind of use case specific data so that they can get tool
+[18:14] calling quality to go up while remaining a model that is relatively small.
+[18:22] Yeah. When you mentioned about co-location,
+[18:25] so in that what I understand from that is you're using you're decreasing the
+[18:29] latency in the network latency. Yeah. Um it's literally because the the
+[18:34] machines are closer to each other. So, you
+[18:36] >> that mean like if I'm using cloud providers or
+[18:39] Uh good question. So, for example, um you know, let's say you're using let's
+[18:44] say you're building a voice agent here in London, right? You have servers here,
+[18:48] but you're using perhaps OpenAI's models for the LLM. And now, odds are that
+[18:53] OpenAI's servers might be somewhere in the US. So, literally the data has the
+[18:57] the network hop has to be from your server here all the way there and back.
+[19:01] Uh instead, if you had if you're able to run, let's say, an open source model in
+[19:06] the data center that you're running uh your voice agent, now it's basically
+[19:09] going to be intra uh sort of uh like uh the data center rather than going
+[19:15] um let's say over the Atlantic. So, that's one way to kind of think about
+[19:18] like and just distance literally kind of like has that big of an impact aside
+[19:22] from other kind of networking related
+[19:24] concerns. Thank you.
+[19:27] Yes. Uh one more question. Um So, we had
+[19:31] uh when trying this voice pipeline system that we had to introduce some
+[19:34] guard railing. So, like, let's say we have classifier model between uh which
+[19:39] just checks that the model's not offering 8% discount
+[19:44] uh which it's not authorized to do. Um
+[19:48] How does it present to the pipeline and how you do that without compromising the
+[19:52] latency and the the experience? Yeah, it's a great question.
+[19:56] So, you know, the question is like what if
+[19:58] we have other models like God real models or other classifiers in the mix?
+[20:02] How does this fit into this architecture?
+[20:04] You're absolutely right. Like this is the most kind of basic reference
+[20:08] architecture that one might have. But in many production settings, there's
+[20:11] actually multiple models that might be in the mix. The God real or the
+[20:14] classifier, we definitely see people kind of like start to introduce that
+[20:18] right before the main LLM as well because maybe you want to check is this
+[20:21] something that um something that goes to an LLM that
+[20:25] handles refunds versus something that handles order tracking perhaps. And so
+[20:29] you might have a classifier there. God reals at the end of the LLM generation
+[20:32] before you produce a response, that also makes sense. And so often this ends up
+[20:37] growing as the as the sort of like scope of what you're
+[20:40] hoping to achieve grows. And it puts real pressure on sort of
+[20:44] like latency concerns and so forth. So, you know, no easy answers except that it
+[20:48] becomes, you know, one more or two more components to think about. Have very
+[20:52] clear sort of guidelines and SLAs on, you know, how much budget can you really
+[20:56] kind of associated with them and then sort of independently scaling them as
+[21:00] needed. But unfortunately, no no easy answers. Yes, especially because
+[21:05] when you have things like like the the edge already Yeah. answer
+[21:09] which was an answer which was already not
+[21:12] what something it should be but the classifier the God reals were something
+[21:15] Yeah. I should have lied. You can't take back things that are spoken. You you
+[21:18] might have to do something Hey, sorry. I shouldn't have said that.
+[21:22] I need to revoke that or something. So, this is really a problem I see there.
+[21:25] Yeah, I I think that's spot on. Like catching all of those before the TTS
+[21:29] model gets invoked is is certainly important. One of the other things
+[21:33] patterns that at least like we've seen is sort of this thinker talker pattern
+[21:37] where you might have a small LLM that is handling
+[21:41] all of the conversation. And so as it gets sort of text from speech to text,
+[21:45] it produces a response and the response might look like let me think about it or
+[21:49] let me get back to you. And then it basically issues one big tool one tool
+[21:53] call to a much bigger model that then has, you know,
+[21:57] much you know, has better instructions, has all the tools associated, maybe more
+[22:00] God reals. And then it produces a much cleaner response that you know, the the
+[22:04] model is much more the the architecture is like, you know, you're much more
+[22:07] comfortable with. And so that gets fed into the TTS model to produce a
+[22:11] response. But you know, in some ways this is kind
+[22:14] of the this is the kind of beauty of like all of these architectures is, you
+[22:17] know, the components are, you know, you can we'll only add components. And so it
+[22:21] kind of, you know, pushes more on sort of reliability, having like, you
+[22:26] know, sort of detailed kind of observability on every single component.
+[22:32] Yes. Um um
+[22:35] I was I was just um curious about the upcoming voice voice
+[22:40] conversations coming out. And I know that this is upcoming but
+[22:45] at the end of the day all of the surrounding infrastructure that we have
+[22:48] in the conversational while we have
+[22:50] conversational systems now and all of yesterday
+[22:53] pipeline approach, how do we like how do you do evals in the product
+[22:57] and observability? Like is there a need to transcribe everything?
+[23:02] Yeah, um very good question. So, how does sort of observability, logging,
+[23:07] evals change? Um So,
+[23:10] in some ways so some parts of it can still remain the same. So, sometimes
+[23:14] what you might have is aside from pure speech to speech, you might actually
+[23:16] have a a transcription model that is running so
+[23:20] that you can at least seeing the transcription allowed at the same time
+[23:23] as the audio is being generated. So, that gives you some amount of
+[23:26] auditability in terms of what audio is coming in and what audio is being
+[23:30] produced. But yes, you know, some evals are going to change. There is no
+[23:34] there's no sort of real concept of sort of text to speech anymore. There's no
+[23:37] concept of pure kind of text to text here anymore. And so the evals become
+[23:41] much more full duplex kind of conversation evals
+[23:45] which is like a much longer conversation and then, you know, evals and metrics uh
+[23:50] that are sort of focused on that entire conversation. All right. But what I mean
+[23:54] is like is the nature of those models are like
+[23:57] able to output the characteristics of the
+[24:00] the conversation in a way that you can evaluate is it that native to the
+[24:03] pipeline or is that something on top? Typically a lot of the evals that would
+[24:08] happen on top on top of the base kind of inference API.
+[24:12] I think I think we're running out of time but
+[24:15] Okay. Um thank you everybody for the for for
+[24:18] being here.
